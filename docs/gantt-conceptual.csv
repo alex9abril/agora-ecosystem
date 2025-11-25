@@ -1,0 +1,12 @@
+Task Name,Start Date,End Date,Duration,Developer,Week,Priority
+Setup Backend y Base de Datos,2024-11-18,2024-11-22,5 days,Dev1,1,High
+Setup Frontend Móvil,2024-11-18,2024-11-22,5 days,Dev2,1,High
+Setup Frontend Web,2024-11-18,2024-11-22,5 days,Dev3,1,High
+API de Pedidos y Notificaciones,2024-11-25,2024-11-29,5 days,Dev1,2,High
+App Cliente - Pedidos,2024-11-25,2024-11-29,5 days,Dev2,2,High
+App Repartidor - Entregas,2024-11-25,2024-11-29,5 days,Dev2,2,High
+App Local - Gestión Pedidos,2024-11-25,2024-11-29,5 days,Dev3,2,High
+Sistema LocalCoins y Fintechs,2024-12-02,2024-12-06,5 days,Dev1,3,High
+Integración LocalCoins en Apps,2024-12-02,2024-12-06,5 days,Dev2+Dev3,3,High
+Testing y Documentación,2024-12-09,2024-12-13,5 days,All,4,High
+

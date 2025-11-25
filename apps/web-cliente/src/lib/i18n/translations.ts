@@ -1,0 +1,223 @@
+/**
+ * Traducciones de la aplicación
+ */
+
+export const translations = {
+  en: {
+    // Navigation
+    nav: {
+      home: 'Home',
+      stores: 'Stores',
+      cart: 'Cart',
+      profile: 'Profile',
+      login: 'Login',
+      register: 'Register',
+      logout: 'Logout',
+    },
+    // Auth
+    auth: {
+      login: 'Login',
+      register: 'Register',
+      email: 'Email',
+      password: 'Password',
+      confirmPassword: 'Confirm Password',
+      firstName: 'First Name',
+      lastName: 'Last Name',
+      phone: 'Phone',
+      forgotPassword: 'Forgot Password?',
+      noAccount: "Don't have an account?",
+      haveAccount: 'Already have an account?',
+      signIn: 'Sign In',
+      signUp: 'Sign Up',
+      loginError: 'Error logging in',
+      registerError: 'Error registering',
+      loginSuccess: 'Login successful',
+      registerSuccess: 'Registration successful',
+    },
+    // Home
+    home: {
+      title: 'Welcome to Localia',
+      subtitle: 'Discover local stores and products',
+      searchPlaceholder: 'Search stores or products...',
+      featuredStores: 'Featured Stores',
+      categories: 'Categories',
+      seeAll: 'See All',
+    },
+    // Stores
+    stores: {
+      title: 'Stores',
+      searchPlaceholder: 'Search stores...',
+      filterByCategory: 'Filter by Category',
+      allCategories: 'All Categories',
+      rating: 'Rating',
+      reviews: 'reviews',
+      orders: 'orders',
+      open: 'Open',
+      closed: 'Closed',
+      viewStore: 'View Store',
+      noStores: 'No stores found',
+      loading: 'Loading stores...',
+    },
+    // Products
+    products: {
+      title: 'Products',
+      searchPlaceholder: 'Search products...',
+      addToCart: 'Add to Cart',
+      outOfStock: 'Out of Stock',
+      price: 'Price',
+      description: 'Description',
+      noProducts: 'No products found',
+      loading: 'Loading products...',
+      category: 'Category',
+    },
+    // Cart
+    cart: {
+      title: 'Shopping Cart',
+      empty: 'Your cart is empty',
+      total: 'Total',
+      checkout: 'Checkout',
+      remove: 'Remove',
+      quantity: 'Quantity',
+      subtotal: 'Subtotal',
+    },
+    // Profile
+    profile: {
+      title: 'Profile',
+      edit: 'Edit Profile',
+      save: 'Save',
+      cancel: 'Cancel',
+      address: 'Address',
+      phone: 'Phone',
+      email: 'Email',
+      name: 'Name',
+    },
+    // Common
+    common: {
+      loading: 'Loading...',
+      error: 'An error occurred',
+      retry: 'Retry',
+      cancel: 'Cancel',
+      save: 'Save',
+      delete: 'Delete',
+      edit: 'Edit',
+      close: 'Close',
+      back: 'Back',
+      next: 'Next',
+      previous: 'Previous',
+      search: 'Search',
+      filter: 'Filter',
+      clear: 'Clear',
+      language: 'Language',
+    },
+  },
+  es: {
+    // Navigation
+    nav: {
+      home: 'Inicio',
+      stores: 'Tiendas',
+      cart: 'Carrito',
+      profile: 'Perfil',
+      login: 'Iniciar Sesión',
+      register: 'Registrarse',
+      logout: 'Cerrar Sesión',
+    },
+    // Auth
+    auth: {
+      login: 'Iniciar Sesión',
+      register: 'Registrarse',
+      email: 'Correo Electrónico',
+      password: 'Contraseña',
+      confirmPassword: 'Confirmar Contraseña',
+      firstName: 'Nombre',
+      lastName: 'Apellido',
+      phone: 'Teléfono',
+      forgotPassword: '¿Olvidaste tu contraseña?',
+      noAccount: '¿No tienes una cuenta?',
+      haveAccount: '¿Ya tienes una cuenta?',
+      signIn: 'Iniciar Sesión',
+      signUp: 'Registrarse',
+      loginError: 'Error al iniciar sesión',
+      registerError: 'Error al registrarse',
+      loginSuccess: 'Sesión iniciada exitosamente',
+      registerSuccess: 'Registro exitoso',
+    },
+    // Home
+    home: {
+      title: 'Bienvenido a Localia',
+      subtitle: 'Descubre tiendas y productos locales',
+      searchPlaceholder: 'Buscar tiendas o productos...',
+      featuredStores: 'Tiendas Destacadas',
+      categories: 'Categorías',
+      seeAll: 'Ver Todas',
+    },
+    // Stores
+    stores: {
+      title: 'Tiendas',
+      searchPlaceholder: 'Buscar tiendas...',
+      filterByCategory: 'Filtrar por Categoría',
+      allCategories: 'Todas las Categorías',
+      rating: 'Calificación',
+      reviews: 'reseñas',
+      orders: 'pedidos',
+      open: 'Abierto',
+      closed: 'Cerrado',
+      viewStore: 'Ver Tienda',
+      noStores: 'No se encontraron tiendas',
+      loading: 'Cargando tiendas...',
+    },
+    // Products
+    products: {
+      title: 'Productos',
+      searchPlaceholder: 'Buscar productos...',
+      addToCart: 'Agregar al Carrito',
+      outOfStock: 'Agotado',
+      price: 'Precio',
+      description: 'Descripción',
+      noProducts: 'No se encontraron productos',
+      loading: 'Cargando productos...',
+      category: 'Categoría',
+    },
+    // Cart
+    cart: {
+      title: 'Carrito de Compras',
+      empty: 'Tu carrito está vacío',
+      total: 'Total',
+      checkout: 'Finalizar Compra',
+      remove: 'Eliminar',
+      quantity: 'Cantidad',
+      subtotal: 'Subtotal',
+    },
+    // Profile
+    profile: {
+      title: 'Perfil',
+      edit: 'Editar Perfil',
+      save: 'Guardar',
+      cancel: 'Cancelar',
+      address: 'Dirección',
+      phone: 'Teléfono',
+      email: 'Correo Electrónico',
+      name: 'Nombre',
+    },
+    // Common
+    common: {
+      loading: 'Cargando...',
+      error: 'Ocurrió un error',
+      retry: 'Reintentar',
+      cancel: 'Cancelar',
+      save: 'Guardar',
+      delete: 'Eliminar',
+      edit: 'Editar',
+      close: 'Cerrar',
+      back: 'Atrás',
+      next: 'Siguiente',
+      previous: 'Anterior',
+      search: 'Buscar',
+      filter: 'Filtrar',
+      clear: 'Limpiar',
+      language: 'Idioma',
+    },
+  },
+} as const;
+
+export type TranslationKey = keyof typeof translations.en;
+

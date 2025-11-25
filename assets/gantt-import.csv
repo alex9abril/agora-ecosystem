@@ -1,0 +1,29 @@
+Task Name,Start Date,End Date,Duration,Developer,Week,Issue Number
+App Local - Configuración,2025-01-20,2025-01-24,5 days,Dev3,2,315
+App Local - Gestión Menú,2025-01-20,2025-01-24,5 days,Dev3,2,314
+Control de Emisión LCs,2025-01-27,2025-01-31,5 days,Dev1,3,320
+Sistema de Propinas,2025-01-27,2025-01-31,5 days,Dev1,3,319
+Integración Fintechs,2025-01-27,2025-01-31,5 days,Dev1,3,318
+Backend - Endpoints LocalCoins,2025-01-27,2025-01-31,5 days,Dev1,3,317
+Backend - Modelo LocalCoins,2025-01-27,2025-01-31,5 days,Dev1,3,316
+App Repartidor - Ganancias,2025-01-27,2025-01-31,5 days,Dev2,3,324
+Sistema de Propinas Móvil,2025-01-27,2025-01-31,5 days,Dev2,3,323
+App Cliente - Pago con LCs,2025-01-27,2025-01-31,5 days,Dev2,3,322
+App Cliente - Wallet,2025-01-27,2025-01-31,5 days,Dev2,3,321
+Panel Admin - Configuración,2025-01-27,2025-01-31,5 days,Dev3,3,329
+Panel Admin - Reportes Financieros,2025-01-27,2025-01-31,5 days,Dev3,3,328
+Panel Admin - Gestión LocalCoins,2025-01-27,2025-01-31,5 days,Dev3,3,327
+Panel Admin - Gestión Usuarios,2025-01-27,2025-01-31,5 days,Dev3,3,326
+Panel Admin - Dashboard,2025-01-27,2025-01-31,5 days,Dev3,3,325
+Testing y Optimizaciones Backend,2025-02-03,2025-02-07,5 days,Dev1,4,334
+Cálculo de Impacto Ecológico,2025-02-03,2025-02-07,5 days,Dev1,4,333
+Sistema de Tags Automáticos,2025-02-03,2025-02-07,5 days,Dev1,4,332
+Backend - Endpoints Red Social,2025-02-03,2025-02-07,5 days,Dev1,4,331
+Backend - Modelo Red Social,2025-02-03,2025-02-07,5 days,Dev1,4,330
+App Móvil - Compartir Externo,2025-02-03,2025-02-07,5 days,Dev2,4,339
+App Móvil - Perfil Ecológico,2025-02-03,2025-02-07,5 days,Dev2,4,338
+App Móvil - Interacción Social,2025-02-03,2025-02-07,5 days,Dev2,4,337
+App Móvil - Crear Publicación,2025-02-03,2025-02-07,5 days,Dev2,4,336
+App Móvil - Feed Publicaciones,2025-02-03,2025-02-07,5 days,Dev2,4,335
+Panel Admin - Mejoras,2025-02-03,2025-02-07,5 days,Dev3,4,341
+App Local - Mejoras,2025-02-03,2025-02-07,5 days,Dev3,4,340

@@ -1,0 +1,59 @@
+Title,Body,Labels,Status,Week,Developer,Priority
+"Setup Backend - NestJS/Express","Inicializar proyecto backend con NestJS o Express. Configurar estructura de carpetas, TypeScript, ESLint/Prettier.","backend,setup","Todo",1,Dev1,High
+"Configuración Base de Datos","Crear esquema de base de datos PostgreSQL/Supabase. Tablas: users, businesses, delivery_persons, orders, localcoins_transactions. Migraciones y seeders.","backend,database","Todo",1,Dev1,High
+"Sistema de Autenticación","Integración Firebase Auth / JWT. Endpoints de registro/login. Middleware de autenticación. Roles y permisos.","backend,auth","Todo",1,Dev1,High
+"Configuración de Ambientes Backend","Variables de entorno (dev, staging, prod). Configuración CI/CD básica. Docker setup (opcional).","backend,devops","Todo",1,Dev1,Medium
+"Setup React Native","Inicializar proyecto React Native. Configurar navegación (React Navigation). Setup de estructura de carpetas.","mobile,setup","Todo",1,Dev2,High
+"Autenticación en Móvil","Pantallas de login/registro. Integración con Firebase Auth. Manejo de tokens. Persistencia de sesión.","mobile,auth","Todo",1,Dev2,High
+"Navegación Básica Móvil","Stack Navigator inicial. Pantallas placeholder. Bottom tabs (App Cliente).","mobile,navigation","Todo",1,Dev2,Medium
+"Configuración Ambientes Móvil","Variables de entorno. Configuración de API endpoints.","mobile,config","Todo",1,Dev2,Medium
+"Setup Next.js/React","Inicializar proyecto Next.js. Configurar estructura de carpetas. Setup de TypeScript.","web,setup","Todo",1,Dev3,High
+"Autenticación Web","Pantallas de login/registro (App Local). Integración con Firebase Auth. Manejo de tokens. Rutas protegidas.","web,auth","Todo",1,Dev3,High
+"Layouts Básicos Web","Layout para App Local. Layout para Panel Admin. Componentes compartidos.","web,ui","Todo",1,Dev3,Medium
+"Configuración Ambientes Web","Variables de entorno. Configuración de API endpoints.","web,config","Todo",1,Dev3,Medium
+"API de Pedidos - Modelos","Modelo Order completo. Estados de pedido (pending, accepted, in_transit, delivered, cancelled). Relaciones entre modelos.","backend,orders","Todo",2,Dev1,High
+"Endpoints de Pedidos","POST /orders (crear pedido). GET /orders (listar pedidos). GET /orders/:id (detalle). PUT /orders/:id/accept. PUT /orders/:id/update-status.","backend,orders,api","Todo",2,Dev1,High
+"Sistema de Notificaciones","Integración con Firebase Cloud Messaging. Notificaciones push básicas. Notificaciones por cambio de estado.","backend,notifications","Todo",2,Dev1,High
+"Geolocalización Backend","Endpoints para ubicación. Cálculo de distancias. Validación de radio (3 km).","backend,geolocation","Todo",2,Dev1,Medium
+"Filtros y Búsqueda Pedidos","Pedidos disponibles para repartidores. Pedidos por local. Historial de pedidos.","backend,orders","Todo",2,Dev1,Medium
+"App Cliente - Pantalla Inicio","Lista de locales disponibles. Búsqueda y filtros básicos. Cards de locales.","mobile,cliente","Todo",2,Dev2,High
+"App Cliente - Pantalla Menú","Visualización de menú del local. Agregar items al carrito. Cálculo de total.","mobile,cliente","Todo",2,Dev2,High
+"App Cliente - Crear Pedido","Formulario de pedido. Selección de dirección. Confirmación de pedido. Envío de pedido a API.","mobile,cliente","Todo",2,Dev2,High
+"App Cliente - Seguimiento","Pantalla de estado en tiempo real. Mapa con ubicación (básico). Información del repartidor. Tiempo estimado.","mobile,cliente","Todo",2,Dev2,High
+"App Repartidor - Pedidos Disponibles","Lista de pedidos pendientes. Información del pedido (origen, destino, distancia). Filtros básicos.","mobile,repartidor","Todo",2,Dev2,High
+"App Repartidor - Aceptar Pedido","Detalle del pedido. Botón aceptar/rechazar. Confirmación.","mobile,repartidor","Todo",2,Dev2,High
+"App Repartidor - Gestión Entrega","Pantalla de pedido activo. Botones de cambio de estado. Navegación básica. Marcar como entregado.","mobile,repartidor","Todo",2,Dev2,High
+"App Repartidor - Historial","Lista de pedidos completados. Ganancias acumuladas.","mobile,repartidor","Todo",2,Dev2,Medium
+"App Local - Dashboard","Vista general de pedidos. Estadísticas básicas. Notificaciones de nuevos pedidos.","web,local","Todo",2,Dev3,High
+"App Local - Gestión Pedidos","Lista de pedidos recibidos. Detalle de pedido. Aceptar/rechazar pedido. Actualizar estado de preparación.","web,local","Todo",2,Dev3,High
+"App Local - Gestión Menú","Lista de productos. Agregar/editar producto. Activar/desactivar productos.","web,local","Todo",2,Dev3,High
+"App Local - Configuración","Horarios de operación. Información del local.","web,local","Todo",2,Dev3,Medium
+"Backend - Modelo LocalCoins","Tabla de wallets (balance por usuario). Tabla de transacciones. Tipos de transacción (compra, pago, propina, conversión).","backend,localcoins","Todo",3,Dev1,High
+"Backend - Endpoints LocalCoins","GET /wallet/balance. POST /wallet/purchase. POST /wallet/transfer. GET /wallet/transactions.","backend,localcoins,api","Todo",3,Dev1,High
+"Integración Fintechs","Setup de Stripe/Conekta/MercadoPago. Endpoint de compra de créditos. Webhooks de pagos. Conversión de LCs a dinero real.","backend,payments,fintech","Todo",3,Dev1,High
+"Sistema de Propinas","Endpoint para agregar propina. Cálculo automático de distribución.","backend,payments","Todo",3,Dev1,High
+"Control de Emisión LCs","Lógica de LCs bonificados. Caducidad de créditos (30 días). Validación de ratios.","backend,localcoins","Todo",3,Dev1,Medium
+"App Cliente - Wallet","Pantalla de balance. Historial de transacciones. Comprar LocalCoins. Integración con fintech.","mobile,cliente,localcoins","Todo",3,Dev2,High
+"App Cliente - Pago con LCs","Selección de método de pago. Confirmación de pago. Validación de balance.","mobile,cliente,payments","Todo",3,Dev2,High
+"Sistema de Propinas Móvil","Agregar propina al pedido. Selección de monto. Confirmación.","mobile,cliente,payments","Todo",3,Dev2,High
+"App Repartidor - Ganancias","Visualización de ganancias. Historial de pagos recibidos. Opción de conversión a dinero real.","mobile,repartidor,localcoins","Todo",3,Dev2,High
+"Panel Admin - Dashboard","Métricas generales (usuarios, pedidos, ingresos). Gráficos básicos. Filtros por fecha.","web,admin","Todo",3,Dev3,High
+"Panel Admin - Gestión Usuarios","Lista de usuarios (clientes, locales, repartidores). Detalle de usuario. Activar/desactivar usuarios. Ver historial de transacciones.","web,admin","Todo",3,Dev3,High
+"Panel Admin - Gestión LocalCoins","Balance total de LCs en circulación. Emisión de créditos bonificados. Control de emisión. Reportes de transacciones.","web,admin,localcoins","Todo",3,Dev3,High
+"Panel Admin - Reportes Financieros","Ingresos por comisiones. Conversiones de LCs. Análisis de transacciones.","web,admin,reports","Todo",3,Dev3,Medium
+"Panel Admin - Configuración","Parámetros generales. Comisiones. Límites y restricciones.","web,admin,config","Todo",3,Dev3,Medium
+"Backend - Modelo Red Social","Tabla de publicaciones (posts). Tabla de likes/comentarios. Tabla de seguimientos (follows).","backend,social","Todo",4,Dev1,High
+"Backend - Endpoints Red Social","POST /posts (crear publicación). GET /posts (feed). POST /posts/:id/like. POST /posts/:id/comment. GET /posts/user/:id.","backend,social,api","Todo",4,Dev1,High
+"Sistema de Tags Automáticos","Cálculo de emisiones CO₂ por pedido. Cálculo de reducción de plástico. Generación automática de tags.","backend,social","Todo",4,Dev1,High
+"Cálculo de Impacto Ecológico","Endpoint para calcular emisiones. Endpoint para calcular plástico evitado. Acumulación de impacto por usuario.","backend,social,environment","Todo",4,Dev1,High
+"Testing y Optimizaciones Backend","Tests de integración básicos. Optimización de queries. Corrección de bugs críticos.","backend,testing","Todo",4,Dev1,Medium
+"App Móvil - Feed Publicaciones","Lista de publicaciones. Scroll infinito. Cards de publicación con tags.","mobile,social","Todo",4,Dev2,High
+"App Móvil - Crear Publicación","Cámara integrada / selección de foto. Editor básico (filtros opcionales). Tags automáticos pre-cargados. Publicar en feed.","mobile,social","Todo",4,Dev2,High
+"App Móvil - Interacción Social","Sistema de likes. Comentarios básicos. Compartir publicación.","mobile,social","Todo",4,Dev2,High
+"App Móvil - Perfil Ecológico","Estadísticas de impacto. Publicaciones del usuario. Badges obtenidos.","mobile,social,profile","Todo",4,Dev2,High
+"App Móvil - Compartir Externo","Generar tarjeta para compartir. Compartir en WhatsApp. Link de invitación incluido.","mobile,social,sharing","Todo",4,Dev2,High
+"App Local - Mejoras","Gestión completa de menú. Promociones básicas. Estadísticas de ventas mejoradas.","web,local","Todo",4,Dev3,Medium
+"Panel Admin - Mejoras","Reportes avanzados. Exportación de datos. Gestión de contenido de red social.","web,admin","Todo",4,Dev3,Medium
+"Testing End-to-End","Flujos completos de usuario. Corrección de bugs. Optimización de performance.","testing,qa","Todo",4,All,High
+"Documentación Final","Guía de usuario básica. Documentación de API. Manual de administrador.","documentation","Todo",4,All,Medium
+

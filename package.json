@@ -1,0 +1,23 @@
+{
+  "name": "localia-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LOCALIA - Plataforma de Delivery Hiperlocal",
+  "scripts": {
+    "dev:backend": "cd apps/backend && npm run dev",
+    "dev:client": "cd apps/mobile-client && npm start",
+    "dev:repartidor": "cd apps/mobile-repartidor && npm start",
+    "dev:local": "cd apps/web-local && npm run dev",
+    "dev:admin": "cd apps/web-admin && npm run dev",
+    "install:backend": "cd apps/backend && npm install",
+    "install:client": "cd apps/mobile-client && npm install",
+    "install:repartidor": "cd apps/mobile-repartidor && npm install",
+    "install:local": "cd apps/web-local && npm install",
+    "install:admin": "cd apps/web-admin && npm install",
+    "install:all": "npm run install:backend && npm run install:client && npm run install:repartidor && npm run install:local && npm run install:admin"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

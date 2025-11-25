@@ -1,0 +1,142 @@
+# Cursor Rules para LOCALIA Admin
+
+## 🗄️ Reglas para Base de Datos
+
+### IMPORTANTE: Antes de cualquier operación de base de datos
+
+**SIEMPRE** debes revisar los archivos SQL en la carpeta `database/` antes de:
+- Crear nuevas tablas, columnas, índices o constraints
+- Modificar estructuras existentes
+- Crear nuevos endpoints que consulten la base de datos
+- Implementar servicios que interactúen con la base de datos
+- Crear DTOs o interfaces TypeScript basadas en esquemas de base de datos
+
+### Archivos y scripts de referencia obligatorios a revisar en `database/`:
+
+> **IMPORTANTE:**  
+> No basta con revisar solo los archivos principales (`schema.sql`, algunos seeds o el README).  
+> Es fundamental considerar que en la carpeta `database/` pueden existir múltiples archivos SQL involucrados en la evolución y migración del esquema, datos de ejemplo, catálogos, hotfixes, o migraciones específicas que afecten la estructura real y actual de la base de datos.
+>
+> Siempre revisa TODOS los archivos relevantes en la carpeta `database/`, ya que las modificaciones a la estructura (tablas, columnas, índices, constraints, triggers, relaciones, etc.) pueden haberse realizado en diferentes scripts a lo largo del tiempo.
+
+1. **`database/schema.sql`**  
+   - Estructura base y principal de la base de datos  
+   - Define todos los schemas, tablas, columnas, constraints y tipos principales  
+   - Define índices, triggers, funciones, y relaciones
+
+2. **Archivos de migración, fixes, y catálogos** (p. ej. `business_categories_catalog.sql`, `migrations_*.sql`, `update_*_table.sql`)  
+   - Contienen cambios incrementales, migraciones históricas, o alteraciones importantes sobre el schema base  
+   - Aquí pueden agregarse o modificarse columnas, constraints, relaciones o datos fundamentales  
+   - **SIEMPRE** revisa si hay nuevos scripts o migraciones ejecutadas posteriormente al schema base
+
+3. **`database/README.md`**  
+   - Documentación sobre la organización por schemas  
+   - Listados de tablas, relaciones y ejemplos de consultas  
+   - Puede señalar convenciones o atajos importantes
+
+4. **Seeds y datos de ejemplo (`seed_*.sql`)**  
+   - Incluyen catálogos iniciales y ejemplos (ej: `seed_catalog.sql`, `seed_delivery_cycle.sql`)
+   - Ayudan a entender los datos típicos de la base, relaciones y flujos reales  
+   - Útiles para pruebas y comprensión de uso en producción real
+
+> **Resumen:**  
+> Antes de tomar cualquier decisión que involucre la base de datos, revisa el conjunto completo de archivos SQL y documentación presente en la carpeta `database/` para asegurarte de tener el contexto actualizado de la estructura, migraciones y datos, y evitar inconsistencias o perder rastros de cambios importantes.
+
+### Checklist antes de implementar:
+
+- [ ] ¿Revisé todos los archivos relevantes en la carpeta `database/` (incluyendo `schema.sql`, migraciones, catálogos y seeds) para verificar la estructura y cambios de las tablas?
+- [ ] ¿Verifiqué los nombres exactos de las columnas (case-sensitive)?
+- [ ] ¿Confirmé los tipos de datos (UUID, TEXT, DECIMAL, BOOLEAN, JSONB, etc.)?
+- [ ] ¿Revisé las relaciones (foreign keys) y constraints?
+- [ ] ¿Verifiqué los ENUMs disponibles para campos específicos?
+- [ ] ¿Confirmé si hay triggers o funciones que afecten las operaciones?
+- [ ] ¿Revisé si hay índices que deba considerar en las consultas?
+- [ ] ¿Verifiqué si la tabla está en un schema específico (core, catalog, orders, etc.)?
+
+### Convenciones importantes:
+
+1. **Schemas**: Las tablas están organizadas en schemas:
+   - `core.*` - Entidades principales (user_profiles, businesses, repartidores, addresses)
+   - `catalog.*` - Catálogo (product_categories, products, collections)
+   - `orders.*` - Pedidos (orders, order_items, deliveries)
+   - `reviews.*` - Evaluaciones (reviews, tips)
+   - `communication.*` - Comunicación (notifications, messages)
+   - `commerce.*` - Comercio (promotions, subscriptions, ads)
+   - `social.*` - Red social (social_posts, social_likes, etc.)
+
+2. **Tipos de datos**:
+   - IDs: `UUID` (usar `gen_random_uuid()` o UUIDs válidos)
+   - Geolocalización: `POINT` (PostgreSQL nativo, usar `(location)[0]` y `(location)[1]` para extraer coordenadas)
+   - JSON: `JSONB` para variantes, información nutricional, etc.
+   - Arrays: `TEXT[]` para alérgenos, tags, etc.
+   - Precios: `DECIMAL(10,2)` para montos monetarios
+
+3. **Eliminación lógica**:
+   - **NUNCA** eliminar físicamente registros
+   - Usar campos `is_active`, `is_available`, o `status` para desactivar
+   - Las tablas NO tienen `deleted_at` por defecto, usar campos booleanos
+
+4. **Autenticación**:
+   - Usar `auth.users` de Supabase para autenticación
+   - `core.user_profiles` extiende `auth.users` con roles y datos adicionales
+   - El `id` de `user_profiles` debe coincidir con `auth.users.id`
+
+5. **Wallet Integration**:
+   - Los campos `wallet_*` son `VARCHAR(255)`, NO `UUID`
+   - El wallet es un proyecto separado, solo se almacenan referencias
+
+### Ejemplos de consultas correctas:
+
+```sql
+-- ✅ CORRECTO: Usar schema prefix
+SELECT * FROM core.user_profiles WHERE role = 'client';
+
+-- ✅ CORRECTO: Extraer coordenadas de POINT
+SELECT (location)[0] as longitude, (location)[1] as latitude FROM core.businesses;
+
+-- ✅ CORRECTO: Usar gen_random_uuid() para nuevos registros
+INSERT INTO catalog.products (id, business_id, name, price) 
+VALUES (gen_random_uuid(), $1, $2, $3);
+
+-- ❌ INCORRECTO: No usar schema prefix
+SELECT * FROM user_profiles; -- FALLA si la tabla está en schema 'core'
+
+-- ❌ INCORRECTO: Intentar usar ST_X/ST_Y con POINT
+SELECT ST_X(location) FROM core.businesses; -- FALLA, usar (location)[0] en su lugar
+```
+
+### Cuando trabajes con backend (NestJS):
+
+1. **DTOs**: Basa los DTOs en la estructura real de `schema.sql`
+2. **Services**: Usa los nombres exactos de columnas y schemas
+3. **Queries**: Siempre incluye el schema prefix en las consultas SQL
+4. **Tipos TypeScript**: Mapea correctamente los tipos PostgreSQL a TypeScript:
+   - `UUID` → `string`
+   - `DECIMAL` → `number`
+   - `BOOLEAN` → `boolean`
+   - `JSONB` → `any` o interface específica
+   - `TEXT[]` → `string[]`
+   - `POINT` → Extraer como `{ longitude: number, latitude: number }`
+
+### Cuando trabajes con frontend:
+
+1. **Interfaces TypeScript**: Deben coincidir exactamente con la estructura de las tablas
+2. **Formularios**: Validar tipos de datos según los constraints del schema
+3. **Filtros**: Usar los nombres exactos de columnas que existen en el schema
+
+## 📝 Notas adicionales
+
+- Si encuentras inconsistencias entre el código y `schema.sql`, **SIEMPRE** prioriza `schema.sql` como fuente de verdad
+- Si necesitas modificar el schema, actualiza `schema.sql` primero y luego el código
+- Para nuevos campos, verifica si hay triggers o funciones que los afecten
+- Para relaciones, verifica las foreign keys y constraints en `schema.sql`
+
+## ⚠️ IMPORTANTE: Ejecución de Scripts SQL
+
+**NUNCA ejecutes scripts SQL directamente en la base de datos.** 
+
+- El usuario es el único responsable de ejecutar todos los scripts SQL
+- Solo crea, modifica o corrige los archivos SQL según las instrucciones del usuario
+- NO uses herramientas para ejecutar comandos SQL en la base de datos
+- NO propongas ejecutar scripts SQL, solo crea o corrige los archivos
+
