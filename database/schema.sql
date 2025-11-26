@@ -1,8 +1,9 @@
 -- ============================================================================
--- DELIVERY ECOSYSTEM - Database Schema
+-- AGORA ECOSYSTEM - Database Schema
 -- ============================================================================
 -- Descripción: Modelo de base de datos normalizado y estandarizado para
 --              ecosistema de delivery hiperlocal (radio 3 km)
+--              Plataforma AGORA - Venta de refacciones y productos en línea
 -- 
 -- Plataforma: Supabase (PostgreSQL)
 -- Autenticación: Supabase Auth (auth.users)
@@ -10,8 +11,8 @@
 -- Nota: El sistema de Wallet (LocalCoins) es un proyecto separado.
 --       Este schema incluye referencias externas al wallet mediante user_id.
 -- ============================================================================
--- Versión: 2.0 (Supabase Auth)
--- Fecha: 2024-11-18
+-- Versión: 2.1 (AGORA - Refacciones)
+-- Fecha: 2025-01-XX
 -- ============================================================================
 
 -- Extensiones PostgreSQL
