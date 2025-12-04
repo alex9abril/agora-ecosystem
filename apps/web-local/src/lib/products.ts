@@ -151,7 +151,11 @@ export const productsService = {
   /**
    * Obtener todos los productos de un negocio
    */
-  async getProducts(businessId?: string, vehicle?: { brand_id?: string; model_id?: string; year_id?: string; spec_id?: string }): Promise<Product[]> {
+  async getProducts(
+    businessId?: string, 
+    vehicle?: { brand_id?: string; model_id?: string; year_id?: string; spec_id?: string },
+    pagination?: { page?: number; limit?: number }
+  ): Promise<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       // Construir query params
       const params = new URLSearchParams();
@@ -169,11 +173,20 @@ export const productsService = {
         if (vehicle.spec_id) params.append('vehicleSpecId', vehicle.spec_id);
       }
       
-      const response = await apiRequest<{ data: Product[]; pagination: any }>(`/catalog/products?${params.toString()}`, {
+      // Agregar parámetros de paginación
+      if (pagination) {
+        if (pagination.page) params.append('page', pagination.page.toString());
+        if (pagination.limit) params.append('limit', pagination.limit.toString());
+      }
+      
+      const response = await apiRequest<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/catalog/products?${params.toString()}`, {
         method: 'GET',
       });
       // El backend devuelve { data: [...], pagination: {...} }
-      return response?.data || [];
+      return {
+        data: response?.data || [],
+        pagination: response?.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
     } catch (error: any) {
       console.error('Error obteniendo productos:', error);
       throw error;

@@ -142,7 +142,7 @@ export default function CartPage() {
             </p>
             {!isAuthenticated ? (
               <div className="flex gap-3 justify-center">
-                <ContextualLink href="/auth/login" className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-block">
+                <ContextualLink href="/auth/login" className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block">
                   Iniciar Sesión
                 </ContextualLink>
                 <ContextualLink href="/auth/register" className="px-6 py-3 bg-gray-100 text-black rounded-lg hover:bg-gray-200 transition-colors inline-block">
@@ -150,7 +150,7 @@ export default function CartPage() {
                 </ContextualLink>
               </div>
             ) : (
-              <ContextualLink href="/products" className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-block">
+              <ContextualLink href="/products" className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block">
                 Ver Productos
               </ContextualLink>
             )}
@@ -187,7 +187,7 @@ export default function CartPage() {
                       <p className="text-sm text-gray-600 mb-2">{item.product_description}</p>
                     )}
                     <p className="text-lg font-bold text-black mb-2">
-                      ${parseFloat(String(item.item_subtotal || 0)).toFixed(2)}
+                      {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
                     </p>
                     {itemsTaxBreakdowns[item.id] && (
                       <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
@@ -227,21 +227,21 @@ export default function CartPage() {
             <div className="space-y-2 mb-4">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Impuestos</span>
-                <span>${totalTax.toFixed(2)}</span>
+                <span>{formatPrice(totalTax)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Envío</span>
-                <span>${deliveryFee.toFixed(2)}</span>
+                <span>{formatPrice(deliveryFee)}</span>
               </div>
             </div>
             <div className="border-t border-gray-200 pt-4">
               <div className="flex justify-between items-center">
                 <span className="text-lg font-bold">Total</span>
-                <span className="text-2xl font-bold">${total.toFixed(2)}</span>
+                <span className="text-2xl font-bold">{formatPrice(total)}</span>
               </div>
             </div>
           </div>
@@ -265,14 +265,14 @@ export default function CartPage() {
             {isAuthenticated ? (
               <ContextualLink
                 href={getCheckoutUrl()}
-                className="flex-1 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-center font-medium"
+                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-medium"
               >
                 Proceder al Pago
               </ContextualLink>
             ) : (
               <ContextualLink
                 href="/auth/login"
-                className="flex-1 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-center font-medium"
+                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-medium"
               >
                 Iniciar Sesión para Comprar
               </ContextualLink>

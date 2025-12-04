@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { TaxBreakdown as TaxBreakdownType } from '@/lib/orders';
+import { formatPrice } from '@/lib/format';
 
 interface TaxBreakdownProps {
   taxBreakdown: TaxBreakdownType | null | undefined;
@@ -29,7 +30,7 @@ export default function TaxBreakdown({
     if (rateType === 'percentage') {
       return `${(rate * 100).toFixed(0)}%`;
     }
-    return `$${rate.toFixed(2)}`;
+    return formatPrice(rate);
   };
 
   if (compact) {
@@ -38,12 +39,12 @@ export default function TaxBreakdown({
         {taxBreakdown.taxes.map((tax, index) => (
           <span key={tax.tax_type_id}>
             {index > 0 && ', '}
-            {tax.tax_name} ({formatRate(tax.rate, tax.rate_type)}): ${tax.amount.toFixed(2)}
+            {tax.tax_name} ({formatRate(tax.rate, tax.rate_type)}): {formatPrice(tax.amount)}
           </span>
         ))}
         {showTotal && taxBreakdown.total_tax > 0 && (
           <span className="ml-2 font-medium">
-            Total impuestos: ${taxBreakdown.total_tax.toFixed(2)}
+            Total impuestos: {formatPrice(taxBreakdown.total_tax)}
           </span>
         )}
       </div>
@@ -58,14 +59,14 @@ export default function TaxBreakdown({
             {tax.tax_name} ({formatRate(tax.rate, tax.rate_type)})
           </span>
           <span className="text-black font-medium">
-            ${tax.amount.toFixed(2)}
+            {formatPrice(tax.amount)}
           </span>
         </div>
       ))}
       {showTotal && taxBreakdown.total_tax > 0 && (
         <div className="flex justify-between text-sm font-semibold pt-1 border-t border-gray-200 mt-1">
           <span className="text-gray-700">Total de impuestos</span>
-          <span className="text-black">${taxBreakdown.total_tax.toFixed(2)}</span>
+          <span className="text-black">{formatPrice(taxBreakdown.total_tax)}</span>
         </div>
       )}
     </div>

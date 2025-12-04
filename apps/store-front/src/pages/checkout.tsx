@@ -19,6 +19,7 @@ import { taxesService } from '@/lib/taxes';
 import { productsService, Product } from '@/lib/products';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
 import ContextualLink from '@/components/ContextualLink';
+import { formatPrice } from '@/lib/format';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -323,7 +324,7 @@ export default function CheckoutPage() {
                       >
                         <div className="flex justify-between items-center">
                           <span>{percent === 0 ? 'Sin propina' : `${percent}%`}</span>
-                          <span className="font-semibold">${amount.toFixed(2)}</span>
+                          <span className="font-semibold">{formatPrice(amount)}</span>
                         </div>
                       </button>
                     );
@@ -358,14 +359,14 @@ export default function CheckoutPage() {
                         <div className="flex-1">
                           <div className="font-medium">{item.product_name}</div>
                           <div className="text-sm text-gray-600">
-                            Cantidad: {item.quantity} × ${parseFloat(String(item.unit_price || 0)).toFixed(2)}
+                            Cantidad: {item.quantity} × {formatPrice(parseFloat(String(item.unit_price || 0)))}
                           </div>
                           {itemsTaxBreakdowns[item.id] && (
                             <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
                           )}
                         </div>
                         <div className="font-semibold">
-                          ${parseFloat(String(item.item_subtotal || 0)).toFixed(2)}
+                          {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
                         </div>
                       </div>
                     ))}
@@ -376,25 +377,25 @@ export default function CheckoutPage() {
                 <div className="border-t border-gray-200 pt-4 space-y-2">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Impuestos</span>
-                    <span>${totalTax.toFixed(2)}</span>
+                    <span>{formatPrice(totalTax)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Envío</span>
-                    <span>${deliveryFee.toFixed(2)}</span>
+                    <span>{formatPrice(deliveryFee)}</span>
                   </div>
                   {tipAmount > 0 && (
                     <div className="flex justify-between">
                       <span>Propina</span>
-                      <span>${tipAmount.toFixed(2)}</span>
+                      <span>{formatPrice(tipAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
                     <span>Total</span>
-                    <span>${total.toFixed(2)}</span>
+                    <span>{formatPrice(total)}</span>
                   </div>
                 </div>
               </div>
@@ -414,7 +415,7 @@ export default function CheckoutPage() {
             {currentStep !== 'summary' ? (
               <button
                 onClick={handleNextStep}
-                className="flex-1 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
               >
                 Continuar
               </button>
@@ -422,7 +423,7 @@ export default function CheckoutPage() {
               <button
                 onClick={handleCheckout}
                 disabled={processing}
-                className="flex-1 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {processing ? 'Procesando...' : 'Confirmar Pedido'}
               </button>

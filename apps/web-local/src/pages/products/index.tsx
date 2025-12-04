@@ -48,6 +48,12 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<'updated_at' | 'created_at'>('updated_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  
   // Estados para compatibilidad de vehículos
   const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibility[]>([]);
   const [loadingCompatibilities, setLoadingCompatibilities] = useState(false);
@@ -68,13 +74,7 @@ export default function ProductsPage() {
   const [productTaxes, setProductTaxes] = useState<ProductTax[]>([]);
   const [loadingTaxes, setLoadingTaxes] = useState(false);
 
-  // Cargar datos iniciales - productos son globales, no requieren tienda
-  useEffect(() => {
-    loadData();
-    loadTaxTypes();
-  }, []); // Cargar una sola vez al montar
-
-  const loadData = async () => {
+  const loadData = async (page: number = currentPage, limit: number = pageSize) => {
     try {
       setLoading(true);
       setError(null);
@@ -85,13 +85,17 @@ export default function ProductsPage() {
       // Cargar productos y categorías en paralelo
       // Los productos son GLOBALES - no se filtra por businessId
       // Si se proporciona businessId, solo se usa para crear productos nuevos, pero el listado es global
-      const [productsData, categoriesData] = await Promise.all([
-        productsService.getProducts(undefined, userVehicle || undefined), // undefined = todos los productos globales
+      const [productsResponse, categoriesData] = await Promise.all([
+        productsService.getProducts(undefined, userVehicle || undefined, { page, limit }), // undefined = todos los productos globales
         productsService.getCategories(),
       ]);
 
-      // Asegurar que productsData sea un array
-      setProducts(Array.isArray(productsData) ? productsData : []);
+      // Actualizar productos y paginación
+      setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
+      setTotalProducts(productsResponse.pagination.total || 0);
+      setTotalPages(productsResponse.pagination.totalPages || 0);
+      setCurrentPage(productsResponse.pagination.page || 1);
+      
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (err: any) {
       console.error('Error cargando datos:', err);
@@ -100,6 +104,19 @@ export default function ProductsPage() {
       setLoading(false);
     }
   };
+
+  // Cargar datos iniciales - productos son globales, no requieren tienda
+  useEffect(() => {
+    loadData(1, pageSize);
+    loadTaxTypes();
+  }, []); // Cargar una sola vez al montar
+
+  // Recargar cuando cambie la página o el tamaño de página
+  useEffect(() => {
+    if (currentPage > 0) {
+      loadData(currentPage, pageSize);
+    }
+  }, [currentPage, pageSize]); // Recargar cuando cambie la página o el tamaño de página
 
   const loadTaxTypes = async () => {
     try {
@@ -391,8 +408,8 @@ export default function ProductsPage() {
       if (!editingProduct) {
         // Recargar el producto recién creado para obtener su ID
         // Los productos son globales, no se filtra por businessId
-        const updatedProducts = await productsService.getProducts(undefined);
-        const newProduct = updatedProducts.find(p => p.name === formData.name);
+        const updatedProductsResponse = await productsService.getProducts(undefined);
+        const newProduct = updatedProductsResponse.data.find((p: Product) => p.name === formData.name);
         if (newProduct) {
           setEditingProduct(newProduct);
           setFormData({ ...formData, business_id: newProduct.business_id });
@@ -799,8 +816,68 @@ export default function ProductsPage() {
 
               {filteredAndSortedProducts.length > 0 && (
                 <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-                  <div className="text-sm text-gray-500">
-                    No. of rows {filteredAndSortedProducts.length}
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-gray-500">
+                      Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalProducts)} de {totalProducts} productos
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Selector de tamaño de página */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-gray-500">Mostrar:</label>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => {
+                            setPageSize(Number(e.target.value));
+                            setCurrentPage(1); // Resetear a la primera página
+                          }}
+                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                        >
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                      
+                      {/* Controles de paginación */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setCurrentPage(1)}
+                          disabled={currentPage === 1}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Primera página"
+                        >
+                          ««
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Página anterior"
+                        >
+                          «
+                        </button>
+                        <span className="px-3 py-1 text-sm text-gray-700">
+                          Página {currentPage} de {totalPages || 1}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(currentPage + 1)}
+                          disabled={currentPage >= totalPages}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Página siguiente"
+                        >
+                          »
+                        </button>
+                        <button
+                          onClick={() => setCurrentPage(totalPages)}
+                          disabled={currentPage >= totalPages}
+                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Última página"
+                        >
+                          »»
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1707,7 +1784,7 @@ export function ProductForm({
                 <div>
                   <CategorySelector
                     categories={categories}
-                    value={formData.category_id}
+                    value={formData.category_id || ''}
                     onChange={(categoryId) => setFormData({ ...formData, category_id: categoryId })}
                     required={isFieldRequired('category_id')}
                     placeholder="Selecciona una categoría"
@@ -2210,12 +2287,12 @@ function VehicleCompatibilitySection({
         notes: notes || null,
         is_active: true,
         // Incluir nombres para mostrar descripción completa
-        brand_name: selectedBrandData?.name || null,
-        model_name: selectedModelData?.name || null,
-        year_start: selectedYearData?.year_start || null,
-        year_end: selectedYearData?.year_end || null,
-        generation: selectedYearData?.generation || null,
-        engine_code: selectedSpecData?.engine_code || null,
+        brand_name: selectedBrandData?.name || undefined,
+        model_name: selectedModelData?.name || undefined,
+        year_start: selectedYearData?.year_start || undefined,
+        year_end: selectedYearData?.year_end || undefined,
+        generation: selectedYearData?.generation || undefined,
+        engine_code: selectedSpecData?.engine_code || undefined,
         transmission_type: selectedSpecData?.transmission_type || null,
       };
       setProductCompatibilities([...compatibilities, newCompatibility]);

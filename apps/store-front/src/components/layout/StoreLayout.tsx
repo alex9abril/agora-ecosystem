@@ -4,14 +4,8 @@
 
 import React, { ReactNode } from 'react';
 import { useStoreContext } from '@/contexts/StoreContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCart } from '@/contexts/CartContext';
+import Header from './Header';
 import ContextualLink from '../ContextualLink';
-import { useStoreRouting } from '@/hooks/useStoreRouting';
-import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
-import PersonIcon from '@mui/icons-material/Person';
-import HomeIcon from '@mui/icons-material/Home';
-import StoreIcon from '@mui/icons-material/Store';
 
 interface StoreLayoutProps {
   children: ReactNode;
@@ -23,77 +17,24 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
     groupData, 
     branchData, 
     isInStore, 
-    getStoreName,
-    getStoreLogo,
     isLoading,
     error,
   } = useStoreContext();
-  const { isAuthenticated } = useAuth();
-  const { itemCount } = useCart();
-  const { getProductsUrl, getCartUrl } = useStoreRouting();
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header con branding del grupo/sucursal */}
-      <header className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {/* Logo y nombre */}
-            <ContextualLink href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              {getStoreLogo() && (
-                <img 
-                  src={getStoreLogo()!} 
-                  alt={getStoreName()} 
-                  className="h-10 w-10 rounded object-cover"
-                />
-              )}
-              <span className="text-xl font-bold text-black">
-                {getStoreName()}
-              </span>
-            </ContextualLink>
-
-            {/* Navegación */}
-            <nav className="flex items-center gap-6">
-              <ContextualLink href="/" className="text-gray-700 hover:text-black transition-colors font-medium">
-                Inicio
-              </ContextualLink>
-              <ContextualLink href={getProductsUrl()} className="text-gray-700 hover:text-black transition-colors font-medium">
-                Productos
-              </ContextualLink>
-              {/* Carrito siempre visible */}
-              <ContextualLink href={getCartUrl()} className="relative text-gray-700 hover:text-black transition-colors font-medium">
-                <ShoppingCartIcon className="w-6 h-6" />
-                {isAuthenticated && itemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-green-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                    {itemCount > 99 ? '99+' : itemCount}
-                  </span>
-                )}
-              </ContextualLink>
-              
-              {/* Perfil solo si está autenticado */}
-              {isAuthenticated ? (
-                <ContextualLink href="/profile" className="text-gray-700 hover:text-black transition-colors font-medium">
-                  <PersonIcon className="w-6 h-6" />
-                </ContextualLink>
-              ) : (
-                <ContextualLink href="/auth/login" className="text-gray-700 hover:text-black transition-colors font-medium">
-                  Iniciar Sesión
-                </ContextualLink>
-              )}
-            </nav>
-          </div>
-        </div>
-      </header>
+      {/* Header principal con diseño AutoZone */}
+      <Header />
 
       {/* Banner del grupo/sucursal si aplica */}
       {isInStore() && !isLoading && !error && (
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white py-6">
+        <div className="bg-gradient-to-r from-toyota-red to-toyota-red-dark text-white py-6">
           <div className="max-w-7xl mx-auto px-4">
             {contextType === 'grupo' && groupData && (
               <div>
                 <h2 className="text-2xl font-bold mb-2">{groupData.name}</h2>
                 {groupData.description && (
-                  <p className="text-blue-100">{groupData.description}</p>
+                  <p className="text-white opacity-90">{groupData.description}</p>
                 )}
               </div>
             )}
@@ -101,10 +42,10 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
               <div>
                 <h2 className="text-2xl font-bold mb-2">{branchData.name}</h2>
                 {branchData.address && (
-                  <p className="text-blue-100">📍 {branchData.address}</p>
+                  <p className="text-white opacity-90">📍 {branchData.address}</p>
                 )}
                 {branchData.phone && (
-                  <p className="text-blue-100">📞 {branchData.phone}</p>
+                  <p className="text-white opacity-90">📞 {branchData.phone}</p>
                 )}
               </div>
             )}
@@ -114,10 +55,10 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
 
       {/* Mensaje de error si el slug no existe */}
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="bg-red-50 border-l-4 border-toyota-red p-4">
           <div className="max-w-7xl mx-auto">
-            <p className="text-red-700">{error}</p>
-            <ContextualLink href="/" className="text-red-600 hover:text-red-800 text-sm mt-2 inline-block">
+            <p className="text-toyota-red-dark">{error}</p>
+            <ContextualLink href="/" className="text-toyota-red hover:text-toyota-red-dark text-sm mt-2 inline-block">
               Volver al inicio
             </ContextualLink>
           </div>
@@ -136,7 +77,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
       </main>
 
       {/* Footer con información de contacto */}
-      <footer className="bg-gray-900 text-white mt-12">
+      <footer className="bg-toyota-gray-dark text-white mt-12">
         <div className="max-w-7xl mx-auto px-4 py-8">
           {isInStore() ? (
             <div>

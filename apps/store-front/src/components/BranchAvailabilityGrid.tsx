@@ -6,12 +6,14 @@
 import React from 'react';
 import { ProductBranchAvailability } from '@/lib/products';
 import StockIndicator from './StockIndicator';
+import { formatPrice } from '@/lib/format';
 
 interface BranchAvailabilityGridProps {
   availabilities: ProductBranchAvailability[];
   globalPrice: number;
   selectedBranchId?: string | null;
   onBranchSelect: (branchId: string) => void;
+  storedBranchId?: string | null;
   className?: string;
 }
 
@@ -20,6 +22,7 @@ export default function BranchAvailabilityGrid({
   globalPrice,
   selectedBranchId,
   onBranchSelect,
+  storedBranchId,
   className = '',
 }: BranchAvailabilityGridProps) {
   // Filtrar solo sucursales activas y con producto habilitado
@@ -76,7 +79,7 @@ export default function BranchAvailabilityGrid({
                       {availability.branch_name}
                     </h4>
                     {isSelected && (
-                      <span className="text-xs font-medium text-black bg-black text-white px-2 py-0.5 rounded">
+                      <span className="text-xs font-medium text-white bg-toyota-red px-2 py-0.5 rounded">
                         Seleccionada
                       </span>
                     )}
@@ -94,12 +97,12 @@ export default function BranchAvailabilityGrid({
                   <span className={`font-bold ${
                     isSelected ? 'text-black text-xl' : isBestOption ? 'text-green-700 text-xl' : 'text-black text-lg'
                   }`}>
-                    ${displayPrice.toFixed(2)}
+                    {formatPrice(displayPrice)}
                   </span>
                   {hasDiscount && (
                     <div className="mt-1">
                       <span className="text-xs text-gray-500 line-through">
-                        ${globalPrice.toFixed(2)}
+                        {formatPrice(globalPrice)}
                       </span>
                       <span className="text-xs text-green-600 font-medium ml-2">
                         -{((1 - displayPrice / globalPrice) * 100).toFixed(0)}%

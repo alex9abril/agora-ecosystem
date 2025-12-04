@@ -71,7 +71,7 @@ export default function ProductsPage() {
               />
               <button
                 type="submit"
-                className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                className="px-6 py-2 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
               >
                 Buscar
               </button>

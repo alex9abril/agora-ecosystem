@@ -82,7 +82,7 @@ export default function HomePage() {
           <div className="mb-8">
             <button
               onClick={() => setShowBranchSelector(!showBranchSelector)}
-              className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+              className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
             >
               {showBranchSelector ? 'Ocultar' : 'Seleccionar'} Sucursal
             </button>

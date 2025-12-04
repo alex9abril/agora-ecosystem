@@ -1963,15 +1963,26 @@ export class BusinessesService {
       );
       const total = parseInt(countResult.rows[0].total);
 
-      // Obtener datos
+      // Obtener datos con información de ciudad y estado
       queryParams.push(limit, offset);
       const result = await pool.query(
         `SELECT 
           b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
-          b.address, b.phone, b.email, b.is_active, b.created_at, b.updated_at
+          b.phone, b.email, b.is_active, b.created_at, b.updated_at,
+          a.city, a.state,
+          (b.location)[0] as longitude,
+          (b.location)[1] as latitude,
+          CONCAT_WS(', ',
+            NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
+            NULLIF(a.neighborhood, ''),
+            NULLIF(a.city, ''),
+            NULLIF(a.state, ''),
+            NULLIF(a.postal_code, '')
+          ) as address
         FROM core.businesses b
+        LEFT JOIN core.addresses a ON b.address_id = a.id
         ${whereClause}
-        ORDER BY b.created_at DESC
+        ORDER BY a.state ASC, a.city ASC, b.name ASC
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
         queryParams
       );
@@ -2005,8 +2016,19 @@ export class BusinessesService {
       const result = await pool.query(
         `SELECT 
           b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
-          b.address, b.phone, b.email, b.is_active, b.created_at, b.updated_at
+          b.phone, b.email, b.is_active, b.created_at, b.updated_at,
+          a.city, a.state,
+          (b.location)[0] as longitude,
+          (b.location)[1] as latitude,
+          CONCAT_WS(', ',
+            NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
+            NULLIF(a.neighborhood, ''),
+            NULLIF(a.city, ''),
+            NULLIF(a.state, ''),
+            NULLIF(a.postal_code, '')
+          ) as address
         FROM core.businesses b
+        LEFT JOIN core.addresses a ON b.address_id = a.id
         WHERE b.slug = $1 AND b.is_active = TRUE`,
         [slug]
       );

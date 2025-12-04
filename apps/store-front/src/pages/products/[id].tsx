@@ -18,6 +18,8 @@ import { useStoreContext } from '@/contexts/StoreContext';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
 import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { formatPrice } from '@/lib/format';
+import WarningIcon from '@mui/icons-material/Warning';
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -35,6 +37,35 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [addingToCart, setAddingToCart] = useState(false);
+  const [storedBranch, setStoredBranch] = useState<{ id: string; name: string } | null>(null);
+
+  // Cargar sucursal guardada en localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('selected_branch');
+        if (stored) {
+          const branch = JSON.parse(stored);
+          setStoredBranch({ id: branch.id, name: branch.name });
+        }
+      } catch (error) {
+        console.error('Error leyendo sucursal guardada:', error);
+      }
+    }
+  }, []);
+
+  // Cuando se carga la sucursal guardada, si hay disponibilidades ya cargadas, seleccionarla automáticamente
+  useEffect(() => {
+    if (contextType === 'global' && storedBranch && branchAvailabilities.length > 0 && !selectedBranchId) {
+      // Si hay una sucursal guardada y está disponible, seleccionarla automáticamente
+      const storedBranchAvailable = branchAvailabilities.find(
+        (avail) => avail.branch_id === storedBranch.id && avail.is_active && avail.is_enabled
+      );
+      if (storedBranchAvailable) {
+        setSelectedBranchId(storedBranch.id);
+      }
+    }
+  }, [storedBranch, branchAvailabilities, contextType, selectedBranchId]);
 
   useEffect(() => {
     if (id) {
@@ -69,7 +100,37 @@ export default function ProductDetailPage() {
       const availabilities = response.availabilities || [];
       setBranchAvailabilities(availabilities);
       
-      // Seleccionar automáticamente la primera sucursal (mejor precio)
+      // Obtener sucursal guardada (puede no estar en el estado aún)
+      let currentStoredBranch = storedBranch;
+      if (!currentStoredBranch && typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('selected_branch');
+          if (stored) {
+            const branch = JSON.parse(stored);
+            currentStoredBranch = { id: branch.id, name: branch.name };
+          }
+        } catch (error) {
+          // Ignorar error
+        }
+      }
+      
+      // Si ya hay una sucursal seleccionada manualmente, no cambiar la selección
+      if (selectedBranchId) {
+        return;
+      }
+      
+      // Si hay una sucursal guardada y está disponible, seleccionarla automáticamente (prioridad)
+      if (currentStoredBranch) {
+        const storedBranchAvailable = availabilities.find(
+          (avail) => avail.branch_id === currentStoredBranch!.id && avail.is_active && avail.is_enabled
+        );
+        if (storedBranchAvailable) {
+          setSelectedBranchId(currentStoredBranch.id);
+          return;
+        }
+      }
+      
+      // Si no hay sucursal guardada o no está disponible, seleccionar la más barata
       const availableBranches = availabilities
         .filter((avail) => avail.is_active && avail.is_enabled)
         .map((avail) => ({
@@ -80,7 +141,7 @@ export default function ProductDetailPage() {
         }))
         .sort((a, b) => a.displayPrice - b.displayPrice);
       
-      if (availableBranches.length > 0 && !selectedBranchId) {
+      if (availableBranches.length > 0) {
         setSelectedBranchId(availableBranches[0].branch_id);
       }
     } catch (error) {
@@ -288,7 +349,7 @@ export default function ProductDetailPage() {
                       <>
                         <span className="text-sm text-gray-600 mb-1 block">Precio:</span>
                         <span className="text-3xl font-bold text-black">
-                          ${displayPrice.toFixed(2)}
+                          {formatPrice(displayPrice)}
                         </span>
                         <p className="text-xs text-gray-500 mt-1">
                           {selectedBranch.branch_name}
@@ -298,7 +359,7 @@ export default function ProductDetailPage() {
                       <>
                         <span className="text-sm text-gray-600 mb-1 block">Precio global:</span>
                         <span className="text-3xl font-bold text-black">
-                          ${product.price.toFixed(2)}
+                          {formatPrice(product.price)}
                         </span>
                         <p className="text-xs text-gray-500 mt-1">
                           Selecciona una sucursal para ver precio y stock específicos
@@ -357,12 +418,36 @@ export default function ProductDetailPage() {
                       <p className="text-sm text-gray-500">Cargando sucursales disponibles...</p>
                     </div>
                   ) : (
-                    <BranchAvailabilityGrid
-                      availabilities={branchAvailabilities}
-                      globalPrice={product.price}
-                      selectedBranchId={selectedBranchId}
-                      onBranchSelect={setSelectedBranchId}
-                    />
+                    <>
+                      {/* Alerta si el producto no está disponible en la sucursal seleccionada */}
+                      {storedBranch && !branchAvailabilities.some(
+                        (avail) => avail.branch_id === storedBranch.id && avail.is_active && avail.is_enabled
+                      ) && (
+                        <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <h4 className="text-sm font-semibold text-yellow-800 mb-1">
+                                Producto no disponible en tu sucursal seleccionada
+                              </h4>
+                              <p className="text-sm text-yellow-700 mb-2">
+                                Este producto no se encuentra disponible en <strong>{storedBranch.name}</strong>, pero puedes agregarlo al carrito desde otra sucursal.
+                              </p>
+                              <p className="text-xs text-yellow-600">
+                                <strong>Nota:</strong> Si agregas este producto desde una sucursal diferente a la seleccionada, es probable que se genere una división de pedidos y costos adicionales de envío.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <BranchAvailabilityGrid
+                        availabilities={branchAvailabilities}
+                        globalPrice={product.price}
+                        selectedBranchId={selectedBranchId}
+                        onBranchSelect={setSelectedBranchId}
+                        storedBranchId={storedBranch?.id}
+                      />
+                    </>
                   )}
                 </div>
               )}
@@ -417,10 +502,33 @@ export default function ProductDetailPage() {
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-semibold text-gray-700">Total:</span>
                   <span className="text-2xl font-bold text-black">
-                    ${calculateTotalPrice().toFixed(2)}
+                    {formatPrice(calculateTotalPrice())}
                   </span>
                 </div>
               </div>
+
+              {/* Advertencia si se selecciona una sucursal diferente a la guardada */}
+              {contextType === 'global' && storedBranch && selectedBranchId && selectedBranchId !== storedBranch.id && (
+                <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-yellow-800 mb-1">
+                        Sucursal diferente a la seleccionada
+                      </h4>
+                      <p className="text-sm text-yellow-700 mb-2">
+                        Estás agregando este producto desde una sucursal diferente a <strong>{storedBranch.name}</strong> (tu sucursal seleccionada).
+                        {selectedBranch && (
+                          <> Actualmente seleccionada: <strong>{selectedBranch.branch_name}</strong>.</>
+                        )}
+                      </p>
+                      <p className="text-xs text-yellow-600">
+                        <strong>Nota:</strong> Esto puede generar una división de pedidos y costos adicionales de envío si tu carrito contiene productos de diferentes sucursales.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Botón agregar al carrito */}
               {contextType === 'global' && !selectedBranchId && (
@@ -432,7 +540,7 @@ export default function ProductDetailPage() {
               {contextType === 'global' && selectedBranchId && (
                 <button 
                   onClick={handleAddToCart}
-                  className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={
                     product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
                     addingToCart ||
@@ -450,7 +558,7 @@ export default function ProductDetailPage() {
               {contextType !== 'global' && isAvailable && (
                 <button 
                   onClick={handleAddToCart}
-                  className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={
                     product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
                     addingToCart

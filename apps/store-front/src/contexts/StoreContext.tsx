@@ -32,6 +32,10 @@ export interface Business {
   address?: string;
   phone?: string;
   email?: string;
+  city?: string;
+  state?: string;
+  latitude?: number;
+  longitude?: number;
   is_active: boolean;
 }
 
@@ -60,6 +64,8 @@ interface StoreContextValue {
 }
 
 const StoreContext = createContext<StoreContextValue | undefined>(undefined);
+
+const STORAGE_KEY = 'selected_branch';
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const router = useRouter();

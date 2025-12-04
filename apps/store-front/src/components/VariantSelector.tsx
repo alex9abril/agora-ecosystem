@@ -74,15 +74,15 @@ export default function VariantSelector({
                     onClick={() => handleVariantSelect(group.variant_group_id, variant.variant_id, 'single')}
                     className={`px-4 py-2 rounded-lg border-2 transition-colors ${
                       isSelected
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                        ? 'border-toyota-red bg-toyota-red text-white'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-toyota-gray'
                     }`}
                   >
                     <div className="font-medium">{variant.variant_name}</div>
                     {variantPrice !== product.price && (
                       <div className="text-xs">
                         {variantPrice > product.price ? '+' : ''}
-                        ${(variantPrice - product.price).toFixed(2)}
+                        {formatPrice(Math.abs(variantPrice - product.price))}
                       </div>
                     )}
                   </button>
@@ -123,7 +123,7 @@ export default function VariantSelector({
                     {variantPrice !== product.price && (
                       <span className={`text-sm ${isSelected ? 'text-gray-700' : 'text-gray-600'}`}>
                         {variantPrice > product.price ? '+' : ''}
-                        ${(variantPrice - product.price).toFixed(2)}
+                        {formatPrice(Math.abs(variantPrice - product.price))}
                       </span>
                     )}
                   </label>

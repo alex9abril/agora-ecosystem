@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { Product } from '@/lib/products';
+import { formatPrice } from '@/lib/format';
 
 interface BranchPriceDisplayProps {
   product: Product;
@@ -23,12 +24,12 @@ export default function BranchPriceDisplay({
     <div className={className}>
       <div className="flex items-center gap-2">
         <span className="text-2xl font-bold text-black">
-          ${displayPrice.toFixed(2)}
+          {formatPrice(displayPrice)}
         </span>
         {hasDiscount && (
           <>
             <span className="text-lg text-gray-500 line-through">
-              ${product.price.toFixed(2)}
+              {formatPrice(product.price)}
             </span>
             <span className="text-sm text-green-600 font-medium">
               -{((1 - displayPrice / product.price) * 100).toFixed(0)}%

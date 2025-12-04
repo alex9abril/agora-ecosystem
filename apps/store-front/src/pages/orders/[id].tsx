@@ -12,6 +12,7 @@ import ContextualLink from '@/components/ContextualLink';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PaymentIcon from '@mui/icons-material/Payment';
+import { formatPrice } from '@/lib/format';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -151,7 +152,7 @@ export default function OrderDetailPage() {
                     <div className="flex-1">
                       <div className="font-medium mb-1">{item.item_name}</div>
                       <div className="text-sm text-gray-600">
-                        Cantidad: {item.quantity} × ${parseFloat(String(item.item_price || 0)).toFixed(2)}
+                        Cantidad: {item.quantity} × {formatPrice(parseFloat(String(item.item_price || 0)))}
                       </div>
                       {item.variant_selection && Object.keys(item.variant_selection).length > 0 && (
                         <div className="text-xs text-gray-500 mt-1">
@@ -168,7 +169,7 @@ export default function OrderDetailPage() {
                       )}
                     </div>
                     <div className="font-semibold">
-                      ${parseFloat(String(item.item_subtotal || 0)).toFixed(2)}
+                      {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
                     </div>
                   </div>
                 ))}
@@ -201,31 +202,31 @@ export default function OrderDetailPage() {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span>${parseFloat(String(order.subtotal || 0)).toFixed(2)}</span>
+                <span>{formatPrice(parseFloat(String(order.subtotal || 0)))}</span>
               </div>
               <div className="flex justify-between">
                 <span>Impuestos</span>
-                <span>${parseFloat(String(order.tax_amount || 0)).toFixed(2)}</span>
+                <span>{formatPrice(parseFloat(String(order.tax_amount || 0)))}</span>
               </div>
               <div className="flex justify-between">
                 <span>Envío</span>
-                <span>${parseFloat(String(order.delivery_fee || 0)).toFixed(2)}</span>
+                <span>{formatPrice(parseFloat(String(order.delivery_fee || 0)))}</span>
               </div>
               {parseFloat(String(order.discount_amount || 0)) > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Descuento</span>
-                  <span>-${parseFloat(String(order.discount_amount || 0)).toFixed(2)}</span>
+                  <span>-{formatPrice(parseFloat(String(order.discount_amount || 0)))}</span>
                 </div>
               )}
               {parseFloat(String(order.tip_amount || 0)) > 0 && (
                 <div className="flex justify-between">
                   <span>Propina</span>
-                  <span>${parseFloat(String(order.tip_amount || 0)).toFixed(2)}</span>
+                  <span>{formatPrice(parseFloat(String(order.tip_amount || 0)))}</span>
                 </div>
               )}
               <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
                 <span>Total</span>
-                <span>${parseFloat(String(order.total_amount || 0)).toFixed(2)}</span>
+                <span>{formatPrice(parseFloat(String(order.total_amount || 0)))}</span>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200">
@@ -248,7 +249,7 @@ export default function OrderDetailPage() {
           <div className="text-center">
             <ContextualLink
               href="/"
-              className="px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors inline-block font-medium"
+              className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block font-medium"
             >
               Volver al Inicio
             </ContextualLink>

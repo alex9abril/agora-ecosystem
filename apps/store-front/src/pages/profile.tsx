@@ -135,7 +135,7 @@ export default function ProfilePage() {
                     setEditingAddress(null);
                     setShowAddressForm(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors"
                 >
                   <AddIcon className="w-5 h-5" />
                   Agregar Dirección

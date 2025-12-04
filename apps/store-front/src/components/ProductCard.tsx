@@ -7,6 +7,7 @@ import React from 'react';
 import ContextualLink from './ContextualLink';
 import { Product } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
+import { formatPrice } from '@/lib/format';
 
 interface ProductCardProps {
   product: Product;
@@ -66,18 +67,18 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
           <div className="flex items-center justify-between">
             <div>
               <span className="text-xl font-bold text-black">
-                ${typeof displayPrice === 'number' ? displayPrice.toFixed(2) : displayPrice}
+                {formatPrice(displayPrice)}
               </span>
               {contextType === 'sucursal' && product.branch_price !== undefined && product.branch_price !== product.price && (
                 <span className="text-sm text-gray-500 line-through ml-2">
-                  ${product.price.toFixed(2)}
+                  {formatPrice(product.price)}
                 </span>
               )}
             </div>
             {isAvailable && onAddToCart && (
               <button
                 onClick={handleAddToCart}
-                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                className="px-4 py-2 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-sm font-medium"
                 aria-label="Agregar al carrito"
               >
                 Agregar
