@@ -10,6 +10,7 @@ import { supabase, supabaseAdmin } from '../../config/supabase.config';
 import { dbPool } from '../../config/database.config';
 import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
+import { AdminSignUpDto } from './dto/admin-signup.dto';
 
 /**
  * Servicio de autenticación usando Supabase
@@ -27,7 +28,7 @@ export class AuthService {
     const { data: { user }, error } = await supabase.auth.getUser(token);
 
     if (error || !user) {
-      throw new UnauthorizedException('Token inválido o expirado');
+      throw new UnauthorizedException('Tu sesión ha expirado o el token es inválido. Por favor, inicia sesión nuevamente.');
     }
 
     return user;
@@ -294,11 +295,21 @@ export class AuthService {
 
     if (authError) {
       console.error('❌ Error en Supabase Auth:', authError);
-      // Si el usuario ya existe
-      if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
-        throw new ConflictException('El email ya está registrado');
+      
+      // Mensajes personalizados según el tipo de error
+      if (authError.message.includes('already registered') || authError.message.includes('already exists') || authError.message.includes('User already registered')) {
+        throw new ConflictException('Este email ya está registrado en nuestra plataforma. Si ya tienes una cuenta, intenta iniciar sesión.');
       }
-      throw new BadRequestException(`Error al registrar usuario: ${authError.message}`);
+      
+      if (authError.message.includes('Password') && authError.message.includes('weak')) {
+        throw new BadRequestException('La contraseña es demasiado débil. Por favor, usa una contraseña más segura con al menos 6 caracteres.');
+      }
+      
+      if (authError.message.includes('Email') && authError.message.includes('invalid')) {
+        throw new BadRequestException('El formato del email no es válido. Por favor, verifica que esté escrito correctamente.');
+      }
+      
+      throw new BadRequestException('No se pudo completar el registro. Por favor, verifica los datos proporcionados e intenta nuevamente.');
     }
 
     if (!authData || !authData.user) {
@@ -388,6 +399,235 @@ export class AuthService {
   }
 
   /**
+   * Registra un nuevo usuario administrador
+   * Este método solo permite crear usuarios con rol 'admin'
+   */
+  async signUpAdmin(adminSignUpDto: AdminSignUpDto) {
+    if (!supabaseAdmin) {
+      throw new ServiceUnavailableException('Servicio de autenticación admin no configurado');
+    }
+
+    if (!supabase) {
+      throw new ServiceUnavailableException('Servicio de autenticación no configurado');
+    }
+
+    console.log('🔍 Registrando nuevo administrador:', adminSignUpDto.email);
+
+    let adminData: any = null;
+    let adminError: any = null;
+    let userId: string | null = null;
+
+    // Primero intentar crear usuario usando admin client
+    try {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email: adminSignUpDto.email,
+        password: adminSignUpDto.password,
+        email_confirm: true, // Confirmar email automáticamente
+        user_metadata: {
+          first_name: adminSignUpDto.firstName,
+          last_name: adminSignUpDto.lastName,
+          phone: adminSignUpDto.phone,
+          role: 'admin', // Siempre admin
+        },
+      });
+
+      if (error) {
+        adminError = error;
+        console.warn('⚠️  Error con admin client:', error.message);
+      } else if (data?.user) {
+        adminData = data;
+        userId = data.user.id;
+        console.log('✅ Administrador creado con admin client:', userId);
+      }
+    } catch (err: any) {
+      console.warn('⚠️  Excepción al usar admin client:', err.message);
+      adminError = err;
+    }
+
+    // Si falla con "User not allowed" o similar, usar enfoque alternativo
+    if (adminError && (adminError.message.includes('not allowed') || adminError.message.includes('User not allowed'))) {
+      console.log('🔄 Intentando enfoque alternativo: signUp normal + confirmación...');
+      
+      // Verificar si el usuario ya existe
+      const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (!listError && existingUsers?.users) {
+        const existingUser = (existingUsers.users as any[]).find(
+          (u: any) => u.email?.toLowerCase() === adminSignUpDto.email.toLowerCase()
+        );
+        if (existingUser) {
+          throw new ConflictException('Este email ya está registrado. Si ya tienes una cuenta de administrador, intenta iniciar sesión.');
+        }
+      }
+
+      // Crear usuario con signUp normal
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: adminSignUpDto.email,
+        password: adminSignUpDto.password,
+        options: {
+          data: {
+            first_name: adminSignUpDto.firstName,
+            last_name: adminSignUpDto.lastName,
+            phone: adminSignUpDto.phone,
+            role: 'admin',
+          },
+        },
+      });
+
+      if (signUpError) {
+        console.error('❌ Error en signUp normal:', signUpError);
+        
+        if (signUpError.message.includes('already registered') || signUpError.message.includes('already exists') || signUpError.message.includes('User already registered')) {
+          throw new ConflictException('Este email ya está registrado. Si ya tienes una cuenta de administrador, intenta iniciar sesión.');
+        }
+        
+        if (signUpError.message.includes('Password') && signUpError.message.includes('weak')) {
+          throw new BadRequestException('La contraseña es demasiado débil. Por favor, usa una contraseña más segura.');
+        }
+        
+        if (signUpError.message.includes('Email') && signUpError.message.includes('invalid')) {
+          throw new BadRequestException('El formato del email no es válido. Por favor, verifica que esté escrito correctamente.');
+        }
+        
+        throw new BadRequestException('No se pudo crear la cuenta de administrador. Por favor, verifica los datos e intenta nuevamente.');
+      }
+
+      if (!signUpData?.user) {
+        throw new BadRequestException('No se pudo crear el administrador');
+      }
+
+      userId = signUpData.user.id;
+      adminData = { user: signUpData.user };
+      console.log('✅ Administrador creado con signUp normal:', userId);
+
+      // Confirmar email usando admin client
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          email_confirm: true,
+        });
+        console.log('✅ Email confirmado automáticamente');
+      } catch (confirmError: any) {
+        console.warn('⚠️  No se pudo confirmar email automáticamente:', confirmError.message);
+        // Continuar de todas formas, el usuario puede confirmar manualmente
+      }
+    } else if (adminError) {
+      // Otro tipo de error
+      console.error('❌ Error en Supabase Auth:', adminError);
+      
+      if (adminError.message.includes('already registered') || adminError.message.includes('already exists') || adminError.message.includes('User already registered')) {
+        throw new ConflictException('Este email ya está registrado. Si ya tienes una cuenta de administrador, intenta iniciar sesión.');
+      }
+      
+      if (adminError.message.includes('Password') && adminError.message.includes('weak')) {
+        throw new BadRequestException('La contraseña es demasiado débil. Por favor, usa una contraseña más segura.');
+      }
+      
+      if (adminError.message.includes('Email') && adminError.message.includes('invalid')) {
+        throw new BadRequestException('El formato del email no es válido. Por favor, verifica que esté escrito correctamente.');
+      }
+      
+      throw new BadRequestException('No se pudo crear la cuenta de administrador. Por favor, verifica los datos e intenta nuevamente.');
+    }
+
+    if (!adminData || !adminData.user || !userId) {
+      console.error('❌ ERROR: No se pudo crear el usuario');
+      throw new BadRequestException('No se pudo crear el administrador');
+    }
+
+    console.log('✅ Administrador creado en Supabase Auth:', userId);
+
+    // Crear perfil en core.user_profiles con rol 'admin'
+    if (dbPool) {
+      console.log('✅ Creando perfil de administrador en core.user_profiles...');
+      try {
+        // Verificar si el teléfono ya existe antes de insertar
+        let phoneToInsert = adminSignUpDto.phone || null;
+        if (phoneToInsert) {
+          const phoneCheck = await dbPool.query(
+            'SELECT id FROM core.user_profiles WHERE phone = $1',
+            [phoneToInsert]
+          );
+          if (phoneCheck.rows.length > 0) {
+            console.warn(`⚠️  El teléfono ${phoneToInsert} ya está en uso, se creará el perfil sin teléfono`);
+            phoneToInsert = null;
+          }
+        }
+
+        await dbPool.query(
+          `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            userId,
+            'admin', // Siempre admin
+            adminSignUpDto.firstName,
+            adminSignUpDto.lastName,
+            phoneToInsert,
+            false,
+            true,
+          ]
+        );
+        console.log('✅ Perfil de administrador creado exitosamente en core.user_profiles');
+      } catch (profileError: any) {
+        console.error('❌ Error creando perfil de administrador:', profileError);
+        // Si el error es por teléfono duplicado, intentar sin teléfono
+        if (profileError.code === '23505' && profileError.constraint === 'user_profiles_phone_key') {
+          console.log('🔄 Reintentando crear perfil sin teléfono...');
+          try {
+            await dbPool.query(
+              `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
+               VALUES ($1, $2, $3, $4, NULL, $5, $6)`,
+              [
+                userId,
+                'admin',
+                adminSignUpDto.firstName,
+                adminSignUpDto.lastName,
+                false,
+                true,
+              ]
+            );
+            console.log('✅ Perfil de administrador creado exitosamente sin teléfono');
+          } catch (retryError: any) {
+            console.error('❌ Error en reintento de creación de perfil:', retryError);
+            // No lanzamos error aquí para no bloquear el registro
+          }
+        }
+        // No lanzamos error aquí para no bloquear el registro
+      }
+    } else {
+      console.warn('⚠️  dbPool no está disponible, no se creará perfil en core.user_profiles');
+    }
+
+    // Crear sesión para el administrador usando el cliente normal de supabase
+    let session = null;
+    if (supabase) {
+      try {
+        // Iniciar sesión para obtener la sesión completa
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: adminSignUpDto.email,
+          password: adminSignUpDto.password,
+        });
+
+        if (!signInError && signInData?.session) {
+          session = signInData.session;
+          console.log('✅ Sesión creada automáticamente para el administrador');
+        } else {
+          console.warn('⚠️  No se pudo crear sesión automática:', signInError?.message);
+        }
+      } catch (sessionErr: any) {
+        console.warn('⚠️  No se pudo crear sesión automática, el usuario deberá iniciar sesión manualmente');
+      }
+    }
+
+    return {
+      user: adminData.user,
+      session: session || null,
+      accessToken: session?.access_token || null,
+      refreshToken: session?.refresh_token || null,
+      message: 'Administrador registrado exitosamente. Ya puedes iniciar sesión.',
+      needsEmailConfirmation: false,
+    };
+  }
+
+  /**
    * Inicia sesión con email y contraseña
    */
   async signIn(signInDto: SignInDto) {
@@ -403,8 +643,8 @@ export class AuthService {
         // Buscar usuario por email usando Supabase Admin
         const { data: usersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
         
-        if (!usersError && usersData?.users) {
-          const user = usersData.users.find(u => u.email === signInDto.email);
+        if (!usersError && usersData?.users && Array.isArray(usersData.users)) {
+          const user = usersData.users.find((u: any) => u.email === signInDto.email);
           
           if (user) {
             // Obtener perfil del usuario
@@ -449,18 +689,31 @@ export class AuthService {
 
     if (error) {
       console.error('❌ Error en signIn:', error.message);
-      if (error.message.includes('Invalid login credentials')) {
-        throw new UnauthorizedException('Credenciales inválidas. Verifica tu email y contraseña.');
+      
+      // Mensajes personalizados según el tipo de error
+      if (error.message.includes('Invalid login credentials') || error.message.includes('invalid')) {
+        throw new UnauthorizedException('Las credenciales proporcionadas son incorrectas. Por favor, verifica tu email y contraseña.');
       }
-      if (error.message.includes('Email not confirmed')) {
-        throw new UnauthorizedException('Por favor verifica tu email antes de iniciar sesión');
+      
+      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+        throw new UnauthorizedException('Tu cuenta requiere verificación de email. Por favor, revisa tu bandeja de entrada y haz clic en el enlace de confirmación antes de iniciar sesión.');
       }
-      throw new UnauthorizedException(`Error al iniciar sesión: ${error.message}`);
+      
+      if (error.message.includes('User not found') || error.message.includes('user_not_found')) {
+        throw new UnauthorizedException('No existe una cuenta asociada a este email. Por favor, verifica tu dirección de correo electrónico.');
+      }
+      
+      if (error.message.includes('Too many requests') || error.message.includes('rate_limit')) {
+        throw new UnauthorizedException('Demasiados intentos de inicio de sesión. Por favor, espera unos minutos e intenta nuevamente.');
+      }
+      
+      // Error genérico con mensaje más amigable
+      throw new UnauthorizedException('No se pudo iniciar sesión. Por favor, verifica tus credenciales e intenta nuevamente.');
     }
 
     if (!data.user || !data.session) {
       console.error('❌ No se pudo obtener usuario o sesión');
-      throw new UnauthorizedException('No se pudo iniciar sesión');
+      throw new UnauthorizedException('No se pudo completar el inicio de sesión. Por favor, intenta nuevamente.');
     }
 
     console.log('✅ Sesión iniciada exitosamente para:', data.user.email);
@@ -509,7 +762,11 @@ export class AuthService {
     });
 
     if (error) {
-      throw new BadRequestException(`Error al solicitar recuperación: ${error.message}`);
+      if (error.message.includes('rate_limit') || error.message.includes('Too many requests')) {
+        throw new BadRequestException('Demasiadas solicitudes de recuperación. Por favor, espera unos minutos antes de intentar nuevamente.');
+      }
+      
+      throw new BadRequestException('No se pudo enviar el email de recuperación. Por favor, verifica el email proporcionado e intenta nuevamente.');
     }
 
     // Supabase siempre retorna éxito por seguridad (no revela si el email existe)
@@ -543,9 +800,14 @@ export class AuthService {
 
     if (error) {
       if (error.message.includes('token') || error.message.includes('expired') || error.message.includes('session')) {
-        throw new UnauthorizedException('Token inválido o expirado. Por favor solicita un nuevo enlace de recuperación.');
+        throw new UnauthorizedException('El enlace de recuperación ha expirado o es inválido. Por favor, solicita un nuevo enlace de recuperación de contraseña.');
       }
-      throw new BadRequestException(`Error al actualizar contraseña: ${error.message}`);
+      
+      if (error.message.includes('Password') && error.message.includes('weak')) {
+        throw new BadRequestException('La nueva contraseña es demasiado débil. Por favor, usa una contraseña más segura con al menos 6 caracteres.');
+      }
+      
+      throw new BadRequestException('No se pudo actualizar la contraseña. Por favor, verifica que el enlace sea válido e intenta nuevamente.');
     }
 
     if (!data.user) {
@@ -591,11 +853,14 @@ export class AuthService {
     });
 
     if (error) {
-      throw new UnauthorizedException(`Error al refrescar token: ${error.message}`);
+      if (error.message.includes('expired') || error.message.includes('invalid')) {
+        throw new UnauthorizedException('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+      }
+      throw new UnauthorizedException('No se pudo renovar la sesión. Por favor, inicia sesión nuevamente.');
     }
 
     if (!data.session) {
-      throw new UnauthorizedException('No se pudo refrescar la sesión');
+      throw new UnauthorizedException('No se pudo renovar la sesión. Por favor, inicia sesión nuevamente.');
     }
 
     return {

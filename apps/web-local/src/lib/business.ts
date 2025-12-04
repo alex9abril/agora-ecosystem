@@ -23,6 +23,8 @@ export interface Business {
   is_active: boolean;
   is_verified: boolean;
   accepts_orders: boolean;
+  accepts_pickup?: boolean;
+  slug?: string;
   commission_rate: number;
   uses_eco_packaging: boolean;
   opening_hours?: any;
@@ -61,6 +63,9 @@ export interface CreateBusinessData {
   country?: string;
   opening_hours?: any;
   uses_eco_packaging?: boolean;
+  slug?: string;
+  accepts_pickup?: boolean;
+  is_active?: boolean;
 }
 
 export interface BusinessCategory {
@@ -84,6 +89,46 @@ export interface ServiceRegion {
   max_delivery_radius_meters: number;
   min_order_amount: number;
   coverage_area_geojson: string; // GeoJSON del polígono
+}
+
+export interface BusinessGroup {
+  id: string;
+  owner_id: string;
+  name: string;
+  legal_name?: string;
+  description?: string;
+  slug: string;
+  logo_url?: string;
+  website_url?: string;
+  tax_id?: string;
+  settings?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateBusinessGroupData {
+  name: string;
+  legal_name?: string;
+  description?: string;
+  slug?: string;
+  logo_url?: string;
+  website_url?: string;
+  tax_id?: string;
+  settings?: Record<string, any>;
+  is_active?: boolean;
+}
+
+export interface UpdateBusinessGroupData {
+  name?: string;
+  legal_name?: string;
+  description?: string;
+  slug?: string;
+  logo_url?: string;
+  website_url?: string;
+  tax_id?: string;
+  settings?: Record<string, any>;
+  is_active?: boolean;
 }
 
 export interface LocationValidation {
@@ -207,6 +252,163 @@ export const businessService = {
     return apiRequest<Business>(`/businesses/${businessId}`, {
       method: 'PATCH',
       body: JSON.stringify(businessData),
+    });
+  },
+
+  /**
+   * Obtener todas las sucursales (tiendas) del usuario actual
+   */
+  async getAllBranches(userId: string): Promise<Business[]> {
+    try {
+      // Usar el endpoint de business-users para obtener todas las tiendas del usuario
+      const summary = await apiRequest<Array<{
+        business_id: string;
+        business_name: string;
+        role: string;
+        is_active: boolean;
+      }>>(`/business-users/user/${userId}/summary`, {
+        method: 'GET',
+      });
+
+      // Obtener los detalles completos de cada sucursal
+      const branches = await Promise.all(
+        summary.map(async (item) => {
+          try {
+            return await this.getMyBusiness(item.business_id);
+          } catch (error) {
+            console.error(`Error obteniendo detalles de sucursal ${item.business_id}:`, error);
+            return null;
+          }
+        })
+      );
+
+      return branches.filter((b): b is Business => b !== null);
+    } catch (error: any) {
+      console.error('Error obteniendo sucursales:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener todas las marcas de vehículos disponibles
+   */
+  async getAvailableVehicleBrands(): Promise<Array<{ id: string; name: string; code: string; display_order: number }>> {
+    try {
+      console.log('[BusinessService] Obteniendo marcas disponibles...');
+      const brands = await apiRequest<Array<{ id: string; name: string; code: string; display_order: number }>>(
+        '/businesses/vehicle-brands/available',
+        { method: 'GET' }
+      );
+      console.log('[BusinessService] Marcas disponibles obtenidas:', brands.length);
+      return brands;
+    } catch (error: any) {
+      console.error('[BusinessService] Error obteniendo marcas disponibles:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener las marcas asignadas a una sucursal
+   */
+  async getBusinessVehicleBrands(businessId: string): Promise<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>> {
+    try {
+      console.log('[BusinessService] Obteniendo marcas de la sucursal:', businessId);
+      const brands = await apiRequest<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>>(
+        `/businesses/${businessId}/vehicle-brands`,
+        { method: 'GET' }
+      );
+      console.log('[BusinessService] Marcas de la sucursal obtenidas:', brands.length);
+      return brands;
+    } catch (error: any) {
+      console.error('[BusinessService] Error obteniendo marcas de la sucursal:', error);
+      // Si es 404, puede que la función SQL no exista, retornar array vacío
+      if (error.statusCode === 404) {
+        console.warn('[BusinessService] Endpoint no encontrado, retornando array vacío');
+        return [];
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Agregar una marca a una sucursal
+   */
+  async addVehicleBrandToBusiness(businessId: string, brandId: string): Promise<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>> {
+    try {
+      const brands = await apiRequest<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>>(
+        `/businesses/${businessId}/vehicle-brands/${brandId}`,
+        { method: 'POST' }
+      );
+      return brands;
+    } catch (error: any) {
+      console.error('[BusinessService] Error agregando marca:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Quitar una marca de una sucursal
+   */
+  async removeVehicleBrandFromBusiness(businessId: string, brandId: string): Promise<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>> {
+    try {
+      const brands = await apiRequest<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>>(
+        `/businesses/${businessId}/vehicle-brands/${brandId}`,
+        { method: 'DELETE' }
+      );
+      return brands;
+    } catch (error: any) {
+      console.error('[BusinessService] Error quitando marca:', error);
+      throw error;
+    }
+  },
+
+  // ============================================================================
+  // BUSINESS GROUPS (Grupos Empresariales)
+  // ============================================================================
+
+  /**
+   * Obtener el grupo empresarial del usuario actual
+   */
+  async getMyBusinessGroup(): Promise<BusinessGroup | null> {
+    try {
+      const group = await apiRequest<BusinessGroup>('/businesses/my-business-group', {
+        method: 'GET',
+      });
+      return group;
+    } catch (error: any) {
+      // Si es 404, significa que no tiene grupo empresarial
+      if (error.statusCode === 404) {
+        console.log('[BusinessService] Usuario no tiene grupo empresarial (404)');
+        return null;
+      }
+      // Si es 401, el token es inválido - dejar que el error se propague
+      if (error.statusCode === 401) {
+        console.error('[BusinessService] Token inválido o expirado');
+        throw error;
+      }
+      // Otros errores
+      console.error('[BusinessService] Error obteniendo grupo empresarial:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Crear un nuevo grupo empresarial
+   */
+  async createBusinessGroup(data: CreateBusinessGroupData): Promise<BusinessGroup> {
+    return apiRequest<BusinessGroup>('/businesses/business-groups', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Actualizar un grupo empresarial
+   */
+  async updateBusinessGroup(groupId: string, data: UpdateBusinessGroupData): Promise<BusinessGroup> {
+    return apiRequest<BusinessGroup>(`/businesses/business-groups/${groupId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     });
   },
 };

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { productsService, Product, ProductCategory, ProductType, CreateProductData, ProductVariantGroup } from '@/lib/products';
 import { taxesService, TaxType, ProductTax } from '@/lib/taxes';
+import { vehiclesService, ProductCompatibility } from '@/lib/vehicles';
 import ImageUpload from '@/components/ImageUpload';
 import CategorySelector from '@/components/CategorySelector';
 import { ProductForm } from './index';
@@ -25,6 +26,7 @@ export default function ProductDetailPage() {
   const [formData, setFormData] = useState<CreateProductData>({
     business_id: '',
     name: '',
+    sku: '',
     description: '',
     image_url: '',
     price: 0,
@@ -40,6 +42,20 @@ export default function ProductDetailPage() {
   const [variantGroups, setVariantGroups] = useState<ProductVariantGroup[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
+  
+  // Estados para compatibilidad de vehículos
+  const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibility[]>([]);
+  const [loadingCompatibilities, setLoadingCompatibilities] = useState(false);
+  
+  // Estados para disponibilidad por sucursal
+  const [branchAvailabilities, setBranchAvailabilities] = useState<Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+  }>>([]);
+  const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] = useState(false);
   
   // Estados para impuestos
   const [availableTaxTypes, setAvailableTaxTypes] = useState<TaxType[]>([]);
@@ -60,21 +76,55 @@ export default function ProductDetailPage() {
     }
   }, []);
 
+  // Función para cargar compatibilidades del producto
+  const loadProductCompatibilities = useCallback(async (productId: string) => {
+    try {
+      setLoadingCompatibilities(true);
+      const compatibilities = await vehiclesService.getProductCompatibilities(productId);
+      setProductCompatibilities(compatibilities || []);
+    } catch (err: any) {
+      console.error('Error cargando compatibilidades del producto:', err);
+      setProductCompatibilities([]);
+    } finally {
+      setLoadingCompatibilities(false);
+    }
+  }, []);
+
+  // Función para cargar disponibilidad por sucursal
+  const loadBranchAvailabilities = useCallback(async (productId: string) => {
+    try {
+      setLoadingBranchAvailabilities(true);
+      const response = await productsService.getProductBranchAvailability(productId);
+      setBranchAvailabilities(response.availabilities || []);
+    } catch (err: any) {
+      console.error('Error cargando disponibilidad por sucursal:', err);
+      setBranchAvailabilities([]);
+    } finally {
+      setLoadingBranchAvailabilities(false);
+    }
+  }, []);
+
   // Cargar producto cuando cambie el ID de la URL
+  // Los productos son globales, no requieren tienda seleccionada
   useEffect(() => {
-    if (router.isReady && id && typeof id === 'string' && selectedBusiness?.business_id) {
+    if (router.isReady && id && typeof id === 'string') {
       loadProduct(id);
       loadCategories();
       loadTaxTypes();
     }
-  }, [router.isReady, id, selectedBusiness?.business_id]);
+  }, [router.isReady, id]);
 
-  // Cargar impuestos cuando el producto esté cargado
+  // Cargar impuestos, compatibilidades y disponibilidad por sucursal cuando el producto esté cargado
   useEffect(() => {
     if (product?.id) {
       loadProductTaxes(product.id);
+      loadBranchAvailabilities(product.id);
+      // Solo cargar compatibilidades si es refaccion o accesorio
+      if (product.product_type === 'refaccion' || product.product_type === 'accesorio') {
+        loadProductCompatibilities(product.id);
+      }
     }
-  }, [product?.id, loadProductTaxes]);
+  }, [product?.id, product?.product_type, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities]);
 
   const loadProduct = async (productId: string) => {
     try {
@@ -97,6 +147,7 @@ export default function ProductDetailPage() {
       setFormData({
         business_id: productData.business_id,
         name: productData.name,
+        sku: productData.sku || '',
         description: productData.description || '',
         image_url: productData.image_url || '',
         price: productData.price,
@@ -177,6 +228,13 @@ export default function ProductDetailPage() {
     }
   }, [product?.id, loadProductTaxes]);
 
+  // Función memoizada para cargar compatibilidades del producto actual (para pasar al formulario)
+  const handleLoadProductCompatibilities = useCallback(() => {
+    if (product?.id && (product.product_type === 'refaccion' || product.product_type === 'accesorio')) {
+      loadProductCompatibilities(product.id);
+    }
+  }, [product?.id, product?.product_type, loadProductCompatibilities]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product) return;
@@ -228,6 +286,64 @@ export default function ProductDetailPage() {
       });
 
       await productsService.updateProduct({ ...productData, id: product.id });
+      
+      // Guardar compatibilidades si es refaccion o accesorio
+      if (product?.id && (product.product_type === 'refaccion' || product.product_type === 'accesorio')) {
+        try {
+          // Obtener compatibilidades actuales del producto
+          const currentCompatibilities = await vehiclesService.getProductCompatibilities(product.id);
+          const currentIds = currentCompatibilities.map(c => c.id);
+
+          // Eliminar compatibilidades que ya no están en la lista
+          for (const current of currentCompatibilities) {
+            if (!productCompatibilities.find(pc => pc.id === current.id)) {
+              await vehiclesService.removeProductCompatibility(current.id);
+            }
+          }
+
+          // Agregar nuevas compatibilidades
+          for (const compatibility of productCompatibilities) {
+            if (!compatibility.id || !currentIds.includes(compatibility.id)) {
+              // Es una nueva compatibilidad
+              await vehiclesService.addProductCompatibility(product.id, {
+                vehicle_brand_id: compatibility.vehicle_brand_id || undefined,
+                vehicle_model_id: compatibility.vehicle_model_id || undefined,
+                vehicle_year_id: compatibility.vehicle_year_id || undefined,
+                vehicle_spec_id: compatibility.vehicle_spec_id || undefined,
+                is_universal: compatibility.is_universal || false,
+                notes: compatibility.notes || undefined,
+              });
+            }
+          }
+        } catch (compatErr: any) {
+          console.error('Error guardando compatibilidades:', compatErr);
+          // No fallar el guardado del producto si hay error en compatibilidades
+        }
+      }
+
+      // Guardar disponibilidad por sucursal - enviar TODAS las sucursales (habilitadas y deshabilitadas)
+      if (product?.id) {
+        try {
+          // Filtrar solo las sucursales que tienen datos válidos
+          const availabilitiesToSave = branchAvailabilities
+            .filter(avail => avail.branch_id) // Solo las que tienen branch_id
+            .map(avail => ({
+              branch_id: avail.branch_id,
+              is_enabled: avail.is_enabled || false,
+              price: avail.price !== null && avail.price !== undefined ? avail.price : null,
+              stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
+            }));
+          
+          if (availabilitiesToSave.length > 0) {
+            console.log('💾 Guardando disponibilidad por sucursal:', availabilitiesToSave);
+            await productsService.updateProductBranchAvailability(product.id, availabilitiesToSave);
+            console.log('✅ Disponibilidad por sucursal guardada exitosamente');
+          }
+        } catch (err: any) {
+          console.error('❌ Error guardando disponibilidad por sucursal:', err);
+          // No fallar el guardado del producto si hay error en disponibilidad
+        }
+      }
       
       // Guardar/actualizar impuestos del producto
       if (product?.id) {
@@ -376,6 +492,14 @@ export default function ProductDetailPage() {
           setProductTaxes={setProductTaxes}
           loadingTaxes={loadingTaxes}
           onLoadProductTaxes={handleLoadProductTaxes}
+          productCompatibilities={productCompatibilities}
+          setProductCompatibilities={setProductCompatibilities}
+          loadingCompatibilities={loadingCompatibilities}
+          onLoadProductCompatibilities={handleLoadProductCompatibilities}
+          branchAvailabilities={branchAvailabilities}
+          setBranchAvailabilities={setBranchAvailabilities}
+          loadingBranchAvailabilities={loadingBranchAvailabilities}
+          onLoadBranchAvailabilities={loadBranchAvailabilities}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
         />

@@ -80,9 +80,11 @@ const menuItems: MenuItem[] = [
 export default function Sidebar() {
   const router = useRouter();
   const { user } = useAuth();
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   
-  const userRole = (selectedBusiness?.role || 'operations_staff') as BusinessRole;
+  // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
+  const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
+  const userRole = (selectedBusiness?.role || (hasSuperadminRole ? 'superadmin' : 'operations_staff')) as BusinessRole;
   const canManageSettings = usePermission('canManageSettings');
   const canManageProducts = usePermission('canManageProducts');
   const canManageOrders = usePermission('canManageOrders');

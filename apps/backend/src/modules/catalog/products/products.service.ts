@@ -99,17 +99,18 @@ export class ProductsService {
     ];
 
     // Campos específicos según tipo
-    if (productType === 'food' || productType === 'beverage' || productType === 'grocery') {
+    // Para refacciones, accesorios y fluidos: no se muestran alérgenos ni información nutricional
+    if (productType === 'refaccion' || productType === 'accesorio' || productType === 'fluido') {
       return [
         ...baseFields,
-        { fieldName: 'allergens', isVisible: true, isRequired: false, displayOrder: 11 },
-        { fieldName: 'nutritional_info', isVisible: true, isRequired: false, displayOrder: 12 },
+        { fieldName: 'allergens', isVisible: false, isRequired: false, displayOrder: 11 },
+        { fieldName: 'nutritional_info', isVisible: false, isRequired: false, displayOrder: 12 },
         { fieldName: 'requires_prescription', isVisible: false, isRequired: false, displayOrder: 13 },
         { fieldName: 'age_restriction', isVisible: false, isRequired: false, displayOrder: 14 },
         { fieldName: 'max_quantity_per_order', isVisible: false, isRequired: false, displayOrder: 15 },
         { fieldName: 'requires_pharmacist_validation', isVisible: false, isRequired: false, displayOrder: 16 },
       ];
-    } else if (productType === 'medicine') {
+    } else if (productType === 'servicio_instalacion' || productType === 'servicio_mantenimiento') {
       return [
         ...baseFields,
         { fieldName: 'allergens', isVisible: false, isRequired: false, displayOrder: 11 },
@@ -120,7 +121,7 @@ export class ProductsService {
         { fieldName: 'requires_pharmacist_validation', isVisible: true, isRequired: false, displayOrder: 16 },
       ];
     } else {
-      // non_food y otros
+      // Otros tipos de producto (por defecto, todos los campos opcionales)
       return [
         ...baseFields,
         { fieldName: 'allergens', isVisible: false, isRequired: false, displayOrder: 11 },
@@ -151,6 +152,10 @@ export class ProductsService {
       search,
       sortBy = 'display_order',
       sortOrder = 'asc',
+      vehicleBrandId,
+      vehicleModelId,
+      vehicleYearId,
+      vehicleSpecId,
     } = query;
 
     const offset = (page - 1) * limit;
@@ -191,15 +196,53 @@ export class ProductsService {
       paramIndex += 2;
     }
 
+    // Filtrado por compatibilidad de vehículos
+    let compatibilityJoin = '';
+    let compatibilityWhere = '';
+    if (vehicleBrandId || vehicleModelId || vehicleYearId || vehicleSpecId) {
+      // Solo filtrar productos de tipo refaccion o accesorio
+      whereConditions.push(`p.product_type IN ('refaccion', 'accesorio')`);
+      
+      // Agregar JOIN con tabla de compatibilidad
+      compatibilityJoin = `INNER JOIN catalog.product_vehicle_compatibility pvc ON pvc.product_id = p.id`;
+      
+      // Agregar condición de compatibilidad usando la función SQL
+      const brandParam = paramIndex++;
+      const modelParam = paramIndex++;
+      const yearParam = paramIndex++;
+      const specParam = paramIndex++;
+      
+      compatibilityWhere = `AND pvc.is_active = TRUE
+        AND (
+          pvc.is_universal = TRUE
+          OR catalog.check_product_vehicle_compatibility(
+            p.id,
+            $${brandParam}::UUID,
+            $${modelParam}::UUID,
+            $${yearParam}::UUID,
+            $${specParam}::UUID
+          ) = TRUE
+        )`;
+      
+      queryParams.push(
+        vehicleBrandId || null,
+        vehicleModelId || null,
+        vehicleYearId || null,
+        vehicleSpecId || null
+      );
+    }
+
     const whereClause = whereConditions.length > 0
       ? `WHERE ${whereConditions.join(' AND ')}`
       : '';
 
-    // Obtener total para paginación
+    // Obtener total para paginación (usar queryParams antes de agregar limit/offset)
     const countQuery = `
-      SELECT COUNT(*) as total 
+      SELECT COUNT(DISTINCT p.id) as total 
       FROM catalog.products p
+      ${compatibilityJoin}
       ${whereClause}
+      ${compatibilityWhere}
     `;
     const countResult = await pool.query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total, 10);
@@ -216,6 +259,7 @@ export class ProductsService {
     };
     const orderByColumn = sortByMap[orderBy] || 'p.display_order';
     
+    // Agregar limit y offset al final para la query principal
     queryParams.push(limit, offset);
 
     const sqlQuery = `
@@ -255,11 +299,13 @@ export class ProductsService {
           '[]'::json
         ) as variant_groups_structured
       FROM catalog.products p
+      ${compatibilityJoin}
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
       LEFT JOIN catalog.product_variant_groups vg ON vg.product_id = p.id
       ${whereClause}
-      GROUP BY p.id, p.business_id, p.name, p.description, p.image_url, p.price, p.product_type,
+      ${compatibilityWhere}
+      GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
@@ -336,10 +382,11 @@ export class ProductsService {
             business_id: row.business_id,
             business_name: row.business_name,
             name: row.name,
+            sku: row.sku || null,
             description: row.description,
             image_url: row.image_url,
             price: parseFloat(row.price),
-            product_type: row.product_type || 'food',
+            product_type: row.product_type || 'refaccion',
             category_id: row.category_id,
             category_name: row.category_name,
             category_display_order: row.category_display_order || 999,
@@ -425,7 +472,7 @@ export class ProductsService {
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
       LEFT JOIN catalog.product_variant_groups vg ON vg.product_id = p.id
       WHERE p.id = $1
-      GROUP BY p.id, p.business_id, p.name, p.description, p.image_url, p.price, p.product_type,
+      GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
@@ -565,10 +612,11 @@ export class ProductsService {
         business_id: row.business_id,
         business_name: row.business_name,
         name: row.name,
+        sku: row.sku || null,
         description: row.description,
         image_url: row.image_url,
         price: parseFloat(row.price),
-        product_type: row.product_type || 'food', // Valor por defecto para productos existentes
+        product_type: row.product_type || 'refaccion', // Valor por defecto para productos existentes
         category_id: row.category_id,
         category_name: row.category_name,
         is_available: row.is_available,
@@ -634,14 +682,25 @@ export class ProductsService {
       }
     }
 
+    // Validar que el SKU sea único dentro del negocio si se proporciona
+    if (createProductDto.sku && createProductDto.sku.trim() !== '') {
+      const skuCheck = await pool.query(
+        'SELECT id FROM catalog.products WHERE business_id = $1 AND sku = $2',
+        [createProductDto.business_id, createProductDto.sku.trim()]
+      );
+      if (skuCheck.rows.length > 0) {
+        throw new BadRequestException('Ya existe un producto con este SKU en este negocio');
+      }
+    }
+
     const sqlQuery = `
       INSERT INTO catalog.products (
-        business_id, name, description, image_url, price, product_type, category_id,
+        business_id, name, sku, description, image_url, price, product_type, category_id,
         is_available, is_featured, variants, nutritional_info, allergens,
         display_order, requires_prescription, age_restriction, max_quantity_per_order,
         requires_pharmacist_validation
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
       ) RETURNING *
     `;
 
@@ -684,9 +743,15 @@ export class ProductsService {
         ? createProductDto.image_url.trim() 
         : null;
 
+      // Normalizar SKU: si está vacío o es solo espacios, usar null
+      const skuValue = createProductDto.sku && createProductDto.sku.trim() !== '' 
+        ? createProductDto.sku.trim() 
+        : null;
+
       const queryParams = [
         createProductDto.business_id,
         createProductDto.name,
+        skuValue,
         createProductDto.description || null,
         imageUrl,
         createProductDto.price,
@@ -704,21 +769,28 @@ export class ProductsService {
         createProductDto.requires_pharmacist_validation || false,
       ];
 
-      console.log('🔍 Intentando crear producto con parámetros:', {
+      console.log('🔍 [CREATE] Intentando crear producto con parámetros:', {
         business_id: queryParams[0],
         name: queryParams[1],
-        product_type: queryParams[5],
-        allergens: queryParams[11],
-        allergens_type: typeof queryParams[11],
-        allergens_is_array: Array.isArray(queryParams[11]),
+        sku: queryParams[2],
+        sku_original: createProductDto.sku,
+        product_type: queryParams[6],
+        allergens: queryParams[12],
+        allergens_type: typeof queryParams[12],
+        allergens_is_array: Array.isArray(queryParams[12]),
       });
 
       const result = await pool.query(sqlQuery, queryParams);
       
       // Verificar qué se guardó en la base de datos
       const savedRow = result.rows[0];
-      console.log('🔍 [CREATE] Producto guardado, variants en DB:', savedRow.variants);
-      console.log('🔍 [CREATE] Tipo de variants:', typeof savedRow.variants);
+      console.log('🔍 [CREATE] Producto guardado:', {
+        id: savedRow.id,
+        name: savedRow.name,
+        sku: savedRow.sku,
+        sku_type: typeof savedRow.sku,
+        variants: savedRow.variants ? 'present' : 'null',
+      });
       if (savedRow.variants) {
         console.log('🔍 [CREATE] Variants como string:', JSON.stringify(savedRow.variants));
       }
@@ -784,6 +856,33 @@ export class ProductsService {
     const updateFields: string[] = [];
     const updateValues: any[] = [];
     let paramIndex = 1;
+
+    // Validar que el SKU sea único dentro del negocio si se proporciona y es diferente al actual
+    if (updateProductDto.sku !== undefined) {
+      // Normalizar SKU: si está vacío o es solo espacios, usar null
+      const skuValue = updateProductDto.sku && updateProductDto.sku.trim() !== '' 
+        ? updateProductDto.sku.trim() 
+        : null;
+      
+      console.log('🔍 [UPDATE] Actualizando SKU:', {
+        product_id: id,
+        sku_original: updateProductDto.sku,
+        sku_normalized: skuValue,
+      });
+      
+      if (skuValue) {
+        const skuCheck = await pool.query(
+          'SELECT id FROM catalog.products WHERE business_id = $1 AND sku = $2 AND id != $3',
+          [existing.business_id, skuValue, id]
+        );
+        if (skuCheck.rows.length > 0) {
+          throw new BadRequestException('Ya existe un producto con este SKU en este negocio');
+        }
+      }
+      updateFields.push(`sku = $${paramIndex}`);
+      updateValues.push(skuValue);
+      paramIndex++;
+    }
 
     if (updateProductDto.name !== undefined) {
       updateFields.push(`name = $${paramIndex}`);
@@ -939,13 +1038,21 @@ export class ProductsService {
     `;
 
     try {
+      console.log('🔍 [UPDATE] Query SQL:', sqlQuery);
+      console.log('🔍 [UPDATE] Valores a actualizar:', updateValues);
+      
       const result = await pool.query(sqlQuery, updateValues);
       
       // Verificar qué se guardó en la base de datos
       if (result.rows.length > 0) {
         const savedRow = result.rows[0];
-        console.log('🔍 [UPDATE] Producto actualizado, variants en DB:', savedRow.variants);
-        console.log('🔍 [UPDATE] Tipo de variants:', typeof savedRow.variants);
+        console.log('🔍 [UPDATE] Producto actualizado:', {
+          id: savedRow.id,
+          name: savedRow.name,
+          sku: savedRow.sku,
+          sku_type: typeof savedRow.sku,
+          variants: savedRow.variants ? 'present' : 'null',
+        });
         if (savedRow.variants) {
           console.log('🔍 [UPDATE] Variants como string:', JSON.stringify(savedRow.variants, null, 2));
         }
@@ -1006,6 +1113,189 @@ export class ProductsService {
         code: error.code,
       });
       throw new ServiceUnavailableException('Error al eliminar producto');
+    }
+  }
+
+  /**
+   * Obtener disponibilidad de un producto en todas las sucursales
+   */
+  async getProductBranchAvailability(productId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que el producto existe
+      const productCheck = await pool.query('SELECT id FROM catalog.products WHERE id = $1', [productId]);
+      if (productCheck.rows.length === 0) {
+        throw new NotFoundException('Producto no encontrado');
+      }
+
+      // Consulta: obtener todas las sucursales activas y su disponibilidad
+      // Incluir el estado is_active de la sucursal para mostrar indicadores visuales
+      const sqlQuery = `
+        SELECT 
+          b.id AS branch_id,
+          b.name AS branch_name,
+          b.slug AS branch_slug,
+          b.phone AS branch_phone,
+          b.is_active AS branch_is_active,
+          COALESCE(pba.is_enabled, FALSE) AS is_enabled,
+          pba.price,
+          pba.stock,
+          -- Construir dirección completa desde core.addresses si existe
+          CONCAT_WS(', ',
+            NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
+            NULLIF(a.neighborhood, ''),
+            NULLIF(a.city, ''),
+            NULLIF(a.state, ''),
+            NULLIF(a.postal_code, '')
+          ) AS branch_address
+        FROM core.businesses b
+        LEFT JOIN core.addresses a ON b.address_id = a.id
+        LEFT JOIN catalog.product_branch_availability pba 
+          ON b.id = pba.branch_id 
+          AND pba.product_id = $1
+          AND COALESCE(pba.is_active, TRUE) = TRUE
+        WHERE b.is_active = TRUE
+        ORDER BY pba.is_enabled DESC NULLS LAST, b.name ASC
+      `;
+
+      const result = await pool.query(sqlQuery, [productId]);
+      
+      return {
+        availabilities: result.rows.map(row => ({
+          branch_id: row.branch_id,
+          branch_name: row.branch_name,
+          branch_slug: row.branch_slug || null,
+          branch_address: row.branch_address || null,
+          branch_phone: row.branch_phone || null,
+          is_enabled: row.is_enabled || false,
+          price: row.price !== null && row.price !== undefined ? parseFloat(row.price.toString()) : null,
+          stock: row.stock !== null && row.stock !== undefined ? parseInt(row.stock.toString(), 10) : null,
+          is_active: row.branch_is_active !== undefined ? row.branch_is_active : true,
+        })),
+      };
+    } catch (error: any) {
+      console.error('❌ Error obteniendo disponibilidad por sucursal:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack,
+      });
+      
+      // Si es un error de tabla no encontrada, dar un mensaje más claro
+      if (error.code === '42P01') {
+        throw new ServiceUnavailableException(
+          'La tabla de disponibilidad por sucursal no existe. Por favor, ejecuta la migración migration_product_branch_availability.sql'
+        );
+      }
+      
+      // Si es un error de NotFoundException, re-lanzarlo
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new ServiceUnavailableException(
+        `Error al obtener disponibilidad por sucursal: ${error.message || 'Error desconocido'}`
+      );
+    }
+  }
+
+  /**
+   * Actualizar disponibilidad de un producto en múltiples sucursales
+   */
+  async updateProductBranchAvailability(
+    productId: string,
+    availabilities: Array<{
+      branch_id: string;
+      is_enabled: boolean;
+      price?: number | null;
+      stock?: number | null;
+    }>
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    // Verificar que el producto existe
+    const productCheck = await pool.query('SELECT id FROM catalog.products WHERE id = $1', [productId]);
+    if (productCheck.rows.length === 0) {
+      throw new NotFoundException('Producto no encontrado');
+    }
+
+    // Usar transacción para garantizar consistencia
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const availability of availabilities) {
+        // Verificar que la sucursal existe
+        const branchCheck = await client.query(
+          'SELECT id FROM core.businesses WHERE id = $1 AND is_active = TRUE',
+          [availability.branch_id]
+        );
+        if (branchCheck.rows.length === 0) {
+          console.warn(`⚠️ Sucursal ${availability.branch_id} no encontrada o inactiva, omitiendo...`);
+          continue; // Continuar con la siguiente en lugar de fallar
+        }
+
+        if (availability.is_enabled) {
+          // Si está habilitada, insertar o actualizar
+          const upsertQuery = `
+            INSERT INTO catalog.product_branch_availability (
+              product_id, branch_id, is_enabled, price, stock, is_active, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP)
+            ON CONFLICT (product_id, branch_id)
+            DO UPDATE SET
+              is_enabled = EXCLUDED.is_enabled,
+              price = EXCLUDED.price,
+              stock = EXCLUDED.stock,
+              is_active = TRUE,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+
+          await client.query(upsertQuery, [
+            productId,
+            availability.branch_id,
+            true, // Siempre true cuando está habilitada
+            availability.price ?? null,
+            availability.stock ?? null,
+          ]);
+        } else {
+          // Si está deshabilitada, eliminar el registro o marcarlo como inactivo
+          const deleteQuery = `
+            DELETE FROM catalog.product_branch_availability
+            WHERE product_id = $1 AND branch_id = $2
+          `;
+          await client.query(deleteQuery, [productId, availability.branch_id]);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // Retornar la disponibilidad actualizada
+      return this.getProductBranchAvailability(productId);
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error('❌ Error actualizando disponibilidad por sucursal:', {
+        message: error.message,
+        code: error.code,
+      });
+      
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new ServiceUnavailableException('Error al actualizar disponibilidad por sucursal');
+    } finally {
+      client.release();
     }
   }
 }

@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/router';
-import { authService, AuthResponse } from '@/lib/auth';
+import { authService, AuthResponse, AdminSignUpData } from '@/lib/auth';
 import { 
   setAuthToken, 
   getAuthToken, 
@@ -24,6 +24,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (data: any) => Promise<void>;
+  signUpAdmin: (data: AdminSignUpData) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -197,6 +198,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signUpAdmin = async (data: AdminSignUpData) => {
+    try {
+      console.log('[Auth] Registrando administrador...');
+      const response: AuthResponse = await authService.signUpAdmin(data);
+      
+      console.log('[Auth] Administrador registrado exitosamente');
+      setToken(response.accessToken);
+      setUser(response.user);
+      
+      // Guardar en localStorage
+      setAuthToken(response.accessToken);
+      if (response.refreshToken) {
+        setRefreshToken(response.refreshToken);
+      }
+      setUserInStorage(response.user);
+      
+      console.log('[Auth] Datos guardados en localStorage');
+      
+      // Redirigir al dashboard
+      router.push('/dashboard');
+    } catch (error: any) {
+      console.error('[Auth] Error al registrar administrador:', error);
+      throw error;
+    }
+  };
+
   const signOut = async () => {
     try {
       if (token) {
@@ -255,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!token && !!user,
     signIn,
     signUp,
+    signUpAdmin,
     signOut,
     refreshUser,
   };

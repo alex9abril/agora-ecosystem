@@ -63,11 +63,22 @@ export const taxesService = {
    * Obtener todos los tipos de impuestos disponibles
    */
   async getTaxTypes(includeInactive: boolean = false): Promise<TaxType[]> {
-    const url = `/catalog/taxes${includeInactive ? '?includeInactive=true' : ''}`;
-    const response = await apiRequest<TaxType[]>(url, {
-      method: 'GET',
-    });
-    return response;
+    try {
+      console.log('[TaxesService] Obteniendo tipos de impuestos, includeInactive:', includeInactive);
+      const url = `/catalog/taxes${includeInactive ? '?includeInactive=true' : ''}`;
+      const response = await apiRequest<TaxType[]>(url, {
+        method: 'GET',
+      });
+      console.log('[TaxesService] Tipos de impuestos obtenidos:', response?.length || 0);
+      return response || [];
+    } catch (error: any) {
+      console.error('[TaxesService] Error obteniendo tipos de impuestos:', error);
+      // Si es 404 o 401, puede ser un problema de permisos o que no existan impuestos
+      if (error.statusCode === 404 || error.statusCode === 401) {
+        console.warn('[TaxesService] No se pudieron obtener tipos de impuestos. Verifica permisos o configuración.');
+      }
+      return [];
+    }
   },
 
   /**

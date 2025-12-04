@@ -647,7 +647,11 @@ export class BusinessUsersService {
       }
 
       // Verificar si el email existe en la lista de usuarios
-      const emailExists = data.users.some((user) => user.email?.toLowerCase() === email.toLowerCase());
+      if (!data?.users || !Array.isArray(data.users)) {
+        return false;
+      }
+
+      const emailExists = data.users.some((user: any) => user.email?.toLowerCase() === email.toLowerCase());
       return emailExists;
     } catch (error: any) {
       console.error('Error verificando email:', error);

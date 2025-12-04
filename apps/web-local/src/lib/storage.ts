@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
   REFRESH_TOKEN: 'auth_refresh_token',
   USER: 'auth_user',
+  USER_VEHICLE: 'user_vehicle',
 } as const;
 
 /**
@@ -124,5 +125,53 @@ export function clearAuth(): void {
  */
 export function hasAuth(): boolean {
   return !!getAuthToken() && !!getUser();
+}
+
+/**
+ * Almacenar vehículo del usuario
+ */
+export function setUserVehicle(vehicle: any): void {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEYS.USER_VEHICLE, JSON.stringify(vehicle));
+      console.log('[Storage] Vehículo guardado:', vehicle?.brand_name || 'N/A');
+    } catch (e) {
+      console.error('[Storage] Error guardando vehículo:', e);
+    }
+  }
+}
+
+/**
+ * Obtener vehículo del usuario
+ */
+export function getUserVehicle(): any | null {
+  if (typeof window !== 'undefined') {
+    try {
+      const vehicleStr = localStorage.getItem(STORAGE_KEYS.USER_VEHICLE);
+      if (vehicleStr) {
+        const vehicle = JSON.parse(vehicleStr);
+        console.log('[Storage] Vehículo recuperado:', vehicle?.brand_name || 'N/A');
+        return vehicle;
+      }
+    } catch (e) {
+      console.error('[Storage] Error parsing vehicle from storage:', e);
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Limpiar vehículo del usuario
+ */
+export function clearUserVehicle(): void {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.USER_VEHICLE);
+      console.log('[Storage] Vehículo eliminado');
+    } catch (e) {
+      console.error('[Storage] Error eliminando vehículo:', e);
+    }
+  }
 }
 

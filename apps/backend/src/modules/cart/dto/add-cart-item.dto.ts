@@ -36,5 +36,14 @@ export class AddCartItemDto {
   @IsOptional()
   @IsString({ message: 'specialInstructions debe ser una cadena de texto' })
   specialInstructions?: string;
+
+  @ApiProperty({
+    description: 'ID de la sucursal desde donde se está comprando (opcional, para contexto global)',
+    example: '11111111-1111-1111-1111-111111111111',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'El branchId debe ser un UUID válido' })
+  branchId?: string;
 }
 

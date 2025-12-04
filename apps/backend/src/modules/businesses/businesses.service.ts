@@ -11,6 +11,8 @@ import { UpdateBusinessStatusDto } from './dto/update-business-status.dto';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessAddressDto } from './dto/update-business-address.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
+import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 
 @Injectable()
 export class BusinessesService {
@@ -401,28 +403,29 @@ export class BusinessesService {
    * Actualizar información básica de un negocio
    */
   async update(id: string, ownerId: string, updateDto: UpdateBusinessDto) {
-    if (!dbPool) {
-      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
-    }
+    try {
+      if (!dbPool) {
+        throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+      }
 
-    const pool = dbPool;
+      const pool = dbPool;
 
-    // Verificar que el negocio existe y pertenece al usuario
-    const business = await this.findOne(id);
-    if (!business) {
-      throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
-    }
+      // Verificar que el negocio existe y pertenece al usuario
+      const business = await this.findOne(id);
+      if (!business) {
+        throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
+      }
 
-    // Verificar que el usuario tiene permisos (es superadmin del negocio)
-    const businessUserCheck = await pool.query(
-      `SELECT role FROM core.business_users 
-       WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE`,
-      [id, ownerId]
-    );
+      // Verificar que el usuario tiene permisos (es superadmin del negocio)
+      const businessUserCheck = await pool.query(
+        `SELECT role FROM core.business_users 
+         WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE`,
+        [id, ownerId]
+      );
 
-    if (businessUserCheck.rows.length === 0 || businessUserCheck.rows[0].role !== 'superadmin') {
-      throw new BadRequestException('No tienes permisos para actualizar este negocio');
-    }
+      if (businessUserCheck.rows.length === 0 || businessUserCheck.rows[0].role !== 'superadmin') {
+        throw new BadRequestException('No tienes permisos para actualizar este negocio');
+      }
 
     // Resolver category_id si se proporciona category (nombre)
     let categoryId: string | null = null;
@@ -494,6 +497,18 @@ export class BusinessesService {
       updateFields.push(`website_url = $${paramIndex++}`);
       updateValues.push(updateDto.website_url || null);
     }
+    if (updateDto.slug !== undefined) {
+      updateFields.push(`slug = $${paramIndex++}`);
+      updateValues.push(updateDto.slug || null);
+    }
+    if (updateDto.accepts_pickup !== undefined) {
+      updateFields.push(`accepts_pickup = $${paramIndex++}`);
+      updateValues.push(updateDto.accepts_pickup);
+    }
+    if (updateDto.is_active !== undefined) {
+      updateFields.push(`is_active = $${paramIndex++}`);
+      updateValues.push(updateDto.is_active);
+    }
 
     if (updateFields.length === 0) {
       throw new BadRequestException('No se proporcionaron campos para actualizar');
@@ -502,22 +517,41 @@ export class BusinessesService {
     // Agregar updated_at
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
 
+    // El id va al final del array de valores
     updateValues.push(id);
 
-    const updateQuery = `
-      UPDATE core.businesses 
-      SET ${updateFields.join(', ')}
-      WHERE id = $${paramIndex}
-      RETURNING *
-    `;
+      const updateQuery = `
+        UPDATE core.businesses 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+      `;
 
-    const result = await pool.query(updateQuery, updateValues);
+      const result = await pool.query(updateQuery, updateValues);
 
-    if (result.rows.length === 0) {
-      throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      console.error('❌ Error actualizando negocio:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        hint: error.hint,
+        stack: error.stack,
+        id,
+        ownerId,
+        updateDto,
+      });
+      
+      if (error instanceof NotFoundException || error instanceof BadRequestException || error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+      
+      throw new ServiceUnavailableException(`Error al actualizar negocio: ${error.message}`);
     }
-
-    return result.rows[0];
   }
 
   /**
@@ -744,27 +778,8 @@ export class BusinessesService {
 
     try {
 
-    // Verificar que el usuario no tenga ya un negocio como superadmin
-    // Permitimos múltiples negocios, pero verificamos si ya es superadmin de alguno
-    // (esto se puede cambiar más adelante si queremos permitir múltiples negocios)
-    const existingBusinessUser = await pool.query(
-      `SELECT bu.business_id, b.name 
-       FROM core.business_users bu
-       INNER JOIN core.businesses b ON bu.business_id = b.id
-       WHERE bu.user_id = $1 
-       AND bu.role = 'superadmin' 
-       AND bu.is_active = TRUE`,
-      [ownerId]
-    );
-
-    // Por ahora, permitimos solo un negocio por usuario (como superadmin)
-    // Esto se puede cambiar más adelante si queremos permitir múltiples negocios
-    if (existingBusinessUser.rows.length > 0) {
-      throw new BadRequestException(
-        `Ya tienes un negocio registrado: ${existingBusinessUser.rows[0].name}. ` +
-        `Por el momento solo se permite un negocio por cuenta.`
-      );
-    }
+    // Permitir múltiples sucursales por usuario (múltiples negocios)
+    // Ya no hay restricción de un solo negocio por cuenta
 
     // Validar que la ubicación esté dentro de la región activa
     const locationValidation = await this.validateLocationInRegion(
@@ -869,8 +884,8 @@ export class BusinessesService {
       `INSERT INTO core.businesses (
         owner_id, name, legal_name, description, category, category_id, tags,
         phone, email, website_url, address_id, location,
-        is_active, accepts_orders, uses_eco_packaging, opening_hours
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ST_MakePoint($12, $13)::point, $14, $15, $16, $17)
+        is_active, accepts_orders, accepts_pickup, uses_eco_packaging, opening_hours, slug
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ST_MakePoint($12, $13)::point, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         ownerId,
@@ -886,10 +901,12 @@ export class BusinessesService {
         addressId,
         createDto.longitude,
         createDto.latitude,
-        true, // is_active
+        createDto.is_active !== undefined ? createDto.is_active : true, // is_active
         true, // accepts_orders
+        createDto.accepts_pickup !== undefined ? createDto.accepts_pickup : false, // accepts_pickup
         createDto.uses_eco_packaging || false,
         openingHoursJsonb, // JSONB o null
+        createDto.slug || null, // slug (se generará automáticamente si es null por el trigger)
       ]
     );
 
@@ -1044,7 +1061,57 @@ export class BusinessesService {
         return null;
       }
       
-      return result.rows[0];
+      const business = result.rows[0];
+      
+      // Debug: Verificar coordenadas extraídas
+      console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas del POINT:', {
+        business_id: business.id,
+        location_raw: business.location,
+        extracted_longitude: business.longitude,
+        extracted_latitude: business.latitude,
+        location_type: typeof business.location,
+      });
+      
+      // Si no se pudieron extraer las coordenadas en SQL, hacerlo manualmente
+      if (!business.longitude || !business.latitude) {
+        if (business.location) {
+          console.log('[BusinessesService.findByOwnerId] Extrayendo coordenadas manualmente...');
+          if (typeof business.location === 'object' && business.location.x !== undefined) {
+            business.longitude = business.location.x;
+            business.latitude = business.location.y;
+            console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde objeto:', {
+              longitude: business.longitude,
+              latitude: business.latitude,
+            });
+          } else if (typeof business.location === 'string') {
+            const match = business.location.match(/POINT\(([^ ]+) ([^ ]+)\)/);
+            if (match) {
+              business.longitude = parseFloat(match[1]);
+              business.latitude = parseFloat(match[2]);
+              console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde string:', {
+                longitude: business.longitude,
+                latitude: business.latitude,
+              });
+            }
+          }
+        }
+      }
+      
+      // Formatear el objeto location para el frontend
+      if (business.longitude && business.latitude) {
+        business.location = {
+          longitude: business.longitude,
+          latitude: business.latitude,
+        };
+      }
+      
+      console.log('[BusinessesService.findByOwnerId] Negocio formateado:', {
+        longitude: business.longitude,
+        latitude: business.latitude,
+        formatted_location: business.location,
+      });
+      
+      return business;
     }
     
     // Si no se proporciona businessId, buscar el negocio del usuario usando business_users (sistema de roles)
@@ -1551,6 +1618,590 @@ export class BusinessesService {
       }
       console.error('❌ Error obteniendo negocio más cercano:', error);
       throw new ServiceUnavailableException(`Error al obtener negocio más cercano: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener todas las marcas de vehículos disponibles
+   */
+  async getAvailableVehicleBrands() {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    try {
+      console.log('[BusinessesService] Obteniendo marcas disponibles...');
+      const result = await dbPool.query(
+        `SELECT id, name, code, display_order, is_active
+         FROM catalog.vehicle_brands
+         WHERE is_active = TRUE
+         ORDER BY display_order, name ASC`
+      );
+
+      console.log('[BusinessesService] Marcas disponibles encontradas:', result.rows.length);
+      return result.rows;
+    } catch (error: any) {
+      console.error('❌ Error obteniendo marcas de vehículos:', error);
+      throw new ServiceUnavailableException(`Error al obtener marcas: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener las marcas de vehículos asignadas a una sucursal
+   */
+  async getBusinessVehicleBrands(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    try {
+      console.log('[BusinessesService] Obteniendo marcas de la sucursal:', businessId);
+      
+      // Intentar usar la función SQL primero
+      let result;
+      try {
+        result = await dbPool.query(
+          `SELECT * FROM catalog.get_business_vehicle_brands($1)`,
+          [businessId]
+        );
+        console.log('[BusinessesService] Marcas obtenidas usando función SQL:', result.rows.length);
+      } catch (funcError: any) {
+        // Si la función no existe, usar consulta directa
+        console.warn('[BusinessesService] Función SQL no encontrada, usando consulta directa:', funcError.message);
+        result = await dbPool.query(
+          `SELECT 
+            vb.id as brand_id,
+            vb.name as brand_name,
+            vb.code as brand_code,
+            vb.display_order,
+            bvb.created_at as assigned_at,
+            bvb.is_active
+          FROM catalog.business_vehicle_brands bvb
+          INNER JOIN catalog.vehicle_brands vb ON bvb.vehicle_brand_id = vb.id
+          WHERE bvb.business_id = $1
+            AND bvb.is_active = TRUE
+            AND vb.is_active = TRUE
+          ORDER BY vb.display_order ASC, vb.name ASC`,
+          [businessId]
+        );
+        console.log('[BusinessesService] Marcas obtenidas usando consulta directa:', result.rows.length);
+      }
+
+      return result.rows;
+    } catch (error: any) {
+      console.error('❌ Error obteniendo marcas de la sucursal:', error);
+      throw new ServiceUnavailableException(`Error al obtener marcas de la sucursal: ${error.message}`);
+    }
+  }
+
+  /**
+   * Agregar una marca de vehículo a una sucursal
+   */
+  async addVehicleBrandToBusiness(businessId: string, vehicleBrandId: string, userId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que el negocio existe y el usuario tiene permisos
+      const businessCheck = await pool.query(
+        `SELECT b.id FROM core.businesses b
+         INNER JOIN core.business_users bu ON b.id = bu.business_id
+         WHERE b.id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
+        [businessId, userId]
+      );
+
+      if (businessCheck.rows.length === 0) {
+        throw new BadRequestException('No tienes permisos para gestionar esta sucursal');
+      }
+
+      // Verificar que la marca existe y está activa
+      const brandCheck = await pool.query(
+        `SELECT id FROM catalog.vehicle_brands WHERE id = $1 AND is_active = TRUE`,
+        [vehicleBrandId]
+      );
+
+      if (brandCheck.rows.length === 0) {
+        throw new NotFoundException('La marca de vehículo no existe o está inactiva');
+      }
+
+      // Verificar si ya existe la relación
+      const existingCheck = await pool.query(
+        `SELECT id, is_active FROM catalog.business_vehicle_brands 
+         WHERE business_id = $1 AND vehicle_brand_id = $2`,
+        [businessId, vehicleBrandId]
+      );
+
+      if (existingCheck.rows.length > 0) {
+        // Si existe pero está inactiva, reactivarla
+        if (existingCheck.rows[0].is_active === false) {
+          await pool.query(
+            `UPDATE catalog.business_vehicle_brands 
+             SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP, created_by = $3
+             WHERE business_id = $1 AND vehicle_brand_id = $2`,
+            [businessId, vehicleBrandId, userId]
+          );
+        } else {
+          throw new BadRequestException('La marca ya está asignada a esta sucursal');
+        }
+      } else {
+        // Insertar nueva relación
+        await pool.query(
+          `INSERT INTO catalog.business_vehicle_brands (business_id, vehicle_brand_id, created_by, is_active)
+           VALUES ($1, $2, $3, TRUE)`,
+          [businessId, vehicleBrandId, userId]
+        );
+      }
+
+      // Devolver las marcas actualizadas
+      return this.getBusinessVehicleBrands(businessId);
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error agregando marca a la sucursal:', error);
+      throw new ServiceUnavailableException(`Error al agregar marca: ${error.message}`);
+    }
+  }
+
+  /**
+   * Quitar una marca de vehículo de una sucursal
+   */
+  async removeVehicleBrandFromBusiness(businessId: string, vehicleBrandId: string, userId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que el negocio existe y el usuario tiene permisos
+      const businessCheck = await pool.query(
+        `SELECT b.id FROM core.businesses b
+         INNER JOIN core.business_users bu ON b.id = bu.business_id
+         WHERE b.id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
+        [businessId, userId]
+      );
+
+      if (businessCheck.rows.length === 0) {
+        throw new BadRequestException('No tienes permisos para gestionar esta sucursal');
+      }
+
+      // Desactivar la relación (eliminación lógica)
+      const result = await pool.query(
+        `UPDATE catalog.business_vehicle_brands 
+         SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE business_id = $1 AND vehicle_brand_id = $2 AND is_active = TRUE
+         RETURNING id`,
+        [businessId, vehicleBrandId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('La marca no está asignada a esta sucursal');
+      }
+
+      // Devolver las marcas actualizadas
+      return this.getBusinessVehicleBrands(businessId);
+    } catch (error: any) {
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error quitando marca de la sucursal:', error);
+      throw new ServiceUnavailableException(`Error al quitar marca: ${error.message}`);
+    }
+  }
+
+  // ============================================================================
+  // BUSINESS GROUPS (Grupos Empresariales)
+  // ============================================================================
+
+  /**
+   * Listar grupos empresariales (público)
+   */
+  async getBusinessGroups(query: any) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    try {
+      let whereConditions = ['is_active = TRUE'];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (query.search) {
+        whereConditions.push(`(name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`);
+        queryParams.push(`%${query.search}%`);
+        paramIndex++;
+      }
+
+      if (query.isActive !== undefined) {
+        whereConditions.push(`is_active = $${paramIndex}`);
+        queryParams.push(query.isActive === 'true' || query.isActive === true);
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+      // Contar total
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM core.business_groups ${whereClause}`,
+        queryParams
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      // Obtener datos
+      queryParams.push(limit, offset);
+      const result = await pool.query(
+        `SELECT 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at
+        FROM core.business_groups
+        ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        queryParams
+      );
+
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Error obteniendo grupos empresariales:', error);
+      throw new ServiceUnavailableException(`Error al obtener grupos empresariales: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener grupo empresarial por slug (público)
+   */
+  async getBusinessGroupBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at
+        FROM core.business_groups
+        WHERE slug = $1 AND is_active = TRUE`,
+        [slug]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo grupo empresarial:', error);
+      throw new ServiceUnavailableException(`Error al obtener grupo empresarial: ${error.message}`);
+    }
+  }
+
+  /**
+   * Listar sucursales (branches) (público)
+   */
+  async getBranches(query: any) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+    const page = parseInt(query.page) || 1;
+    const limit = parseInt(query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    try {
+      let whereConditions = ['b.is_active = TRUE'];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (query.groupId) {
+        whereConditions.push(`b.business_group_id = $${paramIndex}`);
+        queryParams.push(query.groupId);
+        paramIndex++;
+      }
+
+      if (query.search) {
+        whereConditions.push(`(b.name ILIKE $${paramIndex} OR b.description ILIKE $${paramIndex})`);
+        queryParams.push(`%${query.search}%`);
+        paramIndex++;
+      }
+
+      if (query.isActive !== undefined) {
+        whereConditions.push(`b.is_active = $${paramIndex}`);
+        queryParams.push(query.isActive === 'true' || query.isActive === true);
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+      // Contar total
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM core.businesses b ${whereClause}`,
+        queryParams
+      );
+      const total = parseInt(countResult.rows[0].total);
+
+      // Obtener datos
+      queryParams.push(limit, offset);
+      const result = await pool.query(
+        `SELECT 
+          b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
+          b.address, b.phone, b.email, b.is_active, b.created_at, b.updated_at
+        FROM core.businesses b
+        ${whereClause}
+        ORDER BY b.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        queryParams
+      );
+
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Error obteniendo sucursales:', error);
+      throw new ServiceUnavailableException(`Error al obtener sucursales: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener sucursal por slug (público)
+   */
+  async getBranchBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT 
+          b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
+          b.address, b.phone, b.email, b.is_active, b.created_at, b.updated_at
+        FROM core.businesses b
+        WHERE b.slug = $1 AND b.is_active = TRUE`,
+        [slug]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo sucursal:', error);
+      throw new ServiceUnavailableException(`Error al obtener sucursal: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener el grupo empresarial del usuario actual (owner_id)
+   */
+  async getMyBusinessGroup(ownerId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at
+        FROM core.business_groups
+        WHERE owner_id = $1 AND is_active = TRUE
+        ORDER BY created_at DESC
+        LIMIT 1`,
+        [ownerId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('No se encontró un grupo empresarial para este usuario');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo grupo empresarial:', error);
+      throw new ServiceUnavailableException(`Error al obtener grupo empresarial: ${error.message}`);
+    }
+  }
+
+  /**
+   * Crear un nuevo grupo empresarial
+   */
+  async createBusinessGroup(ownerId: string, createDto: CreateBusinessGroupDto) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const settingsJson = createDto.settings ? JSON.stringify(createDto.settings) : '{}';
+
+      const result = await pool.query(
+        `INSERT INTO core.business_groups (
+          owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+        RETURNING 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at`,
+        [
+          ownerId,
+          createDto.name,
+          createDto.legal_name || null,
+          createDto.description || null,
+          createDto.slug || null, // El trigger generará el slug si es NULL
+          createDto.logo_url || null,
+          createDto.website_url || null,
+          createDto.tax_id || null,
+          settingsJson,
+          createDto.is_active ?? true,
+        ]
+      );
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error.code === '23505') { // Unique violation
+        throw new BadRequestException('El slug ya está en uso');
+      }
+      console.error('❌ Error creando grupo empresarial:', error);
+      throw new ServiceUnavailableException(`Error al crear grupo empresarial: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualizar un grupo empresarial
+   */
+  async updateBusinessGroup(groupId: string, ownerId: string, updateDto: UpdateBusinessGroupDto) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que el grupo existe y pertenece al usuario
+      const checkResult = await pool.query(
+        'SELECT id FROM core.business_groups WHERE id = $1 AND owner_id = $2',
+        [groupId, ownerId]
+      );
+
+      if (checkResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado o no tienes permisos');
+      }
+
+      // Construir query dinámico
+      const updateFields: string[] = [];
+      const updateValues: any[] = [];
+      let paramIndex = 1;
+
+      if (updateDto.name !== undefined) {
+        updateFields.push(`name = $${paramIndex++}`);
+        updateValues.push(updateDto.name);
+      }
+      if (updateDto.legal_name !== undefined) {
+        updateFields.push(`legal_name = $${paramIndex++}`);
+        updateValues.push(updateDto.legal_name || null);
+      }
+      if (updateDto.description !== undefined) {
+        updateFields.push(`description = $${paramIndex++}`);
+        updateValues.push(updateDto.description || null);
+      }
+      if (updateDto.slug !== undefined) {
+        updateFields.push(`slug = $${paramIndex++}`);
+        updateValues.push(updateDto.slug || null);
+      }
+      if (updateDto.logo_url !== undefined) {
+        updateFields.push(`logo_url = $${paramIndex++}`);
+        updateValues.push(updateDto.logo_url || null);
+      }
+      if (updateDto.website_url !== undefined) {
+        updateFields.push(`website_url = $${paramIndex++}`);
+        updateValues.push(updateDto.website_url || null);
+      }
+      if (updateDto.tax_id !== undefined) {
+        updateFields.push(`tax_id = $${paramIndex++}`);
+        updateValues.push(updateDto.tax_id || null);
+      }
+      if (updateDto.settings !== undefined) {
+        updateFields.push(`settings = $${paramIndex++}::jsonb`);
+        updateValues.push(JSON.stringify(updateDto.settings));
+      }
+      if (updateDto.is_active !== undefined) {
+        updateFields.push(`is_active = $${paramIndex++}`);
+        updateValues.push(updateDto.is_active);
+      }
+
+      if (updateFields.length === 0) {
+        // No hay campos para actualizar, retornar el grupo actual
+        return this.getMyBusinessGroup(ownerId);
+      }
+
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      updateValues.push(groupId, ownerId);
+
+      const query = `
+        UPDATE core.business_groups
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex++} AND owner_id = $${paramIndex++}
+        RETURNING 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at
+      `;
+
+      const result = await pool.query(query, updateValues);
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado o no tienes permisos');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      if (error.code === '23505') { // Unique violation
+        throw new BadRequestException('El slug ya está en uso');
+      }
+      console.error('❌ Error actualizando grupo empresarial:', error);
+      throw new ServiceUnavailableException(`Error al actualizar grupo empresarial: ${error.message}`);
     }
   }
 }

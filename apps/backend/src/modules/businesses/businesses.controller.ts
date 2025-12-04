@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Query,
   Body,
@@ -30,6 +31,8 @@ import { UpdateBusinessStatusDto } from './dto/update-business-status.dto';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { UpdateBusinessAddressDto } from './dto/update-business-address.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
+import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
+import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 
 @ApiTags('businesses')
 @Controller('businesses')
@@ -38,12 +41,11 @@ export class BusinessesController {
   constructor(private readonly businessesService: BusinessesService) {}
 
   @Get()
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Listar todos los negocios con filtros y paginación' })
+  @Public()
+  @ApiOperation({ summary: 'Listar todos los negocios con filtros y paginación (Público)' })
   @ApiResponse({ status: 200, description: 'Lista de negocios obtenida exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autenticado' })
   @ApiResponse({ status: 400, description: 'Parámetros inválidos' })
-  async findAll(@Query() query: ListBusinessesDto, @CurrentUser() user: User) {
+  async findAll(@Query() query: ListBusinessesDto) {
     return this.businessesService.findAll(query);
   }
 
@@ -180,6 +182,77 @@ export class BusinessesController {
     return this.businessesService.findNearest(lat, lon, businessId);
   }
 
+  @Get('vehicle-brands/available')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener todas las marcas de vehículos disponibles' })
+  @ApiResponse({ status: 200, description: 'Marcas obtenidas exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async getAvailableVehicleBrands() {
+    return this.businessesService.getAvailableVehicleBrands();
+  }
+
+  // ============================================================================
+  // BUSINESS GROUPS (Grupos Empresariales) - Debe ir ANTES de @Get(':id')
+  // ============================================================================
+
+  @Get('groups')
+  @Public()
+  @ApiOperation({ summary: 'Listar grupos empresariales (Público)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Lista de grupos obtenida exitosamente' })
+  async getGroups(@Query() query: any) {
+    return this.businessesService.getBusinessGroups(query);
+  }
+
+  @Get('groups/:slug')
+  @Public()
+  @ApiOperation({ summary: 'Obtener grupo empresarial por slug (Público)' })
+  @ApiParam({ name: 'slug', description: 'Slug del grupo empresarial' })
+  @ApiResponse({ status: 200, description: 'Grupo obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Grupo no encontrado' })
+  async getGroupBySlug(@Param('slug') slug: string) {
+    return this.businessesService.getBusinessGroupBySlug(slug);
+  }
+
+  @Get('branches')
+  @Public()
+  @ApiOperation({ summary: 'Listar sucursales (branches) (Público)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'groupId', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  @ApiQuery({ name: 'latitude', required: false, type: Number })
+  @ApiQuery({ name: 'longitude', required: false, type: Number })
+  @ApiQuery({ name: 'radius', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Lista de sucursales obtenida exitosamente' })
+  async getBranches(@Query() query: any) {
+    return this.businessesService.getBranches(query);
+  }
+
+  @Get('branches/:slug')
+  @Public()
+  @ApiOperation({ summary: 'Obtener sucursal por slug (Público)' })
+  @ApiParam({ name: 'slug', description: 'Slug de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Sucursal obtenida exitosamente' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  async getBranchBySlug(@Param('slug') slug: string) {
+    return this.businessesService.getBranchBySlug(slug);
+  }
+
+  @Get('my-business-group')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener el grupo empresarial del usuario actual' })
+  @ApiResponse({ status: 200, description: 'Grupo empresarial obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'No se encontró un grupo empresarial' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getMyBusinessGroup(@CurrentUser() user: User) {
+    return this.businessesService.getMyBusinessGroup(user.id);
+  }
+
   @Get(':id')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener un negocio por ID' })
@@ -237,6 +310,84 @@ export class BusinessesController {
     @CurrentUser() user: User,
   ) {
     return this.businessesService.updateAddress(id, user.id, updateDto);
+  }
+
+  @Get(':id/vehicle-brands')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener las marcas de vehículos asignadas a una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiResponse({ status: 200, description: 'Marcas obtenidas exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Negocio no encontrado' })
+  async getBusinessVehicleBrands(@Param('id') id: string) {
+    return this.businessesService.getBusinessVehicleBrands(id);
+  }
+
+  @Post(':id/vehicle-brands/:brandId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Agregar una marca de vehículo a una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'brandId', description: 'ID de la marca de vehículo', type: String })
+  @ApiResponse({ status: 200, description: 'Marca agregada exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Negocio o marca no encontrada' })
+  @ApiResponse({ status: 400, description: 'La marca ya está asignada o sin permisos' })
+  async addVehicleBrand(
+    @Param('id') id: string,
+    @Param('brandId') brandId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.addVehicleBrandToBusiness(id, brandId, user.id);
+  }
+
+  @Delete(':id/vehicle-brands/:brandId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Quitar una marca de vehículo de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'brandId', description: 'ID de la marca de vehículo', type: String })
+  @ApiResponse({ status: 200, description: 'Marca quitada exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Negocio o marca no encontrada' })
+  @ApiResponse({ status: 400, description: 'Sin permisos' })
+  async removeVehicleBrand(
+    @Param('id') id: string,
+    @Param('brandId') brandId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.removeVehicleBrandFromBusiness(id, brandId, user.id);
+  }
+
+  // ============================================================================
+  // BUSINESS GROUPS (Grupos Empresariales) - Resto de endpoints
+  // ============================================================================
+
+  @Post('business-groups')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Crear un nuevo grupo empresarial' })
+  @ApiResponse({ status: 201, description: 'Grupo empresarial creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async createBusinessGroup(
+    @Body() createDto: CreateBusinessGroupDto,
+    @CurrentUser() user: User
+  ) {
+    return this.businessesService.createBusinessGroup(user.id, createDto);
+  }
+
+  @Patch('business-groups/:id')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial (UUID)' })
+  @ApiResponse({ status: 200, description: 'Grupo empresarial actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Grupo empresarial no encontrado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async updateBusinessGroup(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessGroupDto,
+    @CurrentUser() user: User
+  ) {
+    return this.businessesService.updateBusinessGroup(id, user.id, updateDto);
   }
 }
 

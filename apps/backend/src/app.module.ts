@@ -20,6 +20,8 @@ import { BusinessUsersModule } from './modules/business-users/business-users.mod
 import { CartModule } from './modules/cart/cart.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { VehiclesModule } from './modules/catalog/vehicles/vehicles.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { OrdersModule } from './modules/orders/orders.module';
     CartModule,
     AddressesModule,
     OrdersModule,
+    VehiclesModule,
+    SettingsModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

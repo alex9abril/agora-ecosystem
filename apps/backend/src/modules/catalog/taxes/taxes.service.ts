@@ -21,8 +21,8 @@ export class TaxesService {
 
     try {
       const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
-      const result = await dbPool.query(
-        `SELECT 
+      const query = `
+        SELECT 
           id,
           name,
           description,
@@ -39,8 +39,18 @@ export class TaxesService {
           updated_at
         FROM catalog.tax_types
         ${whereClause}
-        ORDER BY is_default DESC, name ASC`,
-      );
+        ORDER BY is_default DESC, name ASC
+      `;
+      
+      console.log('[TaxesService] Consultando tipos de impuestos:', { includeInactive, whereClause });
+      const result = await dbPool.query(query);
+      console.log('[TaxesService] Tipos de impuestos encontrados:', result.rows.length);
+      
+      if (result.rows.length === 0) {
+        console.warn('[TaxesService] No se encontraron tipos de impuestos activos. Verificando si hay impuestos inactivos...');
+        const allResult = await dbPool.query('SELECT COUNT(*) as total FROM catalog.tax_types');
+        console.log('[TaxesService] Total de tipos de impuestos en la base de datos:', allResult.rows[0]?.total || 0);
+      }
 
       return result.rows;
     } catch (error: any) {

@@ -14,6 +14,14 @@ export interface SignUpData {
   role?: 'client' | 'repartidor' | 'local' | 'admin';
 }
 
+export interface AdminSignUpData {
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
 export interface SignInData {
   email: string;
   password: string;
@@ -51,6 +59,17 @@ export const authService = {
    */
   async signUp(data: SignUpData): Promise<AuthResponse> {
     return apiRequest<AuthResponse>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Registrar un nuevo administrador
+   * Solo permite crear usuarios con rol 'admin'
+   */
+  async signUpAdmin(data: AdminSignUpData): Promise<AuthResponse> {
+    return apiRequest<AuthResponse>('/auth/signup/admin', {
       method: 'POST',
       body: JSON.stringify(data),
     });

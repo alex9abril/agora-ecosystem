@@ -5,12 +5,14 @@ import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { productsService, Product, ProductCategory, ProductType, CreateProductData, ProductVariantGroup } from '@/lib/products';
 import { taxesService, TaxType, ProductTax } from '@/lib/taxes';
+import { getUserVehicle } from '@/lib/storage';
+import { vehiclesService, ProductCompatibility, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec } from '@/lib/vehicles';
 import ImageUpload from '@/components/ImageUpload';
 import CategorySelector from '@/components/CategorySelector';
 
 export default function ProductsPage() {
   const router = useRouter();
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -26,6 +28,7 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState<CreateProductData>({
     business_id: '',
     name: '',
+    sku: '',
     description: '',
     image_url: '',
     price: 0,
@@ -45,29 +48,45 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<'updated_at' | 'created_at'>('updated_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
+  // Estados para compatibilidad de vehículos
+  const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibility[]>([]);
+  const [loadingCompatibilities, setLoadingCompatibilities] = useState(false);
+  
+  // Estados para disponibilidad por sucursal
+  const [branchAvailabilities, setBranchAvailabilities] = useState<Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+    is_active?: boolean; // Estado activo/inactivo de la sucursal
+  }>>([]);
+  const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] = useState(false);
+  
   // Estados para impuestos
   const [availableTaxTypes, setAvailableTaxTypes] = useState<TaxType[]>([]);
   const [productTaxes, setProductTaxes] = useState<ProductTax[]>([]);
   const [loadingTaxes, setLoadingTaxes] = useState(false);
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales - productos son globales, no requieren tienda
   useEffect(() => {
-    if (selectedBusiness?.business_id) {
-      loadData();
-      loadTaxTypes();
-    }
-  }, [selectedBusiness?.business_id]);
+    loadData();
+    loadTaxTypes();
+  }, []); // Cargar una sola vez al montar
 
   const loadData = async () => {
-    if (!selectedBusiness?.business_id) return;
-
     try {
       setLoading(true);
       setError(null);
 
+      // Obtener vehículo del usuario si está guardado
+      const userVehicle = getUserVehicle();
+      
       // Cargar productos y categorías en paralelo
+      // Los productos son GLOBALES - no se filtra por businessId
+      // Si se proporciona businessId, solo se usa para crear productos nuevos, pero el listado es global
       const [productsData, categoriesData] = await Promise.all([
-        productsService.getProducts(selectedBusiness.business_id),
+        productsService.getProducts(undefined, userVehicle || undefined), // undefined = todos los productos globales
         productsService.getCategories(),
       ]);
 
@@ -85,11 +104,21 @@ export default function ProductsPage() {
   const loadTaxTypes = async () => {
     try {
       setLoadingTaxes(true);
+      console.log('[ProductsPage] Cargando tipos de impuestos...');
       const taxTypes = await taxesService.getTaxTypes(false);
+      console.log('[ProductsPage] Tipos de impuestos recibidos:', taxTypes?.length || 0, taxTypes);
       // Asegurar que siempre sea un array
-      setAvailableTaxTypes(Array.isArray(taxTypes) ? taxTypes : []);
+      const taxTypesArray = Array.isArray(taxTypes) ? taxTypes : [];
+      setAvailableTaxTypes(taxTypesArray);
+      
+      if (taxTypesArray.length === 0) {
+        console.warn('[ProductsPage] No se encontraron tipos de impuestos. Intentando cargar incluyendo inactivos...');
+        // Intentar cargar también los inactivos para diagnóstico
+        const allTaxTypes = await taxesService.getTaxTypes(true);
+        console.log('[ProductsPage] Tipos de impuestos (incluyendo inactivos):', allTaxTypes?.length || 0);
+      }
     } catch (err: any) {
-      console.error('Error cargando tipos de impuestos:', err);
+      console.error('[ProductsPage] Error cargando tipos de impuestos:', err);
       // Asegurar que siempre sea un array, incluso si hay error
       setAvailableTaxTypes([]);
     } finally {
@@ -110,9 +139,105 @@ export default function ProductsPage() {
     }
   };
 
+  const loadProductCompatibilities = async (productId: string) => {
+    try {
+      setLoadingCompatibilities(true);
+      const compatibilities = await vehiclesService.getProductCompatibilities(productId);
+      setProductCompatibilities(compatibilities || []);
+    } catch (err: any) {
+      console.error('Error cargando compatibilidades del producto:', err);
+      setProductCompatibilities([]);
+    } finally {
+      setLoadingCompatibilities(false);
+    }
+  };
+
+  const saveProductCompatibilities = async (productId: string) => {
+    try {
+      // Obtener compatibilidades actuales del producto
+      const currentCompatibilities = await vehiclesService.getProductCompatibilities(productId);
+      const currentIds = currentCompatibilities.map(c => c.id);
+
+      // Eliminar compatibilidades que ya no están en la lista
+      for (const current of currentCompatibilities) {
+        if (!productCompatibilities.find(pc => pc.id === current.id)) {
+          await vehiclesService.removeProductCompatibility(current.id);
+        }
+      }
+
+      // Agregar nuevas compatibilidades
+      for (const compatibility of productCompatibilities) {
+        if (!compatibility.id || !currentIds.includes(compatibility.id)) {
+          // Es una nueva compatibilidad
+          await vehiclesService.addProductCompatibility(productId, {
+            vehicle_brand_id: compatibility.vehicle_brand_id || undefined,
+            vehicle_model_id: compatibility.vehicle_model_id || undefined,
+            vehicle_year_id: compatibility.vehicle_year_id || undefined,
+            vehicle_spec_id: compatibility.vehicle_spec_id || undefined,
+            is_universal: compatibility.is_universal || false,
+            notes: compatibility.notes || undefined,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('Error guardando compatibilidades:', err);
+      // No fallar el guardado del producto si hay error en compatibilidades
+    }
+  };
+
+  const loadBranchAvailabilities = async (productId: string) => {
+    try {
+      setLoadingBranchAvailabilities(true);
+      const response = await productsService.getProductBranchAvailability(productId);
+      
+      // Enriquecer con información de is_active de availableBusinesses si no viene del backend
+      const enrichedAvailabilities = (response.availabilities || []).map(avail => {
+        const business = availableBusinesses.find(b => b.business_id === avail.branch_id);
+        return {
+          ...avail,
+          is_active: avail.is_active !== undefined ? avail.is_active : (business?.is_active ?? true),
+        };
+      });
+      
+      setBranchAvailabilities(enrichedAvailabilities);
+    } catch (err: any) {
+      console.error('Error cargando disponibilidad por sucursal:', err);
+      setBranchAvailabilities([]);
+    } finally {
+      setLoadingBranchAvailabilities(false);
+    }
+  };
+
+  const saveBranchAvailabilities = async (productId: string) => {
+    try {
+      // Filtrar y mapear solo las sucursales que tienen datos válidos
+      const availabilitiesToSave = branchAvailabilities
+        .filter(avail => avail.branch_id) // Solo las que tienen branch_id
+        .map(avail => ({
+          branch_id: avail.branch_id,
+          is_enabled: avail.is_enabled || false,
+          price: avail.price !== null && avail.price !== undefined ? avail.price : null,
+          stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
+        }));
+      
+      if (availabilitiesToSave.length > 0) {
+        console.log('💾 Guardando disponibilidad por sucursal:', availabilitiesToSave);
+        await productsService.updateProductBranchAvailability(productId, availabilitiesToSave);
+        console.log('✅ Disponibilidad por sucursal guardada exitosamente');
+      }
+    } catch (err: any) {
+      console.error('❌ Error guardando disponibilidad por sucursal:', err);
+      // No fallar el guardado del producto si hay error en disponibilidad
+    }
+  };
+
   const handleCreate = () => {
-    if (!selectedBusiness?.business_id) {
-      setError('No hay negocio seleccionado');
+    // Para crear productos, necesitamos una tienda
+    // Si no hay tienda seleccionada, usar la primera disponible
+    const businessToUse = selectedBusiness || (availableBusinesses.length > 0 ? availableBusinesses[0] : null);
+    
+    if (!businessToUse?.business_id) {
+      setError('No hay tienda disponible para crear productos. Por favor, selecciona una tienda o crea una nueva.');
       return;
     }
 
@@ -132,10 +257,14 @@ export default function ProductsPage() {
         await loadTaxTypes();
       }
       
+      // Para crear productos, usar la tienda seleccionada o la primera disponible
+      const businessToUse = selectedBusiness || (availableBusinesses.length > 0 ? availableBusinesses[0] : null);
+      
       // Inicializar formulario con el tipo seleccionado
       setFormData({
         ...formData,
-        business_id: selectedBusiness?.business_id || '',
+        business_id: businessToUse?.business_id || '',
+        sku: formData.sku || '',
         product_type: productType,
       });
       
@@ -153,9 +282,13 @@ export default function ProductsPage() {
   };
 
   const resetForm = () => {
+    // Para crear productos, usar la tienda seleccionada o la primera disponible
+    const businessToUse = selectedBusiness || (availableBusinesses.length > 0 ? availableBusinesses[0] : null);
+    
     setFormData({
-      business_id: selectedBusiness?.business_id || '',
+      business_id: businessToUse?.business_id || '',
       name: '',
+      sku: '',
       description: '',
       image_url: '',
       price: 0,
@@ -194,6 +327,7 @@ export default function ProductsPage() {
 
       const productData: CreateProductData = {
         ...formData,
+        sku: formData.sku && formData.sku.trim() !== '' ? formData.sku.trim() : undefined,
         image_url: imageUrl,
         variant_groups: variantGroups, // Enviar siempre, incluso si está vacío para poder eliminar grupos
         allergens: allergens.length > 0 ? allergens : undefined,
@@ -256,15 +390,48 @@ export default function ProductsPage() {
       // Si es un producto nuevo, mantener el formulario abierto para gestionar variantes
       if (!editingProduct) {
         // Recargar el producto recién creado para obtener su ID
-        const updatedProducts = await productsService.getProducts(selectedBusiness?.business_id || '');
+        // Los productos son globales, no se filtra por businessId
+        const updatedProducts = await productsService.getProducts(undefined);
         const newProduct = updatedProducts.find(p => p.name === formData.name);
         if (newProduct) {
           setEditingProduct(newProduct);
           setFormData({ ...formData, business_id: newProduct.business_id });
-          // Cargar impuestos del producto recién creado
+          // Cargar impuestos y compatibilidades del producto recién creado
           await loadProductTaxes(newProduct.id);
+          // Solo cargar compatibilidades si es refaccion o accesorio
+          if (newProduct.product_type === 'refaccion' || newProduct.product_type === 'accesorio') {
+            await loadProductCompatibilities(newProduct.id);
+          }
+          // Cargar disponibilidad por sucursal
+          await loadBranchAvailabilities(newProduct.id);
         }
       } else {
+        // Guardar compatibilidades si es refaccion o accesorio
+        if (savedProduct.product_type === 'refaccion' || savedProduct.product_type === 'accesorio') {
+          await saveProductCompatibilities(savedProduct.id);
+        }
+        // Guardar disponibilidad por sucursal - enviar TODAS las sucursales
+        if (branchAvailabilities.length > 0) {
+          try {
+            const availabilitiesToSave = branchAvailabilities
+              .filter(avail => avail.branch_id) // Solo las que tienen branch_id
+              .map(avail => ({
+                branch_id: avail.branch_id,
+                is_enabled: avail.is_enabled || false,
+                price: avail.price !== null && avail.price !== undefined ? avail.price : null,
+                stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
+              }));
+            
+            if (availabilitiesToSave.length > 0) {
+              console.log('💾 Guardando disponibilidad por sucursal:', availabilitiesToSave);
+              await productsService.updateProductBranchAvailability(savedProduct.id, availabilitiesToSave);
+              console.log('✅ Disponibilidad por sucursal guardada exitosamente');
+            }
+          } catch (err: any) {
+            console.error('❌ Error guardando disponibilidad por sucursal:', err);
+            // No fallar el guardado del producto si hay error en disponibilidad
+          }
+        }
         // Si es edición, cerrar el formulario
         setShowForm(false);
         resetForm();
@@ -406,6 +573,19 @@ export default function ProductsPage() {
             editingProduct={editingProduct}
             saving={saving}
             fieldConfig={fieldConfig}
+            availableTaxTypes={availableTaxTypes}
+            productTaxes={productTaxes}
+            setProductTaxes={setProductTaxes}
+            loadingTaxes={loadingTaxes}
+            onLoadProductTaxes={editingProduct ? () => loadProductTaxes(editingProduct.id) : undefined}
+            productCompatibilities={productCompatibilities}
+            setProductCompatibilities={setProductCompatibilities}
+            loadingCompatibilities={loadingCompatibilities}
+            onLoadProductCompatibilities={editingProduct ? () => loadProductCompatibilities(editingProduct.id) : undefined}
+            branchAvailabilities={branchAvailabilities}
+            setBranchAvailabilities={setBranchAvailabilities}
+            loadingBranchAvailabilities={loadingBranchAvailabilities}
+            onLoadBranchAvailabilities={loadBranchAvailabilities}
             onSubmit={handleSubmit}
             onCancel={() => {
               setShowForm(false);
@@ -639,7 +819,52 @@ interface ProductTypeSelectionProps {
 }
 
 function ProductTypeSelection({ onSelect, onCancel }: ProductTypeSelectionProps) {
-  const productTypes = productsService.getProductTypes();
+  const [productTypes, setProductTypes] = useState<Array<{ value: ProductType; label: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadProductTypes = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const types = await productsService.getProductTypes();
+        setProductTypes(types);
+      } catch (err: any) {
+        console.error('Error cargando tipos de producto:', err);
+        setError('No se pudieron cargar los tipos de producto');
+        // Usar valores por defecto en caso de error
+        setProductTypes([
+          { value: 'food', label: 'Alimento' },
+          { value: 'beverage', label: 'Bebida' },
+          { value: 'medicine', label: 'Medicamento' },
+          { value: 'grocery', label: 'Abarrotes' },
+          { value: 'non_food', label: 'No Alimenticio' },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProductTypes();
+  }, []);
+
+  // Mapeo de descripciones para cada tipo (puede ser extendido según necesidad)
+  const getTypeDescription = (value: string): string => {
+    const descriptions: Record<string, string> = {
+      'food': 'Alimentos y comidas preparadas',
+      'beverage': 'Bebidas y refrescos',
+      'medicine': 'Medicamentos y productos farmacéuticos',
+      'grocery': 'Abarrotes y productos de despensa',
+      'non_food': 'Productos no alimenticios',
+      'refaccion': 'Refacciones y repuestos',
+      'accesorio': 'Accesorios para vehículos',
+      'servicio_instalacion': 'Servicios de instalación',
+      'servicio_mantenimiento': 'Servicios de mantenimiento',
+      'fluido': 'Fluidos y lubricantes',
+    };
+    return descriptions[value] || 'Tipo de producto';
+  };
 
   return (
     <div className="bg-white rounded border border-gray-200">
@@ -652,33 +877,44 @@ function ProductTypeSelection({ onSelect, onCancel }: ProductTypeSelectionProps)
           Selecciona el tipo de producto que deseas crear. Esto determinará qué campos estarán disponibles en el formulario.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {productTypes.map((type) => (
-            <button
-              key={type.value}
-              onClick={() => onSelect(type.value)}
-              className="p-4 border border-gray-200 rounded hover:border-gray-400 hover:bg-gray-50 transition-colors text-left"
-            >
-              <h3 className="text-sm font-medium text-gray-900 mb-1">{type.label}</h3>
-              <p className="text-xs text-gray-500">
-                {type.value === 'food' && 'Alimentos y comidas preparadas'}
-                {type.value === 'beverage' && 'Bebidas y refrescos'}
-                {type.value === 'medicine' && 'Medicamentos y productos farmacéuticos'}
-                {type.value === 'grocery' && 'Abarrotes y productos de despensa'}
-                {type.value === 'non_food' && 'Productos no alimenticios'}
-              </p>
-            </button>
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            <span className="ml-3 text-sm text-gray-600">Cargando tipos de producto...</span>
+          </div>
+        ) : error ? (
+          <div className="bg-yellow-50 border border-yellow-200 rounded p-4 mb-4">
+            <p className="text-sm text-yellow-800">{error}</p>
+          </div>
+        ) : null}
 
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-normal border border-gray-200 rounded text-gray-600 hover:bg-gray-50 transition-colors"
-          >
-            Cancelar
-          </button>
-        </div>
+        {!loading && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {productTypes.map((type) => (
+                <button
+                  key={type.value}
+                  onClick={() => onSelect(type.value)}
+                  className="p-4 border border-gray-200 rounded hover:border-gray-400 hover:bg-gray-50 transition-colors text-left"
+                >
+                  <h3 className="text-sm font-medium text-gray-900 mb-1">{type.label}</h3>
+                  <p className="text-xs text-gray-500">
+                    {getTypeDescription(type.value)}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-normal border border-gray-200 rounded text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -707,6 +943,26 @@ export interface ProductFormProps {
   setProductTaxes: React.Dispatch<React.SetStateAction<ProductTax[]>>;
   loadingTaxes: boolean;
   onLoadProductTaxes?: () => void;
+  productCompatibilities: ProductCompatibility[];
+  setProductCompatibilities: React.Dispatch<React.SetStateAction<ProductCompatibility[]>>;
+  loadingCompatibilities: boolean;
+  onLoadProductCompatibilities?: () => void;
+  branchAvailabilities: Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+  }>;
+  setBranchAvailabilities: React.Dispatch<React.SetStateAction<Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+  }>>>;
+  loadingBranchAvailabilities: boolean;
+  onLoadBranchAvailabilities?: (productId: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
 }
@@ -733,11 +989,44 @@ export function ProductForm({
   setProductTaxes,
   loadingTaxes,
   onLoadProductTaxes,
+  productCompatibilities,
+  setProductCompatibilities,
+  loadingCompatibilities,
+  onLoadProductCompatibilities,
+  branchAvailabilities,
+  setBranchAvailabilities,
+  loadingBranchAvailabilities,
+  onLoadBranchAvailabilities,
   onSubmit,
   onCancel,
 }: ProductFormProps) {
-  const productTypes = productsService.getProductTypes();
+  const { availableBusinesses } = useSelectedBusiness();
+  const [productTypes, setProductTypes] = useState<Array<{ value: ProductType; label: string }>>([]);
+  const [showPriceHelp, setShowPriceHelp] = useState(false);
+  const [showSelectionTypeHelp, setShowSelectionTypeHelp] = useState(false);
   const commonAllergens = ['gluten', 'lactosa', 'huevo', 'soja', 'nueces', 'pescado', 'mariscos', 'sésamo'];
+
+  // Cargar tipos de producto al montar el componente
+  useEffect(() => {
+    const loadProductTypes = async () => {
+      try {
+        const types = await productsService.getProductTypes();
+        setProductTypes(types);
+      } catch (err: any) {
+        console.error('Error cargando tipos de producto:', err);
+        // Usar valores por defecto en caso de error
+        setProductTypes([
+          { value: 'food', label: 'Alimento' },
+          { value: 'beverage', label: 'Bebida' },
+          { value: 'medicine', label: 'Medicamento' },
+          { value: 'grocery', label: 'Abarrotes' },
+          { value: 'non_food', label: 'No Alimenticio' },
+        ]);
+      }
+    };
+
+    loadProductTypes();
+  }, []);
 
   // Cargar impuestos del producto cuando se edita
   useEffect(() => {
@@ -746,6 +1035,39 @@ export function ProductForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingProduct?.id]); // Solo ejecutar cuando cambie el ID del producto, no cuando cambie la función
+
+  // Detectar si el sistema de precios por sucursal está activo
+  // Si hay sucursales disponibles, el sistema está activo y las variantes solo pueden usar ajustes relativos
+  const hasBranchPrices = availableBusinesses.length > 0 || branchAvailabilities.length > 0;
+  
+  useEffect(() => {
+    // Si hay precios por sucursal, convertir todos los precios absolutos a ajustes relativos
+    if (hasBranchPrices) {
+      const basePrice = formData.price || 0;
+      let hasChanges = false;
+      const updatedGroups = variantGroups.map(group => ({
+        ...group,
+        variants: group.variants.map(variant => {
+          if (variant.absolute_price !== undefined && variant.absolute_price !== null) {
+            hasChanges = true;
+            // Convertir precio absoluto a ajuste relativo
+            const adjustment = variant.absolute_price - basePrice;
+            return {
+              ...variant,
+              absolute_price: undefined,
+              price_adjustment: adjustment
+            };
+          }
+          return variant;
+        })
+      }));
+      
+      if (hasChanges) {
+        setVariantGroups(updatedGroups);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasBranchPrices, formData.price]); // Solo ejecutar cuando cambie hasBranchPrices o el precio base
 
   // Helper para verificar si un campo es visible
   const isFieldVisible = (fieldName: string): boolean => {
@@ -865,6 +1187,48 @@ export function ProductForm({
                 </div>
               )}
 
+              {/* Campo SKU - siempre visible */}
+              <div>
+                <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                  SKU (Código de Producto)
+                </label>
+                <input
+                  type="text"
+                  maxLength={100}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                  value={formData.sku || ''}
+                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                  placeholder="Ej: HAMB-CLAS-001"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Código único de identificación del producto (opcional)
+                </p>
+              </div>
+
+              {/* Campo SKU */}
+              {fieldConfig.find(f => f.fieldName === 'sku')?.isVisible && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    SKU (Código de Producto)
+                    {fieldConfig.find(f => f.fieldName === 'sku')?.isRequired && (
+                      <span className="text-red-500 ml-1">*</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    required={fieldConfig.find(f => f.fieldName === 'sku')?.isRequired || false}
+                    maxLength={100}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                    value={formData.sku || ''}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    placeholder="Ej: HAMB-CLAS-001"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Código único de identificación del producto (opcional)
+                  </p>
+                </div>
+              )}
+
               {/* Descripción */}
               {isFieldVisible('description') && (
                 <div>
@@ -901,7 +1265,14 @@ export function ProductForm({
             {editingProduct && isFieldVisible('variant_groups') && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                  <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">Variantes</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">Variantes</h3>
+                    {hasBranchPrices && (
+                      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                        ⚠️ Solo ajustes relativos (hay precios por sucursal)
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={addVariantGroup}
@@ -960,16 +1331,22 @@ export function ProductForm({
 
                   <div className="space-y-2">
                     {(group.variants || []).map((variant, variantIndex) => {
+                      // Detectar si el sistema de precios por sucursal está activo
+                      // Si hay sucursales disponibles, el sistema está activo y las variantes solo pueden usar ajustes relativos
+                      const hasBranchPrices = availableBusinesses.length > 0 || branchAvailabilities.length > 0;
+                      
                       // Calcular precio final para mostrar
+                      // Si hay precios por sucursal, mostrar ejemplos con diferentes precios de sucursal
                       const basePrice = formData.price || 0;
-                      const finalPrice = variant.absolute_price !== undefined && variant.absolute_price !== null
+                      const hasAbsolutePrice = !hasBranchPrices && variant.absolute_price !== undefined && variant.absolute_price !== null;
+                      const finalPrice = hasAbsolutePrice
                         ? variant.absolute_price
                         : basePrice + (variant.price_adjustment || 0);
                       
                       return (
                         <div key={variantIndex} className="flex gap-2 items-start p-3 bg-gray-50 rounded border border-gray-200">
                           <div className="flex-1 space-y-2">
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className={`grid gap-2 ${hasBranchPrices ? 'grid-cols-2' : 'grid-cols-3'}`}>
                               <div>
                                 <label className="block text-xs font-normal text-gray-600 mb-1">Nombre</label>
                                 <input
@@ -999,7 +1376,7 @@ export function ProductForm({
                                       });
                                     }}
                                     placeholder="+0.00"
-                                    disabled={variant.absolute_price !== undefined && variant.absolute_price !== null}
+                                    disabled={!hasBranchPrices && variant.absolute_price !== undefined && variant.absolute_price !== null}
                                   />
                                   {variant.price_adjustment !== 0 && (
                                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
@@ -1008,39 +1385,67 @@ export function ProductForm({
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-400 mt-0.5">
-                                  {basePrice} + {variant.price_adjustment || 0} = ${finalPrice.toFixed(2)}
+                                  {hasBranchPrices ? (
+                                    <>
+                                      Ajuste: {variant.price_adjustment >= 0 ? '+' : ''}${(variant.price_adjustment || 0).toFixed(2)}
+                                      <br />
+                                      <span className="text-gray-500">
+                                        Se aplica sobre el precio de cada sucursal
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {basePrice.toFixed(2)} + {variant.price_adjustment >= 0 ? '+' : ''}{(variant.price_adjustment || 0).toFixed(2)} = ${(finalPrice || 0).toFixed(2)}
+                                    </>
+                                  )}
                                 </p>
                               </div>
-                              <div>
-                                <label className="block text-xs font-normal text-gray-600 mb-1">
-                                  Precio Absoluto
-                                  <span className="text-gray-400 ml-1">(fijo)</span>
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                                    value={variant.absolute_price || ''}
-                                    onChange={(e) => {
-                                      const value = e.target.value ? parseFloat(e.target.value) : undefined;
-                                      updateVariant(groupIndex, variantIndex, { 
-                                        absolute_price: value,
-                                        price_adjustment: value !== undefined ? 0 : variant.price_adjustment
-                                      });
-                                    }}
-                                    placeholder="Opcional"
-                                  />
+                              {/* Precio Absoluto - Solo disponible si NO hay precios por sucursal */}
+                              {!hasBranchPrices && (
+                                <div>
+                                  <label className="block text-xs font-normal text-gray-600 mb-1">
+                                    Precio Absoluto
+                                    <span className="text-gray-400 ml-1">(fijo)</span>
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                                      value={variant.absolute_price || ''}
+                                      onChange={(e) => {
+                                        const value = e.target.value ? parseFloat(e.target.value) : undefined;
+                                        updateVariant(groupIndex, variantIndex, { 
+                                          absolute_price: value,
+                                          price_adjustment: value !== undefined ? 0 : variant.price_adjustment
+                                        });
+                                      }}
+                                      placeholder="Opcional"
+                                    />
+                                  </div>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {variant.absolute_price ? `Precio fijo: $${variant.absolute_price.toFixed(2)}` : 'Usa ajuste relativo'}
+                                  </p>
                                 </div>
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                  {variant.absolute_price ? `Precio fijo: $${variant.absolute_price.toFixed(2)}` : 'Usa ajuste relativo'}
-                                </p>
-                              </div>
+                              )}
                             </div>
                             <div className="flex items-center justify-between text-xs text-gray-500 bg-white px-2 py-1 rounded border border-gray-200">
-                              <span>Precio final: <strong className="text-gray-700">${finalPrice.toFixed(2)}</strong></span>
-                              {variant.absolute_price !== undefined && variant.absolute_price !== null && (
-                                <span className="text-blue-600">(Precio fijo)</span>
+                              {hasBranchPrices ? (
+                                <div className="flex-1">
+                                  <span className="block">
+                                    Ajuste: <strong className="text-gray-700">{variant.price_adjustment >= 0 ? '+' : ''}${(variant.price_adjustment || 0).toFixed(2)}</strong>
+                                  </span>
+                                  <span className="text-gray-400 text-xs">
+                                    Ejemplo: Sucursal $90 → ${(90 + (variant.price_adjustment || 0)).toFixed(2)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <>
+                                  <span>Precio final: <strong className="text-gray-700">${(finalPrice || 0).toFixed(2)}</strong></span>
+                                  {hasAbsolutePrice && (
+                                    <span className="text-blue-600">(Precio fijo)</span>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
@@ -1066,26 +1471,79 @@ export function ProductForm({
                     </button>
                   </div>
                   
-                  {/* Ayuda sobre precios y configuración */}
+                  {/* Ayuda sobre precios y configuración - Desplegables */}
                   <div className="mt-3 space-y-2">
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-600">
-                      <p className="font-medium text-gray-700 mb-1">💡 Cómo funcionan los precios:</p>
-                      <ul className="list-disc list-inside space-y-0.5 text-gray-600">
-                        <li><strong>Ajuste de Precio:</strong> Se suma al precio base ({formData.price ? `$${formData.price.toFixed(2)}` : '$0.00'}). Ej: +$5.00 = ${formData.price ? (formData.price + 5).toFixed(2) : '5.00'}</li>
-                        <li><strong>Precio Absoluto:</strong> Reemplaza el precio base. Si lo usas, ignora el ajuste.</li>
-                        <li><strong>Ejemplo:</strong> Producto $120 → Chica: +$0 = $120, Grande: +$20 = $140, o Grande: $150 (absoluto)</li>
-                      </ul>
+                    {/* Panel de ayuda sobre precios - Desplegable */}
+                    <div className="border border-blue-200 rounded overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setShowPriceHelp(!showPriceHelp)}
+                        className="w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center justify-between text-left"
+                      >
+                        <span className="text-xs font-medium text-gray-700">💡 Cómo funcionan los precios</span>
+                        <svg
+                          className={`w-4 h-4 text-gray-600 transition-transform ${showPriceHelp ? 'transform rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showPriceHelp && (
+                        <div className="p-3 bg-blue-50 border-t border-blue-200 text-xs text-gray-600">
+                          {(() => {
+                            const hasBranchPrices = availableBusinesses.length > 0 || branchAvailabilities.length > 0;
+                            if (hasBranchPrices) {
+                              return (
+                                <ul className="list-disc list-inside space-y-0.5 text-gray-600">
+                                  <li><strong>⚠️ Precios por Sucursal Configurados:</strong> Las variantes solo pueden usar ajustes relativos (incrementos/decrementos).</li>
+                                  <li><strong>Ajuste de Precio:</strong> Se suma al precio base de cada sucursal. Ej: Si sucursal tiene $90 y ajuste es +$20, precio final = $110</li>
+                                  <li><strong>Ejemplo:</strong> Producto base $100, Sucursal A $90, Sucursal B $95 → Variante "Grande" +$20 → Sucursal A: $110, Sucursal B: $115</li>
+                                  <li><strong>💡 Ventaja:</strong> El mismo ajuste se aplica a todas las sucursales, manteniendo consistencia en los incrementos.</li>
+                                </ul>
+                              );
+                            } else {
+                              return (
+                                <ul className="list-disc list-inside space-y-0.5 text-gray-600">
+                                  <li><strong>Ajuste de Precio:</strong> Se suma al precio base ({formData.price ? `$${formData.price.toFixed(2)}` : '$0.00'}). Ej: +$5.00 = ${formData.price ? (formData.price + 5).toFixed(2) : '5.00'}</li>
+                                  <li><strong>Precio Absoluto:</strong> Reemplaza el precio base. Si lo usas, ignora el ajuste.</li>
+                                  <li><strong>Ejemplo:</strong> Producto $120 → Chica: +$0 = $120, Grande: +$20 = $140, o Grande: $150 (absoluto)</li>
+                                </ul>
+                              );
+                            }
+                          })()}
+                        </div>
+                      )}
                     </div>
                     
-                    {/* Ayuda sobre tipos de selección */}
-                    <div className="p-3 bg-green-50 border border-green-200 rounded text-xs text-gray-600">
-                      <p className="font-medium text-gray-700 mb-1">📋 Tipos de Selección:</p>
-                      <ul className="list-disc list-inside space-y-0.5 text-gray-600">
-                        <li><strong>Única:</strong> El cliente elige solo UNA opción (ej: Tamaño - Chica, Mediana o Grande)</li>
-                        <li><strong>Múltiple:</strong> El cliente puede elegir VARIAS opciones (ej: Salsas - puede elegir Magui, Valentina, Inglesa, etc.)</li>
-                        <li><strong>💡 Para salsas/condimentos:</strong> Usa "Múltiple" para que puedan elegir varias salsas</li>
-                        <li><strong>💡 Para tamaños:</strong> Usa "Única" porque solo pueden elegir un tamaño</li>
-                      </ul>
+                    {/* Panel de ayuda sobre tipos de selección - Desplegable */}
+                    <div className="border border-green-200 rounded overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setShowSelectionTypeHelp(!showSelectionTypeHelp)}
+                        className="w-full px-3 py-2 bg-green-50 hover:bg-green-100 transition-colors flex items-center justify-between text-left"
+                      >
+                        <span className="text-xs font-medium text-gray-700">📋 Tipos de Selección</span>
+                        <svg
+                          className={`w-4 h-4 text-gray-600 transition-transform ${showSelectionTypeHelp ? 'transform rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {showSelectionTypeHelp && (
+                        <div className="p-3 bg-green-50 border-t border-green-200 text-xs text-gray-600">
+                          <ul className="list-disc list-inside space-y-0.5 text-gray-600">
+                            <li><strong>Única:</strong> El cliente elige solo UNA opción (ej: Tamaño - Chica, Mediana o Grande)</li>
+                            <li><strong>Múltiple:</strong> El cliente puede elegir VARIAS opciones (ej: Salsas - puede elegir Magui, Valentina, Inglesa, etc.)</li>
+                            <li><strong>💡 Para salsas/condimentos:</strong> Usa "Múltiple" para que puedan elegir varias salsas</li>
+                            <li><strong>💡 Para tamaños:</strong> Usa "Única" porque solo pueden elegir un tamaño</li>
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1099,6 +1557,30 @@ export function ProductForm({
                 Las variantes se pueden gestionar después de crear el producto.
               </p>
             </div>
+          )}
+
+          {/* Disponibilidad por Sucursal - Entre variantes y compatibilidad */}
+          {editingProduct && (
+            <BranchAvailabilitySection
+              branchAvailabilities={branchAvailabilities}
+              setBranchAvailabilities={setBranchAvailabilities}
+              loadingBranchAvailabilities={loadingBranchAvailabilities}
+              onLoadBranchAvailabilities={onLoadBranchAvailabilities}
+              editingProduct={editingProduct}
+              globalPrice={formData.price}
+            />
+          )}
+
+          {/* Compatibilidad de Vehículos - Solo para refacciones y accesorios */}
+          {/* Movida aquí para que esté justo después de variantes y sea más prominente */}
+          {(formData.product_type === 'refaccion' || formData.product_type === 'accesorio') && (
+            <VehicleCompatibilitySection
+              productCompatibilities={productCompatibilities}
+              setProductCompatibilities={setProductCompatibilities}
+              loadingCompatibilities={loadingCompatibilities}
+              onLoadProductCompatibilities={onLoadProductCompatibilities}
+              editingProduct={editingProduct}
+            />
           )}
 
             {/* Alérgenos */}
@@ -1123,59 +1605,6 @@ export function ProductForm({
               </div>
             )}
 
-            {/* Información Nutricional */}
-            {isFieldVisible('nutritional_info') && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
-                  Información Nutricional (Opcional)
-                </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-normal text-gray-600 mb-1.5">Calorías</label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                  value={nutritionalInfo.calories || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, calories: e.target.value ? parseInt(e.target.value) : undefined })}
-                  placeholder="kcal"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-normal text-gray-600 mb-1.5">Proteína (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                  value={nutritionalInfo.protein || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, protein: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-normal text-gray-600 mb-1.5">Carbohidratos (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                  value={nutritionalInfo.carbohydrates || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, carbohydrates: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-normal text-gray-600 mb-1.5">Grasas (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                  value={nutritionalInfo.fats || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, fats: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-            </div>
-              </div>
-            )}
 
             {/* Campos de Farmacia */}
             {isFieldVisible('requires_prescription') && (
@@ -1622,6 +2051,713 @@ export function ProductForm({
             </button>
           </div>
         </form>
+    </div>
+  );
+}
+
+// Componente para la sección de compatibilidad de vehículos
+interface VehicleCompatibilitySectionProps {
+  productCompatibilities: ProductCompatibility[];
+  setProductCompatibilities: React.Dispatch<React.SetStateAction<ProductCompatibility[]>>;
+  loadingCompatibilities: boolean;
+  onLoadProductCompatibilities?: () => void;
+  editingProduct: Product | null;
+}
+
+function VehicleCompatibilitySection({
+  productCompatibilities,
+  setProductCompatibilities,
+  loadingCompatibilities,
+  onLoadProductCompatibilities,
+  editingProduct,
+}: VehicleCompatibilitySectionProps) {
+  // Asegurar que productCompatibilities siempre sea un array
+  const compatibilities = productCompatibilities || [];
+  const [brands, setBrands] = useState<VehicleBrand[]>([]);
+  const [models, setModels] = useState<VehicleModel[]>([]);
+  const [years, setYears] = useState<VehicleYear[]>([]);
+  const [specs, setSpecs] = useState<VehicleSpec[]>([]);
+  const [loadingBrands, setLoadingBrands] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [loadingYears, setLoadingYears] = useState(false);
+  const [loadingSpecs, setLoadingSpecs] = useState(false);
+
+  // Estados para el formulario de nueva compatibilidad
+  const [selectedBrand, setSelectedBrand] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
+  const [selectedSpec, setSelectedSpec] = useState<string>('');
+  const [isUniversal, setIsUniversal] = useState(false);
+  const [notes, setNotes] = useState('');
+
+  // Cargar compatibilidades cuando se edita un producto
+  useEffect(() => {
+    if (editingProduct?.id && onLoadProductCompatibilities) {
+      onLoadProductCompatibilities();
+    }
+  }, [editingProduct?.id, onLoadProductCompatibilities]);
+
+  // Cargar marcas al montar
+  useEffect(() => {
+    const loadBrands = async () => {
+      setLoadingBrands(true);
+      try {
+        const brandsData = await vehiclesService.getBrands();
+        setBrands(brandsData);
+      } catch (err) {
+        console.error('Error cargando marcas:', err);
+      } finally {
+        setLoadingBrands(false);
+      }
+    };
+    loadBrands();
+  }, []);
+
+  // Cargar modelos cuando se selecciona una marca
+  useEffect(() => {
+    const loadModels = async () => {
+      if (selectedBrand && !isUniversal) {
+        setLoadingModels(true);
+        try {
+          const modelsData = await vehiclesService.getModelsByBrand(selectedBrand);
+          setModels(modelsData);
+        } catch (err) {
+          console.error('Error cargando modelos:', err);
+        } finally {
+          setLoadingModels(false);
+        }
+      } else {
+        setModels([]);
+        setSelectedModel('');
+      }
+    };
+    loadModels();
+  }, [selectedBrand, isUniversal]);
+
+  // Cargar años cuando se selecciona un modelo
+  useEffect(() => {
+    const loadYears = async () => {
+      if (selectedModel && !isUniversal) {
+        setLoadingYears(true);
+        try {
+          const yearsData = await vehiclesService.getYearsByModel(selectedModel);
+          setYears(yearsData);
+        } catch (err) {
+          console.error('Error cargando años:', err);
+        } finally {
+          setLoadingYears(false);
+        }
+      } else {
+        setYears([]);
+        setSelectedYear('');
+      }
+    };
+    loadYears();
+  }, [selectedModel, isUniversal]);
+
+  // Cargar especificaciones cuando se selecciona un año
+  useEffect(() => {
+    const loadSpecs = async () => {
+      if (selectedYear && !isUniversal) {
+        setLoadingSpecs(true);
+        try {
+          const specsData = await vehiclesService.getSpecsByYear(selectedYear);
+          setSpecs(specsData);
+        } catch (err) {
+          console.error('Error cargando especificaciones:', err);
+        } finally {
+          setLoadingSpecs(false);
+        }
+      } else {
+        setSpecs([]);
+        setSelectedSpec('');
+      }
+    };
+    loadSpecs();
+  }, [selectedYear, isUniversal]);
+
+  const handleAddCompatibility = () => {
+    if (isUniversal) {
+      // Agregar compatibilidad universal
+      const newCompatibility: ProductCompatibility = {
+        id: '', // Se asignará cuando se guarde
+        product_id: editingProduct?.id || '',
+        vehicle_brand_id: null,
+        vehicle_model_id: null,
+        vehicle_year_id: null,
+        vehicle_spec_id: null,
+        is_universal: true,
+        notes: notes || null,
+        is_active: true,
+      };
+      setProductCompatibilities([...compatibilities, newCompatibility]);
+    } else if (selectedBrand) {
+      // Obtener nombres de los elementos seleccionados para mostrar descripción completa
+      const selectedBrandData = brands.find(b => b.id === selectedBrand);
+      const selectedModelData = models.find(m => m.id === selectedModel);
+      const selectedYearData = years.find(y => y.id === selectedYear);
+      const selectedSpecData = specs.find(s => s.id === selectedSpec);
+
+      // Agregar compatibilidad específica con nombres incluidos
+      const newCompatibility: ProductCompatibility = {
+        id: '', // Se asignará cuando se guarde
+        product_id: editingProduct?.id || '',
+        vehicle_brand_id: selectedBrand,
+        vehicle_model_id: selectedModel || null,
+        vehicle_year_id: selectedYear || null,
+        vehicle_spec_id: selectedSpec || null,
+        is_universal: false,
+        notes: notes || null,
+        is_active: true,
+        // Incluir nombres para mostrar descripción completa
+        brand_name: selectedBrandData?.name || null,
+        model_name: selectedModelData?.name || null,
+        year_start: selectedYearData?.year_start || null,
+        year_end: selectedYearData?.year_end || null,
+        generation: selectedYearData?.generation || null,
+        engine_code: selectedSpecData?.engine_code || null,
+        transmission_type: selectedSpecData?.transmission_type || null,
+      };
+      setProductCompatibilities([...compatibilities, newCompatibility]);
+    }
+
+    // Limpiar formulario
+    setSelectedBrand('');
+    setSelectedModel('');
+    setSelectedYear('');
+    setSelectedSpec('');
+    setIsUniversal(false);
+    setNotes('');
+  };
+
+  const handleRemoveCompatibility = (index: number) => {
+    setProductCompatibilities(compatibilities.filter((_, i) => i !== index));
+  };
+
+  const getCompatibilityLabel = (compatibility: ProductCompatibility): string => {
+    if (compatibility.is_universal) {
+      return '🌐 Universal (Todos los vehículos)';
+    }
+    
+    const parts: string[] = [];
+    
+    // Marca
+    if (compatibility.brand_name) {
+      parts.push(compatibility.brand_name);
+    } else if (compatibility.vehicle_brand_id) {
+      // Intentar obtener el nombre desde el estado local
+      const brandData = brands.find(b => b.id === compatibility.vehicle_brand_id);
+      if (brandData) parts.push(brandData.name);
+    }
+    
+    // Modelo
+    if (compatibility.model_name) {
+      parts.push(compatibility.model_name);
+    } else if (compatibility.vehicle_model_id) {
+      const modelData = models.find(m => m.id === compatibility.vehicle_model_id);
+      if (modelData) parts.push(modelData.name);
+    }
+    
+    // Años
+    if (compatibility.year_start) {
+      const yearStr = compatibility.year_end
+        ? `${compatibility.year_start}-${compatibility.year_end}`
+        : `${compatibility.year_start}+`;
+      parts.push(yearStr);
+      if (compatibility.generation) {
+        parts.push(`(${compatibility.generation})`);
+      }
+    } else if (compatibility.vehicle_year_id) {
+      const yearData = years.find(y => y.id === compatibility.vehicle_year_id);
+      if (yearData) {
+        const yearStr = yearData.year_end
+          ? `${yearData.year_start}-${yearData.year_end}`
+          : `${yearData.year_start}+`;
+        parts.push(yearStr);
+        if (yearData.generation) {
+          parts.push(`(${yearData.generation})`);
+        }
+      }
+    }
+    
+    // Especificaciones técnicas
+    const specParts: string[] = [];
+    if (compatibility.engine_code) {
+      specParts.push(compatibility.engine_code);
+    } else if (compatibility.vehicle_spec_id) {
+      const specData = specs.find(s => s.id === compatibility.vehicle_spec_id);
+      if (specData?.engine_code) specParts.push(specData.engine_code);
+    }
+    
+    if (compatibility.transmission_type) {
+      specParts.push(compatibility.transmission_type);
+    } else if (compatibility.vehicle_spec_id) {
+      const specData = specs.find(s => s.id === compatibility.vehicle_spec_id);
+      if (specData?.transmission_type) specParts.push(specData.transmission_type);
+    }
+    
+    if (specParts.length > 0) {
+      parts.push(`[${specParts.join(', ')}]`);
+    }
+    
+    // Si no hay información suficiente, mostrar al menos lo que tenemos
+    if (parts.length === 0) {
+      if (compatibility.vehicle_brand_id) {
+        return 'Compatibilidad específica (Marca seleccionada)';
+      }
+      return 'Compatibilidad específica';
+    }
+    
+    return parts.join(' ');
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+        <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+          Compatibilidad de Vehículos
+        </h3>
+        {loadingCompatibilities && (
+          <span className="text-xs text-gray-500">Cargando...</span>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* Formulario para agregar compatibilidad */}
+        <div className="p-4 border border-gray-200 rounded bg-gray-50">
+          <h4 className="text-xs font-medium text-gray-700 mb-3">Agregar Compatibilidad</h4>
+          
+          <div className="space-y-3">
+            {/* Opción Universal */}
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                checked={isUniversal}
+                onChange={(e) => {
+                  setIsUniversal(e.target.checked);
+                  if (e.target.checked) {
+                    setSelectedBrand('');
+                    setSelectedModel('');
+                    setSelectedYear('');
+                    setSelectedSpec('');
+                  }
+                }}
+              />
+              <span className="ml-2 text-sm text-gray-700">Producto Universal (compatible con todos los vehículos)</span>
+            </label>
+
+            {!isUniversal && (
+              <>
+                {/* Marca */}
+                <div>
+                  <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                    Marca <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                    value={selectedBrand}
+                    onChange={(e) => {
+                      setSelectedBrand(e.target.value);
+                      setSelectedModel('');
+                      setSelectedYear('');
+                      setSelectedSpec('');
+                    }}
+                    disabled={loadingBrands}
+                  >
+                    <option value="">{loadingBrands ? 'Cargando...' : 'Selecciona una marca'}</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>{brand.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Modelo */}
+                {selectedBrand && (
+                  <div>
+                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                      Modelo (Opcional)
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                      value={selectedModel}
+                      onChange={(e) => {
+                        setSelectedModel(e.target.value);
+                        setSelectedYear('');
+                        setSelectedSpec('');
+                      }}
+                      disabled={loadingModels}
+                    >
+                      <option value="">{loadingModels ? 'Cargando...' : 'Selecciona un modelo (opcional)'}</option>
+                      {models.map((model) => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Año/Generación */}
+                {selectedModel && (
+                  <div>
+                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                      Año / Generación (Opcional)
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                      value={selectedYear}
+                      onChange={(e) => {
+                        setSelectedYear(e.target.value);
+                        setSelectedSpec('');
+                      }}
+                      disabled={loadingYears}
+                    >
+                      <option value="">{loadingYears ? 'Cargando...' : 'Selecciona un año (opcional)'}</option>
+                      {years.map((year) => (
+                        <option key={year.id} value={year.id}>
+                          {year.year_start} {year.year_end ? `- ${year.year_end}` : '+'} {year.generation ? `(${year.generation})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Especificación */}
+                {selectedYear && (
+                  <div>
+                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                      Especificación (Opcional)
+                    </label>
+                    <select
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                      value={selectedSpec}
+                      onChange={(e) => setSelectedSpec(e.target.value)}
+                      disabled={loadingSpecs}
+                    >
+                      <option value="">{loadingSpecs ? 'Cargando...' : 'Selecciona una especificación (opcional)'}</option>
+                      {specs.map((spec) => (
+                        <option key={spec.id} value={spec.id}>
+                          {spec.engine_displacement} {spec.engine_code} {spec.transmission_type} {spec.drivetrain}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Notas */}
+            <div>
+              <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                Notas (Opcional)
+              </label>
+              <textarea
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Notas adicionales sobre la compatibilidad..."
+              />
+            </div>
+
+            {/* Botón Agregar */}
+            <button
+              type="button"
+              onClick={handleAddCompatibility}
+              disabled={!isUniversal && !selectedBrand}
+              className="w-full px-3 py-2 text-sm font-normal bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Agregar Compatibilidad
+            </button>
+          </div>
+        </div>
+
+        {/* Lista de compatibilidades */}
+        {compatibilities.length > 0 ? (
+          <div>
+            <label className="block text-xs font-normal text-gray-600 mb-2">
+              Compatibilidades Asignadas
+            </label>
+            <div className="space-y-2">
+              {compatibilities.map((compatibility, index) => (
+                <div
+                  key={index}
+                  className="flex items-start justify-between p-3 border border-gray-200 rounded bg-white hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm flex-shrink-0">
+                        {compatibility.is_universal ? '🌐' : '🚗'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 break-words">
+                          {getCompatibilityLabel(compatibility)}
+                        </p>
+                        {compatibility.notes && (
+                          <p className="text-xs text-gray-500 mt-1 italic break-words">
+                            📝 {compatibility.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCompatibility(index)}
+                    className="ml-3 flex-shrink-0 text-red-600 hover:text-red-800 transition-colors"
+                    title="Eliminar compatibilidad"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 italic">
+            No hay compatibilidades asignadas. Agrega compatibilidades para que los clientes puedan filtrar este producto por vehículo.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Componente para la sección de disponibilidad por sucursal
+interface BranchAvailabilitySectionProps {
+  branchAvailabilities: Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+    is_active?: boolean; // Estado activo/inactivo de la sucursal
+  }>;
+  setBranchAvailabilities: React.Dispatch<React.SetStateAction<Array<{
+    branch_id: string;
+    branch_name: string;
+    is_enabled: boolean;
+    price: number | null;
+    stock: number | null;
+    is_active?: boolean;
+  }>>>;
+  loadingBranchAvailabilities: boolean;
+  onLoadBranchAvailabilities?: (productId: string) => void;
+  editingProduct: Product | null;
+  globalPrice: number;
+}
+
+function BranchAvailabilitySection({
+  branchAvailabilities,
+  setBranchAvailabilities,
+  loadingBranchAvailabilities,
+  onLoadBranchAvailabilities,
+  editingProduct,
+  globalPrice,
+}: BranchAvailabilitySectionProps) {
+  const { availableBusinesses } = useSelectedBusiness();
+
+  // Cargar disponibilidades cuando se edita un producto
+  useEffect(() => {
+    if (editingProduct?.id && onLoadBranchAvailabilities) {
+      onLoadBranchAvailabilities(editingProduct.id);
+    } else if (availableBusinesses.length > 0 && branchAvailabilities.length === 0) {
+      // Inicializar con todas las sucursales disponibles si no hay datos
+      const initialAvailabilities = availableBusinesses.map(business => ({
+        branch_id: business.business_id,
+        branch_name: business.business_name,
+        is_enabled: false,
+        price: null,
+        stock: null,
+        is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
+      }));
+      setBranchAvailabilities(initialAvailabilities);
+    }
+  }, [editingProduct?.id, onLoadBranchAvailabilities, availableBusinesses]);
+
+  const handleToggleEnabled = (branchId: string) => {
+    setBranchAvailabilities(prev => 
+      prev.map(avail => 
+        avail.branch_id === branchId 
+          ? { ...avail, is_enabled: !avail.is_enabled }
+          : avail
+      )
+    );
+  };
+
+  const handlePriceChange = (branchId: string, price: string) => {
+    const numPrice = price === '' ? null : parseFloat(price);
+    setBranchAvailabilities(prev => 
+      prev.map(avail => 
+        avail.branch_id === branchId 
+          ? { ...avail, price: numPrice }
+          : avail
+      )
+    );
+  };
+
+  const handleStockChange = (branchId: string, stock: string) => {
+    const numStock = stock === '' ? null : parseInt(stock, 10);
+    setBranchAvailabilities(prev => 
+      prev.map(avail => 
+        avail.branch_id === branchId 
+          ? { ...avail, stock: isNaN(numStock!) ? null : numStock }
+          : avail
+      )
+    );
+  };
+
+  // Asegurar que todas las sucursales estén en la lista
+  // Sincronizar branchAvailabilities con availableBusinesses
+  useEffect(() => {
+    if (availableBusinesses.length > 0) {
+      setBranchAvailabilities(prev => {
+        const allBranchIds = availableBusinesses.map(b => b.business_id);
+        const existingBranchIds = new Set(prev.map(a => a.branch_id));
+        
+        // Agregar sucursales faltantes
+        const missingBranches = availableBusinesses
+          .filter(b => !existingBranchIds.has(b.business_id))
+          .map(business => ({
+            branch_id: business.business_id,
+            branch_name: business.business_name,
+            is_enabled: false,
+            price: null,
+            stock: null,
+            is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
+          }));
+        
+        // Filtrar sucursales que ya no existen y agregar las faltantes
+        const validBranchIds = new Set(allBranchIds);
+        const filtered = prev.filter(a => validBranchIds.has(a.branch_id));
+        
+        // Solo actualizar si hay cambios
+        if (missingBranches.length > 0 || filtered.length !== prev.length) {
+          return [...filtered, ...missingBranches];
+        }
+        
+        return prev;
+      });
+    }
+  }, [availableBusinesses.map(b => b.business_id).join(',')]);
+
+  // Asegurar que todas las sucursales estén en la lista para mostrar
+  const allAvailabilities = availableBusinesses.map(business => {
+    const existing = branchAvailabilities.find(a => a.branch_id === business.business_id);
+    return existing || {
+      branch_id: business.business_id,
+      branch_name: business.business_name,
+      is_enabled: false,
+      price: null,
+      stock: null,
+      is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
+    };
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+        <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+          Disponibilidad por Sucursal
+        </h3>
+        {loadingBranchAvailabilities && (
+          <span className="text-xs text-gray-500">Cargando...</span>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {allAvailabilities.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full border border-gray-200 rounded">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Habilitar
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Sucursal
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Precio
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Stock
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {allAvailabilities.map((availability) => {
+                  const isBranchActive = availability.is_active !== false; // Por defecto true si no está definido
+                  return (
+                    <tr 
+                      key={availability.branch_id} 
+                      className={`hover:bg-gray-50 ${!isBranchActive ? 'opacity-60' : ''}`}
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={availability.is_enabled}
+                          onChange={() => handleToggleEnabled(availability.branch_id)}
+                          disabled={!isBranchActive}
+                          className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={!isBranchActive ? 'La sucursal está inactiva' : ''}
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm ${!isBranchActive ? 'text-gray-500' : 'text-gray-900'}`}>
+                            {availability.branch_name}
+                          </span>
+                          {!isBranchActive && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              Inactiva
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={availability.price !== null ? availability.price : ''}
+                          onChange={(e) => handlePriceChange(availability.branch_id, e.target.value)}
+                          placeholder={`${globalPrice.toFixed(2)} (global)`}
+                          disabled={!availability.is_enabled || !isBranchActive}
+                          className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                          title={!isBranchActive ? 'La sucursal está inactiva' : ''}
+                        />
+                        {availability.price === null && (
+                          <span className="text-xs text-gray-500">(Global)</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <input
+                        type="number"
+                        min="0"
+                        value={availability.stock !== null ? availability.stock : ''}
+                        onChange={(e) => handleStockChange(availability.branch_id, e.target.value)}
+                        placeholder="Sin límite"
+                        disabled={!availability.is_enabled || !isBranchActive}
+                        className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                        title={!isBranchActive ? 'La sucursal está inactiva' : ''}
+                      />
+                    </td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 italic">
+            No hay sucursales disponibles. Crea una sucursal en Configuración → Sucursales.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

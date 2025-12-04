@@ -10,6 +10,12 @@ export class UpdateProductDto {
   @MaxLength(255)
   name?: string;
 
+  @ApiPropertyOptional({ description: 'SKU (Stock Keeping Unit) - Código único de identificación del producto', example: 'HAMB-CLAS-001' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  sku?: string;
+
   @ApiPropertyOptional({ description: 'Descripción del producto', example: 'Carne, lechuga, tomate, cebolla, queso' })
   @IsOptional()
   @IsString()

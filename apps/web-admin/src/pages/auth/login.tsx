@@ -122,6 +122,16 @@ export default function LoginPage() {
                   {loading ? 'Signing in...' : 'Sign in'}
                 </button>
               </div>
+
+              <div className="text-center pt-4">
+                <span className="text-sm text-gray-600">¿No tienes cuenta? </span>
+                <Link
+                  href="/auth/register"
+                  className="text-sm text-gray-900 underline hover:text-gray-700 transition-colors"
+                >
+                  Crear cuenta de administrador
+                </Link>
+              </div>
             </form>
           </div>
         </div>

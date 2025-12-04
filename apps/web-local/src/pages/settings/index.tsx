@@ -18,29 +18,68 @@ interface ConfigurationCard {
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [isSuperadmin, setIsSuperadmin] = useState(false);
 
   useEffect(() => {
     const checkPermissions = async () => {
       try {
-        // Verificar si el usuario tiene un negocio y es superadmin
-        // Usar la tienda seleccionada si está disponible
-        const businessId = selectedBusiness?.business_id;
-        const business = await businessService.getMyBusiness(businessId);
-        if (business && business.user_role === 'superadmin') {
-          setIsSuperadmin(true);
-        } else {
-          // Si no es superadmin, redirigir a la página principal
-          console.log('[Settings] Usuario no es superadmin, redirigiendo...');
-          router.push('/');
+        // Si hay tienda seleccionada, verificar desde ahí
+        if (selectedBusiness) {
+          const businessId = selectedBusiness.business_id;
+          const business = await businessService.getMyBusiness(businessId);
+          if (business && business.user_role === 'superadmin') {
+            setIsSuperadmin(true);
+            setLoading(false);
+            return;
+          }
         }
+
+        // Si no hay tienda seleccionada o no es superadmin en esa tienda,
+        // verificar si es superadmin en alguna de las tiendas disponibles
+        if (availableBusinesses.length > 0) {
+          // Verificar si alguna de las tiendas disponibles tiene rol superadmin
+          const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
+          if (hasSuperadminRole) {
+            setIsSuperadmin(true);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // Si no hay tiendas disponibles pero el usuario existe, intentar verificar directamente
+        // (para superadmins sin tiendas asignadas aún)
+        if (user) {
+          try {
+            const business = await businessService.getMyBusiness();
+            if (business && business.user_role === 'superadmin') {
+              setIsSuperadmin(true);
+              setLoading(false);
+              return;
+            }
+          } catch (err: any) {
+            // Si falla, continuar con la verificación normal
+            console.log('[Settings] No se pudo verificar negocio directo:', err);
+          }
+        }
+
+        // Si llegamos aquí, no es superadmin
+        console.log('[Settings] Usuario no es superadmin, redirigiendo...');
+        router.push('/');
+        setIsSuperadmin(false);
       } catch (error: any) {
         console.error('Error verificando permisos:', error);
-        // Si hay error (404, etc.), redirigir a la página principal
+        // Si hay error (404, etc.), verificar si es superadmin desde availableBusinesses
         if (error?.statusCode === 404) {
-          console.log('[Settings] Usuario no tiene negocio asignado, redirigiendo...');
+          // Verificar si tiene rol superadmin en alguna tienda disponible
+          const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
+          if (hasSuperadminRole) {
+            setIsSuperadmin(true);
+            setLoading(false);
+            return;
+          }
+          console.log('[Settings] Usuario no tiene negocio asignado y no es superadmin, redirigiendo...');
           router.push('/');
         } else {
           setIsSuperadmin(false);
@@ -50,15 +89,12 @@ export default function SettingsPage() {
       }
     };
 
-    if (user && selectedBusiness) {
+    if (user) {
       checkPermissions();
-    } else if (user && !selectedBusiness) {
-      // Esperar a que se seleccione una tienda
-      setLoading(true);
     } else {
       setLoading(false);
     }
-  }, [user, router, selectedBusiness?.business_id]);
+  }, [user, router, selectedBusiness?.business_id, availableBusinesses.length]);
 
   const configurationCards: ConfigurationCard[] = [
     // Configuración de Tienda
@@ -72,6 +108,18 @@ export default function SettingsPage() {
         </svg>
       ),
       href: '/settings/store',
+      category: 'Configuración de Tienda',
+    },
+    {
+      id: 'branches',
+      title: 'Sucursales',
+      description: 'Gestiona las sucursales de tu tienda y agrega nuevas ubicaciones',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+      href: '/settings/branches',
       category: 'Configuración de Tienda',
     },
     // Usuarios y Permisos (solo para superadmin)

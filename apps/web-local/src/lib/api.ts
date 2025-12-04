@@ -111,13 +111,28 @@ export async function apiRequest<T = any>(
       data.statusCode || response.status,
       data
     );
-    console.error('[API] Error en petición:', {
-      endpoint,
-      status: error.statusCode,
-      message: error.message,
-      url,
-      hasAuth: !!authToken,
-    });
+    
+    // Endpoints donde 404 es un caso esperado y no debe loguearse como error
+    const expected404Endpoints = ['/businesses/my-business'];
+    const isExpected404 = error.statusCode === 404 && expected404Endpoints.some(ep => endpoint.includes(ep));
+    
+    if (isExpected404) {
+      // Solo loguear como info, no como error
+      console.log('[API] Recurso no encontrado (esperado):', {
+        endpoint,
+        status: error.statusCode,
+        message: error.message,
+      });
+    } else {
+      // Otros errores se loguean normalmente
+      console.error('[API] Error en petición:', {
+        endpoint,
+        status: error.statusCode,
+        message: error.message,
+        url,
+        hasAuth: !!authToken,
+      });
+    }
     
     // Si es un error 401, limpiar el token y redirigir al login
     if (error.statusCode === 401) {

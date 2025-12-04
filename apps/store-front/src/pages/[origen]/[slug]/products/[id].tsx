@@ -1,0 +1,12 @@
+/**
+ * Página de detalle de producto con contexto (grupo/sucursal)
+ * Reutiliza la misma lógica pero con contexto
+ */
+
+import ProductDetailPage from '../../../products/[id]';
+
+export default function ContextualProductDetailPage() {
+  // Reutilizar la misma página, el contexto se maneja automáticamente
+  return <ProductDetailPage />;
+}
+

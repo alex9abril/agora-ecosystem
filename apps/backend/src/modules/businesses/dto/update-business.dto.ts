@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsArray, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsArray, MaxLength, IsBoolean } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class UpdateBusinessDto {
   @ApiPropertyOptional({ description: 'Nombre del negocio', example: 'Restaurante La Roma' })
@@ -51,5 +52,23 @@ export class UpdateBusinessDto {
   @IsOptional()
   @IsString()
   website_url?: string;
+
+  @ApiPropertyOptional({ description: 'Slug amigable para el storefront', example: 'restaurante-la-roma' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  slug?: string;
+
+  @ApiPropertyOptional({ description: 'Si la sucursal acepta recolección de productos en la unidad física', example: false })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  accepts_pickup?: boolean;
+
+  @ApiPropertyOptional({ description: 'Si la sucursal está activa y disponible para ventas', example: true })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  is_active?: boolean;
 }
 

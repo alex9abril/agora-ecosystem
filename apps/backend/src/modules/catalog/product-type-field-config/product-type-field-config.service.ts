@@ -110,7 +110,7 @@ export class ProductTypeFieldConfigService {
 
     try {
       // Verificar que el tipo de producto sea válido
-      const validTypes = ['food', 'beverage', 'medicine', 'grocery', 'non_food'];
+      const validTypes = ['refaccion', 'accesorio', 'servicio_instalacion', 'servicio_mantenimiento', 'fluido'];
       if (!validTypes.includes(productType)) {
         throw new BadRequestException(`Tipo de producto inválido: ${productType}`);
       }
@@ -176,16 +176,84 @@ export class ProductTypeFieldConfigService {
   }
 
   /**
-   * Obtener lista de tipos de producto disponibles
+   * Obtener lista de tipos de producto disponibles dinámicamente desde la base de datos
    */
   async getProductTypes() {
-    return [
-      { value: 'food', label: 'Alimento' },
-      { value: 'beverage', label: 'Bebida' },
-      { value: 'medicine', label: 'Medicamento' },
-      { value: 'grocery', label: 'Abarrotes' },
-      { value: 'non_food', label: 'No Alimenticio' },
-    ];
+    if (!dbPool) {
+      // Fallback a valores por defecto si no hay conexión a BD
+      return [
+        { value: 'food', label: 'Alimento' },
+        { value: 'beverage', label: 'Bebida' },
+        { value: 'medicine', label: 'Medicamento' },
+        { value: 'grocery', label: 'Abarrotes' },
+        { value: 'non_food', label: 'No Alimenticio' },
+      ];
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Obtener los valores del ENUM desde la base de datos
+      const enumQuery = `
+        SELECT 
+          e.enumlabel as value,
+          e.enumlabel as label
+        FROM pg_enum e
+        JOIN pg_type t ON e.enumtypid = t.oid
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE n.nspname = 'catalog' 
+          AND t.typname = 'product_type'
+        ORDER BY e.enumsortorder
+      `;
+
+      const result = await pool.query(enumQuery);
+
+      if (result.rows.length === 0) {
+        // Si no hay valores en el ENUM, usar valores por defecto
+        console.warn('⚠️ No se encontraron tipos de producto en el ENUM. Usando valores por defecto.');
+        return [
+          { value: 'food', label: 'Alimento' },
+          { value: 'beverage', label: 'Bebida' },
+          { value: 'medicine', label: 'Medicamento' },
+          { value: 'grocery', label: 'Abarrotes' },
+          { value: 'non_food', label: 'No Alimenticio' },
+        ];
+      }
+
+      // Mapear los valores del ENUM a labels más legibles
+      const labelMap: Record<string, string> = {
+        'food': 'Alimento',
+        'beverage': 'Bebida',
+        'medicine': 'Medicamento',
+        'grocery': 'Abarrotes',
+        'non_food': 'No Alimenticio',
+        'refaccion': 'Refacción',
+        'accesorio': 'Accesorio',
+        'servicio_instalacion': 'Servicio de Instalación',
+        'servicio_mantenimiento': 'Servicio de Mantenimiento',
+        'fluido': 'Fluidos y Lubricantes',
+      };
+
+      return result.rows.map(row => ({
+        value: row.value,
+        label: labelMap[row.value] || row.value.charAt(0).toUpperCase() + row.value.slice(1).replace(/_/g, ' '),
+      }));
+    } catch (error: any) {
+      console.error('❌ Error obteniendo tipos de producto desde la base de datos:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
+
+      // Fallback a valores por defecto en caso de error
+      return [
+        { value: 'food', label: 'Alimento' },
+        { value: 'beverage', label: 'Bebida' },
+        { value: 'medicine', label: 'Medicamento' },
+        { value: 'grocery', label: 'Abarrotes' },
+        { value: 'non_food', label: 'No Alimenticio' },
+      ];
+    }
   }
 
   /**
@@ -203,12 +271,13 @@ export class ProductTypeFieldConfigService {
       { value: 'is_featured', label: 'Destacado' },
       { value: 'display_order', label: 'Orden de Visualización' },
       { value: 'variant_groups', label: 'Grupos de Variantes' },
-      { value: 'allergens', label: 'Alérgenos' },
-      { value: 'nutritional_info', label: 'Información Nutricional' },
-      { value: 'requires_prescription', label: 'Requiere Prescripción' },
-      { value: 'age_restriction', label: 'Restricción de Edad' },
+      { value: 'variants', label: 'Variantes (Compatibilidad de Vehículos)' },
+      { value: 'nutritional_info', label: 'Especificaciones Técnicas' },
+      { value: 'allergens', label: 'Alérgenos (No aplica)' },
+      { value: 'requires_prescription', label: 'Requiere Prescripción (No aplica)' },
+      { value: 'age_restriction', label: 'Restricción de Edad (No aplica)' },
       { value: 'max_quantity_per_order', label: 'Cantidad Máxima por Pedido' },
-      { value: 'requires_pharmacist_validation', label: 'Requiere Validación de Farmacéutico' },
+      { value: 'requires_pharmacist_validation', label: 'Requiere Validación (No aplica)' },
     ];
   }
 }

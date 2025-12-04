@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { productsService, Product, ProductCategory, ProductType, CreateProductData, ProductVariantGroup } from '@/lib/products';
+import { getUserVehicle } from '@/lib/storage';
 import ImageUpload from '@/components/ImageUpload';
 
 export default function ProductsPage() {
@@ -21,6 +22,7 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState<CreateProductData>({
     business_id: '',
     name: '',
+    sku: '',
     description: '',
     image_url: '',
     price: 0,
@@ -51,9 +53,12 @@ export default function ProductsPage() {
       setLoading(true);
       setError(null);
 
+      // Obtener vehículo del usuario si está guardado
+      const userVehicle = getUserVehicle();
+      
       // Cargar productos y categorías en paralelo
       const [productsData, categoriesData] = await Promise.all([
-        productsService.getProducts(selectedBusiness.business_id),
+        productsService.getProducts(selectedBusiness.business_id, userVehicle || undefined),
         productsService.getCategories(),
       ]);
 
@@ -86,6 +91,7 @@ export default function ProductsPage() {
     setFormData({
       business_id: product.business_id,
       name: product.name,
+      sku: product.sku || '',
       description: product.description || '',
       image_url: product.image_url || '',
       price: product.price,
@@ -110,6 +116,7 @@ export default function ProductsPage() {
     setFormData({
       business_id: selectedBusiness?.business_id || '',
       name: '',
+      sku: '',
       description: '',
       image_url: '',
       price: 0,
@@ -147,6 +154,7 @@ export default function ProductsPage() {
 
       const productData: CreateProductData = {
         ...formData,
+        sku: formData.sku && formData.sku.trim() !== '' ? formData.sku.trim() : undefined,
         image_url: imageUrl,
         variant_groups: variantGroups.length > 0 ? variantGroups : undefined,
         allergens: allergens.length > 0 ? allergens : undefined,
@@ -363,8 +371,30 @@ function ProductFormModal({
   onSubmit,
   onClose,
 }: ProductFormModalProps) {
-  const productTypes = productsService.getProductTypes();
+  const [productTypes, setProductTypes] = useState<Array<{ value: ProductType; label: string }>>([]);
   const commonAllergens = ['gluten', 'lactosa', 'huevo', 'soja', 'nueces', 'pescado', 'mariscos', 'sésamo'];
+
+  // Cargar tipos de producto al montar el componente
+  useEffect(() => {
+    const loadProductTypes = async () => {
+      try {
+        const types = await productsService.getProductTypes();
+        setProductTypes(types);
+      } catch (err: any) {
+        console.error('Error cargando tipos de producto:', err);
+        // Usar valores por defecto en caso de error
+        setProductTypes([
+          { value: 'food', label: 'Alimento' },
+          { value: 'beverage', label: 'Bebida' },
+          { value: 'medicine', label: 'Medicamento' },
+          { value: 'grocery', label: 'Abarrotes' },
+          { value: 'non_food', label: 'No Alimenticio' },
+        ]);
+      }
+    };
+
+    loadProductTypes();
+  }, []);
 
   const addVariantGroup = () => {
     setVariantGroups([
@@ -460,6 +490,23 @@ function ProductFormModal({
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Ej: Hamburguesa Clásica"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                SKU (Código de Producto)
+              </label>
+              <input
+                type="text"
+                maxLength={100}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                value={formData.sku || ''}
+                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                placeholder="Ej: HAMB-CLAS-001"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Código único de identificación del producto (opcional)
+              </p>
             </div>
 
             <div>
@@ -708,55 +755,6 @@ function ProductFormModal({
             </div>
           </div>
 
-          {/* Información Nutricional */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2 mb-4">Información Nutricional (Opcional)</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Calorías</label>
-                <input
-                  type="number"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={nutritionalInfo.calories || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, calories: e.target.value ? parseInt(e.target.value) : undefined })}
-                  placeholder="kcal"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Proteína (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={nutritionalInfo.protein || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, protein: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Carbohidratos (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={nutritionalInfo.carbohydrates || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, carbohydrates: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Grasas (g)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  value={nutritionalInfo.fats || ''}
-                  onChange={(e) => setNutritionalInfo({ ...nutritionalInfo, fats: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  placeholder="g"
-                />
-              </div>
-            </div>
-          </div>
 
           {/* Campos de Farmacia (solo si es medicamento) */}
           {isMedicine && (

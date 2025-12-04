@@ -4,7 +4,10 @@
 
 import { apiRequest } from './api';
 
-export type ProductType = 'food' | 'beverage' | 'medicine' | 'grocery' | 'non_food';
+// Tipo de producto puede ser cualquier string válido del ENUM en la base de datos
+// Los valores comunes incluyen: 'food', 'beverage', 'medicine', 'grocery', 'non_food',
+// 'refaccion', 'accesorio', 'servicio_instalacion', 'servicio_mantenimiento', 'fluido'
+export type ProductType = string;
 
 export interface ProductCategory {
   id: string;
@@ -42,6 +45,7 @@ export interface Product {
   id: string;
   business_id: string;
   name: string;
+  sku?: string;
   description?: string;
   image_url?: string;
   price: number;
@@ -66,6 +70,7 @@ export interface Product {
 export interface CreateProductData {
   business_id: string;
   name: string;
+  sku?: string;
   description?: string;
   image_url?: string;
   price: number;
@@ -122,24 +127,49 @@ export const productsService = {
   },
 
   /**
-   * Obtener tipos de producto disponibles
+   * Obtener tipos de producto disponibles dinámicamente desde el backend
    */
-  getProductTypes(): Array<{ value: ProductType; label: string }> {
-    return [
-      { value: 'food', label: 'Alimento' },
-      { value: 'beverage', label: 'Bebida' },
-      { value: 'medicine', label: 'Medicamento' },
-      { value: 'grocery', label: 'Abarrotes' },
-      { value: 'non_food', label: 'No Alimenticio' },
-    ];
+  async getProductTypes(): Promise<Array<{ value: ProductType; label: string }>> {
+    try {
+      const types = await apiRequest<Array<{ value: string; label: string }>>('/catalog/product-type-field-config/product-types', {
+        method: 'GET',
+      });
+      return types.map(t => ({ value: t.value as ProductType, label: t.label }));
+    } catch (error: any) {
+      console.error('Error obteniendo tipos de producto:', error);
+      // Fallback a valores por defecto en caso de error
+      return [
+        { value: 'food', label: 'Alimento' },
+        { value: 'beverage', label: 'Bebida' },
+        { value: 'medicine', label: 'Medicamento' },
+        { value: 'grocery', label: 'Abarrotes' },
+        { value: 'non_food', label: 'No Alimenticio' },
+      ];
+    }
   },
 
   /**
    * Obtener todos los productos de un negocio
    */
-  async getProducts(businessId: string): Promise<Product[]> {
+  async getProducts(businessId?: string, vehicle?: { brand_id?: string; model_id?: string; year_id?: string; spec_id?: string }): Promise<Product[]> {
     try {
-      const response = await apiRequest<{ data: Product[]; pagination: any }>(`/catalog/products?businessId=${businessId}`, {
+      // Construir query params
+      const params = new URLSearchParams();
+      
+      // businessId es opcional - si no se proporciona, se obtienen todos los productos (catálogo global)
+      if (businessId) {
+        params.append('businessId', businessId);
+      }
+      
+      // Agregar parámetros de compatibilidad si hay vehículo seleccionado
+      if (vehicle) {
+        if (vehicle.brand_id) params.append('vehicleBrandId', vehicle.brand_id);
+        if (vehicle.model_id) params.append('vehicleModelId', vehicle.model_id);
+        if (vehicle.year_id) params.append('vehicleYearId', vehicle.year_id);
+        if (vehicle.spec_id) params.append('vehicleSpecId', vehicle.spec_id);
+      }
+      
+      const response = await apiRequest<{ data: Product[]; pagination: any }>(`/catalog/products?${params.toString()}`, {
         method: 'GET',
       });
       // El backend devuelve { data: [...], pagination: {...} }
@@ -233,6 +263,83 @@ export const productsService = {
     //   body: formData,
     // });
     // return response.image_url;
+  },
+
+  /**
+   * Obtener disponibilidad de un producto en todas las sucursales
+   */
+  async getProductBranchAvailability(productId: string): Promise<{
+    availabilities: Array<{
+      branch_id: string;
+      branch_name: string;
+      is_enabled: boolean;
+      price: number | null;
+      stock: number | null;
+      is_active?: boolean; // Estado activo/inactivo de la sucursal
+    }>;
+  }> {
+    try {
+      const response = await apiRequest<{
+        availabilities: Array<{
+          branch_id: string;
+          branch_name: string;
+          is_enabled: boolean;
+          price: number | null;
+          stock: number | null;
+          is_active?: boolean;
+        }>;
+      }>(`/catalog/products/${productId}/branch-availability`, {
+        method: 'GET',
+      });
+      return { availabilities: response?.availabilities || [] };
+    } catch (error: any) {
+      console.error('Error obteniendo disponibilidad por sucursal:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Actualizar disponibilidad de un producto en múltiples sucursales
+   */
+  async updateProductBranchAvailability(
+    productId: string,
+    availabilities: Array<{
+      branch_id: string;
+      is_enabled: boolean;
+      price?: number | null;
+      stock?: number | null;
+    }>
+  ): Promise<{
+    product_id: string;
+    availabilities: Array<{
+      branch_id: string;
+      branch_name: string;
+      is_enabled: boolean;
+      price: number | null;
+      stock: number | null;
+      is_active: boolean;
+    }>;
+  }> {
+    try {
+      const response = await apiRequest<{
+        product_id: string;
+        availabilities: Array<{
+          branch_id: string;
+          branch_name: string;
+          is_enabled: boolean;
+          price: number | null;
+          stock: number | null;
+          is_active: boolean;
+        }>;
+      }>(`/catalog/products/${productId}/branch-availability`, {
+        method: 'POST',
+        body: JSON.stringify({ availabilities }),
+      });
+      return response;
+    } catch (error: any) {
+      console.error('Error actualizando disponibilidad por sucursal:', error);
+      throw error;
+    }
   },
 };
 

@@ -23,6 +23,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { User } from '@supabase/supabase-js';
 import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
+import { AdminSignUpDto } from './dto/admin-signup.dto';
 import { RequestPasswordResetDto, UpdatePasswordDto } from './dto/reset-password.dto';
 
 /**
@@ -74,6 +75,35 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'El email ya está registrado' })
   async signUp(@Body() signUpDto: SignUpDto) {
     return this.authService.signUp(signUpDto);
+  }
+
+  /**
+   * Endpoint público: Registro de nuevo administrador
+   * Este endpoint solo permite crear usuarios con rol 'admin'
+   */
+  @Public()
+  @Post('signup/admin')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registrar un nuevo administrador' })
+  @ApiBody({ type: AdminSignUpDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Administrador registrado exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        user: { type: 'object' },
+        session: { type: 'object' },
+        accessToken: { type: 'string' },
+        refreshToken: { type: 'string' },
+        message: { type: 'string' },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 409, description: 'El email ya está registrado' })
+  async signUpAdmin(@Body() adminSignUpDto: AdminSignUpDto) {
+    return this.authService.signUpAdmin(adminSignUpDto);
   }
 
   /**

@@ -223,15 +223,34 @@ export async function apiRequest<T = any>(
   if (!response.ok || !data.success) {
     const statusCode = data.statusCode || response.status;
     
-    // Si es 401 (no autorizado), intentar refrescar token
+    // Endpoints públicos de autenticación que no deben intentar refrescar token
+    const publicAuthEndpoints = ['/auth/signin', '/auth/signup', '/auth/signup/admin', '/auth/password/reset', '/auth/password/update'];
+    const isPublicAuthEndpoint = publicAuthEndpoints.some(ep => endpoint.includes(ep));
+    
+    // Si es 401 (no autorizado)
     if (statusCode === 401) {
+      // Para endpoints públicos de autenticación, usar el mensaje del backend directamente
+      if (isPublicAuthEndpoint) {
+        const error = new ApiError(
+          data.message || 'Error de autenticación',
+          statusCode,
+          data
+        );
+        console.error('[API] Error de autenticación en endpoint público:', {
+          endpoint,
+          status: error.statusCode,
+          message: error.message,
+        });
+        throw error;
+      }
+      
       console.log('[API] Error 401 detectado, intentando refrescar token...');
       
       // Evitar loop infinito: si el endpoint es /auth/refresh, no intentar refrescar
       if (endpoint.includes('/auth/refresh')) {
         console.log('[API] Error en refresh token, cerrando sesión');
         handleSessionExpired();
-        throw new ApiError('Sesión expirada', 401);
+        throw new ApiError(data.message || 'Sesión expirada', 401, data);
       }
       
       const newToken = await tryRefreshToken();
@@ -242,7 +261,7 @@ export async function apiRequest<T = any>(
       } else {
         // No se pudo refrescar, cerrar sesión
         handleSessionExpired();
-        throw new ApiError('Sesión expirada. Por favor, inicia sesión nuevamente', 401);
+        throw new ApiError(data.message || 'Sesión expirada. Por favor, inicia sesión nuevamente', 401, data);
       }
     }
     

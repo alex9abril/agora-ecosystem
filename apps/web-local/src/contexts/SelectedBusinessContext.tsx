@@ -30,6 +30,8 @@ const SelectedBusinessContext = createContext<SelectedBusinessContextType | unde
 const STORAGE_KEY_ID = 'localia_selected_business_id';
 // Clave para guardar datos básicos (UUID + nombre + categoría)
 const STORAGE_KEY_DATA = 'localia_selected_business_data';
+// Clave para indicar que el usuario eligió modo global (sin tienda seleccionada)
+const STORAGE_KEY_GLOBAL_MODE = 'localia_global_mode';
 
 interface StoredBusinessData {
   business_id: string;
@@ -69,7 +71,17 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
 
     try {
       setIsLoading(true);
-      const businesses = await usersService.getUserBusinessesSummary(user.id);
+      
+      // Timeout de seguridad: si la petición tarda más de 10 segundos, cancelar
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: La petición tardó demasiado')), 10000);
+      });
+      
+      const businesses = await Promise.race([
+        usersService.getUserBusinessesSummary(user.id),
+        timeoutPromise
+      ]) as any[];
+      
       setAvailableBusinesses(businesses);
 
       // Filtrar solo las tiendas activas y accesibles
@@ -83,7 +95,7 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
         const savedDataStr = localStorage.getItem(STORAGE_KEY_DATA);
         if (savedDataStr) {
           savedBusinessData = JSON.parse(savedDataStr);
-          savedBusinessId = savedBusinessData.business_id;
+          savedBusinessId = savedBusinessData?.business_id || null;
         } else {
           // Fallback al formato antiguo (solo UUID)
           savedBusinessId = localStorage.getItem(STORAGE_KEY_ID);
@@ -97,8 +109,8 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
         const savedBusiness = activeBusinesses.find(b => b.business_id === savedBusinessId);
         if (savedBusiness && savedBusiness.can_access && savedBusiness.is_active) {
           // Si tenemos datos guardados, enriquecer con categoría si no está en el resumen
-          if (savedBusinessData?.category && !savedBusiness.category) {
-            savedBusiness.category = savedBusinessData.category;
+          if (savedBusinessData && savedBusinessData.category && !(savedBusiness as any).category) {
+            (savedBusiness as any).category = savedBusinessData.category;
           }
 
           // Cargar datos completos de la tienda (incluyendo categoría) en segundo plano
@@ -109,9 +121,9 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
                 // Actualizar el business seleccionado con datos completos
                 setSelectedBusiness({
                   ...savedBusiness,
-                  category: fullBusiness.category || savedBusiness.category,
+                  category: fullBusiness.category || (savedBusinessData?.category),
                   business_address: fullBusiness.business_address,
-                });
+                } as BusinessSummary);
                 // Guardar datos actualizados en localStorage
                 saveBusinessDataToStorage(savedBusinessId, fullBusiness.name, fullBusiness.category);
               }
@@ -165,10 +177,33 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       console.error('[SelectedBusinessContext] Error cargando tiendas:', error);
       setAvailableBusinesses([]);
       setIsLoading(false);
+      
+      // Si es un error de timeout o red, intentar una vez más después de un delay
+      if (error?.message?.includes('Timeout') || error?.code === 'ECONNABORTED' || error?.statusCode >= 500) {
+        console.log('[SelectedBusinessContext] Reintentando cargar tiendas en 2 segundos...');
+        setTimeout(() => {
+          if (user && token) {
+            loadBusinesses();
+          }
+        }, 2000);
+      }
     }
   };
 
   const selectBusiness = (businessId: string) => {
+    // Si businessId está vacío, limpiar selección (modo global)
+    if (!businessId || businessId === '') {
+      setSelectedBusiness(null);
+      localStorage.removeItem(STORAGE_KEY_ID);
+      localStorage.removeItem(STORAGE_KEY_DATA);
+      // Marcar que el usuario eligió modo global
+      localStorage.setItem(STORAGE_KEY_GLOBAL_MODE, 'true');
+      return;
+    }
+
+    // Si se selecciona una tienda, desactivar modo global
+    localStorage.removeItem(STORAGE_KEY_GLOBAL_MODE);
+
     const business = availableBusinesses.find(b => b.business_id === businessId);
     if (business && business.can_access && business.is_active) {
       setSelectedBusiness(business);

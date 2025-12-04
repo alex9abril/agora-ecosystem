@@ -28,6 +28,26 @@ export class ListProductsDto {
   @IsUUID()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de marca de vehículo', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  vehicleBrandId?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de modelo de vehículo', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  vehicleModelId?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de año/generación', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  vehicleYearId?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de especificación técnica', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  vehicleSpecId?: string;
+
   @ApiPropertyOptional({ description: 'Filtrar por disponible', example: true })
   @IsOptional()
   @Type(() => Boolean)

@@ -66,6 +66,7 @@
 
 2. **Tipos de datos**:
    - IDs: `UUID` (usar `gen_random_uuid()` o UUIDs válidos)
+   - **IMPORTANTE - UUIDs en scripts SQL**: Cuando especifiques UUIDs manualmente en scripts SQL (INSERT, UPDATE, etc.), **SIEMPRE usa solo números (0-9), sin letras**. Formato: `'00000001-0000-0000-0000-000000000001'`. NO uses letras como `'refacciones-0000-...'` o `'accesorios-0000-...'`.
    - Geolocalización: `POINT` (PostgreSQL nativo, usar `(location)[0]` y `(location)[1]` para extraer coordenadas)
    - JSON: `JSONB` para variantes, información nutricional, etc.
    - Arrays: `TEXT[]` para alérgenos, tags, etc.

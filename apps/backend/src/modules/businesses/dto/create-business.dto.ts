@@ -103,5 +103,23 @@ export class CreateBusinessDto {
   @IsOptional()
   @IsBoolean()
   uses_eco_packaging?: boolean = false;
+
+  @ApiPropertyOptional({ description: 'Slug amigable para el storefront (se genera automáticamente si no se proporciona)', example: 'restaurante-la-roma' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  slug?: string;
+
+  @ApiPropertyOptional({ description: 'Si la sucursal acepta recolección de productos en la unidad física', example: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  accepts_pickup?: boolean = false;
+
+  @ApiPropertyOptional({ description: 'Si la sucursal está activa y disponible para ventas', example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  is_active?: boolean = true;
 }
 

@@ -3,11 +3,11 @@ import { IsString, IsOptional, IsBoolean, IsInt, IsUUID, IsUrl, IsNumber, IsArra
 import { Type } from 'class-transformer';
 
 export enum ProductType {
-  FOOD = 'food',
-  BEVERAGE = 'beverage',
-  MEDICINE = 'medicine',
-  GROCERY = 'grocery',
-  NON_FOOD = 'non_food',
+  REFACCION = 'refaccion',
+  ACCESORIO = 'accesorio',
+  SERVICIO_INSTALACION = 'servicio_instalacion',
+  SERVICIO_MANTENIMIENTO = 'servicio_mantenimiento',
+  FLUIDO = 'fluido',
 }
 
 export class CreateProductDto {
@@ -19,6 +19,12 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(255)
   name: string;
+
+  @ApiPropertyOptional({ description: 'SKU (Stock Keeping Unit) - Código único de identificación del producto', example: 'HAMB-CLAS-001' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  sku?: string;
 
   @ApiPropertyOptional({ description: 'Descripción del producto', example: 'Carne, lechuga, tomate, cebolla, queso' })
   @IsOptional()
@@ -36,7 +42,7 @@ export class CreateProductDto {
   @Type(() => Number)
   price: number;
 
-  @ApiProperty({ description: 'Tipo de producto', enum: ProductType, example: ProductType.FOOD })
+  @ApiProperty({ description: 'Tipo de producto', enum: ProductType, example: ProductType.REFACCION })
   @IsEnum(ProductType)
   product_type: ProductType;
 

@@ -11,13 +11,20 @@ export default function HomePage() {
   const { selectedBusiness, isLoading: businessLoading } = useSelectedBusiness();
 
   useEffect(() => {
-    if (authLoading || businessLoading) return;
+    // Si aún está cargando la autenticación, esperar
+    if (authLoading) return;
 
+    // Si no está autenticado, redirigir inmediatamente al login
+    // No esperar a que termine businessLoading
     if (!isAuthenticated) {
       router.push('/auth/login');
       return;
     }
 
+    // Si está autenticado, esperar a que termine businessLoading para decidir la ruta
+    if (businessLoading) return;
+
+    // Usuario autenticado y business cargado: decidir ruta
     if (selectedBusiness) {
       const role = selectedBusiness.role as BusinessRole;
       const defaultRoute = getDefaultRouteForRole(role);
@@ -27,6 +34,18 @@ export default function HomePage() {
       router.push('/dashboard');
     }
   }, [isAuthenticated, authLoading, selectedBusiness, businessLoading, router]);
+
+  // Timeout de seguridad: si pasa más de 5 segundos y no está autenticado, redirigir al login
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (!authLoading && !isAuthenticated) {
+        console.log('[HomePage] Timeout: redirigiendo al login');
+        router.push('/auth/login');
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [authLoading, isAuthenticated, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">

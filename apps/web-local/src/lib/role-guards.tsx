@@ -11,8 +11,11 @@ import { BusinessRole, hasPermission, canAccessRoute, getDefaultRouteForRole } f
  * Hook para verificar si el usuario tiene un permiso específico
  */
 export function usePermission(permission: keyof import('./permissions').RolePermissions): boolean {
-  const { selectedBusiness } = useSelectedBusiness();
-  const role = (selectedBusiness?.role || 'operations_staff') as BusinessRole;
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
+  
+  // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
+  const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
+  const role = (selectedBusiness?.role || (hasSuperadminRole ? 'superadmin' : 'operations_staff')) as BusinessRole;
   return hasPermission(role, permission);
 }
 

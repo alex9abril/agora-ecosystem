@@ -142,13 +142,49 @@ export class CartService {
 
       const product = productResult.rows[0];
 
-      // Verificar disponibilidad
-      if (!product.is_available) {
-        throw new BadRequestException('El producto no está disponible');
+      // Determinar el business_id a usar
+      // Si se proporciona branchId, usarlo (en contexto global con sucursal seleccionada)
+      // Si no, usar el business_id del producto
+      let targetBusinessId = product.business_id;
+      
+      if (addItemDto.branchId) {
+        // Verificar que la sucursal existe y obtener su business_id
+        const branchResult = await client.query(
+          `SELECT id, business_group_id FROM core.businesses WHERE id = $1 AND is_active = TRUE`,
+          [addItemDto.branchId]
+        );
+        
+        if (branchResult.rows.length === 0) {
+          throw new NotFoundException('Sucursal no encontrada o inactiva');
+        }
+        
+        targetBusinessId = addItemDto.branchId; // La sucursal ES el business_id
+      }
+
+      // Verificar disponibilidad del producto en la sucursal seleccionada
+      if (addItemDto.branchId) {
+        const availabilityResult = await client.query(
+          `SELECT is_enabled, stock, price 
+           FROM catalog.product_branch_availability 
+           WHERE product_id = $1 AND branch_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+          [addItemDto.productId, addItemDto.branchId]
+        );
+        
+        if (availabilityResult.rows.length > 0) {
+          const availability = availabilityResult.rows[0];
+          if (!availability.is_enabled) {
+            throw new BadRequestException('El producto no está disponible en esta sucursal');
+          }
+        }
+      } else {
+        // Verificar disponibilidad general
+        if (!product.is_available) {
+          throw new BadRequestException('El producto no está disponible');
+        }
       }
 
       // Si el carrito ya tiene un business_id, verificar que sea el mismo
-      if (cart.business_id && cart.business_id !== product.business_id) {
+      if (cart.business_id && cart.business_id !== targetBusinessId) {
         throw new ConflictException(
           'No se pueden agregar productos de diferentes tiendas al mismo carrito. Por favor, completa tu pedido actual o vacía el carrito.'
         );
@@ -198,7 +234,22 @@ export class CartService {
         }
       }
 
-      const unitPrice = parseFloat(product.price);
+      // Determinar el precio a usar
+      // Si hay branchId y tiene precio personalizado, usarlo; sino usar precio global
+      let unitPrice = parseFloat(product.price);
+      
+      if (addItemDto.branchId) {
+        const availabilityResult = await client.query(
+          `SELECT price FROM catalog.product_branch_availability 
+           WHERE product_id = $1 AND branch_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+          [addItemDto.productId, addItemDto.branchId]
+        );
+        
+        if (availabilityResult.rows.length > 0 && availabilityResult.rows[0].price !== null) {
+          unitPrice = parseFloat(availabilityResult.rows[0].price);
+        }
+      }
+      
       const itemSubtotal = (unitPrice + variantPriceAdjustment) * addItemDto.quantity;
 
       // Normalizar variant_selections para el constraint UNIQUE
@@ -234,7 +285,7 @@ export class CartService {
         if (!cart.business_id) {
           await client.query(
             `UPDATE orders.shopping_cart SET business_id = $1 WHERE id = $2`,
-            [product.business_id, cart.id]
+            [targetBusinessId, cart.id]
           );
         }
 
