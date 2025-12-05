@@ -146,6 +146,7 @@ export class ProductsService {
       page = 1,
       limit = 20,
       businessId,
+      groupId,
       categoryId,
       isAvailable,
       isFeatured,
@@ -165,15 +166,43 @@ export class ProductsService {
     let whereConditions: string[] = [];
     let queryParams: any[] = [];
     let paramIndex = 1;
+    let businessJoin = '';
 
-    if (businessId) {
+    // Si se filtra por grupo, necesitamos hacer JOIN con businesses
+    if (groupId) {
+      businessJoin = `INNER JOIN core.businesses b_filter ON p.business_id = b_filter.id`;
+      whereConditions.push(`b_filter.business_group_id = $${paramIndex}`);
+      queryParams.push(groupId);
+      paramIndex++;
+    } else if (businessId) {
       whereConditions.push(`p.business_id = $${paramIndex}`);
       queryParams.push(businessId);
       paramIndex++;
     }
 
+    // Filtro por categoría: incluir la categoría y todas sus subcategorías recursivamente
+    let categoryCTE = '';
+    let categoryWhere = '';
     if (categoryId) {
-      whereConditions.push(`p.category_id = $${paramIndex}`);
+      // CTE recursiva para obtener todas las subcategorías (hijos, nietos, etc.)
+      categoryCTE = `
+        WITH RECURSIVE category_tree AS (
+          -- Caso base: la categoría inicial
+          SELECT id, parent_category_id, name
+          FROM catalog.product_categories
+          WHERE id = $${paramIndex}::UUID
+          
+          UNION ALL
+          
+          -- Caso recursivo: todas las subcategorías
+          SELECT pc.id, pc.parent_category_id, pc.name
+          FROM catalog.product_categories pc
+          INNER JOIN category_tree ct ON pc.parent_category_id = ct.id
+        )
+      `;
+      
+      // Filtrar productos que pertenezcan a cualquier categoría en el árbol
+      categoryWhere = `AND p.category_id IN (SELECT id FROM category_tree)`;
       queryParams.push(categoryId);
       paramIndex++;
     }
@@ -232,17 +261,31 @@ export class ProductsService {
       );
     }
 
-    const whereClause = whereConditions.length > 0
-      ? `WHERE ${whereConditions.join(' AND ')}`
+    // Construir WHERE clause combinando todas las condiciones
+    const allWhereConditions = [...whereConditions];
+    if (categoryWhere) {
+      // Si categoryWhere empieza con AND, removerlo y agregarlo como condición normal
+      const categoryCondition = categoryWhere.replace(/^AND\s+/, '');
+      allWhereConditions.push(categoryCondition);
+    }
+    if (compatibilityWhere) {
+      // Si compatibilityWhere empieza con AND, removerlo y agregarlo como condición normal
+      const compatibilityCondition = compatibilityWhere.replace(/^AND\s+/, '');
+      allWhereConditions.push(compatibilityCondition);
+    }
+    
+    const whereClause = allWhereConditions.length > 0
+      ? `WHERE ${allWhereConditions.join(' AND ')}`
       : '';
 
     // Obtener total para paginación (usar queryParams antes de agregar limit/offset)
     const countQuery = `
+      ${categoryCTE}
       SELECT COUNT(DISTINCT p.id) as total 
       FROM catalog.products p
+      ${businessJoin}
       ${compatibilityJoin}
       ${whereClause}
-      ${compatibilityWhere}
     `;
     const countResult = await pool.query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total, 10);
@@ -263,6 +306,7 @@ export class ProductsService {
     queryParams.push(limit, offset);
 
     const sqlQuery = `
+      ${categoryCTE}
       SELECT 
         p.*,
         b.name as business_name,
@@ -299,12 +343,12 @@ export class ProductsService {
           '[]'::json
         ) as variant_groups_structured
       FROM catalog.products p
+      ${businessJoin}
       ${compatibilityJoin}
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
       LEFT JOIN catalog.product_variant_groups vg ON vg.product_id = p.id
       ${whereClause}
-      ${compatibilityWhere}
       GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
@@ -1118,8 +1162,11 @@ export class ProductsService {
 
   /**
    * Obtener disponibilidad de un producto en todas las sucursales
+   * @param productId ID del producto
+   * @param groupId Opcional: filtrar por grupo empresarial
+   * @param brandId Opcional: filtrar por marca de vehículo (solo sucursales que venden productos de esa marca)
    */
-  async getProductBranchAvailability(productId: string) {
+  async getProductBranchAvailability(productId: string, groupId?: string, brandId?: string) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
@@ -1133,10 +1180,39 @@ export class ProductsService {
         throw new NotFoundException('Producto no encontrado');
       }
 
+      // Construir condiciones de filtrado
+      let whereConditions = ['b.is_active = TRUE'];
+      const queryParams: any[] = [productId];
+      let paramIndex = 2;
+      let brandJoin = '';
+
+      // Filtrar por grupo
+      if (groupId) {
+        whereConditions.push(`b.business_group_id = $${paramIndex}`);
+        queryParams.push(groupId);
+        paramIndex++;
+      }
+
+      // Filtrar por marca (solo sucursales que venden productos de esa marca)
+      if (brandId) {
+        brandJoin = `
+          INNER JOIN catalog.product_branch_availability pba_brand ON b.id = pba_brand.branch_id
+          INNER JOIN catalog.product_vehicle_compatibility pvc ON pba_brand.product_id = pvc.product_id
+        `;
+        whereConditions.push(`pvc.vehicle_brand_id = $${paramIndex}`);
+        whereConditions.push(`pba_brand.is_enabled = TRUE`);
+        whereConditions.push(`pba_brand.is_active = TRUE`);
+        whereConditions.push(`pvc.is_active = TRUE`);
+        queryParams.push(brandId);
+        paramIndex++;
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
       // Consulta: obtener todas las sucursales activas y su disponibilidad
       // Incluir el estado is_active de la sucursal para mostrar indicadores visuales
       const sqlQuery = `
-        SELECT 
+        SELECT DISTINCT
           b.id AS branch_id,
           b.name AS branch_name,
           b.slug AS branch_slug,
@@ -1155,15 +1231,16 @@ export class ProductsService {
           ) AS branch_address
         FROM core.businesses b
         LEFT JOIN core.addresses a ON b.address_id = a.id
+        ${brandJoin}
         LEFT JOIN catalog.product_branch_availability pba 
           ON b.id = pba.branch_id 
           AND pba.product_id = $1
           AND COALESCE(pba.is_active, TRUE) = TRUE
-        WHERE b.is_active = TRUE
-        ORDER BY pba.is_enabled DESC NULLS LAST, b.name ASC
+        ${whereClause}
+        ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.name ASC
       `;
 
-      const result = await pool.query(sqlQuery, [productId]);
+      const result = await pool.query(sqlQuery, queryParams);
       
       return {
         availabilities: result.rows.map(row => ({

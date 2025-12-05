@@ -86,5 +86,12 @@ export const branchesService = {
       groupId,
     });
   },
+
+  /**
+   * Obtener sucursales que venden productos de una marca específica
+   */
+  async getBranchesByBrand(brandId: string): Promise<BusinessResponse> {
+    return apiRequest<BusinessResponse>(`/businesses/branches/by-brand/${brandId}`, { method: 'GET' });
+  },
 };
 

@@ -7,8 +7,9 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback 
 import { useRouter } from 'next/router';
 import { businessGroupsService } from '@/lib/business-groups';
 import { branchesService } from '@/lib/branches';
+import { vehicleBrandsService, VehicleBrand } from '@/lib/vehicle-brands';
 
-export type StoreContextType = 'global' | 'grupo' | 'sucursal';
+export type StoreContextType = 'global' | 'grupo' | 'sucursal' | 'brand';
 
 export interface BusinessGroup {
   id: string;
@@ -45,10 +46,12 @@ interface StoreContextValue {
   slug: string | null;
   groupId: string | null;
   branchId: string | null;
+  brandId: string | null;
   
   // Datos cargados
   groupData: BusinessGroup | null;
   branchData: Business | null;
+  brandData: VehicleBrand | null;
   
   // Estado de carga
   isLoading: boolean;
@@ -73,8 +76,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [slug, setSlug] = useState<string | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
+  const [brandId, setBrandId] = useState<string | null>(null);
   const [groupData, setGroupData] = useState<BusinessGroup | null>(null);
   const [branchData, setBranchData] = useState<Business | null>(null);
+  const [brandData, setBrandData] = useState<VehicleBrand | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,13 +107,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    // Detectar marca: /brand/{code}
+    const brandMatch = asPath.match(/^\/brand\/([^/?#]+)/);
+    if (brandMatch) {
+      setContextType('brand');
+      setSlug(brandMatch[1]);
+      loadBrandData(brandMatch[1]);
+      return;
+    }
+    
     // Contexto global (sin prefijo - por defecto)
     setContextType('global');
     setSlug(null);
     setGroupId(null);
     setBranchId(null);
+    setBrandId(null);
     setGroupData(null);
     setBranchData(null);
+    setBrandData(null);
     setIsLoading(false);
     setError(null);
   }, [router.isReady, router.asPath]);
@@ -152,6 +168,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadBrandData = async (brandCode: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const data = await vehicleBrandsService.getBrandByCode(brandCode);
+      
+      if (!data) {
+        throw new Error('Marca no encontrada');
+      }
+      
+      setBrandData(data);
+      setBrandId(data.id);
+    } catch (err: any) {
+      console.error('Error cargando marca:', err);
+      setError(err.message || 'Error al cargar la marca');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const getContextualUrl = useCallback((path: string): string => {
     // Rutas absolutas que NO deben tener contexto
     const absoluteRoutes = ['/auth/', '/api/', '/_next/'];
@@ -185,8 +222,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (contextType === 'sucursal' && branchData) {
       return branchData.name;
     }
-    return 'Agora';
-  }, [contextType, groupData, branchData]);
+    if (contextType === 'brand' && brandData) {
+      return `Productos para ${brandData.name}`;
+    }
+    return 'Agora Parts';
+  }, [contextType, groupData, branchData, brandData]);
 
   const getStoreLogo = useCallback((): string | null => {
     if (contextType === 'grupo' && groupData?.logo_url) {
@@ -211,8 +251,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     slug,
     groupId,
     branchId,
+    brandId,
     groupData,
     branchData,
+    brandData,
     isLoading,
     error,
     getContextualUrl,

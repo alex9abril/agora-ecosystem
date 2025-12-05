@@ -18,7 +18,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import BusinessIcon from '@mui/icons-material/Business';
 import StoreSelectorDialog from '../StoreSelectorDialog';
+import NavigationDialog from '../NavigationDialog';
+import CategoriesMenu from '../CategoriesMenu';
 
 export default function Header() {
   const router = useRouter();
@@ -32,7 +35,9 @@ export default function Header() {
   const { getCartUrl } = useStoreRouting();
   const [searchQuery, setSearchQuery] = useState('');
   const [showStoreSelector, setShowStoreSelector] = useState(false);
+  const [showNavigationDialog, setShowNavigationDialog] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showCategoriesMenu, setShowCategoriesMenu] = useState(false);
   const [storeInfo, setStoreInfo] = useState<{ name: string; address: string; isOpen: boolean; nextOpenTime: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
 
@@ -114,6 +119,13 @@ export default function Header() {
 
               {/* Acciones de usuario */}
               <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowNavigationDialog(true)}
+                  className="text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap flex items-center gap-1"
+                >
+                  <BusinessIcon className="w-5 h-5" />
+                  <span className="hidden sm:inline">Navegar</span>
+                </button>
                 {!isAuthenticated ? (
                   <ContextualLink 
                     href="/auth/login" 
@@ -153,14 +165,28 @@ export default function Header() {
           <div className="w-full px-4 py-3">
             <div className="flex items-center gap-4">
               {/* Grupo izquierdo: Menú y selector de vehículo */}
-              <div className="flex items-center gap-4 flex-shrink-0">
+              <div className="flex items-center gap-4 flex-shrink-0 relative">
                 <button
-                  onClick={() => setShowMobileMenu(!showMobileMenu)}
-                  className="flex items-center gap-2 text-toyota-gray hover:text-black transition-colors"
+                  onClick={() => {
+                    setShowCategoriesMenu(!showCategoriesMenu);
+                    setShowMobileMenu(false);
+                  }}
+                  onMouseEnter={() => setShowCategoriesMenu(true)}
+                  className="flex items-center gap-2 text-toyota-gray hover:text-black transition-colors relative"
                 >
                   <MenuIcon className="w-6 h-6" />
                   <span className="hidden sm:inline text-sm font-medium">Menú</span>
                 </button>
+                
+                {/* Menú de categorías flotante */}
+                {showCategoriesMenu && (
+                  <div
+                    className="absolute top-full left-0 mt-2 z-50 w-[800px] shadow-2xl"
+                    onMouseLeave={() => setShowCategoriesMenu(false)}
+                  >
+                    <CategoriesMenu onCategoryClick={() => setShowCategoriesMenu(false)} />
+                  </div>
+                )}
 
                 <button className="hidden md:flex items-center gap-2 text-toyota-gray hover:text-black transition-colors">
                   <DirectionsCarIcon className="w-5 h-5" />
@@ -290,6 +316,12 @@ export default function Header() {
       <StoreSelectorDialog
         open={showStoreSelector}
         onClose={() => setShowStoreSelector(false)}
+      />
+      
+      {/* Diálogo de navegación */}
+      <NavigationDialog
+        open={showNavigationDialog}
+        onClose={() => setShowNavigationDialog(false)}
       />
     </>
   );

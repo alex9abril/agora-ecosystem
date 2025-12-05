@@ -1,6 +1,27 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max, ValidateIf, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, Validate } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+
+// Validador personalizado para UUID opcional o null
+@ValidatorConstraint({ name: 'isUuidOrNull', async: false })
+export class IsUuidOrNullConstraint implements ValidatorConstraintInterface {
+  validate(value: any, args: ValidationArguments) {
+    // Si es null o undefined, es válido
+    if (value === null || value === undefined) {
+      return true;
+    }
+    // Si es un string, validar como UUID
+    if (typeof value === 'string') {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(value);
+    }
+    return false;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    return 'parentCategoryId must be a UUID or null';
+  }
+}
 
 export class ListCategoriesDto {
   @ApiPropertyOptional({ description: 'Página actual', example: 1, default: 1 })
@@ -35,10 +56,22 @@ export class ListCategoriesDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ description: 'Filtrar por categoría padre', example: '11111111-1111-1111-1111-111111111111' })
+  @ApiPropertyOptional({ description: 'Filtrar por categoría padre (null para categorías raíz)', example: '11111111-1111-1111-1111-111111111111' })
+  @Transform(({ value }) => {
+    // Convertir string "null" a null real
+    if (value === 'null') {
+      return null;
+    }
+    // Si está vacío, retornar undefined para que @IsOptional lo maneje
+    if (value === '' || value === undefined) {
+      return undefined;
+    }
+    // Mantener el valor si es un string (UUID)
+    return value;
+  })
   @IsOptional()
-  @IsUUID()
-  parentCategoryId?: string;
+  @Validate(IsUuidOrNullConstraint)
+  parentCategoryId?: string | null;
 
   @ApiPropertyOptional({ description: 'Buscar por nombre', example: 'Bebidas' })
   @IsOptional()

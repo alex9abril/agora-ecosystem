@@ -7,6 +7,8 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
 import ProductGrid from '@/components/ProductGrid';
+import CategoryBreadcrumbs from '@/components/CategoryBreadcrumbs';
+import CategoryInfo from '@/components/CategoryInfo';
 import { productsService } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
 
@@ -15,21 +17,36 @@ export default function ProductsPage() {
   const { contextType } = useStoreContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categoryName, setCategoryName] = useState<string>('');
   const [filters, setFilters] = useState<any>({
     isAvailable: true,
   });
 
   useEffect(() => {
-    const { search, category } = router.query;
+    if (!router.isReady) return;
+    
+    const { search, categoryId } = router.query;
+    const newFilters: any = {
+      isAvailable: true,
+    };
+    
     if (search) {
       setSearchQuery(search as string);
-      setFilters({ ...filters, search: search as string });
+      newFilters.search = search as string;
+    } else {
+      setSearchQuery('');
     }
-    if (category) {
-      setCategoryFilter(category as string);
-      setFilters({ ...filters, categoryId: category as string });
+    
+    if (categoryId && typeof categoryId === 'string') {
+      setCategoryFilter(categoryId);
+      newFilters.categoryId = categoryId;
+    } else {
+      setCategoryFilter('');
+      delete newFilters.categoryId;
     }
-  }, [router.query]);
+    
+    setFilters(newFilters);
+  }, [router.isReady, router.query]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,14 +67,33 @@ export default function ProductsPage() {
       </Head>
       <StoreLayout>
         <div className="mb-8">
+          {/* Breadcrumbs de categoría */}
+          {categoryFilter && (
+            <CategoryBreadcrumbs categoryId={categoryFilter} />
+          )}
+
           <h1 className="text-3xl font-bold text-gray-900 mb-6">
-            {contextType === 'global' 
+            {categoryName
+              ? categoryName
+              : categoryFilter
+              ? 'Productos'
+              : contextType === 'global' 
               ? 'Todos los Productos'
               : contextType === 'grupo'
               ? 'Productos del Grupo'
-              : 'Productos de la Sucursal'
+              : contextType === 'sucursal'
+              ? 'Productos de la Sucursal'
+              : 'Productos'
             }
           </h1>
+
+          {/* Información de la categoría actual */}
+          {categoryFilter && (
+            <CategoryInfo 
+              categoryId={categoryFilter} 
+              onCategoryLoaded={(name) => setCategoryName(name)}
+            />
+          )}
 
           {/* Barra de búsqueda */}
           <form onSubmit={handleSearch} className="mb-6">

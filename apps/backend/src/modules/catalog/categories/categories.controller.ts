@@ -21,35 +21,36 @@ import { ListCategoriesDto } from './dto/list-categories.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('Catalog - Categories')
-@ApiBearerAuth()
 @Controller('catalog/categories')
 @UseGuards(SupabaseAuthGuard)
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar categorías con filtros y paginación' })
+  @Public()
+  @ApiOperation({ summary: 'Listar categorías con filtros y paginación (Público)' })
   @ApiResponse({ status: 200, description: 'Lista de categorías obtenida exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async findAll(@Query() query: ListCategoriesDto) {
     return this.categoriesService.findAll(query);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener detalle de una categoría' })
+  @Public()
+  @ApiOperation({ summary: 'Obtener detalle de una categoría (Público)' })
   @ApiParam({ name: 'id', description: 'ID de la categoría (UUID)' })
   @ApiResponse({ status: 200, description: 'Categoría obtenida exitosamente' })
   @ApiResponse({ status: 404, description: 'Categoría no encontrada' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async findOne(@Param('id') id: string) {
     return this.categoriesService.findOne(id);
   }
 
   @Post()
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Crear una nueva categoría' })
   @ApiResponse({ status: 201, description: 'Categoría creada exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
@@ -60,6 +61,7 @@ export class CategoriesController {
   }
 
   @Patch(':id')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Actualizar una categoría' })
   @ApiParam({ name: 'id', description: 'ID de la categoría (UUID)' })
   @ApiResponse({ status: 200, description: 'Categoría actualizada exitosamente' })
@@ -72,6 +74,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Eliminar lógicamente una categoría (desactivar)' })
   @ApiParam({ name: 'id', description: 'ID de la categoría (UUID)' })
   @ApiResponse({ status: 200, description: 'Categoría desactivada exitosamente' })

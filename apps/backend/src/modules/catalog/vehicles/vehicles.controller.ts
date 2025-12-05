@@ -19,6 +19,7 @@ import {
 import { VehiclesService } from './vehicles.service';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('Catalog - Vehicles')
 @ApiBearerAuth()
@@ -28,6 +29,7 @@ export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
   @Get('brands')
+  @Public()
   @ApiOperation({ summary: 'Obtener todas las marcas de vehículos activas' })
   @ApiResponse({ status: 200, description: 'Marcas obtenidas exitosamente' })
   @ApiResponse({ status: 401, description: 'No autorizado' })

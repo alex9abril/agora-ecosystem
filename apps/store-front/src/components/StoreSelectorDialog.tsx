@@ -55,7 +55,7 @@ export function getStoredBranch(): {
 
 export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDialogProps) {
   const router = useRouter();
-  const { navigateToContext } = useStoreContext();
+  const { navigateToContext, contextType, groupId, branchId, brandId, branchData } = useStoreContext();
   const [step, setStep] = useState<'store-details' | 'location' | 'stores'>('store-details');
   const [selectedStore, setSelectedStore] = useState<Business | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<CityState | null>(null);
@@ -67,6 +67,13 @@ export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDial
   // Verificar si hay tienda guardada al abrir el diálogo
   useEffect(() => {
     if (open) {
+      // Si estamos en contexto de sucursal, mostrar directamente la sucursal actual
+      if (contextType === 'sucursal' && branchData) {
+        setSelectedStore(branchData);
+        setStep('store-details');
+        return;
+      }
+
       const stored = getStoredBranch();
       if (stored) {
         // Cargar información completa de la tienda
@@ -77,7 +84,7 @@ export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDial
         loadLocations();
       }
     }
-  }, [open]);
+  }, [open, contextType, branchData]);
 
   // Cargar ubicaciones disponibles cuando se cambia a step 'location'
   useEffect(() => {
@@ -98,11 +105,25 @@ export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDial
       setLoading(true);
       setError(null);
       
-      // Obtener todas las sucursales activas
-      const response = await branchesService.getBranches({
-        isActive: true,
-        limit: 1000, // Obtener todas las sucursales
-      });
+      let response: BusinessResponse;
+      
+      // Filtrar según el contexto
+      if (contextType === 'grupo' && groupId) {
+        // Solo sucursales del grupo
+        response = await branchesService.getBranchesByGroup(groupId, {
+          isActive: true,
+          limit: 1000,
+        });
+      } else if (contextType === 'brand' && brandId) {
+        // Solo sucursales que venden productos de la marca
+        response = await branchesService.getBranchesByBrand(brandId);
+      } else {
+        // Contexto global: todas las sucursales
+        response = await branchesService.getBranches({
+          isActive: true,
+          limit: 1000,
+        });
+      }
 
       // Agrupar por ciudad y estado
       const locationMap = new Map<string, CityState>();
@@ -162,12 +183,27 @@ export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDial
       setLoading(true);
       setError(null);
       
-      // Obtener todas las sucursales y filtrar por ciudad/estado
-      const response = await branchesService.getBranches({
-        isActive: true,
-        limit: 1000,
-      });
+      let response: BusinessResponse;
+      
+      // Filtrar según el contexto
+      if (contextType === 'grupo' && groupId) {
+        // Solo sucursales del grupo
+        response = await branchesService.getBranchesByGroup(groupId, {
+          isActive: true,
+          limit: 1000,
+        });
+      } else if (contextType === 'brand' && brandId) {
+        // Solo sucursales que venden productos de la marca
+        response = await branchesService.getBranchesByBrand(brandId);
+      } else {
+        // Contexto global: todas las sucursales
+        response = await branchesService.getBranches({
+          isActive: true,
+          limit: 1000,
+        });
+      }
 
+      // Filtrar por ciudad/estado
       const filteredStores = response.data.filter(
         (branch) => branch.city === city && branch.state === state
       );
@@ -364,12 +400,19 @@ export default function StoreSelectorDialog({ open, onClose }: StoreSelectorDial
 
               {/* Botones de acción */}
               <div className="flex gap-3">
-                <button
-                  onClick={handleChangeStore}
-                  className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
-                >
-                  Cambiar Tienda
-                </button>
+                {contextType !== 'sucursal' && (
+                  <button
+                    onClick={handleChangeStore}
+                    className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
+                  >
+                    Cambiar Tienda
+                  </button>
+                )}
+                {contextType === 'sucursal' && (
+                  <div className="flex-1 px-6 py-3 bg-gray-100 text-gray-600 rounded-lg text-center font-medium">
+                    No se puede cambiar la sucursal en este contexto
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     // Limpiar selección de tienda

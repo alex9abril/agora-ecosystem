@@ -22,7 +22,7 @@ interface ProductGridProps {
 
 export default function ProductGrid({ filters, onProductClick, className = '' }: ProductGridProps) {
   const router = useRouter();
-  const { contextType, groupId, branchId } = useStoreContext();
+  const { contextType, groupId, branchId, brandId } = useStoreContext();
   const { addItem } = useCart();
   const { isAuthenticated } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
@@ -31,7 +31,7 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
 
   useEffect(() => {
     loadProducts();
-  }, [contextType, groupId, branchId, filters]);
+  }, [contextType, groupId, branchId, brandId, filters]);
 
   const loadProducts = async () => {
     try {
@@ -48,6 +48,8 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
         params.groupId = groupId;
       } else if (contextType === 'sucursal' && branchId) {
         params.branchId = branchId;
+      } else if (contextType === 'brand' && brandId) {
+        params.vehicleBrandId = brandId;
       }
 
       const response = await productsService.getProducts(params);

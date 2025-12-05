@@ -67,6 +67,8 @@ export interface ListProductsParams {
   limit?: number;
   groupId?: string;      // Filtro por grupo empresarial
   branchId?: string;     // Filtro por sucursal específica
+  brandId?: string;      // Filtro por marca de vehículo (alias para vehicleBrandId)
+  vehicleBrandId?: string; // Filtro por marca de vehículo
   categoryId?: string;
   isAvailable?: boolean;
   isFeatured?: boolean;
@@ -102,6 +104,8 @@ export const productsService = {
     if (params.limit) queryParams.append('limit', params.limit.toString());
     if (params.groupId) queryParams.append('groupId', params.groupId);
     if (params.branchId) queryParams.append('branchId', params.branchId);
+    if (params.vehicleBrandId) queryParams.append('vehicleBrandId', params.vehicleBrandId);
+    if (params.brandId) queryParams.append('vehicleBrandId', params.brandId); // Alias para brandId
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
     if (params.isAvailable !== undefined) queryParams.append('isAvailable', params.isAvailable.toString());
     if (params.isFeatured !== undefined) queryParams.append('isFeatured', params.isFeatured.toString());
@@ -133,14 +137,25 @@ export const productsService = {
 
   /**
    * Obtener disponibilidad de un producto en todas las sucursales
+   * @param productId ID del producto
+   * @param groupId Opcional: filtrar por grupo empresarial
+   * @param brandId Opcional: filtrar por marca de vehículo
    */
-  async getProductBranchAvailability(productId: string): Promise<{
+  async getProductBranchAvailability(
+    productId: string,
+    groupId?: string,
+    brandId?: string
+  ): Promise<{
     availabilities: ProductBranchAvailability[];
   }> {
-    return apiRequest<{ availabilities: ProductBranchAvailability[] }>(
-      `/catalog/products/${productId}/branch-availability`,
-      { method: 'GET' }
-    );
+    const queryParams = new URLSearchParams();
+    if (groupId) queryParams.append('groupId', groupId);
+    if (brandId) queryParams.append('brandId', brandId);
+    
+    const queryString = queryParams.toString();
+    const url = `/catalog/products/${productId}/branch-availability${queryString ? `?${queryString}` : ''}`;
+    
+    return apiRequest<{ availabilities: ProductBranchAvailability[] }>(url, { method: 'GET' });
   },
 };
 

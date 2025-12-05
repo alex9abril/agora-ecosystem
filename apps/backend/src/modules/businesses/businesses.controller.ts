@@ -243,6 +243,15 @@ export class BusinessesController {
     return this.businessesService.getBranchBySlug(slug);
   }
 
+  @Get('branches/by-brand/:brandId')
+  @Public()
+  @ApiOperation({ summary: 'Obtener sucursales que venden productos de una marca específica (Público)' })
+  @ApiParam({ name: 'brandId', description: 'ID de la marca de vehículo' })
+  @ApiResponse({ status: 200, description: 'Sucursales obtenidas exitosamente' })
+  async getBranchesByBrand(@Param('brandId') brandId: string) {
+    return this.businessesService.getBranchesByBrand(brandId);
+  }
+
   @Get('my-business-group')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener el grupo empresarial del usuario actual' })

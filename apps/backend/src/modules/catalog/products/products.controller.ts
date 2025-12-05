@@ -15,6 +15,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { ListProductsDto } from './dto/list-products.dto';
@@ -56,11 +57,17 @@ export class ProductsController {
   @Public()
   @ApiOperation({ summary: 'Obtener disponibilidad de un producto en todas las sucursales (Público)' })
   @ApiParam({ name: 'id', description: 'ID del producto (UUID)' })
+  @ApiQuery({ name: 'groupId', required: false, type: String, description: 'Filtrar por grupo empresarial' })
+  @ApiQuery({ name: 'brandId', required: false, type: String, description: 'Filtrar por marca de vehículo' })
   @ApiResponse({ status: 200, description: 'Disponibilidad obtenida exitosamente' })
   @ApiResponse({ status: 404, description: 'Producto no encontrado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
-  async getBranchAvailability(@Param('id') id: string) {
-    return this.productsService.getProductBranchAvailability(id);
+  async getBranchAvailability(
+    @Param('id') id: string,
+    @Query('groupId') groupId?: string,
+    @Query('brandId') brandId?: string,
+  ) {
+    return this.productsService.getProductBranchAvailability(id, groupId, brandId);
   }
 
   @Get(':id')

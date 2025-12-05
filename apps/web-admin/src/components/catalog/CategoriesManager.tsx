@@ -177,22 +177,47 @@ export default function CategoriesManager() {
   // Construir árbol de categorías
   const categoryTree = useMemo(() => {
     const buildTree = (categories: Category[], parentId: string | null = null, level: number = 0): Category[] => {
-      return categories
-        .filter(cat => {
-          if (parentId === null) {
-            return !cat.parent_category_id;
-          }
-          return cat.parent_category_id === parentId;
-        })
+      const filtered = categories.filter(cat => {
+        if (parentId === null) {
+          return !cat.parent_category_id;
+        }
+        return cat.parent_category_id === parentId;
+      });
+      
+      return filtered
         .sort((a, b) => a.display_order - b.display_order)
-        .map(cat => ({
-          ...cat,
-          level,
-          children: buildTree(categories, cat.id, level + 1),
-        }));
+        .map(cat => {
+          const children = buildTree(categories, cat.id, level + 1);
+          // Debug: verificar niveles profundos
+          if (level >= 2) {
+            console.log(`[CategoriesManager] Categoría de nivel ${level + 1}: ${cat.name}`, { 
+              id: cat.id, 
+              level, 
+              hasChildren: children.length > 0 
+            });
+          }
+          return {
+            ...cat,
+            level,
+            children,
+          };
+        });
     };
 
-    return buildTree(categories);
+    const tree = buildTree(categories);
+    // Debug: verificar estructura del árbol
+    const maxLevel = Math.max(...categories.map(c => {
+      const getLevel = (cat: Category, cats: Category[], currentLevel = 0): number => {
+        if (!cat.parent_category_id) return currentLevel;
+        const parent = cats.find(c => c.id === cat.parent_category_id);
+        if (!parent) return currentLevel;
+        return getLevel(parent, cats, currentLevel + 1);
+      };
+      return getLevel(c, categories);
+    }));
+    console.log(`[CategoriesManager] Árbol construido. Nivel máximo detectado: ${maxLevel + 1}`);
+    
+    return tree;
   }, [categories]);
 
   // Expandir automáticamente las categorías raíz cuando se carga en modo árbol
@@ -506,7 +531,8 @@ export default function CategoriesManager() {
             {flattenedTree.map((category) => {
             const hasChildren = category.children && category.children.length > 0;
             const isExpanded = expandedCategories.has(category.id);
-            const indentLevel = (category.level || 0) * 24;
+            // Asegurar que la indentación funcione para todos los niveles (0, 1, 2, 3+)
+            const indentLevel = (category.level ?? 0) * 24;
 
             return (
               <div
@@ -561,9 +587,9 @@ export default function CategoriesManager() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-xs font-normal text-gray-900 truncate">{category.name}</p>
-                        {category.level && category.level > 0 && (
+                        {(category.level ?? 0) > 0 && (
                           <span className="text-xs text-gray-400 flex-shrink-0">
-                            (Nivel {category.level + 1})
+                            (Nivel {(category.level ?? 0) + 1})
                           </span>
                         )}
                       </div>

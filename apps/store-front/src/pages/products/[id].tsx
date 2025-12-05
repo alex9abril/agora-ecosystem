@@ -26,7 +26,7 @@ export default function ProductDetailPage() {
   const { id } = router.query;
   const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
-  const { contextType, branchId } = useStoreContext();
+  const { contextType, branchId, groupId, brandId, branchData } = useStoreContext();
   const { push } = useStoreRouting();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export default function ProductDetailPage() {
 
   // Cuando se carga la sucursal guardada, si hay disponibilidades ya cargadas, seleccionarla automáticamente
   useEffect(() => {
-    if (contextType === 'global' && storedBranch && branchAvailabilities.length > 0 && !selectedBranchId) {
+    if (contextType !== 'sucursal' && storedBranch && branchAvailabilities.length > 0 && !selectedBranchId) {
       // Si hay una sucursal guardada y está disponible, seleccionarla automáticamente
       const storedBranchAvailable = branchAvailabilities.find(
         (avail) => avail.branch_id === storedBranch.id && avail.is_active && avail.is_enabled
@@ -70,12 +70,16 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (id) {
       loadProduct();
-      // Si estamos en contexto global, cargar disponibilidad en todas las sucursales
-      if (contextType === 'global') {
+      // Cargar disponibilidad según el contexto
+      // En contexto de sucursal, no cargamos disponibilidades (ya tenemos la sucursal)
+      if (contextType !== 'sucursal') {
         loadBranchAvailabilities();
+      } else if (contextType === 'sucursal' && branchId) {
+        // En contexto de sucursal, seleccionar automáticamente esa sucursal
+        setSelectedBranchId(branchId);
       }
     }
-  }, [id, branchId, contextType]);
+  }, [id, branchId, contextType, groupId, brandId]);
 
   const loadProduct = async () => {
     if (!id || typeof id !== 'string') return;
@@ -96,7 +100,12 @@ export default function ProductDetailPage() {
 
     try {
       setLoadingAvailabilities(true);
-      const response = await productsService.getProductBranchAvailability(id);
+      // Pasar parámetros de filtrado según el contexto
+      const response = await productsService.getProductBranchAvailability(
+        id,
+        contextType === 'grupo' ? groupId || undefined : undefined,
+        contextType === 'brand' ? brandId || undefined : undefined
+      );
       const availabilities = response.availabilities || [];
       setBranchAvailabilities(availabilities);
       
@@ -177,12 +186,12 @@ export default function ProductDetailPage() {
     let branchIdToUse: string | undefined;
     if (contextType === 'sucursal') {
       branchIdToUse = branchId || undefined;
-    } else if (contextType === 'global' && selectedBranchId) {
+    } else if (selectedBranchId) {
       branchIdToUse = selectedBranchId;
     }
 
     // Validar stock según la sucursal
-    if (contextType === 'global' && selectedBranchId) {
+    if (contextType !== 'sucursal' && selectedBranchId) {
       const selectedBranch = branchAvailabilities.find(
         (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
       );
@@ -199,8 +208,8 @@ export default function ProductDetailPage() {
       }
     }
 
-    // Validar que se haya seleccionado una sucursal en contexto global
-    if (contextType === 'global' && !selectedBranchId) {
+    // Validar que se haya seleccionado una sucursal (excepto en contexto de sucursal)
+    if (contextType !== 'sucursal' && !selectedBranchId) {
       alert('Por favor, selecciona una sucursal de la lista');
       return;
     }
@@ -253,7 +262,7 @@ export default function ProductDetailPage() {
     if (contextType === 'sucursal' && product.branch_price !== undefined) {
       return product.branch_price;
     }
-    if (contextType === 'global' && selectedBranchId) {
+    if (contextType !== 'sucursal' && selectedBranchId) {
       const selectedBranch = branchAvailabilities.find(
         (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
       );
@@ -296,11 +305,43 @@ export default function ProductDetailPage() {
   const displayPrice = getSelectedBranchPrice();
   
   // Obtener la sucursal seleccionada para mostrar información
-  const selectedBranch = contextType === 'global' && selectedBranchId
-    ? branchAvailabilities.find(
-        (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
-      )
-    : null;
+  let selectedBranch: ProductBranchAvailability | null = null;
+  
+  if (contextType === 'sucursal' && branchData && product) {
+    // En contexto de sucursal, usar la sucursal del contexto
+    selectedBranch = {
+      branch_id: branchData.id,
+      branch_name: branchData.name,
+      is_enabled: product.branch_is_enabled ?? true,
+      price: product.branch_price ?? product.price ?? 0,
+      stock: product.branch_stock ?? null,
+      is_active: true,
+    } as ProductBranchAvailability;
+  } else if (contextType !== 'sucursal' && selectedBranchId) {
+    // Si hay una sucursal seleccionada, buscarla en las disponibilidades
+    selectedBranch = branchAvailabilities.find(
+      (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
+    ) || null;
+  } else if (contextType !== 'sucursal' && branchAvailabilities.length > 0) {
+    // Si no hay selección pero hay disponibilidades, usar la primera (mejor precio)
+    const availableBranches = branchAvailabilities
+      .filter((avail) => avail.is_active && avail.is_enabled)
+      .map((avail) => ({
+        ...avail,
+        displayPrice: avail.price !== null && avail.price !== undefined
+          ? avail.price
+          : product?.price || 0,
+      }))
+      .sort((a, b) => a.displayPrice - b.displayPrice);
+    
+    if (availableBranches.length > 0) {
+      selectedBranch = availableBranches[0];
+      // Auto-seleccionar si no hay selección previa
+      if (!selectedBranchId) {
+        setSelectedBranchId(availableBranches[0].branch_id);
+      }
+    }
+  }
 
   const isAvailable = contextType === 'sucursal' 
     ? (product.branch_is_enabled !== false && product.is_available)
@@ -343,7 +384,7 @@ export default function ProductDetailPage() {
               
               {/* Precio */}
               <div className="mb-4">
-                {contextType === 'global' ? (
+                {contextType !== 'sucursal' ? (
                   <div>
                     {selectedBranch ? (
                       <>
@@ -376,7 +417,7 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Stock */}
-              {contextType === 'global' && selectedBranch && (
+              {contextType !== 'sucursal' && selectedBranch && (
                 <div className="mb-4">
                   <StockIndicator
                     stock={selectedBranch.stock}
@@ -384,7 +425,7 @@ export default function ProductDetailPage() {
                   />
                 </div>
               )}
-              {contextType === 'sucursal' && (
+              {contextType === 'sucursal' && branchData && (
                 <div className="mb-4">
                   <StockIndicator 
                     stock={product.branch_stock} 
@@ -410,8 +451,8 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {/* Lista de sucursales disponibles (solo en contexto global) */}
-              {contextType === 'global' && (
+              {/* Lista de sucursales disponibles (mostrar en todos los contextos excepto sucursal) */}
+              {contextType !== 'sucursal' && (
                 <div className="mb-8">
                   {loadingAvailabilities ? (
                     <div className="text-center py-4">
@@ -483,20 +524,6 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Notas especiales */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notas especiales (opcional)
-                </label>
-                <textarea
-                  value={specialInstructions}
-                  onChange={(e) => setSpecialInstructions(e.target.value)}
-                  placeholder="Ej: Sin cebolla, por favor"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black resize-none"
-                  rows={3}
-                />
-              </div>
-
               {/* Precio total */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between items-center">
@@ -507,55 +534,39 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Advertencia si se selecciona una sucursal diferente a la guardada */}
-              {contextType === 'global' && storedBranch && selectedBranchId && selectedBranchId !== storedBranch.id && (
-                <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-yellow-800 mb-1">
-                        Sucursal diferente a la seleccionada
-                      </h4>
-                      <p className="text-sm text-yellow-700 mb-2">
-                        Estás agregando este producto desde una sucursal diferente a <strong>{storedBranch.name}</strong> (tu sucursal seleccionada).
-                        {selectedBranch && (
-                          <> Actualmente seleccionada: <strong>{selectedBranch.branch_name}</strong>.</>
-                        )}
-                      </p>
-                      <p className="text-xs text-yellow-600">
-                        <strong>Nota:</strong> Esto puede generar una división de pedidos y costos adicionales de envío si tu carrito contiene productos de diferentes sucursales.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Botón agregar al carrito */}
-              {contextType === 'global' && !selectedBranchId && (
+              {contextType !== 'sucursal' && !selectedBranchId && (
                 <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
                   <p className="font-medium mb-1">Selecciona una sucursal para agregar al carrito</p>
                   <p className="text-sm">Elige una sucursal de la lista arriba para ver precio y stock específicos</p>
                 </div>
               )}
-              {contextType === 'global' && selectedBranchId && (
-                <button 
-                  onClick={handleAddToCart}
-                  className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={
-                    product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
-                    addingToCart ||
-                    (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
-                  }
-                >
-                  {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
-                </button>
+              {contextType !== 'sucursal' && selectedBranchId && (
+                <>
+                  {selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                      Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
+                    </div>
+                  )}
+                  <button 
+                    onClick={handleAddToCart}
+                    className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={
+                      product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
+                      addingToCart ||
+                      (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
+                    }
+                  >
+                    {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
+                  </button>
+                </>
               )}
-              {contextType !== 'global' && !isAvailable && (
+              {contextType === 'sucursal' && !isAvailable && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
                   Producto no disponible
                 </div>
               )}
-              {contextType !== 'global' && isAvailable && (
+              {contextType === 'sucursal' && isAvailable && (
                 <button 
                   onClick={handleAddToCart}
                   className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"

@@ -1,6 +1,27 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max, ValidatorConstraint, ValidatorConstraintInterface, Validate } from 'class-validator';
 import { Type } from 'class-transformer';
+
+// Validador personalizado para UUID
+@ValidatorConstraint({ name: 'isValidUuid', async: false })
+export class IsValidUuidConstraint implements ValidatorConstraintInterface {
+  validate(value: any) {
+    // Si es undefined, es válido (manejado por @IsOptional)
+    if (value === undefined || value === null) {
+      return true;
+    }
+    // Si es un string, validar como UUID
+    if (typeof value === 'string') {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(value);
+    }
+    return false;
+  }
+
+  defaultMessage() {
+    return 'must be a valid UUID';
+  }
+}
 
 export class ListProductsDto {
   @ApiPropertyOptional({ description: 'Página actual', example: 1, default: 1 })
@@ -20,32 +41,37 @@ export class ListProductsDto {
 
   @ApiPropertyOptional({ description: 'Filtrar por negocio (UUID)', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   businessId?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar por grupo empresarial (UUID)', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @Validate(IsValidUuidConstraint)
+  groupId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por categoría', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   categoryId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de marca de vehículo', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   vehicleBrandId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de modelo de vehículo', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   vehicleModelId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de año/generación', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   vehicleYearId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de especificación técnica', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @IsUUID()
+  @Validate(IsValidUuidConstraint)
   vehicleSpecId?: string;
 
   @ApiPropertyOptional({ description: 'Filtrar por disponible', example: true })

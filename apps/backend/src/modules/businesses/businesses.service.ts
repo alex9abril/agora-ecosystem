@@ -1647,6 +1647,60 @@ export class BusinessesService {
   }
 
   /**
+   * Obtener sucursales que venden productos de una marca específica
+   */
+  async getBranchesByBrand(brandId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    try {
+      const result = await dbPool.query(
+        `SELECT DISTINCT
+          b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
+          b.phone, b.email, b.is_active, b.created_at, b.updated_at,
+          a.city, a.state,
+          (b.location)[0] as longitude,
+          (b.location)[1] as latitude,
+          CONCAT_WS(', ',
+            NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
+            NULLIF(a.neighborhood, ''),
+            NULLIF(a.city, ''),
+            NULLIF(a.state, ''),
+            NULLIF(a.postal_code, '')
+          ) as address
+        FROM core.businesses b
+        INNER JOIN catalog.product_branch_availability pba ON b.id = pba.branch_id
+        INNER JOIN catalog.product_vehicle_compatibility pvc ON pba.product_id = pvc.product_id
+        LEFT JOIN core.addresses a ON b.address_id = a.id
+        WHERE b.is_active = TRUE
+          AND pba.is_enabled = TRUE
+          AND pba.is_active = TRUE
+          AND pvc.is_active = TRUE
+          AND (
+            pvc.vehicle_brand_id = $1
+            OR pvc.is_universal = TRUE
+          )
+        ORDER BY a.state ASC, a.city ASC, b.name ASC`,
+        [brandId]
+      );
+
+      return {
+        data: result.rows,
+        pagination: {
+          page: 1,
+          limit: result.rows.length,
+          total: result.rows.length,
+          totalPages: 1,
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Error obteniendo sucursales por marca:', error);
+      throw new ServiceUnavailableException(`Error al obtener sucursales por marca: ${error.message}`);
+    }
+  }
+
+  /**
    * Obtener las marcas de vehículos asignadas a una sucursal
    */
   async getBusinessVehicleBrands(businessId: string) {
