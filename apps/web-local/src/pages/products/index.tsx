@@ -45,14 +45,21 @@ export default function ProductsPage() {
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'updated_at' | 'created_at'>('updated_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<'name' | 'price'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalProducts, setTotalProducts] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  
+  // Estados para filtros de sucursales
+  const [showBranchFilters, setShowBranchFilters] = useState(false);
+  const [selectedBranchFilters, setSelectedBranchFilters] = useState<Set<string>>(new Set());
+  const [showUnassignedProducts, setShowUnassignedProducts] = useState(false);
+  const [productBranchMap, setProductBranchMap] = useState<Map<string, Set<string>>>(new Map()); // productId -> Set of branchIds
+  const [loadingBranchMap, setLoadingBranchMap] = useState(false);
   
   // Estados para compatibilidad de vehículos
   const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibility[]>([]);
@@ -91,17 +98,62 @@ export default function ProductsPage() {
       ]);
 
       // Actualizar productos y paginación
-      setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
+      const loadedProducts = Array.isArray(productsResponse.data) ? productsResponse.data : [];
+      setProducts(loadedProducts);
       setTotalProducts(productsResponse.pagination.total || 0);
       setTotalPages(productsResponse.pagination.totalPages || 0);
       setCurrentPage(productsResponse.pagination.page || 1);
       
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      
+      // Cargar disponibilidad de sucursales para todos los productos solo si hay filtros activos o hay productos
+      // Esto se puede optimizar cargando solo cuando se necesite filtrar
+      if (loadedProducts.length > 0 && availableBusinesses.length > 0) {
+        // Cargar en segundo plano sin bloquear la UI
+        loadProductBranchMap(loadedProducts).catch(err => {
+          console.error('Error cargando mapa de sucursales:', err);
+        });
+      }
     } catch (err: any) {
       console.error('Error cargando datos:', err);
       setError('Error al cargar los productos');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cargar el mapa de productos -> sucursales asignadas
+  const loadProductBranchMap = async (productsToLoad: Product[]) => {
+    try {
+      setLoadingBranchMap(true);
+      const newMap = new Map<string, Set<string>>();
+      
+      // Cargar disponibilidad para cada producto
+      await Promise.all(
+        productsToLoad.map(async (product) => {
+          try {
+            const availability = await productsService.getProductBranchAvailability(product.id);
+            const assignedBranches = new Set<string>();
+            
+            availability.availabilities.forEach(avail => {
+              if (avail.is_enabled) {
+                assignedBranches.add(avail.branch_id);
+              }
+            });
+            
+            newMap.set(product.id, assignedBranches);
+          } catch (err) {
+            // Si falla, asumir que no tiene asignaciones
+            newMap.set(product.id, new Set());
+          }
+        })
+      );
+      
+      setProductBranchMap(newMap);
+    } catch (err: any) {
+      console.error('Error cargando mapa de sucursales:', err);
+    } finally {
+      setLoadingBranchMap(false);
     }
   };
 
@@ -495,22 +547,55 @@ export default function ProductsPage() {
   // Filtrar y ordenar productos
   const filteredAndSortedProducts = products
     .filter((product) => {
-      if (!searchTerm) return true;
-      const search = searchTerm.toLowerCase();
-      return (
-        product.name.toLowerCase().includes(search) ||
-        (product.description && product.description.toLowerCase().includes(search)) ||
-        product.product_type.toLowerCase().includes(search)
-      );
+      // Filtro de búsqueda por texto
+      if (searchTerm) {
+        const search = searchTerm.toLowerCase();
+        const matchesSearch = (
+          product.name.toLowerCase().includes(search) ||
+          (product.description && product.description.toLowerCase().includes(search)) ||
+          product.product_type.toLowerCase().includes(search)
+        );
+        if (!matchesSearch) return false;
+      }
+      
+      // Filtro por sucursales
+      const productBranches = productBranchMap.get(product.id) || new Set<string>();
+      const hasAssignments = productBranches.size > 0;
+      
+      // Si se selecciona "mostrar productos no asignados"
+      if (showUnassignedProducts && hasAssignments) {
+        return false;
+      }
+      
+      // Si hay filtros de sucursales seleccionados
+      if (selectedBranchFilters.size > 0) {
+        // Verificar si el producto está asignado a alguna de las sucursales seleccionadas
+        const hasSelectedBranch = Array.from(selectedBranchFilters).some(branchId => 
+          productBranches.has(branchId)
+        );
+        return hasSelectedBranch;
+      }
+      
+      // Si no hay filtros activos, mostrar todos
+      return true;
     })
     .sort((a, b) => {
-      const aValue = sortBy === 'updated_at' ? a.updated_at : a.created_at;
-      const bValue = sortBy === 'updated_at' ? b.updated_at : b.created_at;
-      if (sortOrder === 'asc') {
-        return aValue.localeCompare(bValue);
-      } else {
-        return bValue.localeCompare(aValue);
+      if (sortBy === 'name') {
+        const aValue = a.name.toLowerCase();
+        const bValue = b.name.toLowerCase();
+        if (sortOrder === 'asc') {
+          return aValue.localeCompare(bValue);
+        } else {
+          return bValue.localeCompare(aValue);
+        }
+      } else if (sortBy === 'price') {
+        if (sortOrder === 'asc') {
+          return a.price - b.price;
+        } else {
+          return b.price - a.price;
+        }
       }
+      return 0;
     });
 
   if (loading) {
@@ -533,12 +618,158 @@ export default function ProductsPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-lg font-medium text-gray-900">Productos</h1>
           {!showForm && (
-            <button
-              onClick={handleCreate}
-              className="px-3 py-1.5 text-sm font-normal bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
-            >
-              + Nuevo Producto
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Botón de Filtros */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowBranchFilters(!showBranchFilters)}
+                  className={`px-4 py-1.5 text-sm font-normal rounded border transition-colors ${
+                    showBranchFilters || selectedBranchFilters.size > 0 || showUnassignedProducts
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    Filtros
+                    {(selectedBranchFilters.size > 0 || showUnassignedProducts) && (
+                      <span className="ml-1 px-1.5 py-0.5 text-xs bg-white text-gray-900 rounded-full">
+                        {selectedBranchFilters.size + (showUnassignedProducts ? 1 : 0)}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                
+                {/* Dropdown de Filtros */}
+                {showBranchFilters && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setShowBranchFilters(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-20">
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-sm font-semibold text-gray-900">Filtrar por Sucursales</h3>
+                          <button
+                            type="button"
+                            onClick={() => setShowBranchFilters(false)}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        
+                        {/* Opción: Productos no asignados */}
+                        <div className="mb-4 pb-4 border-b border-gray-200">
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showUnassignedProducts}
+                              onChange={(e) => {
+                                setShowUnassignedProducts(e.target.checked);
+                                if (e.target.checked) {
+                                  setSelectedBranchFilters(new Set());
+                                }
+                              }}
+                              className="h-4 w-4 text-gray-600 focus:ring-gray-500 border-gray-300 rounded"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">
+                              Productos no asignados a ninguna sucursal
+                            </span>
+                          </label>
+                        </div>
+                        
+                        {/* Lista de Sucursales */}
+                        <div className="max-h-64 overflow-y-auto">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-xs font-medium text-gray-500 uppercase">Sucursales</span>
+                            {availableBusinesses.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (selectedBranchFilters.size === availableBusinesses.length) {
+                                    setSelectedBranchFilters(new Set());
+                                  } else {
+                                    setSelectedBranchFilters(new Set(availableBusinesses.map(b => b.business_id)));
+                                  }
+                                  setShowUnassignedProducts(false);
+                                }}
+                                className="text-xs text-gray-600 hover:text-gray-900"
+                              >
+                                {selectedBranchFilters.size === availableBusinesses.length ? 'Deseleccionar todas' : 'Seleccionar todas'}
+                              </button>
+                            )}
+                          </div>
+                          
+                          {availableBusinesses.length === 0 ? (
+                            <p className="text-sm text-gray-500 py-2">No hay sucursales disponibles</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {availableBusinesses.map((business) => (
+                                <label key={business.business_id} className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedBranchFilters.has(business.business_id)}
+                                    onChange={(e) => {
+                                      const newFilters = new Set(selectedBranchFilters);
+                                      if (e.target.checked) {
+                                        newFilters.add(business.business_id);
+                                      } else {
+                                        newFilters.delete(business.business_id);
+                                      }
+                                      setSelectedBranchFilters(newFilters);
+                                      setShowUnassignedProducts(false);
+                                    }}
+                                    className="h-4 w-4 text-gray-600 focus:ring-gray-500 border-gray-300 rounded"
+                                  />
+                                  <span className="ml-2 text-sm text-gray-700 flex-1">
+                                    {business.business_name}
+                                  </span>
+                                  {!business.is_active && (
+                                    <span className="ml-2 px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded">
+                                      Inactiva
+                                    </span>
+                                  )}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Botón Limpiar Filtros */}
+                        {(selectedBranchFilters.size > 0 || showUnassignedProducts) && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedBranchFilters(new Set());
+                                setShowUnassignedProducts(false);
+                              }}
+                              className="w-full px-3 py-2 text-sm text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                            >
+                              Limpiar Filtros
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              
+              <button
+                onClick={handleCreate}
+                className="px-3 py-1.5 text-sm font-normal bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors"
+              >
+                + Nuevo Producto
+              </button>
+            </div>
           )}
           {showForm && (
             <button
@@ -614,9 +845,9 @@ export default function ProductsPage() {
         ) : (
           /* Lista de productos en tabla */
           <div className="flex-1 flex flex-col min-h-0">
-            {/* Barra de búsqueda y filtros */}
-            <div className="mb-4 flex items-center gap-4">
-              <div className="flex-1 relative">
+            {/* Barra de búsqueda */}
+            <div className="mb-4">
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -641,8 +872,26 @@ export default function ProductsPage() {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <input type="checkbox" className="rounded border-gray-300 text-gray-600 focus:ring-gray-400" />
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Producto
+                      <th 
+                        scope="col" 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={() => {
+                          if (sortBy === 'name') {
+                            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setSortBy('name');
+                            setSortOrder('asc');
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          Producto
+                          {sortBy === 'name' && (
+                            <svg className={`h-4 w-4 ${sortOrder === 'asc' ? 'transform rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            </svg>
+                          )}
+                        </div>
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Disponibilidad
@@ -650,46 +899,29 @@ export default function ProductsPage() {
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Descripción
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Precio
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Tipo
-                      </th>
                       <th 
                         scope="col" 
                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                         onClick={() => {
-                          if (sortBy === 'updated_at') {
+                          if (sortBy === 'price') {
                             setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                           } else {
-                            setSortBy('updated_at');
-                            setSortOrder('desc');
+                            setSortBy('price');
+                            setSortOrder('asc');
                           }
                         }}
                       >
                         <div className="flex items-center gap-1">
-                          Last updated
-                          {sortBy === 'updated_at' && (
+                          Precio
+                          {sortBy === 'price' && (
                             <svg className={`h-4 w-4 ${sortOrder === 'asc' ? 'transform rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                             </svg>
                           )}
                         </div>
                       </th>
-                      <th 
-                        scope="col" 
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => {
-                          if (sortBy === 'created_at') {
-                            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                          } else {
-                            setSortBy('created_at');
-                            setSortOrder('desc');
-                          }
-                        }}
-                      >
-                        Created at
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Tipo
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Acciones
@@ -706,18 +938,6 @@ export default function ProductsPage() {
                         non_food: { label: 'No Alimenticio', color: 'bg-gray-100 text-gray-800' },
                       };
                       const typeInfo = productTypeLabels[product.product_type] || { label: product.product_type, color: 'bg-gray-100 text-gray-800' };
-                      
-                      const formatDate = (dateString: string) => {
-                        const date = new Date(dateString);
-                        return date.toLocaleDateString('es-MX', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        });
-                      };
 
                       return (
                         <tr 
@@ -736,7 +956,10 @@ export default function ProductsPage() {
                             <input type="checkbox" className="rounded border-gray-300 text-gray-600 focus:ring-gray-400" />
                           </td>
                           <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900">{product.name}</div>
+                            <div className="text-sm font-medium text-gray-900 max-w-md">{product.name}</div>
+                            {product.sku && (
+                              <div className="text-xs text-gray-500 mt-1">SKU: {product.sku}</div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
@@ -756,12 +979,6 @@ export default function ProductsPage() {
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${typeInfo.color}`}>
                               {typeInfo.label}
                             </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(product.updated_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(product.created_at)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-2">
@@ -2765,7 +2982,9 @@ function BranchAvailabilitySection({
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {allAvailabilities.map((availability) => {
-                  const isBranchActive = availability.is_active !== false; // Por defecto true si no está definido
+                  // Verificar is_active: debe ser explícitamente true para estar activa
+                  // Si es undefined, null, o false, se considera inactiva
+                  const isBranchActive = availability.is_active === true;
                   return (
                     <tr 
                       key={availability.branch_id} 

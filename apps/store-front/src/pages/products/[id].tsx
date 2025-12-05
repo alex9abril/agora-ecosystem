@@ -68,45 +68,110 @@ export default function ProductDetailPage() {
   }, [storedBranch, branchAvailabilities, contextType, selectedBranchId]);
 
   useEffect(() => {
+    console.log('🔍 [ProductDetail] useEffect triggered:', {
+      id,
+      contextType,
+      branchId,
+      groupId,
+      brandId,
+      routerReady: router.isReady,
+    });
+
     if (id) {
       loadProduct();
       // Cargar disponibilidad según el contexto
-      // En contexto de sucursal, no cargamos disponibilidades (ya tenemos la sucursal)
-      if (contextType !== 'sucursal') {
-        loadBranchAvailabilities();
-      } else if (contextType === 'sucursal' && branchId) {
-        // En contexto de sucursal, seleccionar automáticamente esa sucursal
+      // Reglas:
+      // - Global: mostrar todas las sucursales
+      // - Grupo: mostrar solo sucursales del grupo
+      // - Sucursal: mostrar solo la sucursal actual (NO cargar todas)
+      // - Brand: mostrar todas las sucursales que venden productos de esa marca
+      if (contextType === 'sucursal' && branchId) {
+        console.log('✅ [ProductDetail] In branch context, NOT loading availabilities. Only showing current branch:', branchId);
+        // En contexto de sucursal, NO cargar disponibilidades, solo usar la sucursal del contexto
         setSelectedBranchId(branchId);
+        setBranchAvailabilities([]); // Limpiar disponibilidades
+      } else if (contextType !== 'sucursal') {
+        console.log('✅ [ProductDetail] Loading branch availabilities. Context:', contextType, { groupId, brandId });
+        loadBranchAvailabilities();
+      } else {
+        console.log('❌ [ProductDetail] Branch context but no branchId:', { contextType, branchId });
       }
+    } else {
+      console.log('⏸️ [ProductDetail] No product ID yet, waiting...');
     }
   }, [id, branchId, contextType, groupId, brandId]);
 
   const loadProduct = async () => {
-    if (!id || typeof id !== 'string') return;
+    if (!id || typeof id !== 'string') {
+      console.log('⏸️ [loadProduct] Invalid ID:', id);
+      return;
+    }
 
     try {
+      console.log('📦 [loadProduct] Loading product:', { id, branchId, contextType });
       setLoading(true);
       const productData = await productsService.getProduct(id, branchId || undefined);
+      console.log('✅ [loadProduct] Product loaded:', {
+        id: productData.id,
+        name: productData.name,
+        branch_price: productData.branch_price,
+        branch_stock: productData.branch_stock,
+        branch_is_enabled: productData.branch_is_enabled,
+      });
       setProduct(productData);
     } catch (error) {
-      console.error('Error cargando producto:', error);
+      console.error('❌ [loadProduct] Error cargando producto:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const loadBranchAvailabilities = async () => {
-    if (!id || typeof id !== 'string') return;
+    if (!id || typeof id !== 'string') {
+      console.log('⏸️ [loadBranchAvailabilities] Invalid ID:', id);
+      return;
+    }
 
     try {
+      console.log('🏪 [loadBranchAvailabilities] Loading branch availabilities:', {
+        productId: id,
+        contextType,
+        groupId,
+        brandId,
+      });
       setLoadingAvailabilities(true);
       // Pasar parámetros de filtrado según el contexto
+      // - Global: sin filtros (groupId y brandId undefined)
+      // - Grupo: filtrar por groupId
+      // - Brand: filtrar por brandId
+      const filterGroupId = contextType === 'grupo' ? groupId || undefined : undefined;
+      const filterBrandId = contextType === 'brand' ? brandId || undefined : undefined;
+      
+      console.log('🔍 [loadBranchAvailabilities] Filters applied:', { 
+        contextType, 
+        filterGroupId, 
+        filterBrandId,
+        originalGroupId: groupId,
+        originalBrandId: brandId,
+      });
+      
       const response = await productsService.getProductBranchAvailability(
         id,
-        contextType === 'grupo' ? groupId || undefined : undefined,
-        contextType === 'brand' ? brandId || undefined : undefined
+        filterGroupId,
+        filterBrandId
       );
       const availabilities = response.availabilities || [];
+      console.log('✅ [loadBranchAvailabilities] Availabilities loaded:', {
+        count: availabilities.length,
+        branches: availabilities.map(a => ({
+          id: a.branch_id,
+          name: a.branch_name,
+          price: a.price,
+          stock: a.stock,
+          is_enabled: a.is_enabled,
+          is_active: a.is_active,
+        })),
+      });
       setBranchAvailabilities(availabilities);
       
       // Obtener sucursal guardada (puede no estar en el estado aún)
@@ -125,17 +190,22 @@ export default function ProductDetailPage() {
       
       // Si ya hay una sucursal seleccionada manualmente, no cambiar la selección
       if (selectedBranchId) {
+        console.log('⏸️ [loadBranchAvailabilities] Branch already selected, skipping auto-select:', selectedBranchId);
         return;
       }
       
       // Si hay una sucursal guardada y está disponible, seleccionarla automáticamente (prioridad)
       if (currentStoredBranch) {
+        console.log('🔍 [loadBranchAvailabilities] Checking stored branch:', currentStoredBranch);
         const storedBranchAvailable = availabilities.find(
           (avail) => avail.branch_id === currentStoredBranch!.id && avail.is_active && avail.is_enabled
         );
         if (storedBranchAvailable) {
+          console.log('✅ [loadBranchAvailabilities] Stored branch available, auto-selecting:', currentStoredBranch.id);
           setSelectedBranchId(currentStoredBranch.id);
           return;
+        } else {
+          console.log('⚠️ [loadBranchAvailabilities] Stored branch not available in list');
         }
       }
       
@@ -150,11 +220,15 @@ export default function ProductDetailPage() {
         }))
         .sort((a, b) => a.displayPrice - b.displayPrice);
       
+      console.log('💰 [loadBranchAvailabilities] Available branches sorted by price:', availableBranches.length);
       if (availableBranches.length > 0) {
+        console.log('✅ [loadBranchAvailabilities] Auto-selecting cheapest branch:', availableBranches[0].branch_id);
         setSelectedBranchId(availableBranches[0].branch_id);
+      } else {
+        console.log('⚠️ [loadBranchAvailabilities] No available branches found');
       }
     } catch (error) {
-      console.error('Error cargando disponibilidad por sucursal:', error);
+      console.error('❌ [loadBranchAvailabilities] Error cargando disponibilidad por sucursal:', error);
     } finally {
       setLoadingAvailabilities(false);
     }
@@ -451,7 +525,7 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {/* Lista de sucursales disponibles (mostrar en todos los contextos excepto sucursal) */}
+              {/* Lista de sucursales disponibles (mostrar solo si NO estamos en contexto de sucursal) */}
               {contextType !== 'sucursal' && (
                 <div className="mb-8">
                   {loadingAvailabilities ? (
@@ -484,7 +558,7 @@ export default function ProductDetailPage() {
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
                         globalPrice={product.price}
-                        selectedBranchId={selectedBranchId}
+                        selectedBranchId={contextType === 'sucursal' ? branchId : selectedBranchId}
                         onBranchSelect={setSelectedBranchId}
                         storedBranchId={storedBranch?.id}
                       />

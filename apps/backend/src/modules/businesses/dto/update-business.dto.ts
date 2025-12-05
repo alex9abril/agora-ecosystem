@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsArray, MaxLength, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsArray, MaxLength, IsBoolean, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateBusinessDto {
@@ -70,5 +70,10 @@ export class UpdateBusinessDto {
   @IsBoolean()
   @Type(() => Boolean)
   is_active?: boolean;
+
+  @ApiPropertyOptional({ description: 'ID del grupo empresarial al que pertenece esta sucursal', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  business_group_id?: string | null;
 }
 

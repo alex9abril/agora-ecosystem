@@ -74,11 +74,12 @@ export class ProductsController {
   @Public()
   @ApiOperation({ summary: 'Obtener detalle de un producto (Público)' })
   @ApiParam({ name: 'id', description: 'ID del producto (UUID)' })
+  @ApiQuery({ name: 'branchId', required: false, type: String, description: 'ID de la sucursal para obtener precio y stock específicos' })
   @ApiResponse({ status: 200, description: 'Producto obtenido exitosamente' })
   @ApiResponse({ status: 404, description: 'Producto no encontrado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
-  async findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+  async findOne(@Param('id') id: string, @Query('branchId') branchId?: string) {
+    return this.productsService.findOne(id, branchId);
   }
 
   @Post()

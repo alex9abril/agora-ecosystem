@@ -17,6 +17,7 @@ export default function ContextualProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [categoryName, setCategoryName] = useState<string>('');
+  const [categoryDescription, setCategoryDescription] = useState<string>('');
   const [filters, setFilters] = useState<any>({
     isAvailable: true,
   });
@@ -79,45 +80,38 @@ export default function ContextualProductsPage() {
                 <CategoryBreadcrumbs categoryId={categoryFilter} />
               )}
 
-              <h1 className="text-3xl font-bold text-gray-900 mb-6">
-                {categoryName
-                  ? categoryName
-                  : categoryFilter
-                  ? 'Productos'
-                  : `Productos de ${storeName}`
-                }
-              </h1>
+              {/* Título con nombre y descripción de categoría */}
+              <div className="mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {categoryName || (categoryFilter ? 'Productos' : `Productos de ${storeName}`)}
+                </h1>
+                {categoryDescription && (
+                  <p className="text-gray-600 text-base">{categoryDescription}</p>
+                )}
+              </div>
 
-              {/* Información de la categoría actual */}
-              {categoryFilter && (
-                <CategoryInfo 
-                  categoryId={categoryFilter} 
-                  onCategoryLoaded={(name) => setCategoryName(name)}
-                />
-              )}
+              {/* Layout: Panel lateral izquierdo + Productos en el centro */}
+              <div className="flex gap-6">
+                {/* Panel lateral izquierdo - Información de categoría */}
+                {categoryFilter && (
+                  <aside className="w-64 flex-shrink-0">
+                    <CategoryInfo 
+                      categoryId={categoryFilter} 
+                      onCategoryLoaded={(name, description) => {
+                        setCategoryName(name);
+                        setCategoryDescription(description || '');
+                      }}
+                    />
+                  </aside>
+                )}
 
-              {/* Barra de búsqueda */}
-              <form onSubmit={handleSearch} className="mb-6">
-                <div className="flex gap-3">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar productos..."
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                  />
-                  <button
-                    type="submit"
-                    className="px-6 py-2 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
-                  >
-                    Buscar
-                  </button>
+                {/* Contenido principal - Productos */}
+                <div className="flex-1 min-w-0">
+                  {/* Grid de productos */}
+                  <ProductGrid filters={filters} />
                 </div>
-              </form>
+              </div>
             </div>
-
-            {/* Grid de productos */}
-            <ProductGrid filters={filters} />
           </>
         )}
       </StoreLayout>

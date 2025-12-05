@@ -13,7 +13,7 @@ import CategoryIcon from '@mui/icons-material/Category';
 
 interface CategoryInfoProps {
   categoryId: string;
-  onCategoryLoaded?: (name: string) => void;
+  onCategoryLoaded?: (name: string, description?: string) => void;
 }
 
 export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryInfoProps) {
@@ -50,7 +50,7 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
       // Notificar que la categoría se cargó
       if (onCategoryLoaded && categoryData.name) {
         console.log('Calling onCategoryLoaded with:', categoryData.name);
-        onCategoryLoaded(categoryData.name);
+        onCategoryLoaded(categoryData.name, categoryData.description || undefined);
       }
 
       // Cargar subcategorías
@@ -92,27 +92,24 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
   }
 
   return (
-    <div className="bg-gray-50 rounded-lg p-6 mb-6 border border-gray-200">
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 sticky top-4">
       {/* Información de la categoría actual */}
       <div className="mb-4">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-2 mb-2">
           {category.icon_url && (
             <img 
               src={category.icon_url} 
               alt={category.name}
-              className="w-8 h-8 object-contain"
+              className="w-6 h-6 object-contain"
             />
           )}
           {!category.icon_url && (
-            <CategoryIcon className="w-8 h-8 text-toyota-red" />
+            <CategoryIcon className="w-6 h-6 text-toyota-red" />
           )}
-          <h2 className="text-2xl font-bold text-gray-900">{category.name}</h2>
+          <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
         </div>
-        {category.description && (
-          <p className="text-gray-600 text-sm ml-11">{category.description}</p>
-        )}
         {category.total_products !== undefined && category.total_products > 0 && (
-          <p className="text-sm text-gray-500 ml-11 mt-1">
+          <p className="text-xs text-gray-500 mb-3">
             {category.total_products} {category.total_products === 1 ? 'producto' : 'productos'} disponible{category.total_products === 1 ? '' : 's'}
           </p>
         )}
@@ -121,21 +118,20 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
       {/* Subcategorías */}
       {subcategories.length > 0 && (
         <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">
+          <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">
             Subcategorías
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          </h4>
+          <div className="space-y-2">
             {subcategories.map((subcat) => (
               <ContextualLink
                 key={subcat.id}
                 href={getContextualUrl(`/products?categoryId=${subcat.id}`)}
-                className="flex items-center gap-2 p-3 bg-white rounded-lg border border-gray-200 hover:border-toyota-red hover:shadow-sm transition-all group"
+                className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200 hover:border-toyota-red hover:shadow-sm transition-all group"
               >
-                <CategoryIcon className="w-4 h-4 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                <CategoryIcon className="w-4 h-4 text-gray-400 group-hover:text-toyota-red transition-colors flex-shrink-0" />
                 <span className="text-sm font-medium text-gray-700 group-hover:text-toyota-red transition-colors flex-1">
                   {subcat.name}
                 </span>
-                <ArrowForwardIcon className="w-4 h-4 text-gray-400 group-hover:text-toyota-red transition-colors opacity-0 group-hover:opacity-100" />
               </ContextualLink>
             ))}
           </div>
@@ -146,10 +142,10 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
       <div className="mt-4 pt-4 border-t border-gray-200">
         <ContextualLink
           href={getContextualUrl(`/products?categoryId=${categoryId}`)}
-          className="inline-flex items-center gap-2 text-sm font-medium text-toyota-red hover:text-toyota-red-dark transition-colors"
+          className="inline-flex items-center gap-1 text-xs font-medium text-toyota-red hover:text-toyota-red-dark transition-colors"
         >
-          Ver todos los productos de {category.name}
-          <ArrowForwardIcon className="w-4 h-4" />
+          Ver todos
+          <ArrowForwardIcon className="w-3 h-3" />
         </ContextualLink>
       </div>
     </div>

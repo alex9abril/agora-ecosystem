@@ -147,6 +147,7 @@ export class ProductsService {
       limit = 20,
       businessId,
       groupId,
+      branchId,
       categoryId,
       isAvailable,
       isFeatured,
@@ -167,6 +168,7 @@ export class ProductsService {
     let queryParams: any[] = [];
     let paramIndex = 1;
     let businessJoin = '';
+    let branchJoin = '';
 
     // Si se filtra por grupo, necesitamos hacer JOIN con businesses
     if (groupId) {
@@ -177,6 +179,16 @@ export class ProductsService {
     } else if (businessId) {
       whereConditions.push(`p.business_id = $${paramIndex}`);
       queryParams.push(businessId);
+      paramIndex++;
+    }
+
+    // Filtro por sucursal: filtrar productos disponibles en esa sucursal
+    if (branchId) {
+      branchJoin = `INNER JOIN catalog.product_branch_availability pba ON pba.product_id = p.id`;
+      whereConditions.push(`pba.branch_id = $${paramIndex}`);
+      whereConditions.push(`pba.is_enabled = TRUE`);
+      whereConditions.push(`pba.is_active = TRUE`);
+      queryParams.push(branchId);
       paramIndex++;
     }
 
@@ -284,6 +296,7 @@ export class ProductsService {
       SELECT COUNT(DISTINCT p.id) as total 
       FROM catalog.products p
       ${businessJoin}
+      ${branchJoin}
       ${compatibilityJoin}
       ${whereClause}
     `;
@@ -344,6 +357,7 @@ export class ProductsService {
         ) as variant_groups_structured
       FROM catalog.products p
       ${businessJoin}
+      ${branchJoin}
       ${compatibilityJoin}
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
@@ -469,19 +483,29 @@ export class ProductsService {
   /**
    * Obtener un producto por ID
    */
-  async findOne(id: string) {
+  async findOne(id: string, branchId?: string) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
     const pool = dbPool;
 
+    // Si se proporciona branchId, incluir datos de disponibilidad de la sucursal
+    const branchAvailabilitySelect = branchId 
+      ? `, pba.price as branch_price, pba.stock as branch_stock, pba.is_enabled as branch_is_enabled`
+      : '';
+    
+    const branchAvailabilityJoin = branchId
+      ? `LEFT JOIN catalog.product_branch_availability pba ON pba.product_id = p.id AND pba.branch_id = $2 AND COALESCE(pba.is_active, TRUE) = TRUE`
+      : '';
+
     const sqlQuery = `
       SELECT 
         p.*,
         b.name as business_name,
         pc.name as category_name,
-        pc.business_id as category_business_id,
+        pc.business_id as category_business_id
+        ${branchAvailabilitySelect},
         COALESCE(
           json_agg(
             json_build_object(
@@ -515,16 +539,18 @@ export class ProductsService {
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
       LEFT JOIN catalog.product_variant_groups vg ON vg.product_id = p.id
+      ${branchAvailabilityJoin}
       WHERE p.id = $1
       GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
-               b.name, pc.name, pc.business_id
+               b.name, pc.name, pc.business_id${branchId ? ', pba.price, pba.stock, pba.is_enabled' : ''}
     `;
 
     try {
-      const result = await pool.query(sqlQuery, [id]);
+      const queryParams = branchId ? [id, branchId] : [id];
+      const result = await pool.query(sqlQuery, queryParams);
       
       if (result.rows.length === 0) {
         throw new NotFoundException('Producto no encontrado');
@@ -669,6 +695,16 @@ export class ProductsService {
         variant_groups: variantGroups, // Usar estructuradas si existen
         nutritional_info: row.nutritional_info,
         allergens: row.allergens || [],
+        // Datos específicos de la sucursal (si branchId fue proporcionado)
+        branch_price: branchId && row.branch_price !== null && row.branch_price !== undefined 
+          ? parseFloat(row.branch_price.toString()) 
+          : undefined,
+        branch_stock: branchId && row.branch_stock !== null && row.branch_stock !== undefined 
+          ? parseInt(row.branch_stock.toString(), 10) 
+          : undefined,
+        branch_is_enabled: branchId && row.branch_is_enabled !== null && row.branch_is_enabled !== undefined
+          ? row.branch_is_enabled
+          : undefined,
         // Campos de farmacia
         requires_prescription: row.requires_prescription || false,
         age_restriction: row.age_restriction || null,
@@ -1181,36 +1217,38 @@ export class ProductsService {
       }
 
       // Construir condiciones de filtrado
-      let whereConditions = ['b.is_active = TRUE'];
+      // IMPORTANTE: Devolver TODAS las sucursales (activas e inactivas) para que el frontend pueda gestionarlas
+      // El frontend decidirá si deshabilitar el checkbox basándose en is_active
+      let whereConditions: string[] = [];
       const queryParams: any[] = [productId];
       let paramIndex = 2;
       let brandJoin = '';
 
-      // Filtrar por grupo
+      // Filtrar por grupo: solo sucursales que pertenecen al grupo
       if (groupId) {
         whereConditions.push(`b.business_group_id = $${paramIndex}`);
         queryParams.push(groupId);
         paramIndex++;
       }
 
-      // Filtrar por marca (solo sucursales que venden productos de esa marca)
+      // Filtrar por marca: solo sucursales que venden productos de esa marca
+      // Y que el producto actual sea compatible con esa marca
       if (brandId) {
-        brandJoin = `
-          INNER JOIN catalog.product_branch_availability pba_brand ON b.id = pba_brand.branch_id
-          INNER JOIN catalog.product_vehicle_compatibility pvc ON pba_brand.product_id = pvc.product_id
-        `;
-        whereConditions.push(`pvc.vehicle_brand_id = $${paramIndex}`);
-        whereConditions.push(`pba_brand.is_enabled = TRUE`);
-        whereConditions.push(`pba_brand.is_active = TRUE`);
-        whereConditions.push(`pvc.is_active = TRUE`);
+        // Verificar que el producto sea compatible con la marca
+        whereConditions.push(`EXISTS (
+          SELECT 1 FROM catalog.product_vehicle_compatibility pvc
+          WHERE pvc.product_id = $1 
+          AND pvc.vehicle_brand_id = $${paramIndex} 
+          AND pvc.is_active = TRUE
+        )`);
         queryParams.push(brandId);
         paramIndex++;
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Consulta: obtener todas las sucursales activas y su disponibilidad
-      // Incluir el estado is_active de la sucursal para mostrar indicadores visuales
+      // Consulta: obtener TODAS las sucursales (activas e inactivas) con su disponibilidad
+      // Usar LEFT JOIN para incluir sucursales sin disponibilidad configurada
       const sqlQuery = `
         SELECT DISTINCT
           b.id AS branch_id,
@@ -1230,14 +1268,13 @@ export class ProductsService {
             NULLIF(a.postal_code, '')
           ) AS branch_address
         FROM core.businesses b
-        LEFT JOIN core.addresses a ON b.address_id = a.id
-        ${brandJoin}
         LEFT JOIN catalog.product_branch_availability pba 
           ON b.id = pba.branch_id 
           AND pba.product_id = $1
           AND COALESCE(pba.is_active, TRUE) = TRUE
+        LEFT JOIN core.addresses a ON b.address_id = a.id
         ${whereClause}
-        ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.name ASC
+        ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.is_active DESC, b.name ASC
       `;
 
       const result = await pool.query(sqlQuery, queryParams);

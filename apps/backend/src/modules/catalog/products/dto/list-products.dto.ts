@@ -49,6 +49,11 @@ export class ListProductsDto {
   @Validate(IsValidUuidConstraint)
   groupId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por sucursal (UUID)', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @Validate(IsValidUuidConstraint)
+  branchId?: string;
+
   @ApiPropertyOptional({ description: 'Filtrar por categoría', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
   @Validate(IsValidUuidConstraint)

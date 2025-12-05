@@ -155,7 +155,31 @@ export const productsService = {
     const queryString = queryParams.toString();
     const url = `/catalog/products/${productId}/branch-availability${queryString ? `?${queryString}` : ''}`;
     
-    return apiRequest<{ availabilities: ProductBranchAvailability[] }>(url, { method: 'GET' });
+    console.log('🌐 [productsService] getProductBranchAvailability called:', {
+      productId,
+      groupId,
+      brandId,
+      url,
+    });
+    
+    try {
+      const response = await apiRequest<{ availabilities: ProductBranchAvailability[] }>(url, { method: 'GET' });
+      console.log('✅ [productsService] getProductBranchAvailability response:', {
+        count: response.availabilities?.length || 0,
+        availabilities: response.availabilities?.map(a => ({
+          branch_id: a.branch_id,
+          branch_name: a.branch_name,
+          price: a.price,
+          stock: a.stock,
+          is_enabled: a.is_enabled,
+          is_active: a.is_active,
+        })),
+      });
+      return response;
+    } catch (error) {
+      console.error('❌ [productsService] getProductBranchAvailability error:', error);
+      throw error;
+    }
   },
 };
 

@@ -509,6 +509,23 @@ export class BusinessesService {
       updateFields.push(`is_active = $${paramIndex++}`);
       updateValues.push(updateDto.is_active);
     }
+    if (updateDto.business_group_id !== undefined) {
+      if (updateDto.business_group_id === null) {
+        // Permitir limpiar business_group_id
+        updateFields.push(`business_group_id = NULL`);
+      } else {
+        // Verificar que el grupo existe
+        const groupCheck = await pool.query(
+          'SELECT id FROM core.business_groups WHERE id = $1',
+          [updateDto.business_group_id]
+        );
+        if (groupCheck.rows.length === 0) {
+          throw new BadRequestException('El grupo empresarial especificado no existe');
+        }
+        updateFields.push(`business_group_id = $${paramIndex++}`);
+        updateValues.push(updateDto.business_group_id);
+      }
+    }
 
     if (updateFields.length === 0) {
       throw new BadRequestException('No se proporcionaron campos para actualizar');
@@ -1986,36 +2003,54 @@ export class BusinessesService {
     const offset = (page - 1) * limit;
 
     try {
-      let whereConditions = ['b.is_active = TRUE'];
+      const whereConditions: string[] = [];
       const queryParams: any[] = [];
       let paramIndex = 1;
 
+      // Filtro por grupo empresarial
       if (query.groupId) {
         whereConditions.push(`b.business_group_id = $${paramIndex}`);
         queryParams.push(query.groupId);
         paramIndex++;
       }
 
+      // Filtro por búsqueda
       if (query.search) {
         whereConditions.push(`(b.name ILIKE $${paramIndex} OR b.description ILIKE $${paramIndex})`);
         queryParams.push(`%${query.search}%`);
         paramIndex++;
       }
 
+      // Filtro por estado activo: usar el valor del query si viene, sino usar TRUE por defecto
       if (query.isActive !== undefined) {
+        const isActiveValue = query.isActive === 'true' || query.isActive === true;
         whereConditions.push(`b.is_active = $${paramIndex}`);
-        queryParams.push(query.isActive === 'true' || query.isActive === true);
+        queryParams.push(isActiveValue);
         paramIndex++;
+      } else {
+        // Por defecto, solo mostrar sucursales activas
+        whereConditions.push(`b.is_active = TRUE`);
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
+      // Debug: Log de la query para depuración
+      console.log('🔍 [getBranches] Query params:', {
+        whereClause,
+        queryParams,
+        query: {
+          groupId: query.groupId,
+          isActive: query.isActive,
+          search: query.search,
+        },
+      });
+
       // Contar total
-      const countResult = await pool.query(
-        `SELECT COUNT(*) as total FROM core.businesses b ${whereClause}`,
-        queryParams
-      );
+      const countQuery = `SELECT COUNT(*) as total FROM core.businesses b ${whereClause}`;
+      console.log('🔍 [getBranches] Count query:', countQuery);
+      const countResult = await pool.query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total);
+      console.log('🔍 [getBranches] Total encontrado:', total);
 
       // Obtener datos con información de ciudad y estado
       queryParams.push(limit, offset);
