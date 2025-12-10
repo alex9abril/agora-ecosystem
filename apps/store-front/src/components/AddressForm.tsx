@@ -26,6 +26,8 @@ export default function AddressForm({ address, onSubmit, onCancel, className = '
     longitude: address?.longitude || 0,
     latitude: address?.latitude || 0,
     additional_references: address?.additional_references || '',
+    receiver_name: address?.receiver_name || '',
+    receiver_phone: address?.receiver_phone || '',
     is_default: address?.is_default || false,
   });
   const [loading, setLoading] = useState(false);
@@ -43,26 +45,6 @@ export default function AddressForm({ address, onSubmit, onCancel, className = '
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocalización no disponible');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormData({
-          ...formData,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-      },
-      (error) => {
-        setError('No se pudo obtener la ubicación');
-      }
-    );
   };
 
   return (
@@ -176,14 +158,38 @@ export default function AddressForm({ address, onSubmit, onCancel, className = '
         />
       </div>
 
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={handleGetLocation}
-          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-        >
-          Usar mi ubicación
-        </button>
+      <div className="border-t border-gray-200 pt-4 mt-4">
+        <h3 className="text-sm font-medium text-gray-900 mb-4">Datos de quien recibe</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Nombre de quien recibe *
+            </label>
+            <input
+              type="text"
+              value={formData.receiver_name || ''}
+              onChange={(e) => setFormData({ ...formData, receiver_name: e.target.value })}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="Nombre completo"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Teléfono de quien recibe (opcional)
+            </label>
+            <input
+              type="tel"
+              value={formData.receiver_phone || ''}
+              onChange={(e) => setFormData({ ...formData, receiver_phone: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+              placeholder="Teléfono de contacto"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

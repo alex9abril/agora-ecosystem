@@ -42,6 +42,9 @@ export interface Business {
   address_state?: string;
   postal_code?: string;
   address_country?: string;
+  // Campos de grupo empresarial
+  business_group_id?: string; // ID del grupo empresarial al que pertenece
+  business_group_name?: string; // Nombre del grupo empresarial (para mostrar)
 }
 
 export interface CreateBusinessData {
@@ -409,6 +412,65 @@ export const businessService = {
     return apiRequest<BusinessGroup>(`/businesses/business-groups/${groupId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Obtener sucursales con filtros (público)
+   */
+  async getBranches(filters?: {
+    groupId?: string;
+    search?: string;
+    isActive?: boolean;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: Business[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+    try {
+      const params = new URLSearchParams();
+      if (filters?.groupId) params.append('groupId', filters.groupId);
+      if (filters?.search) params.append('search', filters.search);
+      if (filters?.isActive !== undefined) params.append('isActive', filters.isActive.toString());
+      if (filters?.page) params.append('page', filters.page.toString());
+      if (filters?.limit) params.append('limit', filters.limit.toString());
+
+      const queryString = params.toString();
+      const url = `/businesses/branches${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await apiRequest<{
+        data: Business[];
+        pagination: { page: number; limit: number; total: number; totalPages: number };
+      }>(url, {
+        method: 'GET',
+      });
+
+      return response;
+    } catch (error: any) {
+      console.error('Error obteniendo sucursales:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener sucursales sin grupo empresarial asignado
+   */
+  async getBranchesWithoutGroup(userId: string): Promise<Business[]> {
+    try {
+      const allBranches = await this.getAllBranches(userId);
+      // Filtrar sucursales que no tienen business_group_id
+      return allBranches.filter(branch => !(branch as any).business_group_id);
+    } catch (error: any) {
+      console.error('[BusinessService] Error obteniendo sucursales sin grupo:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Actualizar el grupo empresarial de una sucursal
+   */
+  async updateBranchGroup(branchId: string, businessGroupId: string | null): Promise<Business> {
+    return apiRequest<Business>(`/businesses/${branchId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ business_group_id: businessGroupId }),
     });
   },
 };

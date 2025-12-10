@@ -18,6 +18,8 @@ export interface Address {
   longitude: number;
   latitude: number;
   additional_references?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -37,6 +39,8 @@ export interface CreateAddressDto {
   longitude: number;
   latitude: number;
   additional_references?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
   is_default?: boolean;
 }
 
@@ -53,6 +57,8 @@ export interface UpdateAddressDto {
   longitude?: number;
   latitude?: number;
   additional_references?: string;
+  receiver_name?: string;
+  receiver_phone?: string;
   is_default?: boolean;
 }
 

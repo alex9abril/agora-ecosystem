@@ -6,8 +6,10 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
+import AccountSidebar from '@/components/AccountSidebar';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import { ordersService, Order } from '@/lib/orders';
+import { productsService, Product } from '@/lib/products';
 import ContextualLink from '@/components/ContextualLink';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
@@ -20,6 +22,7 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [products, setProducts] = useState<Record<string, Product>>({});
 
   useEffect(() => {
     if (id && typeof id === 'string') {
@@ -33,6 +36,34 @@ export default function OrderDetailPage() {
       setError(null);
       const orderData = await ordersService.findOne(orderId);
       setOrder(orderData);
+
+      // Cargar información de productos para obtener imágenes y SKUs
+      if (orderData.items && orderData.items.length > 0) {
+        const productIds = orderData.items
+          .map(item => item.product_id)
+          .filter((id): id is string => id !== undefined && id !== null);
+        
+        if (productIds.length > 0) {
+          try {
+            const productsMap: Record<string, Product> = {};
+            // Cargar productos uno por uno
+            await Promise.all(
+              productIds.map(async (productId) => {
+                try {
+                  const product = await productsService.getProduct(productId);
+                  productsMap[productId] = product;
+                } catch (err) {
+                  console.error(`Error cargando producto ${productId}:`, err);
+                }
+              })
+            );
+            setProducts(productsMap);
+          } catch (err) {
+            console.error('Error cargando productos:', err);
+            // No fallar la carga de la orden si hay error cargando productos
+          }
+        }
+      }
     } catch (err: any) {
       console.error('Error cargando pedido:', err);
       setError(err.message || 'Error al cargar el pedido');
@@ -104,7 +135,12 @@ export default function OrderDetailPage() {
         <title>Pedido #{order.id.slice(0, 8)} - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="max-w-4xl mx-auto">
+        <div className="flex gap-6">
+          {/* Sidebar de navegación */}
+          <AccountSidebar activeTab="orders" />
+
+          {/* Contenido principal */}
+          <div className="flex-1 min-w-0">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Pedido #{order.id.slice(0, 8)}
@@ -147,9 +183,36 @@ export default function OrderDetailPage() {
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <h2 className="text-lg font-semibold mb-4">Productos</h2>
               <div className="space-y-4">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex justify-between items-start border-b border-gray-200 pb-4 last:border-b-0">
-                    <div className="flex-1">
+                {order.items.map((item) => {
+                  const product = item.product_id ? products[item.product_id] : null;
+                  const productImage = product?.primary_image_url || product?.image_url || item.product_image_url;
+                  
+                  return (
+                    <div key={item.id} className="flex gap-4 items-start border-b border-gray-200 pb-4 last:border-b-0">
+                    {/* Imagen del producto */}
+                    <div className="flex-shrink-0">
+                      {productImage ? (
+                        <img
+                          src={productImage}
+                          alt={item.item_name}
+                          className="w-20 h-20 object-cover rounded-lg border border-gray-200"
+                          onError={(e) => {
+                            // Si falla la imagen, mostrar placeholder
+                            e.currentTarget.style.display = 'none';
+                            const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (placeholder) placeholder.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      {!productImage && (
+                        <div className="w-20 h-20 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
+                          <span className="text-xs text-gray-400 text-center px-2">Sin imagen</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Información del producto */}
+                    <div className="flex-1 min-w-0">
                       <div className="font-medium mb-1">{item.item_name}</div>
                       <div className="text-sm text-gray-600">
                         Cantidad: {item.quantity} × {formatPrice(parseFloat(String(item.item_price || 0)))}
@@ -168,11 +231,14 @@ export default function OrderDetailPage() {
                         <TaxBreakdownComponent taxBreakdown={item.tax_breakdown} compact />
                       )}
                     </div>
-                    <div className="font-semibold">
+                    
+                    {/* Precio */}
+                    <div className="font-semibold flex-shrink-0">
                       {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -248,11 +314,12 @@ export default function OrderDetailPage() {
           {/* Botón de regresar */}
           <div className="text-center">
             <ContextualLink
-              href="/"
+              href="/orders"
               className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block font-medium"
             >
-              Volver al Inicio
+              Volver a Mis Pedidos
             </ContextualLink>
+          </div>
           </div>
         </div>
       </StoreLayout>

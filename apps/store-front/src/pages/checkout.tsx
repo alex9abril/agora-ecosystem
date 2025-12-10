@@ -1,198 +1,974 @@
 /**
- * Página de checkout - Proceso de pago
- * Versión desktop con pasos claros
+ * Página de checkout - Proceso de compra completo
+ * Layout profesional con dos columnas: proceso (izquierda) y resumen (derecha)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
-import CheckoutSteps, { CheckoutStep } from '@/components/CheckoutSteps';
-import AddressForm from '@/components/AddressForm';
-import TaxBreakdownComponent from '@/components/TaxBreakdown';
-import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
-import { addressesService, Address, CreateAddressDto } from '@/lib/addresses';
-import { ordersService, CheckoutDto } from '@/lib/orders';
-import { cartService, CartItem, TaxBreakdown } from '@/lib/cart';
+import { useAuth } from '@/contexts/AuthContext';
+import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { taxesService } from '@/lib/taxes';
-import { productsService, Product } from '@/lib/products';
-import { useStoreRouting } from '@/hooks/useStoreRouting';
-import ContextualLink from '@/components/ContextualLink';
 import { formatPrice } from '@/lib/format';
+import { apiRequest } from '@/lib/api';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import PersonIcon from '@mui/icons-material/Person';
+import LockIcon from '@mui/icons-material/Lock';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
+
+type CheckoutStep = 'auth' | 'shipping' | 'shipping-method' | 'payment' | 'confirmation';
+
+interface Address {
+  id: string;
+  label?: string;
+  street: string;
+  street_number?: string;
+  interior_number?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  longitude?: number;
+  latitude?: number;
+  additional_references?: string;
+  is_default: boolean;
+  receiver_name?: string; // Nombre de quien recibe en esta dirección
+  receiver_phone?: string; // Teléfono de quien recibe (opcional)
+}
+
+interface PaymentMethod {
+  id: string;
+  type: 'card' | 'cash' | 'transfer';
+  label: string;
+  icon?: string;
+}
+
+interface ShippingOption {
+  id: string;
+  provider: 'fedex' | 'dhl' | 'pickup';
+  label: string;
+  price: number;
+  estimatedDays?: number;
+}
+
+interface ShippingSelection {
+  storeId: string;
+  optionId: string;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { isAuthenticated, loading: authLoading } = useAuth();
   const { cart, loading: cartLoading, refreshCart } = useCart();
-  const { getCartUrl } = useStoreRouting();
-  
-  const [currentStep, setCurrentStep] = useState<CheckoutStep>('address');
+  const { isAuthenticated, signIn, signUp, user } = useAuth();
+  const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
-  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null);
-  const [showAddressForm, setShowAddressForm] = useState(false);
-  const [tipAmount, setTipAmount] = useState(0);
-  const [deliveryNotes, setDeliveryNotes] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState('');
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [editingReceiverForAddressId, setEditingReceiverForAddressId] = useState<string | null>(null);
+  const [editingReceiverName, setEditingReceiverName] = useState('');
+  const [editingReceiverPhone, setEditingReceiverPhone] = useState('');
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
-  const [productsData, setProductsData] = useState<Record<string, Product>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Estados para autenticación
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFirstName, setAuthFirstName] = useState('');
+  const [authLastName, setAuthLastName] = useState('');
+  const [authPhone, setAuthPhone] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Estados para nueva dirección
+  const [newAddress, setNewAddress] = useState({
+    label: '',
+    street: '',
+    street_number: '',
+    interior_number: '',
+    neighborhood: '',
+    city: 'Ciudad de México',
+    state: 'CDMX',
+    postal_code: '',
+    country: 'México',
+    longitude: -99.1332,
+    latitude: 19.4326,
+    additional_references: '',
+    is_default: false,
+    receiver_name: '', // Nombre de quien recibe (obligatorio)
+    receiver_phone: '', // Teléfono de quien recibe (opcional)
+  });
+  const [showNewAddressForm, setShowNewAddressForm] = useState(false);
+  
+  // Estados para facturación
+  const [useSameAddressForBilling, setUseSameAddressForBilling] = useState(true);
+  const [billingAddresses, setBillingAddresses] = useState<Address[]>([]);
+  const [selectedBillingAddressId, setSelectedBillingAddressId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('billing_address_id');
+    }
+    return null;
+  });
+  const [billingAddress, setBillingAddress] = useState({
+    label: '',
+    street: '',
+    street_number: '',
+    interior_number: '',
+    neighborhood: '',
+    city: 'Ciudad de México',
+    state: 'CDMX',
+    postal_code: '',
+    country: 'México',
+    longitude: -99.1332,
+    latitude: 19.4326,
+    additional_references: '',
+    // La dirección de facturación NO tiene campos de receptor
+  });
+  const [showBillingAddressForm, setShowBillingAddressForm] = useState(false);
+  const [editingBillingAddressId, setEditingBillingAddressId] = useState<string | null>(null);
+  const [deletingBillingAddressId, setDeletingBillingAddressId] = useState<string | null>(null);
+  
+  // Estados para envío
+  const [shippingSelections, setShippingSelections] = useState<Record<string, string>>({}); // storeId -> optionId
+  const [shippingOptionsByStore, setShippingOptionsByStore] = useState<Record<string, ShippingOption[]>>({});
+  
+  // Estados para pago
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [paymentMethods] = useState<PaymentMethod[]>([
+    { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
+    { id: 'cash', type: 'cash', label: 'Efectivo al recibir' },
+    { id: 'transfer', type: 'transfer', label: 'Transferencia bancaria' },
+  ]);
+  
+  // Estados para confirmación
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [processingOrder, setProcessingOrder] = useState(false);
+  const [confirmedOrderData, setConfirmedOrderData] = useState<{
+    storesInfo: Record<string, { name: string; items: CartItem[] }>;
+    subtotalsByStore: Record<string, number>;
+    shippingSelections: Record<string, string>;
+    shippingOptionsByStore: Record<string, ShippingOption[]>;
+    total: number;
+  } | null>(null);
 
-  // Redirigir solo si carrito vacío o no autenticado al proceder
+  // Redirigir si no hay carrito (pero no si estamos en confirmación)
   useEffect(() => {
-    if (!cartLoading && (!cart || !cart.items || cart.items.length === 0)) {
-      router.push(getCartUrl());
-      return;
+    if (!cartLoading && (!cart || !cart.items || cart.items.length === 0) && currentStep !== 'confirmation' && !orderId) {
+      router.push('/cart');
     }
-    // Requerir login solo cuando se intenta proceder al checkout
-    if (!authLoading && !isAuthenticated && cart && cart.items && cart.items.length > 0) {
-      router.push('/auth/login?redirect=' + encodeURIComponent(router.asPath));
-      return;
-    }
-  }, [isAuthenticated, authLoading, cart, cartLoading, router, getCartUrl]);
+  }, [cart, cartLoading, router, currentStep, orderId]);
 
-  // Cargar direcciones
+  // Determinar paso inicial
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      loadAddresses();
+    if (isAuthenticated) {
+      if (currentStep === 'auth') {
+        setCurrentStep('shipping');
+        loadAddresses();
+      }
+    } else {
+      setCurrentStep('auth');
     }
-  }, [isAuthenticated, authLoading]);
+  }, [isAuthenticated]);
 
-  // Cargar productos y calcular impuestos
-  useEffect(() => {
-    if (cart && cart.items && cart.items.length > 0) {
-      loadProducts();
-      calculateTaxes();
-    }
-  }, [cart]);
-
+  // Cargar direcciones cuando el usuario está autenticado
   const loadAddresses = async () => {
+    if (!isAuthenticated) return;
+    
     try {
-      const data = await addressesService.findAll();
-      setAddresses(data);
-      const defaultAddress = data.find(a => a.is_default) || data[0];
+      const response = await apiRequest<Address[]>('/addresses', {
+        method: 'GET',
+      });
+      setAddresses(response);
+      
+      // Filtrar direcciones de facturación (por label que contenga "Facturación" o por ID guardado)
+      const savedBillingId = typeof window !== 'undefined' ? localStorage.getItem('billing_address_id') : null;
+      const billingAddrs = response.filter(addr => 
+        addr.label?.toLowerCase().includes('facturación') || 
+        (savedBillingId && addr.id === savedBillingId)
+      );
+      setBillingAddresses(billingAddrs);
+      
+      // Seleccionar la dirección guardada si existe
+      if (savedBillingId) {
+        const savedBilling = billingAddrs.find(addr => addr.id === savedBillingId);
+        if (savedBilling) {
+          setSelectedBillingAddressId(savedBilling.id);
+        } else if (billingAddrs.length > 0) {
+          // Si no existe la guardada, seleccionar la primera disponible
+          setSelectedBillingAddressId(billingAddrs[0].id);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('billing_address_id', billingAddrs[0].id);
+          }
+        }
+      } else if (billingAddrs.length > 0) {
+        // Si no hay guardada, seleccionar la primera disponible
+        setSelectedBillingAddressId(billingAddrs[0].id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('billing_address_id', billingAddrs[0].id);
+        }
+        setUseSameAddressForBilling(false);
+      }
+      
+      // Seleccionar dirección por defecto si existe
+      const defaultAddress = response.find(addr => addr.is_default);
       if (defaultAddress) {
-        setSelectedAddress(defaultAddress);
+        setSelectedAddressId(defaultAddress.id);
+      } else if (response.length > 0) {
+        setSelectedAddressId(response[0].id);
       }
     } catch (error: any) {
       console.error('Error cargando direcciones:', error);
     }
   };
 
-  const loadProducts = async () => {
-    if (!cart || !cart.items) return;
-    
-    const productIds = [...new Set(cart.items.map(item => item.product_id))];
-    const productsMap: Record<string, Product> = {};
-    
-    await Promise.all(
-      productIds.map(async (productId) => {
-        try {
-          const product = await productsService.getProduct(productId);
-          productsMap[productId] = product;
-        } catch (error) {
-          console.error(`Error cargando producto ${productId}:`, error);
-        }
-      })
-    );
-    
-    setProductsData(productsMap);
-  };
-
-  const calculateTaxes = async () => {
-    if (!cart || !cart.items) return;
-    
-    const taxBreakdowns: Record<string, TaxBreakdown> = {};
-    
-    await Promise.all(
-      cart.items.map(async (item: CartItem) => {
-        try {
-          const subtotal = parseFloat(String(item.item_subtotal || 0));
-          const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
-          taxBreakdowns[item.id] = taxBreakdown;
-        } catch (error) {
-          taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
-        }
-      })
-    );
-    
-    setItemsTaxBreakdowns(taxBreakdowns);
-  };
-
-  const handleAddressSelect = (address: Address) => {
-    setSelectedAddress(address);
-    setShowAddressForm(false);
-  };
-
-  const handleAddressCreate = async (addressData: CreateAddressDto) => {
-    try {
-      const newAddress = await addressesService.create(addressData);
-      await loadAddresses();
-      setSelectedAddress(newAddress);
-      setShowAddressForm(false);
-    } catch (error: any) {
-      setError(error.message || 'Error al crear dirección');
+  // Calcular impuestos
+  useEffect(() => {
+    if (cart && cart.items && cart.items.length > 0) {
+      const calculateTaxes = async () => {
+        const taxBreakdowns: Record<string, TaxBreakdown> = {};
+        
+        await Promise.all(
+          cart.items.map(async (item: CartItem) => {
+            try {
+              const subtotal = parseFloat(String(item.item_subtotal || 0));
+              const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
+              taxBreakdowns[item.id] = taxBreakdown;
+            } catch (error) {
+              taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+            }
+          })
+        );
+        
+        setItemsTaxBreakdowns(taxBreakdowns);
+      };
+      
+      calculateTaxes();
     }
-  };
+  }, [cart]);
 
-  const handleNextStep = () => {
-    if (currentStep === 'address') {
-      if (!selectedAddress) {
-        setError('Por favor selecciona una dirección');
-        return;
+  // Agrupar items por tienda/sucursal
+  const itemsByStore = useMemo(() => {
+    if (!cart || !cart.items) return {};
+    
+    const grouped: Record<string, CartItem[]> = {};
+    cart.items.forEach((item) => {
+      const storeKey = item.business_id || 'unknown';
+      if (!grouped[storeKey]) {
+        grouped[storeKey] = [];
       }
-      setCurrentStep('delivery');
-    } else if (currentStep === 'delivery') {
-      setCurrentStep('payment');
-    } else if (currentStep === 'payment') {
-      setCurrentStep('summary');
+      grouped[storeKey].push(item);
+    });
+    
+    return grouped;
+  }, [cart]);
+
+  // Obtener información de cada tienda
+  const storesInfo = useMemo(() => {
+    const stores: Record<string, { name: string; items: CartItem[] }> = {};
+    Object.entries(itemsByStore).forEach(([businessId, items]) => {
+      if (items.length > 0) {
+        stores[businessId] = {
+          name: items[0].business_name || 'Tienda desconocida',
+          items,
+        };
+      }
+    });
+    return stores;
+  }, [itemsByStore]);
+
+  // Calcular subtotales por tienda
+  const subtotalsByStore = useMemo(() => {
+    const subtotals: Record<string, number> = {};
+    Object.entries(storesInfo).forEach(([businessId, store]) => {
+      subtotals[businessId] = store.items.reduce(
+        (sum, item) => sum + parseFloat(String(item.item_subtotal || 0)),
+        0
+      );
+    });
+    return subtotals;
+  }, [storesInfo]);
+
+  // Calcular impuestos por tienda
+  const taxesByStore = useMemo(() => {
+    const taxes: Record<string, number> = {};
+    Object.entries(storesInfo).forEach(([businessId, store]) => {
+      taxes[businessId] = store.items.reduce((sum, item) => {
+        const breakdown = itemsTaxBreakdowns[item.id];
+        return sum + (breakdown?.total_tax || 0);
+      }, 0);
+    });
+    return taxes;
+  }, [storesInfo, itemsTaxBreakdowns]);
+
+  // Calcular totales
+  const subtotal = useMemo(() => {
+    return Object.values(subtotalsByStore).reduce((sum, storeSubtotal) => sum + storeSubtotal, 0);
+  }, [subtotalsByStore]);
+
+  const totalTax = useMemo(() => {
+    return Object.values(taxesByStore).reduce((sum, storeTax) => sum + storeTax, 0);
+  }, [taxesByStore]);
+
+  // Simular cálculo de opciones de envío por tienda
+  const calculateShippingOptions = useMemo(() => {
+    const options: Record<string, ShippingOption[]> = {};
+    
+    Object.keys(storesInfo).forEach((storeId) => {
+      const store = storesInfo[storeId];
+      const subtotal = subtotalsByStore[storeId] || 0;
+      
+      // Simular precios basados en el subtotal y la tienda
+      // Precios más altos para tiendas más lejanas o pedidos más grandes
+      const basePrice = Math.max(50, Math.min(500, subtotal * 0.05)); // Entre $50 y $500, o 5% del subtotal
+      
+      // Variar precios por tienda (simulando diferentes ubicaciones)
+      const storeMultiplier = storeId.charCodeAt(0) % 3; // Variación simple basada en el ID
+      const multipliers = [1.0, 1.2, 0.9];
+      const multiplier = multipliers[storeMultiplier] || 1.0;
+      
+      options[storeId] = [
+        {
+          id: `${storeId}-fedex`,
+          provider: 'fedex',
+          label: 'FedEx',
+          price: Math.round(basePrice * multiplier * 1.0),
+          estimatedDays: 2,
+        },
+        {
+          id: `${storeId}-dhl`,
+          provider: 'dhl',
+          label: 'DHL',
+          price: Math.round(basePrice * multiplier * 0.95),
+          estimatedDays: 3,
+        },
+        {
+          id: `${storeId}-pickup`,
+          provider: 'pickup',
+          label: 'Recoger en tienda',
+          price: 0,
+          estimatedDays: 0,
+        },
+      ];
+    });
+    
+    return options;
+  }, [storesInfo, subtotalsByStore]);
+
+  // Inicializar opciones de envío y selecciones por defecto
+  useEffect(() => {
+    if (Object.keys(calculateShippingOptions).length > 0) {
+      setShippingOptionsByStore(calculateShippingOptions);
+      
+      // Seleccionar "Recoger en tienda" por defecto para cada tienda
+      const defaultSelections: Record<string, string> = {};
+      Object.keys(calculateShippingOptions).forEach((storeId) => {
+        const pickupOption = calculateShippingOptions[storeId].find(opt => opt.provider === 'pickup');
+        if (pickupOption) {
+          defaultSelections[storeId] = pickupOption.id;
+        }
+      });
+      setShippingSelections(defaultSelections);
+    }
+  }, [calculateShippingOptions]);
+
+  // Calcular total de envío
+  const shippingTotal = useMemo(() => {
+    return Object.entries(shippingSelections).reduce((total, [storeId, optionId]) => {
+      const options = shippingOptionsByStore[storeId] || [];
+      const selectedOption = options.find(opt => opt.id === optionId);
+      return total + (selectedOption?.price || 0);
+    }, 0);
+  }, [shippingSelections, shippingOptionsByStore]);
+
+  const total = subtotal + totalTax + shippingTotal;
+
+  // Manejar autenticación
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (authMode === 'login') {
+        await signIn(authEmail, authPassword);
+        setCurrentStep('shipping');
+        await loadAddresses();
+      } else {
+        await signUp({
+          email: authEmail,
+          password: authPassword,
+          firstName: authFirstName,
+          lastName: authLastName,
+          phone: authPhone,
+          role: 'client',
+        });
+        setCurrentStep('shipping');
+        await loadAddresses();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error en la autenticación');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handlePreviousStep = () => {
-    if (currentStep === 'delivery') {
-      setCurrentStep('address');
-    } else if (currentStep === 'payment') {
-      setCurrentStep('delivery');
-    } else if (currentStep === 'summary') {
-      setCurrentStep('payment');
+  // Crear nueva dirección
+  const handleCreateAddress = async () => {
+    if (!isAuthenticated) return;
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      const address = await apiRequest<Address>('/addresses', {
+        method: 'POST',
+        body: JSON.stringify(newAddress),
+      });
+      
+      setAddresses([...addresses, address]);
+      setSelectedAddressId(address.id);
+      setShowNewAddressForm(false);
+      setNewAddress({
+        label: '',
+        street: '',
+        street_number: '',
+        interior_number: '',
+        neighborhood: '',
+        city: 'Ciudad de México',
+        state: 'CDMX',
+        postal_code: '',
+        country: 'México',
+        longitude: -99.1332,
+        latitude: 19.4326,
+        additional_references: '',
+        is_default: false,
+        receiver_name: '',
+        receiver_phone: '',
+      });
+    } catch (err: any) {
+      setError(err.message || 'Error al crear dirección');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCheckout = async () => {
-    if (!selectedAddress || !cart) {
-      setError('Faltan datos para completar el pedido');
+  // Actualizar datos del receptor en una dirección existente
+  const handleUpdateReceiver = async (addressId: string) => {
+    if (!isAuthenticated || !editingReceiverName.trim()) return;
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      const updatedAddress = await apiRequest<Address>(`/addresses/${addressId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          receiver_name: editingReceiverName.trim(),
+          receiver_phone: editingReceiverPhone.trim() || null,
+        }),
+      });
+      
+      // Actualizar el array de direcciones con la dirección actualizada
+      // Usar el objeto completo devuelto por el backend para asegurar que todos los campos estén actualizados
+      const updatedAddresses = addresses.map(addr => 
+        addr.id === addressId ? updatedAddress : addr
+      );
+      setAddresses(updatedAddresses);
+      
+      // Cerrar el formulario de edición
+      setEditingReceiverForAddressId(null);
+      setEditingReceiverName('');
+      setEditingReceiverPhone('');
+      
+      console.log('✅ Receptor actualizado:', {
+        addressId,
+        receiver_name: updatedAddress.receiver_name,
+        receiver_phone: updatedAddress.receiver_phone,
+        updatedAddress
+      });
+    } catch (err: any) {
+      setError(err.message || 'Error al actualizar datos del receptor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Guardar dirección de facturación
+  const handleCreateBillingAddress = async () => {
+    if (!isAuthenticated) {
+      setError('Debes estar autenticado para guardar la dirección de facturación');
+      return;
+    }
+    
+    if (!billingAddress.street.trim()) {
+      setError('Por favor, ingresa la calle de la dirección de facturación');
+      return;
+    }
+    if (!billingAddress.neighborhood.trim()) {
+      setError('Por favor, ingresa la colonia de la dirección de facturación');
+      return;
+    }
+    if (!billingAddress.postal_code.trim()) {
+      setError('Por favor, ingresa el código postal de la dirección de facturación');
+      return;
+    }
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      let savedAddress: Address;
+      
+      if (editingBillingAddressId) {
+        // Actualizar dirección existente
+        savedAddress = await apiRequest<Address>(`/addresses/${editingBillingAddressId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            label: billingAddress.label || 'Facturación',
+            street: billingAddress.street,
+            street_number: billingAddress.street_number || null,
+            interior_number: billingAddress.interior_number || null,
+            neighborhood: billingAddress.neighborhood,
+            city: billingAddress.city || 'Ciudad de México',
+            state: billingAddress.state || 'CDMX',
+            postal_code: billingAddress.postal_code,
+            country: billingAddress.country || 'México',
+            longitude: billingAddress.longitude,
+            latitude: billingAddress.latitude,
+            additional_references: billingAddress.additional_references || null,
+          }),
+        });
+        
+        // Actualizar en las listas
+        setBillingAddresses(billingAddresses.map(addr => addr.id === editingBillingAddressId ? savedAddress : addr));
+        setAddresses(addresses.map(addr => addr.id === editingBillingAddressId ? savedAddress : addr));
+      } else {
+        // Crear nueva dirección de facturación
+        savedAddress = await apiRequest<Address>('/addresses', {
+          method: 'POST',
+          body: JSON.stringify({
+            label: billingAddress.label || 'Facturación',
+            street: billingAddress.street,
+            street_number: billingAddress.street_number || null,
+            interior_number: billingAddress.interior_number || null,
+            neighborhood: billingAddress.neighborhood,
+            city: billingAddress.city || 'Ciudad de México',
+            state: billingAddress.state || 'CDMX',
+            postal_code: billingAddress.postal_code,
+            country: billingAddress.country || 'México',
+            longitude: billingAddress.longitude,
+            latitude: billingAddress.latitude,
+            additional_references: billingAddress.additional_references || null,
+            is_default: false,
+          }),
+        });
+        
+        // Agregar a las listas
+        setBillingAddresses([...billingAddresses, savedAddress]);
+        setAddresses([...addresses, savedAddress]);
+      }
+      
+      // Seleccionar la dirección guardada
+      setSelectedBillingAddressId(savedAddress.id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('billing_address_id', savedAddress.id);
+      }
+      
+      // Cerrar formulario y resetear
+      setShowBillingAddressForm(false);
+      setEditingBillingAddressId(null);
+      setBillingAddress({
+        label: '',
+        street: '',
+        street_number: '',
+        interior_number: '',
+        neighborhood: '',
+        city: 'Ciudad de México',
+        state: 'CDMX',
+        postal_code: '',
+        country: 'México',
+        longitude: -99.1332,
+        latitude: 19.4326,
+        additional_references: '',
+      });
+    } catch (err: any) {
+      setError(err.message || 'Error al guardar la dirección de facturación');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Editar dirección de facturación
+  const handleEditBillingAddress = (address: Address) => {
+    setEditingBillingAddressId(address.id);
+    setBillingAddress({
+      label: address.label || '',
+      street: address.street,
+      street_number: address.street_number || '',
+      interior_number: address.interior_number || '',
+      neighborhood: address.neighborhood,
+      city: address.city,
+      state: address.state,
+      postal_code: address.postal_code,
+      country: address.country,
+      longitude: address.longitude || -99.1332,
+      latitude: address.latitude || 19.4326,
+      additional_references: address.additional_references || '',
+    });
+    setShowBillingAddressForm(true);
+  };
+
+  // Eliminar dirección de facturación
+  const handleDeleteBillingAddress = async (addressId: string) => {
+    if (!isAuthenticated) return;
+    
+    if (!confirm('¿Estás seguro de que deseas eliminar esta dirección de facturación?')) {
+      return;
+    }
+    
+    setError('');
+    setLoading(true);
+    setDeletingBillingAddressId(addressId);
+
+    try {
+      await apiRequest(`/addresses/${addressId}`, {
+        method: 'DELETE',
+      });
+      
+      // Remover de las listas
+      const updatedBillingAddresses = billingAddresses.filter(addr => addr.id !== addressId);
+      setBillingAddresses(updatedBillingAddresses);
+      setAddresses(addresses.filter(addr => addr.id !== addressId));
+      
+      // Si era la dirección seleccionada, seleccionar otra o limpiar
+      if (selectedBillingAddressId === addressId) {
+        if (updatedBillingAddresses.length > 0) {
+          setSelectedBillingAddressId(updatedBillingAddresses[0].id);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('billing_address_id', updatedBillingAddresses[0].id);
+          }
+        } else {
+          setSelectedBillingAddressId(null);
+          setUseSameAddressForBilling(true);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('billing_address_id');
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al eliminar dirección de facturación');
+    } finally {
+      setLoading(false);
+      setDeletingBillingAddressId(null);
+    }
+  };
+
+  // Eliminar dirección
+  const handleDeleteAddress = async (addressId: string) => {
+    if (!isAuthenticated) return;
+    
+    if (!confirm('¿Estás seguro de que deseas eliminar esta dirección?')) {
+      return;
+    }
+    
+    setError('');
+    setLoading(true);
+    setDeletingAddressId(addressId);
+
+    try {
+      await apiRequest(`/addresses/${addressId}`, {
+        method: 'DELETE',
+      });
+      
+      // Remover de la lista
+      const updatedAddresses = addresses.filter(addr => addr.id !== addressId);
+      setAddresses(updatedAddresses);
+      
+      // Si era la dirección seleccionada, seleccionar otra o limpiar
+      if (selectedAddressId === addressId) {
+        if (updatedAddresses.length > 0) {
+          const defaultAddress = updatedAddresses.find(addr => addr.is_default) || updatedAddresses[0];
+          setSelectedAddressId(defaultAddress.id);
+        } else {
+          setSelectedAddressId(null);
+        }
+      }
+      
+      // Si era una dirección de facturación, removerla de la lista
+      const wasBillingAddress = billingAddresses.find(addr => addr.id === addressId);
+      if (wasBillingAddress) {
+        setBillingAddresses(billingAddresses.filter(addr => addr.id !== addressId));
+        
+        // Si era la dirección seleccionada, seleccionar otra o limpiar
+        if (selectedBillingAddressId === addressId) {
+          const remainingBilling = billingAddresses.filter(addr => addr.id !== addressId);
+          if (remainingBilling.length > 0) {
+            setSelectedBillingAddressId(remainingBilling[0].id);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('billing_address_id', remainingBilling[0].id);
+            }
+          } else {
+            setSelectedBillingAddressId(null);
+            setUseSameAddressForBilling(true);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('billing_address_id');
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al eliminar dirección');
+    } finally {
+      setLoading(false);
+      setDeletingAddressId(null);
+    }
+  };
+
+  // Editar dirección completa
+  const handleEditAddress = (address: Address) => {
+    console.log('🔍 [checkout] Editando dirección:', {
+      addressId: address.id,
+      addressLabel: address.label,
+      addressStreet: address.street,
+    });
+    
+    setEditingAddressId(address.id);
+    setNewAddress({
+      label: address.label || '',
+      street: address.street,
+      street_number: address.street_number || '',
+      interior_number: address.interior_number || '',
+      neighborhood: address.neighborhood,
+      city: address.city,
+      state: address.state,
+      postal_code: address.postal_code,
+      country: address.country,
+      longitude: address.longitude || -99.1332,
+      latitude: address.latitude || 19.4326,
+      additional_references: address.additional_references || '',
+      is_default: address.is_default,
+      receiver_name: address.receiver_name || '',
+      receiver_phone: address.receiver_phone || '',
+    });
+    setShowNewAddressForm(true);
+  };
+
+  // Actualizar dirección completa
+  const handleUpdateAddress = async () => {
+    if (!isAuthenticated || !editingAddressId) return;
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      console.log('🔍 [checkout] Actualizando dirección:', {
+        editingAddressId,
+        addressData: newAddress,
+        availableAddresses: addresses.map(a => ({ id: a.id, label: a.label })),
+      });
+
+      const updatedAddress = await apiRequest<Address>(`/addresses/${editingAddressId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          label: newAddress.label || null,
+          street: newAddress.street,
+          street_number: newAddress.street_number || null,
+          interior_number: newAddress.interior_number || null,
+          neighborhood: newAddress.neighborhood,
+          city: newAddress.city || 'Ciudad de México',
+          state: newAddress.state || 'CDMX',
+          postal_code: newAddress.postal_code,
+          country: newAddress.country || 'México',
+          longitude: newAddress.longitude,
+          latitude: newAddress.latitude,
+          additional_references: newAddress.additional_references || null,
+          receiver_name: newAddress.receiver_name || null,
+          receiver_phone: newAddress.receiver_phone || null,
+          is_default: newAddress.is_default || false,
+        }),
+      });
+      
+      // Actualizar en la lista
+      setAddresses(addresses.map(addr => addr.id === editingAddressId ? updatedAddress : addr));
+      
+      // Si era la dirección seleccionada, mantenerla seleccionada
+      if (selectedAddressId === editingAddressId) {
+        setSelectedAddressId(updatedAddress.id);
+      }
+      
+      // Cerrar formulario y resetear
+      setEditingAddressId(null);
+      setShowNewAddressForm(false);
+      setNewAddress({
+        label: '',
+        street: '',
+        street_number: '',
+        interior_number: '',
+        neighborhood: '',
+        city: 'Ciudad de México',
+        state: 'CDMX',
+        postal_code: '',
+        country: 'México',
+        longitude: -99.1332,
+        latitude: 19.4326,
+        additional_references: '',
+        is_default: false,
+        receiver_name: '',
+        receiver_phone: '',
+      });
+    } catch (err: any) {
+      setError(err.message || 'Error al actualizar dirección');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Establecer dirección como predeterminada
+  const handleSetDefaultAddress = async (addressId: string) => {
+    if (!isAuthenticated) return;
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      await apiRequest<Address>(`/addresses/${addressId}/set-default`, {
+        method: 'PATCH',
+      });
+      
+      // Actualizar todas las direcciones: la seleccionada como default, las demás sin default
+      setAddresses(addresses.map(addr => 
+        addr.id === addressId 
+          ? { ...addr, is_default: true }
+          : { ...addr, is_default: false }
+      ));
+      
+      // Seleccionar automáticamente la dirección predeterminada
+      setSelectedAddressId(addressId);
+    } catch (err: any) {
+      setError(err.message || 'Error al establecer dirección predeterminada');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Continuar al paso de método de envío
+  const handleContinueToShippingMethod = () => {
+    if (!selectedAddressId) {
+      setError('Por favor, selecciona una dirección de envío');
+      return;
+    }
+    
+    // Validar que la dirección seleccionada tenga el nombre del receptor
+    const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
+    if (selectedAddress && !selectedAddress.receiver_name?.trim()) {
+      setError('Por favor, ingresa el nombre de la persona que recibirá el pedido en la dirección seleccionada');
+      return;
+    }
+    
+    // Si es una dirección nueva que se está creando, validar que tenga receptor
+    if (showNewAddressForm && !newAddress.receiver_name.trim()) {
+      setError('Por favor, ingresa el nombre de la persona que recibirá el pedido');
+      return;
+    }
+    
+    if (!useSameAddressForBilling && !selectedBillingAddressId) {
+      setError('Por favor, selecciona o agrega una dirección de facturación');
+      return;
+    }
+    setCurrentStep('shipping-method');
+    setError('');
+  };
+
+  // Continuar al paso de pago (desde método de envío)
+  const handleContinueToPaymentFromShipping = () => {
+    // Validar que todas las tiendas tengan un método de envío seleccionado
+    const allStoresHaveShipping = Object.keys(storesInfo).every(storeId => 
+      shippingSelections[storeId] && shippingOptionsByStore[storeId]?.some(opt => opt.id === shippingSelections[storeId])
+    );
+    
+    if (!allStoresHaveShipping) {
+      setError('Por favor, selecciona un método de envío para cada tienda');
+      return;
+    }
+    
+    setCurrentStep('payment');
+    setError('');
+  };
+
+  // Procesar orden
+  const handlePlaceOrder = async () => {
+    if (!selectedAddressId || !selectedPaymentMethod) {
+      setError('Por favor, completa todos los pasos');
       return;
     }
 
+    setProcessingOrder(true);
+    setError('');
+
     try {
-      setProcessing(true);
-      setError('');
-
-      const checkoutDto: CheckoutDto = {
-        addressId: selectedAddress.id,
-        deliveryNotes: deliveryNotes || undefined,
-        tipAmount: tipAmount || 0,
-      };
-
-      const order = await ordersService.checkout(checkoutDto);
+      // Construir notas de entrega
+      let deliveryNotes = `Método de pago: ${paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}`;
       
-      if (!order || !order.id) {
-        setError('Error al crear el pedido. Por favor intenta de nuevo.');
-        return;
+      // Agregar información de dirección de facturación si es diferente
+      if (!useSameAddressForBilling && selectedBillingAddressId) {
+        const selectedBillingAddress = billingAddresses.find(addr => addr.id === selectedBillingAddressId);
+        if (selectedBillingAddress) {
+          const billingAddressText = [
+            selectedBillingAddress.street,
+            selectedBillingAddress.street_number,
+            selectedBillingAddress.interior_number,
+            selectedBillingAddress.neighborhood,
+            selectedBillingAddress.city,
+            selectedBillingAddress.state,
+            selectedBillingAddress.postal_code,
+          ].filter(Boolean).join(', ');
+          deliveryNotes += `\nDirección de facturación: ${billingAddressText}`;
+        }
       }
       
-      await refreshCart();
-      window.location.href = `/orders/${order.id}`;
-    } catch (error: any) {
-      console.error('Error en checkout:', error);
-      setError(error.message || 'Error al procesar el pedido');
+      const order = await apiRequest<{ id: string; order_number: string }>('/orders/checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          addressId: selectedAddressId,
+          deliveryNotes: deliveryNotes.trim(),
+        }),
+      });
+
+      // Guardar información del pedido antes de vaciar el carrito
+      setConfirmedOrderData({
+        storesInfo,
+        subtotalsByStore,
+        shippingSelections,
+        shippingOptionsByStore,
+        total,
+      });
+      
+      setOrderId(order.id);
+      setCurrentStep('confirmation');
+      
+      // Vaciar el carrito después de mostrar la confirmación
+      setTimeout(async () => {
+        await refreshCart();
+      }, 100);
+    } catch (err: any) {
+      setError(err.message || 'Error al procesar la orden');
     } finally {
-      setProcessing(false);
+      setProcessingOrder(false);
     }
   };
 
-  if (authLoading || cartLoading || !cart || !cart.items || cart.items.length === 0) {
+  // No mostrar loading si estamos en confirmación (el carrito ya está vacío pero es normal)
+  if ((cartLoading || !cart || !cart.items || cart.items.length === 0) && currentStep !== 'confirmation' && !orderId) {
     return (
       <StoreLayout>
         <div className="text-center py-12">
@@ -202,236 +978,1274 @@ export default function CheckoutPage() {
     );
   }
 
-  const subtotal = parseFloat(cart.subtotal || '0');
-  const totalTax = Object.values(itemsTaxBreakdowns).reduce(
-    (sum, breakdown) => sum + (breakdown?.total_tax || 0),
-    0
-  );
-  const deliveryFee = 0;
-  const total = subtotal + totalTax + deliveryFee + tipAmount;
-
   return (
     <>
       <Head>
         <title>Checkout - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
+        <div className="max-w-7xl mx-auto py-8">
+          <h1 className="text-3xl font-medium text-gray-900 mb-8">Finalizar Compra</h1>
 
-          {/* Indicador de pasos */}
-          <CheckoutSteps currentStep={currentStep} className="mb-8" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Columna izquierda: Proceso de checkout (2/3) */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                {/* Indicador de pasos */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between">
+                    {[
+                      { key: 'auth', label: 'Autenticación', icon: PersonIcon },
+                      { key: 'shipping', label: 'Dirección', icon: LocalShippingIcon },
+                      { key: 'shipping-method', label: 'Envío', icon: LocalShippingIcon },
+                      { key: 'payment', label: 'Pago', icon: CreditCardIcon },
+                      { key: 'confirmation', label: 'Confirmación', icon: LockIcon },
+                    ].map((step, index) => {
+                      const StepIcon = step.icon;
+                      const stepKeys: CheckoutStep[] = ['auth', 'shipping', 'shipping-method', 'payment', 'confirmation'];
+                      const currentStepIndex = stepKeys.indexOf(currentStep);
+                      const isCompleted = stepKeys.indexOf(step.key as CheckoutStep) < currentStepIndex;
+                      const isCurrent = step.key === currentStep;
 
-          {/* Error message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+                      const stepIndex = stepKeys.indexOf(step.key as CheckoutStep);
+                      const canNavigateToStep = stepIndex <= currentStepIndex; // Solo permitir navegar a pasos completados o actual
 
-          {/* Contenido del paso actual */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            {currentStep === 'address' && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Seleccionar Dirección</h2>
-                {!showAddressForm ? (
-                  <>
-                    {addresses.length > 0 ? (
-                      <div className="space-y-3 mb-4">
-                        {addresses.map((address) => (
-                          <button
-                            key={address.id}
-                            onClick={() => handleAddressSelect(address)}
-                            className={`w-full p-4 rounded-lg border-2 text-left transition-colors ${
-                              selectedAddress?.id === address.id
-                                ? 'border-black bg-gray-50'
-                                : 'border-gray-300 hover:border-gray-400'
-                            }`}
+                      return (
+                        <div key={step.key} className="flex items-center flex-1">
+                          <div 
+                            className={`flex flex-col items-center flex-1 ${canNavigateToStep ? 'cursor-pointer' : 'cursor-default'}`}
+                            onClick={() => {
+                              if (canNavigateToStep && currentStep !== 'confirmation') {
+                                setCurrentStep(step.key as CheckoutStep);
+                                setError('');
+                              }
+                            }}
                           >
-                            <div className="font-semibold mb-1">{address.label || 'Dirección'}</div>
-                            <div className="text-sm text-gray-600">
-                              {address.street} {address.street_number && `#${address.street_number}`}
-                              {address.interior_number && ` Int. ${address.interior_number}`}
-                              <br />
-                              {address.neighborhood}, {address.city}
-                              {address.postal_code && ` ${address.postal_code}`}
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                              isCompleted ? 'bg-blue-600 text-white' : 
+                              isCurrent ? 'bg-blue-600 text-white' : 
+                              'bg-gray-200 text-gray-500'
+                            } ${canNavigateToStep && currentStep !== 'confirmation' ? 'hover:ring-2 hover:ring-blue-500 hover:ring-offset-2' : ''}`}>
+                              {isCompleted ? (
+                                <CheckCircleIcon className="w-6 h-6" />
+                              ) : (
+                                <StepIcon className="w-5 h-5" />
+                              )}
                             </div>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-gray-500 mb-4">No tienes direcciones guardadas</p>
-                    )}
-                    <button
-                      onClick={() => setShowAddressForm(true)}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      + Agregar Nueva Dirección
-                    </button>
-                  </>
-                ) : (
-                  <AddressForm
-                    onSubmit={handleAddressCreate}
-                    onCancel={() => setShowAddressForm(false)}
-                  />
-                )}
-              </div>
-            )}
-
-            {currentStep === 'delivery' && selectedAddress && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Información de Entrega</h2>
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                  <div className="font-semibold mb-2">Dirección de entrega:</div>
-                  <div className="text-sm text-gray-600">
-                    {selectedAddress.street} {selectedAddress.street_number && `#${selectedAddress.street_number}`}
-                    {selectedAddress.interior_number && ` Int. ${selectedAddress.interior_number}`}
-                    <br />
-                    {selectedAddress.neighborhood}, {selectedAddress.city}
-                    {selectedAddress.postal_code && ` ${selectedAddress.postal_code}`}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notas de entrega (opcional)
-                  </label>
-                  <textarea
-                    value={deliveryNotes}
-                    onChange={(e) => setDeliveryNotes(e.target.value)}
-                    placeholder="Ej: Llamar antes de llegar"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black resize-none"
-                    rows={3}
-                  />
-                </div>
-              </div>
-            )}
-
-            {currentStep === 'payment' && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Propina</h2>
-                <div className="space-y-3 mb-4">
-                  {[0, 10, 15, 20].map((percent) => {
-                    const amount = (subtotal * percent) / 100;
-                    return (
-                      <button
-                        key={percent}
-                        onClick={() => setTipAmount(amount)}
-                        className={`w-full p-4 rounded-lg border-2 text-left transition-colors ${
-                          tipAmount === amount
-                            ? 'border-black bg-gray-50'
-                            : 'border-gray-300 hover:border-gray-400'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span>{percent === 0 ? 'Sin propina' : `${percent}%`}</span>
-                          <span className="font-semibold">{formatPrice(amount)}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Propina personalizada
-                  </label>
-                  <input
-                    type="number"
-                    value={tipAmount}
-                    onChange={(e) => setTipAmount(parseFloat(e.target.value) || 0)}
-                    min="0"
-                    step="0.01"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
-                  />
-                </div>
-              </div>
-            )}
-
-            {currentStep === 'summary' && selectedAddress && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">Resumen del Pedido</h2>
-                
-                {/* Items */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-3">Productos</h3>
-                  <div className="space-y-3">
-                    {cart.items.map((item: CartItem) => (
-                      <div key={item.id} className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-medium">{item.product_name}</div>
-                          <div className="text-sm text-gray-600">
-                            Cantidad: {item.quantity} × {formatPrice(parseFloat(String(item.unit_price || 0)))}
+                            <span className={`text-xs mt-2 text-center ${
+                              isCurrent ? 'font-medium text-blue-600' : 'text-gray-500'
+                            }`}>
+                              {step.label}
+                            </span>
                           </div>
-                          {itemsTaxBreakdowns[item.id] && (
-                            <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
+                          {index < 3 && (
+                            <div className={`flex-1 h-0.5 mx-2 ${
+                              isCompleted ? 'bg-blue-600' : 'bg-gray-200'
+                            }`} />
                           )}
                         </div>
-                        <div className="font-semibold">
-                          {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                {/* Paso 1: Autenticación */}
+                {currentStep === 'auth' && (
+                  <div>
+                    <h2 className="text-xl font-medium text-gray-900 mb-6">Autenticación</h2>
+                    
+                    <div className="mb-4 flex gap-2 border-b border-gray-200">
+                      <button
+                        onClick={() => {
+                          setAuthMode('login');
+                          setError('');
+                        }}
+                        className={`px-4 py-2 font-medium ${
+                          authMode === 'login'
+                            ? 'text-toyota-red border-b-2 border-toyota-red'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Iniciar Sesión
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAuthMode('register');
+                          setError('');
+                        }}
+                        className={`px-4 py-2 font-medium ${
+                          authMode === 'register'
+                            ? 'text-toyota-red border-b-2 border-toyota-red'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        Registrarse
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleAuthSubmit} className="space-y-4">
+                      {authMode === 'register' && (
+                        <>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Nombre
+                              </label>
+                              <input
+                                type="text"
+                                value={authFirstName}
+                                onChange={(e) => setAuthFirstName(e.target.value)}
+                                required={authMode === 'register'}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Apellido
+                              </label>
+                              <input
+                                type="text"
+                                value={authLastName}
+                                onChange={(e) => setAuthLastName(e.target.value)}
+                                required={authMode === 'register'}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Teléfono
+                            </label>
+                            <input
+                              type="tel"
+                              value={authPhone}
+                              onChange={(e) => setAuthPhone(e.target.value)}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          required
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Contraseña
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            required
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 text-sm"
+                          >
+                            {showPassword ? 'Ocultar' : 'Mostrar'}
+                          </button>
                         </div>
                       </div>
-                    ))}
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        {loading ? 'Procesando...' : authMode === 'login' ? 'Iniciar Sesión' : 'Registrarse y Continuar'}
+                      </button>
+                    </form>
                   </div>
+                )}
+
+                {/* Paso 2: Envío */}
+                {currentStep === 'shipping' && (
+                  <div>
+                    <h2 className="text-xl font-medium text-gray-900 mb-6">Dirección de Envío</h2>
+
+                    {addresses.length > 0 && (
+                      <div className="space-y-3 mb-6">
+                        {addresses.map((address) => (
+                          <label
+                            key={address.id}
+                            className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                              selectedAddressId === address.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="radio"
+                                name="address"
+                                value={address.id}
+                                checked={selectedAddressId === address.id}
+                                onChange={() => setSelectedAddressId(address.id)}
+                                className="mt-1"
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-start justify-between mb-1">
+                                  <div className="flex-1">
+                                    {address.label && (
+                                      <p className="font-medium text-gray-900">{address.label}</p>
+                                    )}
+                                    {address.is_default && (
+                                      <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-1">
+                                        <StarIcon className="w-3 h-3" />
+                                        Predeterminada
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 ml-2">
+                                    {!address.is_default && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSetDefaultAddress(address.id);
+                                        }}
+                                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                        title="Establecer como predeterminada"
+                                      >
+                                        <StarBorderIcon className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditAddress(address);
+                                      }}
+                                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                      title="Editar dirección"
+                                    >
+                                      <EditIcon className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteAddress(address.id);
+                                      }}
+                                      disabled={deletingAddressId === address.id || loading}
+                                      className="p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                                      title="Eliminar dirección"
+                                    >
+                                      <DeleteIcon className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                  {address.street} {address.street_number}
+                                  {address.interior_number && ` Int. ${address.interior_number}`}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {address.neighborhood}, {address.city}, {address.state} {address.postal_code}
+                                </p>
+                                {address.additional_references && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Referencias: {address.additional_references}
+                                  </p>
+                                )}
+                                {/* Datos del receptor */}
+                                <div className="mt-2 pt-2 border-t border-gray-200">
+                                  {editingReceiverForAddressId === address.id ? (
+                                    <div className="space-y-2">
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                          Nombre completo *
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={editingReceiverName}
+                                          onChange={(e) => setEditingReceiverName(e.target.value)}
+                                          placeholder="Nombre de quien recibirá"
+                                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          autoFocus
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                                          Teléfono (opcional)
+                                        </label>
+                                        <input
+                                          type="tel"
+                                          value={editingReceiverPhone}
+                                          onChange={(e) => setEditingReceiverPhone(e.target.value)}
+                                          placeholder="10 dígitos"
+                                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => handleUpdateReceiver(address.id)}
+                                          disabled={loading || !editingReceiverName.trim()}
+                                          className="flex-1 px-3 py-1.5 text-xs bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                        >
+                                          Guardar
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setEditingReceiverForAddressId(null);
+                                            setEditingReceiverName('');
+                                            setEditingReceiverPhone('');
+                                          }}
+                                          className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                        >
+                                          Cancelar
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <p className="text-xs text-gray-500 mb-1">Recibe:</p>
+                                          {address.receiver_name ? (
+                                            <>
+                                              <p className="text-sm font-medium text-gray-900">
+                                                {address.receiver_name}
+                                              </p>
+                                              {address.receiver_phone && (
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                  Tel: {address.receiver_phone}
+                                                </p>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <p className="text-xs text-orange-600 italic">
+                                              Falta nombre del receptor
+                                            </p>
+                                          )}
+                                        </div>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingReceiverForAddressId(address.id);
+                                            setEditingReceiverName(address.receiver_name || '');
+                                            setEditingReceiverPhone(address.receiver_phone || '');
+                                          }}
+                                          className="ml-2 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
+                                        >
+                                          {address.receiver_name ? 'Editar' : 'Agregar'}
+                                        </button>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {!showNewAddressForm ? (
+                      <button
+                        onClick={() => {
+                          setEditingAddressId(null);
+                          setShowNewAddressForm(true);
+                        }}
+                        className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors font-medium"
+                      >
+                        + Agregar Nueva Dirección
+                      </button>
+                    ) : (
+                      <div className="border-2 border-gray-200 rounded-lg p-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-4">
+                          {editingAddressId ? 'Editar Dirección de Envío' : 'Nueva Dirección de Envío'}
+                        </h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Etiqueta (opcional)
+                            </label>
+                            <input
+                              type="text"
+                              value={newAddress.label}
+                              onChange={(e) => setNewAddress({ ...newAddress, label: e.target.value })}
+                              placeholder="Casa, Trabajo, etc."
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Calle *
+                            </label>
+                            <input
+                              type="text"
+                              value={newAddress.street}
+                              onChange={(e) => setNewAddress({ ...newAddress, street: e.target.value })}
+                              required
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Número Exterior
+                              </label>
+                              <input
+                                type="text"
+                                value={newAddress.street_number}
+                                onChange={(e) => setNewAddress({ ...newAddress, street_number: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Número Interior
+                              </label>
+                              <input
+                                type="text"
+                                value={newAddress.interior_number}
+                                onChange={(e) => setNewAddress({ ...newAddress, interior_number: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Colonia *
+                            </label>
+                            <input
+                              type="text"
+                              value={newAddress.neighborhood}
+                              onChange={(e) => setNewAddress({ ...newAddress, neighborhood: e.target.value })}
+                              required
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Ciudad
+                              </label>
+                              <input
+                                type="text"
+                                value={newAddress.city}
+                                onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Estado
+                              </label>
+                              <input
+                                type="text"
+                                value={newAddress.state}
+                                onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Código Postal *
+                              </label>
+                              <input
+                                type="text"
+                                value={newAddress.postal_code}
+                                onChange={(e) => setNewAddress({ ...newAddress, postal_code: e.target.value })}
+                                required
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Referencias Adicionales
+                            </label>
+                            <textarea
+                              value={newAddress.additional_references}
+                              onChange={(e) => setNewAddress({ ...newAddress, additional_references: e.target.value })}
+                              rows={2}
+                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          
+                          {/* Datos del receptor */}
+                          <div className="border-t border-gray-200 pt-4 mt-4">
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Datos de la Persona que Recibe</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Nombre completo *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={newAddress.receiver_name}
+                                  onChange={(e) => setNewAddress({ ...newAddress, receiver_name: e.target.value })}
+                                  placeholder="Nombre de quien recibirá el pedido"
+                                  required
+                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Teléfono de contacto
+                                </label>
+                                <input
+                                  type="tel"
+                                  value={newAddress.receiver_phone}
+                                  onChange={(e) => setNewAddress({ ...newAddress, receiver_phone: e.target.value })}
+                                  placeholder="10 dígitos (opcional)"
+                                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-3">
+                            <button
+                              onClick={editingAddressId ? handleUpdateAddress : handleCreateAddress}
+                              disabled={loading || !newAddress.street || !newAddress.neighborhood || !newAddress.postal_code || !newAddress.receiver_name.trim()}
+                              className="flex-1 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                            >
+                              {loading ? 'Guardando...' : editingAddressId ? 'Actualizar Dirección' : 'Guardar Dirección'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowNewAddressForm(false);
+                                setEditingAddressId(null);
+                                setError('');
+                                setNewAddress({
+                                  label: '',
+                                  street: '',
+                                  street_number: '',
+                                  interior_number: '',
+                                  neighborhood: '',
+                                  city: 'Ciudad de México',
+                                  state: 'CDMX',
+                                  postal_code: '',
+                                  country: 'México',
+                                  longitude: -99.1332,
+                                  latitude: 19.4326,
+                                  additional_references: '',
+                                  is_default: false,
+                                  receiver_name: '',
+                                  receiver_phone: '',
+                                });
+                              }}
+                              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dirección de facturación */}
+                    <div className="mt-8 mb-6 border-t border-gray-200 pt-6">
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Dirección de Facturación</h3>
+                      
+                      <label className="flex items-center gap-3 mb-4 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={useSameAddressForBilling}
+                          onChange={(e) => {
+                            setUseSameAddressForBilling(e.target.checked);
+                            if (e.target.checked) {
+                              setShowBillingAddressForm(false);
+                              // Mantener la dirección seleccionada
+                            }
+                          }}
+                          className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">
+                          Usar la misma dirección para facturación
+                        </span>
+                      </label>
+
+                      {!useSameAddressForBilling && (
+                        <div>
+                          {billingAddresses.length > 0 && !showBillingAddressForm && (
+                            <div className="space-y-3 mb-4">
+                              {billingAddresses.map((address) => (
+                                <label
+                                  key={address.id}
+                                  className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                                    selectedBillingAddressId === address.id
+                                      ? 'border-blue-500 bg-blue-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="billingAddress"
+                                    value={address.id}
+                                    checked={selectedBillingAddressId === address.id}
+                                    onChange={() => {
+                                      setSelectedBillingAddressId(address.id);
+                                      if (typeof window !== 'undefined') {
+                                        localStorage.setItem('billing_address_id', address.id);
+                                      }
+                                    }}
+                                    className="mt-1"
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-start justify-between mb-1">
+                                      <div className="flex-1">
+                                        {address.label && (
+                                          <p className="font-medium text-gray-900">{address.label}</p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1 ml-2">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditBillingAddress(address);
+                                          }}
+                                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                          title="Editar dirección"
+                                        >
+                                          <EditIcon className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteBillingAddress(address.id);
+                                          }}
+                                          disabled={deletingBillingAddressId === address.id || loading}
+                                          className="p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                                          title="Eliminar dirección"
+                                        >
+                                          <DeleteIcon className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-sm text-gray-600">
+                                      {address.street} {address.street_number}
+                                      {address.interior_number && ` Int. ${address.interior_number}`}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      {address.neighborhood}, {address.city}, {address.state} {address.postal_code}
+                                    </p>
+                                    {address.additional_references && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Referencias: {address.additional_references}
+                                      </p>
+                                    )}
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+
+                          {!showBillingAddressForm ? (
+                            <button
+                              onClick={() => {
+                                setEditingBillingAddressId(null);
+                                setShowBillingAddressForm(true);
+                              }}
+                              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors font-medium"
+                            >
+                              + {billingAddresses.length > 0 ? 'Agregar Otra Dirección de Facturación' : 'Agregar Dirección de Facturación'}
+                            </button>
+                          ) : (
+                            <div className="border-2 border-gray-200 rounded-lg p-6">
+                              <h4 className="text-md font-medium text-gray-900 mb-4">Nueva Dirección de Facturación</h4>
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Etiqueta (opcional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={billingAddress.label}
+                                    onChange={(e) => setBillingAddress({ ...billingAddress, label: e.target.value })}
+                                    placeholder="Casa, Oficina, etc."
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Calle *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={billingAddress.street}
+                                    onChange={(e) => setBillingAddress({ ...billingAddress, street: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Número Exterior
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={billingAddress.street_number}
+                                      onChange={(e) => setBillingAddress({ ...billingAddress, street_number: e.target.value })}
+                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Número Interior
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={billingAddress.interior_number}
+                                      onChange={(e) => setBillingAddress({ ...billingAddress, interior_number: e.target.value })}
+                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Colonia *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={billingAddress.neighborhood}
+                                    onChange={(e) => setBillingAddress({ ...billingAddress, neighborhood: e.target.value })}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Ciudad
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={billingAddress.city}
+                                      onChange={(e) => setBillingAddress({ ...billingAddress, city: e.target.value })}
+                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Estado
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={billingAddress.state}
+                                      onChange={(e) => setBillingAddress({ ...billingAddress, state: e.target.value })}
+                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                      Código Postal *
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={billingAddress.postal_code}
+                                      onChange={(e) => setBillingAddress({ ...billingAddress, postal_code: e.target.value })}
+                                      required
+                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Referencias Adicionales
+                                  </label>
+                                  <textarea
+                                    value={billingAddress.additional_references}
+                                    onChange={(e) => setBillingAddress({ ...billingAddress, additional_references: e.target.value })}
+                                    rows={2}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                </div>
+                                <div className="flex gap-3">
+                                  <button
+                                    onClick={handleCreateBillingAddress}
+                                    disabled={loading || !billingAddress.street.trim() || !billingAddress.neighborhood.trim() || !billingAddress.postal_code.trim()}
+                                    className="flex-1 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                                  >
+                                    {loading ? 'Guardando...' : editingBillingAddressId ? 'Actualizar Dirección' : 'Guardar Dirección'}
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setShowBillingAddressForm(false);
+                                      setEditingBillingAddressId(null);
+                                      setError('');
+                                      setBillingAddress({
+                                        label: '',
+                                        street: '',
+                                        street_number: '',
+                                        interior_number: '',
+                                        neighborhood: '',
+                                        city: 'Ciudad de México',
+                                        state: 'CDMX',
+                                        postal_code: '',
+                                        country: 'México',
+                                        longitude: -99.1332,
+                                        latitude: 19.4326,
+                                        additional_references: '',
+                                      });
+                                    }}
+                                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-6 flex justify-between">
+                      <button
+                        onClick={() => {
+                          if (isAuthenticated) {
+                            setCurrentStep('shipping');
+                          } else {
+                            setCurrentStep('auth');
+                          }
+                          setError('');
+                        }}
+                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                      >
+                        ← Volver
+                      </button>
+                      <button
+                        onClick={handleContinueToShippingMethod}
+                        disabled={
+                          !selectedAddressId || 
+                          (showNewAddressForm && !newAddress.receiver_name.trim()) ||
+                          (!showNewAddressForm && addresses.find(addr => addr.id === selectedAddressId) && !addresses.find(addr => addr.id === selectedAddressId)?.receiver_name?.trim()) ||
+                          (!useSameAddressForBilling && !selectedBillingAddressId)
+                        }
+                        className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        Continuar a Método de Envío
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paso 3: Método de Envío */}
+                {currentStep === 'shipping-method' && (
+                  <div>
+                    <h2 className="text-xl font-medium text-gray-900 mb-6">Método de Envío</h2>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Selecciona el método de envío para cada tienda. Los productos de diferentes tiendas se enviarán por separado.
+                    </p>
+
+                    <div className="space-y-4 mb-6">
+                      {Object.entries(storesInfo).map(([storeId, store]) => {
+                        const options = shippingOptionsByStore[storeId] || [];
+                        const selectedOptionId = shippingSelections[storeId];
+                        
+                        return (
+                          <div key={storeId} className="border-2 border-gray-200 rounded-lg p-4">
+                            <div className="mb-3 pb-2 border-b border-gray-200">
+                              <h3 className="text-base font-medium text-gray-900">{store.name}</h3>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                {store.items.length} {store.items.length === 1 ? 'producto' : 'productos'} • Subtotal: {formatPrice(subtotalsByStore[storeId] || 0)}
+                              </p>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              {options.map((option) => (
+                                <label
+                                  key={option.id}
+                                  className={`block p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                                    selectedOptionId === option.id
+                                      ? 'border-blue-500 bg-blue-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                      <input
+                                        type="radio"
+                                        name={`shipping-${storeId}`}
+                                        value={option.id}
+                                        checked={selectedOptionId === option.id}
+                                        onChange={() => {
+                                          setShippingSelections({
+                                            ...shippingSelections,
+                                            [storeId]: option.id,
+                                          });
+                                        }}
+                                        className="w-4 h-4"
+                                      />
+                                      <div>
+                                        <span className="font-medium text-gray-900 text-sm block">{option.label}</span>
+                                        {option.estimatedDays && option.estimatedDays > 0 && (
+                                          <span className="text-xs text-gray-500">
+                                            Entrega estimada: {option.estimatedDays} {option.estimatedDays === 1 ? 'día' : 'días'}
+                                          </span>
+                                        )}
+                                        {option.provider === 'pickup' && (
+                                          <span className="text-xs text-gray-500">
+                                            Recoge en {store.name}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="font-semibold text-gray-900 text-sm">
+                                        {option.price === 0 ? 'Gratis' : formatPrice(option.price)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-6 flex justify-between">
+                      <button
+                        onClick={() => setCurrentStep('shipping')}
+                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
+                      >
+                        ← Volver
+                      </button>
+                      <button
+                        onClick={handleContinueToPaymentFromShipping}
+                        disabled={!Object.keys(storesInfo).every(storeId => shippingSelections[storeId])}
+                        className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        Continuar al Pago
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paso 4: Pago */}
+                {currentStep === 'payment' && (
+                  <div>
+                    <h2 className="text-xl font-medium text-gray-900 mb-6">Método de Pago</h2>
+
+                    <div className="space-y-3 mb-6">
+                      {paymentMethods.map((method) => (
+                        <label
+                          key={method.id}
+                          className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                            selectedPaymentMethod === method.id
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="payment"
+                              value={method.id}
+                              checked={selectedPaymentMethod === method.id}
+                              onChange={() => setSelectedPaymentMethod(method.id)}
+                              className="w-5 h-5"
+                            />
+                            <div className="flex items-center gap-3">
+                              {method.type === 'card' && <CreditCardIcon className="w-6 h-6 text-gray-600" />}
+                              <span className="font-medium text-gray-900">{method.label}</span>
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 flex justify-between">
+                      <button
+                        onClick={() => {
+                          setCurrentStep('shipping-method');
+                          setError('');
+                        }}
+                        className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                      >
+                        ← Volver
+                      </button>
+                      <button
+                        onClick={handlePlaceOrder}
+                        disabled={!selectedPaymentMethod || processingOrder}
+                        className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      >
+                        {processingOrder ? 'Procesando Orden...' : 'Realizar Pedido'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Paso 5: Confirmación */}
+                {currentStep === 'confirmation' && orderId && (
+                  <div className="py-8">
+                    {/* Icono de éxito */}
+                    <div className="text-center mb-8">
+                      <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-green-100 mb-6">
+                        <CheckCircleIcon className="w-16 h-16 text-green-600" />
+                      </div>
+                      <h2 className="text-3xl font-bold text-gray-900 mb-3">¡Pedido Confirmado!</h2>
+                      <p className="text-lg text-gray-600 mb-2">
+                        Tu pedido ha sido procesado exitosamente
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Recibirás un correo de confirmación con los detalles de tu pedido
+                      </p>
+                    </div>
+
+                    {/* Información del pedido */}
+                    <div className="bg-gray-50 rounded-lg p-6 mb-6">
+                      <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                        <div>
+                          <p className="text-sm text-gray-500 mb-1">Número de pedido</p>
+                          <p className="text-xl font-bold text-gray-900">{orderId}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500 mb-1">Total pagado</p>
+                          <p className="text-xl font-bold text-toyota-red">
+                            {formatPrice(confirmedOrderData?.total || total)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dirección de envío */}
+                      {selectedAddressId && (() => {
+                        const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
+                        if (selectedAddress) {
+                          return (
+                            <div className="mb-4 pb-4 border-b border-gray-200">
+                              <p className="text-sm font-medium text-gray-700 mb-2">Dirección de envío</p>
+                              <div className="text-sm text-gray-600">
+                                {selectedAddress.receiver_name && (
+                                  <p className="font-medium text-gray-900 mb-1">{selectedAddress.receiver_name}</p>
+                                )}
+                                <p>{selectedAddress.street} {selectedAddress.street_number}</p>
+                                {selectedAddress.interior_number && <p>Int. {selectedAddress.interior_number}</p>}
+                                <p>{selectedAddress.neighborhood}, {selectedAddress.city}, {selectedAddress.state} {selectedAddress.postal_code}</p>
+                                {selectedAddress.receiver_phone && (
+                                  <p className="mt-1 text-gray-500">Tel: {selectedAddress.receiver_phone}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {/* Método de pago */}
+                      <div className="mb-4 pb-4 border-b border-gray-200">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Método de pago</p>
+                        <p className="text-sm text-gray-600">
+                          {paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}
+                        </p>
+                      </div>
+
+                      {/* Métodos de envío seleccionados */}
+                      {confirmedOrderData && Object.keys(confirmedOrderData.storesInfo).length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-700 mb-3">Métodos de envío</p>
+                          <div className="space-y-2">
+                            {Object.entries(confirmedOrderData.storesInfo).map(([storeId, store]) => {
+                              const selectedOptionId = confirmedOrderData.shippingSelections[storeId];
+                              const options = confirmedOrderData.shippingOptionsByStore[storeId] || [];
+                              const selectedOption = options.find(opt => opt.id === selectedOptionId);
+                              
+                              return (
+                                <div key={storeId} className="flex items-center justify-between text-sm bg-white rounded p-2">
+                                  <div>
+                                    <span className="font-medium text-gray-900">{store.name}:</span>
+                                    <span className="text-gray-600 ml-2">
+                                      {selectedOption?.label || 'No seleccionado'}
+                                    </span>
+                                    {selectedOption?.estimatedDays && selectedOption.estimatedDays > 0 && (
+                                      <span className="text-gray-500 ml-2">
+                                        ({selectedOption.estimatedDays} {selectedOption.estimatedDays === 1 ? 'día' : 'días'})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-medium text-gray-900">
+                                    {selectedOption?.price === 0 ? 'Gratis' : formatPrice(selectedOption?.price || 0)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Mensaje informativo */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-blue-800">
+                        <strong>¿Qué sigue?</strong> Te enviaremos un correo electrónico con los detalles de tu pedido y el número de seguimiento una vez que sea enviado.
+                      </p>
+                    </div>
+
+                    {/* Botones de acción */}
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                      <button
+                        onClick={() => router.push('/')}
+                        className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium shadow-sm"
+                      >
+                        Continuar Comprando
+                      </button>
+                      <button
+                        onClick={() => router.push('/orders')}
+                        className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                      >
+                        Ver Mis Pedidos
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Columna derecha: Resumen del pedido (1/3) */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
+                <h2 className="text-xl font-medium text-gray-900 mb-6">Resumen del Pedido</h2>
+                
+                {/* Items del carrito agrupados por tienda */}
+                <div className="space-y-4 mb-6 border-b border-gray-200 pb-6">
+                  {Object.entries(storesInfo).map(([businessId, store], storeIndex) => (
+                    <div key={businessId} className={storeIndex > 0 ? 'border-t border-gray-200 pt-4' : ''}>
+                      {/* Encabezado de la tienda */}
+                      {Object.keys(storesInfo).length > 1 && (
+                        <div className="mb-3 pb-2 border-b border-gray-100">
+                          <p className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                            {store.name}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {store.items.length} {store.items.length === 1 ? 'producto' : 'productos'}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Items de esta tienda */}
+                      <div className="space-y-3">
+                        {store.items.map((item: CartItem) => (
+                          <div key={item.id} className="flex gap-3">
+                            {item.product_image_url && (
+                              <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                                <img
+                                  src={item.product_image_url}
+                                  alt={item.product_name}
+                                  className="w-full h-full object-contain p-1"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
+                              <p className="text-xs text-gray-500 mt-1">Cantidad: {item.quantity}</p>
+                              <p className="text-sm font-medium text-gray-900 mt-1">
+                                {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Subtotal y envío por tienda (solo si hay múltiples tiendas) */}
+                      {Object.keys(storesInfo).length > 1 && (
+                        <div className="mt-3 pt-2 border-t border-gray-100 space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-600">Subtotal {store.name}:</span>
+                            <span className="font-medium text-gray-900">
+                              {formatPrice(subtotalsByStore[businessId] || 0)}
+                            </span>
+                          </div>
+                          {currentStep !== 'auth' && currentStep !== 'shipping' && (
+                            (() => {
+                              const selectedOptionId = shippingSelections[businessId];
+                              const options = shippingOptionsByStore[businessId] || [];
+                              const selectedOption = options.find(opt => opt.id === selectedOptionId);
+                              const shippingCost = selectedOption?.price || 0;
+                              
+                              if (shippingCost === 0 && selectedOption?.provider === 'pickup') {
+                                return (
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500">Envío {store.name}:</span>
+                                    <span className="text-gray-700">Recoger en tienda</span>
+                                  </div>
+                                );
+                              } else if (shippingCost > 0) {
+                                return (
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-500">Envío {store.name} ({selectedOption?.label}):</span>
+                                    <span className="text-gray-700">{formatPrice(shippingCost)}</span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Totales */}
-                <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>{formatPrice(subtotal)}</span>
+                <div className="space-y-3 mb-6">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-900">{formatPrice(subtotal)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Impuestos</span>
-                    <span>{formatPrice(totalTax)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Impuestos</span>
+                    <span className="text-gray-900">{formatPrice(totalTax)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Envío</span>
-                    <span>{formatPrice(deliveryFee)}</span>
-                  </div>
-                  {tipAmount > 0 && (
-                    <div className="flex justify-between">
-                      <span>Propina</span>
-                      <span>{formatPrice(tipAmount)}</span>
+                  {shippingTotal > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Envío</span>
+                      <span className="text-gray-900">{formatPrice(shippingTotal)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-                    <span>Total</span>
-                    <span>{formatPrice(total)}</span>
+                  {Object.keys(storesInfo).length > 1 && shippingTotal > 0 && (
+                    <div className="pl-4 space-y-1 mt-2">
+                      {Object.entries(storesInfo).map(([storeId, store]) => {
+                        const selectedOptionId = shippingSelections[storeId];
+                        const options = shippingOptionsByStore[storeId] || [];
+                        const selectedOption = options.find(opt => opt.id === selectedOptionId);
+                        const shippingCost = selectedOption?.price || 0;
+                        
+                        if (shippingCost === 0) return null;
+                        
+                        return (
+                          <div key={storeId} className="flex justify-between text-xs">
+                            <span className="text-gray-500">Envío {store.name}:</span>
+                            <span className="text-gray-700">{formatPrice(shippingCost)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-medium text-gray-900">Total</span>
+                    <span className="text-2xl font-medium text-gray-900">{formatPrice(total)}</span>
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Botones de navegación */}
-          <div className="flex gap-3">
-            {currentStep !== 'address' && (
-              <button
-                onClick={handlePreviousStep}
-                className="flex-1 px-6 py-3 bg-gray-100 text-black rounded-lg hover:bg-gray-200 transition-colors font-medium"
-              >
-                Anterior
-              </button>
-            )}
-            {currentStep !== 'summary' ? (
-              <button
-                onClick={handleNextStep}
-                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
-              >
-                Continuar
-              </button>
-            ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={processing}
-                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {processing ? 'Procesando...' : 'Confirmar Pedido'}
-              </button>
-            )}
+            </div>
           </div>
         </div>
       </StoreLayout>
     </>
   );
 }
-

@@ -27,6 +27,8 @@ export default function StoreSettingsPage() {
     tax_id: '',
     is_active: true,
   });
+  const [branchesWithoutGroup, setBranchesWithoutGroup] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
 
   // Verificar si el usuario es superadmin
   useEffect(() => {
@@ -172,6 +174,7 @@ export default function StoreSettingsPage() {
         });
       } else {
         // Crear nuevo grupo
+        const branchesCount = branchesWithoutGroup.length;
         const created = await businessService.createBusinessGroup({
           name: formData.name,
           legal_name: formData.legal_name || undefined,
@@ -194,6 +197,14 @@ export default function StoreSettingsPage() {
           tax_id: created.tax_id || '',
           is_active: created.is_active ?? true,
         });
+        
+        // Mostrar confirmación con sucursales asignadas
+        if (branchesCount > 0) {
+          alert(`✅ Grupo creado exitosamente. ${branchesCount} sucursal${branchesCount > 1 ? 'es' : ''} asignada${branchesCount > 1 ? 's' : ''} automáticamente.`);
+        } else {
+          alert('✅ Grupo creado exitosamente');
+        }
+        setBranchesWithoutGroup([]); // Limpiar lista ya que fueron asignadas
       }
       
       setIsEditing(false);
@@ -349,8 +360,38 @@ export default function StoreSettingsPage() {
               </div>
             ) : (
               // Formulario de edición/creación
-              <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <>
+                {/* Preview de sucursales que serán asignadas al crear grupo */}
+                {!businessGroup && branchesWithoutGroup.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-blue-900 mb-2">
+                          Al crear este grupo, se asignarán automáticamente <strong>{branchesWithoutGroup.length} sucursal{branchesWithoutGroup.length > 1 ? 'es' : ''}</strong> sin grupo:
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
+                          {branchesWithoutGroup.map(branch => (
+                            <li key={branch.id}>{branch.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!businessGroup && branchesWithoutGroup.length === 0 && !loadingBranches && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-gray-700">
+                      No hay sucursales sin grupo para asignar. Todas tus sucursales ya tienen un grupo asignado.
+                    </p>
+                  </div>
+                )}
+                <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nombre del Grupo <span className="text-red-500">*</span>
@@ -505,6 +546,7 @@ export default function StoreSettingsPage() {
                   </button>
                 </div>
               </form>
+              </>
             )}
           </div>
         </div>

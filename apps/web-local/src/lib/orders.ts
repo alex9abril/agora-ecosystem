@@ -128,5 +128,19 @@ export const ordersService = {
 
     return response;
   },
+
+  /**
+   * ⚠️ TEMPORAL: Eliminar pedido físicamente
+   */
+  async deleteOrder(businessId: string, orderId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiRequest<{ success: boolean; message: string }>(
+      `/orders/business/${businessId}/${orderId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+
+    return response;
+  },
 };
 

@@ -25,6 +25,7 @@ import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
 import { AdminSignUpDto } from './dto/admin-signup.dto';
 import { RequestPasswordResetDto, UpdatePasswordDto } from './dto/reset-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 /**
  * Controlador de autenticación
@@ -225,6 +226,24 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async getProfile(@CurrentUser() user: User) {
     const profile = await this.authService.getUserProfile(user.id);
+    return {
+      ...user,
+      profile,
+    };
+  }
+
+  /**
+   * Endpoint protegido: Actualizar perfil del usuario autenticado
+   */
+  @Patch('me')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar perfil del usuario autenticado' })
+  @ApiResponse({ status: 200, description: 'Perfil actualizado exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 409, description: 'Teléfono ya registrado' })
+  async updateProfile(@CurrentUser() user: User, @Body() updateDto: UpdateProfileDto) {
+    const profile = await this.authService.updateProfile(user.id, updateDto);
     return {
       ...user,
       profile,

@@ -272,17 +272,52 @@ export default function NavigationDialog({ open, onClose }: NavigationDialogProp
             <div className="text-center py-12">
               <p className="text-red-600">{error}</p>
             </div>
-          ) : filteredResults.length === 0 && searchQuery.trim() ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No se encontraron resultados</p>
-            </div>
-          ) : filteredResults.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">No hay datos disponibles</p>
-            </div>
           ) : (
-            <div className="space-y-2">
-              {filteredResults.map((result, index) => {
+            <>
+              {/* Link destacado para ver todos los productos */}
+              {!searchQuery.trim() && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => {
+                      navigateToContext('global', '');
+                      onClose();
+                      router.push('/global');
+                    }}
+                    className="w-full text-left p-4 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-all shadow-sm hover:shadow-md"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-1">Ver Todos los Productos</h3>
+                        <p className="text-sm text-white/90">
+                          Explora todos los productos de todas las sucursales
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {filteredResults.length === 0 && searchQuery.trim() ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No se encontraron resultados</p>
+                </div>
+              ) : filteredResults.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No hay datos disponibles</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredResults.map((result, index) => {
                 const key = result.group 
                   ? `group-${result.group.id}` 
                   : result.branch 
@@ -320,7 +355,9 @@ export default function NavigationDialog({ open, onClose }: NavigationDialogProp
                   </button>
                 );
               })}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

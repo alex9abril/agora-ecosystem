@@ -22,6 +22,7 @@ import { CreateTaxTypeDto } from './dto/create-tax-type.dto';
 import { UpdateTaxTypeDto } from './dto/update-tax-type.dto';
 import { AssignTaxToProductDto } from './dto/assign-tax-to-product.dto';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('Catalog - Taxes')
 @ApiBearerAuth()
@@ -130,7 +131,8 @@ export class TaxesController {
   }
 
   @Post('products/:productId/calculate')
-  @ApiOperation({ summary: 'Calcular impuestos para un producto y subtotal' })
+  @Public()
+  @ApiOperation({ summary: 'Calcular impuestos para un producto y subtotal (Público)' })
   @ApiParam({ name: 'productId', description: 'ID del producto', type: String })
   @ApiQuery({ name: 'subtotal', required: true, type: Number, description: 'Subtotal del producto' })
   @ApiResponse({ status: 200, description: 'Cálculo de impuestos obtenido exitosamente' })

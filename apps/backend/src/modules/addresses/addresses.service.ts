@@ -32,6 +32,8 @@ export class AddressesService {
           (location)[0] as longitude,
           (location)[1] as latitude,
           additional_references,
+          receiver_name,
+          receiver_phone,
           is_default,
           is_active,
           created_at,
@@ -73,6 +75,8 @@ export class AddressesService {
           (location)[0] as longitude,
           (location)[1] as latitude,
           additional_references,
+          receiver_name,
+          receiver_phone,
           is_default,
           is_active,
           created_at,
@@ -119,8 +123,8 @@ export class AddressesService {
         `INSERT INTO core.addresses (
           user_id, label, street, street_number, interior_number,
           neighborhood, city, state, postal_code, country,
-          location, additional_references, is_default, is_active
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_MakePoint($11, $12)::point, $13, $14, TRUE)
+          location, additional_references, receiver_name, receiver_phone, is_default, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ST_MakePoint($11, $12)::point, $13, $14, $15, $16, TRUE)
         RETURNING 
           id,
           label,
@@ -135,6 +139,8 @@ export class AddressesService {
           (location)[0] as longitude,
           (location)[1] as latitude,
           additional_references,
+          receiver_name,
+          receiver_phone,
           is_default,
           is_active,
           created_at,
@@ -153,6 +159,8 @@ export class AddressesService {
           createDto.longitude,
           createDto.latitude,
           createDto.additional_references || null,
+          createDto.receiver_name || null,
+          createDto.receiver_phone || null,
           createDto.is_default || false,
         ]
       );
@@ -174,13 +182,40 @@ export class AddressesService {
 
     try {
       // Verificar que la dirección existe y pertenece al usuario
+      console.log('🔍 [update] Verificando dirección:', { id, userId });
+      
       const existing = await dbPool.query(
-        `SELECT id FROM core.addresses WHERE id = $1 AND user_id = $2 AND is_active = TRUE`,
-        [id, userId]
+        `SELECT id, user_id, is_active FROM core.addresses WHERE id = $1`,
+        [id]
       );
 
+      console.log('🔍 [update] Resultado de búsqueda:', {
+        found: existing.rows.length > 0,
+        rows: existing.rows,
+        requestedUserId: userId,
+      });
+
       if (existing.rows.length === 0) {
+        console.error('❌ [update] Dirección no encontrada en la base de datos:', id);
         throw new NotFoundException('Dirección no encontrada');
+      }
+
+      const address = existing.rows[0];
+      if (address.user_id !== userId) {
+        console.error('❌ [update] La dirección pertenece a otro usuario:', {
+          addressUserId: address.user_id,
+          requestedUserId: userId,
+        });
+        throw new NotFoundException('Dirección no encontrada');
+      }
+
+      // Si la dirección está inactiva pero el usuario intenta editarla, reactivarla automáticamente
+      if (!address.is_active) {
+        console.log('⚠️ [update] La dirección está inactiva, reactivándola automáticamente:', id);
+        // Continuar con la actualización, pero asegurarse de que is_active se establezca en true
+        if (updateDto.is_active === undefined) {
+          updateDto.is_active = true;
+        }
       }
 
       // Si se establece como predeterminada, quitar el flag de otras direcciones
@@ -243,9 +278,21 @@ export class AddressesService {
         updates.push(`additional_references = $${paramIndex++}`);
         values.push(updateDto.additional_references);
       }
+      if (updateDto.receiver_name !== undefined) {
+        updates.push(`receiver_name = $${paramIndex++}`);
+        values.push(updateDto.receiver_name);
+      }
+      if (updateDto.receiver_phone !== undefined) {
+        updates.push(`receiver_phone = $${paramIndex++}`);
+        values.push(updateDto.receiver_phone);
+      }
       if (updateDto.is_default !== undefined) {
         updates.push(`is_default = $${paramIndex++}`);
         values.push(updateDto.is_default);
+      }
+      if (updateDto.is_active !== undefined) {
+        updates.push(`is_active = $${paramIndex++}`);
+        values.push(updateDto.is_active);
       }
 
       if (updates.length === 0) {
@@ -259,24 +306,26 @@ export class AddressesService {
         `UPDATE core.addresses 
          SET ${updates.join(', ')}
          WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
-         RETURNING 
-           id,
-           label,
-           street,
-           street_number,
-           interior_number,
-           neighborhood,
-           city,
-           state,
-           postal_code,
-           country,
-           (location)[0] as longitude,
-           (location)[1] as latitude,
-           additional_references,
-           is_default,
-           is_active,
-           created_at,
-           updated_at`,
+        RETURNING 
+          id,
+          label,
+          street,
+          street_number,
+          interior_number,
+          neighborhood,
+          city,
+          state,
+          postal_code,
+          country,
+          (location)[0] as longitude,
+          (location)[1] as latitude,
+          additional_references,
+          receiver_name,
+          receiver_phone,
+          is_default,
+          is_active,
+          created_at,
+          updated_at`,
         values
       );
 

@@ -83,5 +83,23 @@ export class UpdateAddressDto {
   @IsBoolean()
   @Type(() => Boolean)
   is_default?: boolean;
+
+  @ApiPropertyOptional({ description: 'Nombre de la persona que recibirá el pedido en esta dirección', example: 'María González' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  receiver_name?: string;
+
+  @ApiPropertyOptional({ description: 'Teléfono de contacto de la persona que recibirá el pedido', example: '5512345678' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  receiver_phone?: string;
+
+  @ApiPropertyOptional({ description: 'Indica si la dirección está activa', example: true })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  is_active?: boolean;
 }
 

@@ -10,7 +10,8 @@ import VariantSelector from '@/components/VariantSelector';
 import StockIndicator from '@/components/StockIndicator';
 import BranchPriceDisplay from '@/components/BranchPriceDisplay';
 import BranchAvailabilityGrid from '@/components/BranchAvailabilityGrid';
-import { productsService, Product, ProductBranchAvailability } from '@/lib/products';
+import { productsService, Product, ProductBranchAvailability, ProductImage } from '@/lib/products';
+import ProductImageGallery from '@/components/ProductImageGallery';
 import { branchesService } from '@/lib/branches';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +21,7 @@ import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { formatPrice } from '@/lib/format';
 import WarningIcon from '@mui/icons-material/Warning';
+import { Snackbar, Alert } from '@mui/material';
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -30,6 +32,8 @@ export default function ProductDetailPage() {
   const { push } = useStoreRouting();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [branchAvailabilities, setBranchAvailabilities] = useState<ProductBranchAvailability[]>([]);
   const [loadingAvailabilities, setLoadingAvailabilities] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
@@ -38,6 +42,9 @@ export default function ProductDetailPage() {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [addingToCart, setAddingToCart] = useState(false);
   const [storedBranch, setStoredBranch] = useState<{ id: string; name: string } | null>(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -79,6 +86,7 @@ export default function ProductDetailPage() {
 
     if (id) {
       loadProduct();
+      loadProductImages();
       // Cargar disponibilidad según el contexto
       // Reglas:
       // - Global: mostrar todas las sucursales
@@ -123,6 +131,25 @@ export default function ProductDetailPage() {
       console.error('❌ [loadProduct] Error cargando producto:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadProductImages = async () => {
+    if (!id || typeof id !== 'string') {
+      return;
+    }
+
+    try {
+      setLoadingImages(true);
+      const images = await productsService.getProductImages(id, false);
+      console.log('✅ [loadProductImages] Images loaded:', images.length);
+      setProductImages(images);
+    } catch (error) {
+      console.error('Error cargando imágenes del producto:', error);
+      // Si falla, no es crítico, simplemente no mostramos las imágenes adicionales
+      setProductImages([]);
+    } finally {
+      setLoadingImages(false);
     }
   };
 
@@ -235,14 +262,18 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
-    if (!product) return;
+    console.log('🛒 [handleAddToCart] Iniciando agregar al carrito', {
+      product: product?.id,
+      contextType,
+      branchId,
+      selectedBranchId,
+      quantity,
+      selectedVariants,
+    });
 
-    // Requerir login solo al agregar al carrito
-    if (!isAuthenticated) {
-      const shouldLogin = confirm('Debes iniciar sesión para agregar productos al carrito. ¿Deseas iniciar sesión ahora?');
-      if (shouldLogin) {
-        push('/auth/login');
-      }
+    if (!product) {
+      console.error('❌ [handleAddToCart] No hay producto');
+      alert('Error: No se pudo cargar la información del producto');
       return;
     }
 
@@ -252,6 +283,7 @@ export default function ProductDetailPage() {
     );
 
     if (!hasRequiredVariants) {
+      console.warn('⚠️ [handleAddToCart] Faltan variantes requeridas');
       alert('Por favor, selecciona todas las variantes requeridas');
       return;
     }
@@ -260,8 +292,12 @@ export default function ProductDetailPage() {
     let branchIdToUse: string | undefined;
     if (contextType === 'sucursal') {
       branchIdToUse = branchId || undefined;
+      console.log('✅ [handleAddToCart] Contexto sucursal, usando branchId:', branchIdToUse);
     } else if (selectedBranchId) {
       branchIdToUse = selectedBranchId;
+      console.log('✅ [handleAddToCart] Usando sucursal seleccionada:', branchIdToUse);
+    } else {
+      console.warn('⚠️ [handleAddToCart] No hay sucursal seleccionada en contexto:', contextType);
     }
 
     // Validar stock según la sucursal
@@ -271,12 +307,14 @@ export default function ProductDetailPage() {
       );
       if (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined) {
         if (selectedBranch.stock < quantity) {
+          console.warn('⚠️ [handleAddToCart] Stock insuficiente:', selectedBranch.stock, 'solicitado:', quantity);
           alert(`Solo hay ${selectedBranch.stock} unidades disponibles en ${selectedBranch.branch_name}`);
           return;
         }
       }
     } else if (contextType === 'sucursal' && product.branch_stock !== null && product.branch_stock !== undefined) {
       if (product.branch_stock < quantity) {
+        console.warn('⚠️ [handleAddToCart] Stock insuficiente en sucursal:', product.branch_stock, 'solicitado:', quantity);
         alert(`Solo hay ${product.branch_stock} unidades disponibles`);
         return;
       }
@@ -284,25 +322,69 @@ export default function ProductDetailPage() {
 
     // Validar que se haya seleccionado una sucursal (excepto en contexto de sucursal)
     if (contextType !== 'sucursal' && !selectedBranchId) {
+      console.warn('⚠️ [handleAddToCart] No hay sucursal seleccionada');
       alert('Por favor, selecciona una sucursal de la lista');
       return;
     }
 
     try {
       setAddingToCart(true);
+      // Determinar businessId: si hay branchId, ese ES el business_id; si no, usar el business_id del producto
+      const businessIdToUse = branchIdToUse || product.business_id;
+      
+      // Validar que product.id sea un UUID válido
+      if (!product.id || typeof product.id !== 'string') {
+        console.error('❌ [handleAddToCart] product.id inválido:', {
+          id: product.id,
+          type: typeof product.id,
+          product: product,
+        });
+        alert('Error: ID del producto inválido');
+        return;
+      }
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(product.id.trim())) {
+        console.error('❌ [handleAddToCart] product.id no es un UUID válido:', {
+          id: product.id,
+          trimmed: product.id.trim(),
+          length: product.id.length,
+          product: product,
+        });
+        alert('Error: ID del producto no es válido');
+        return;
+      }
+
+      console.log('📦 [handleAddToCart] Llamando addItem con:', {
+        productId: product.id,
+        productIdType: typeof product.id,
+        productIdLength: product.id.length,
+        quantity,
+        branchIdToUse,
+        businessIdToUse,
+      });
+      
       await addItem(
-        product.id,
+        product.id.trim(),
         quantity,
         selectedVariants,
         specialInstructions || undefined,
-        branchIdToUse
+        branchIdToUse,
+        businessIdToUse
       );
+      
+      console.log('✅ [handleAddToCart] Producto agregado exitosamente');
+      setSnackbarMessage('Producto agregado al carrito');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
       
       // Opcional: redirigir al carrito
       // push('/cart');
     } catch (error: any) {
-      console.error('Error agregando al carrito:', error);
-      alert(error.message || 'Error al agregar producto al carrito');
+      console.error('❌ [handleAddToCart] Error agregando al carrito:', error);
+      setSnackbarMessage(error.message || 'Error al agregar producto al carrito');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     } finally {
       setAddingToCart(false);
     }
@@ -439,17 +521,13 @@ export default function ProductDetailPage() {
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Imagen */}
+            {/* Galería de imágenes */}
             <div>
-              {product.image_url && (
-                <div className="aspect-square bg-gray-200 rounded-lg overflow-hidden mb-4">
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
+              <ProductImageGallery
+                images={productImages}
+                productName={product.name}
+                fallbackImageUrl={product.image_url}
+              />
             </div>
 
             {/* Información */}
@@ -555,6 +633,37 @@ export default function ProductDetailPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Alerta si se selecciona una sucursal diferente a la guardada */}
+                      {/* Solo mostrar si el producto SÍ está disponible en la sucursal guardada (para no duplicar con la alerta anterior) */}
+                      {storedBranch && selectedBranchId && selectedBranchId !== storedBranch.id && 
+                       branchAvailabilities.some(
+                         (avail) => avail.branch_id === storedBranch.id && avail.is_active && avail.is_enabled
+                       ) && (
+                        (() => {
+                          const selectedBranch = branchAvailabilities.find(
+                            (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
+                          );
+                          return selectedBranch ? (
+                            <div className="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                              <div className="flex items-start gap-3">
+                                <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <h4 className="text-sm font-semibold text-yellow-800 mb-1">
+                                    Sucursal diferente seleccionada
+                                  </h4>
+                                  <p className="text-sm text-yellow-700 mb-2">
+                                    Has seleccionado <strong>{selectedBranch.branch_name}</strong> en lugar de tu sucursal guardada <strong>{storedBranch.name}</strong>.
+                                  </p>
+                                  <p className="text-xs text-yellow-600">
+                                    <strong>Importante:</strong> Si agregas este producto al carrito, es probable que se genere una división de pedidos y costos adicionales de envío, ya que proviene de una sucursal diferente a la que tienes seleccionada.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })()
+                      )}
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
                         globalPrice={product.price}
@@ -609,54 +718,96 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Botón agregar al carrito */}
-              {contextType !== 'sucursal' && !selectedBranchId && (
-                <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
-                  <p className="font-medium mb-1">Selecciona una sucursal para agregar al carrito</p>
-                  <p className="text-sm">Elige una sucursal de la lista arriba para ver precio y stock específicos</p>
-                </div>
-              )}
-              {contextType !== 'sucursal' && selectedBranchId && (
-                <>
-                  {selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                      Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
-                    </div>
-                  )}
-                  <button 
-                    onClick={handleAddToCart}
-                    className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={
-                      product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
-                      addingToCart ||
-                      (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
-                    }
-                  >
-                    {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
-                  </button>
-                </>
-              )}
-              {contextType === 'sucursal' && !isAvailable && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                  Producto no disponible
-                </div>
-              )}
-              {contextType === 'sucursal' && isAvailable && (
-                <button 
-                  onClick={handleAddToCart}
-                  className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={
-                    product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
-                    addingToCart
+              {(() => {
+                console.log('🔘 [Render] Estado del botón:', {
+                  contextType,
+                  selectedBranchId,
+                  isAvailable,
+                  branchAvailabilitiesLength: branchAvailabilities.length,
+                  selectedBranch: selectedBranch?.branch_name,
+                });
+                
+                // En contexto de sucursal
+                if (contextType === 'sucursal') {
+                  if (!isAvailable) {
+                    return (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                        Producto no disponible
+                      </div>
+                    );
                   }
-                >
-                  {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
-                </button>
-              )}
+                  return (
+                    <button 
+                      onClick={handleAddToCart}
+                      className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={
+                        product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
+                        addingToCart
+                      }
+                    >
+                      {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
+                    </button>
+                  );
+                }
+                
+                // En contexto global/grupo/brand
+                if (!selectedBranchId) {
+                  // Si hay disponibilidades pero no hay selección, mostrar mensaje
+                  if (branchAvailabilities.length > 0) {
+                    return (
+                      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
+                        <p className="font-medium mb-1">Selecciona una sucursal para agregar al carrito</p>
+                        <p className="text-sm">Elige una sucursal de la lista arriba para ver precio y stock específicos</p>
+                      </div>
+                    );
+                  }
+                  // Si no hay disponibilidades, no mostrar nada
+                  return null;
+                }
+                
+                // Hay sucursal seleccionada
+                return (
+                  <>
+                    {selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+                        Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
+                      </div>
+                    )}
+                    <button 
+                      onClick={handleAddToCart}
+                      className="w-full py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={
+                        product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
+                        addingToCart ||
+                        (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
+                      }
+                    >
+                      {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
-      </StoreLayout>
-    </>
-  );
-}
+        </StoreLayout>
+        
+        {/* Snackbar para notificaciones */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={4000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert 
+            onClose={() => setSnackbarOpen(false)} 
+            severity={snackbarSeverity}
+            sx={{ width: '100%' }}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </>
+    );
+  }
 

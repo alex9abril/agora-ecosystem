@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsInt, Min, IsOptional, IsString, IsObject, ValidateNested } from 'class-validator';
+import { IsUUID, IsInt, Min, IsOptional, IsString, IsObject, ValidateNested, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AddCartItemDto {
@@ -7,7 +7,9 @@ export class AddCartItemDto {
     description: 'ID del producto a agregar al carrito',
     example: '11111111-1111-1111-1111-111111111111',
   })
-  @IsUUID('4', { message: 'El productId debe ser un UUID válido' })
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+    message: 'El productId debe ser un UUID válido',
+  })
   productId: string;
 
   @ApiProperty({
@@ -43,7 +45,9 @@ export class AddCartItemDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: 'El branchId debe ser un UUID válido' })
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+    message: 'El branchId debe ser un UUID válido',
+  })
   branchId?: string;
 }
 

@@ -47,6 +47,16 @@ export class CartController {
   @ApiResponse({ status: 409, description: 'No se pueden mezclar productos de diferentes tiendas' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async addItem(@CurrentUser() user: User, @Body() addItemDto: AddCartItemDto) {
+    console.log('📦 [CartController.addItem] Request recibido:', {
+      userId: user.id,
+      productId: addItemDto.productId,
+      productIdType: typeof addItemDto.productId,
+      productIdLength: addItemDto.productId?.length,
+      productIdValue: JSON.stringify(addItemDto.productId),
+      quantity: addItemDto.quantity,
+      branchId: addItemDto.branchId,
+      fullDto: JSON.stringify(addItemDto),
+    });
     return this.cartService.addItem(user.id, addItemDto);
   }
 

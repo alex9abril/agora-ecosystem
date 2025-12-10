@@ -28,8 +28,10 @@ export interface Product {
   id: string;
   business_id: string;
   name: string;
+  sku?: string | null;
   description?: string;
   image_url?: string;
+  primary_image_url?: string; // URL de la imagen principal de product_images
   price: number;
   product_type: 'food' | 'medicine' | 'non_food';
   category_id?: string;
@@ -67,6 +69,7 @@ export interface ListProductsParams {
   limit?: number;
   groupId?: string;      // Filtro por grupo empresarial
   branchId?: string;     // Filtro por sucursal específica
+  branchIds?: string[];  // Filtro por múltiples sucursales (si el backend lo soporta)
   brandId?: string;      // Filtro por marca de vehículo (alias para vehicleBrandId)
   vehicleBrandId?: string; // Filtro por marca de vehículo
   categoryId?: string;
@@ -86,6 +89,18 @@ export interface ProductBranchAvailability {
   is_enabled: boolean;
   price: number | null;
   stock: number | null;
+  is_active: boolean;
+}
+
+export interface ProductImage {
+  id: string;
+  product_id: string;
+  file_path: string;
+  file_name: string;
+  public_url: string;
+  alt_text?: string;
+  display_order: number;
+  is_primary: boolean;
   is_active: boolean;
 }
 
@@ -133,6 +148,21 @@ export const productsService = {
     const url = `/catalog/products/${productId}${queryString ? `?${queryString}` : ''}`;
     
     return apiRequest<Product>(url, { method: 'GET' });
+  },
+
+  /**
+   * Obtener todas las imágenes de un producto
+   */
+  async getProductImages(productId: string, includeInactive: boolean = false): Promise<ProductImage[]> {
+    const queryParams = new URLSearchParams();
+    if (includeInactive) {
+      queryParams.append('includeInactive', 'true');
+    }
+    
+    const queryString = queryParams.toString();
+    const url = `/catalog/products/${productId}/images${queryString ? `?${queryString}` : ''}`;
+    
+    return apiRequest<ProductImage[]>(url, { method: 'GET' });
   },
 
   /**

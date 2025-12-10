@@ -149,3 +149,5 @@ Comportamiento: Muestra solo las sucursales que venden productos compatibles con
 4. **Filtro de grupo**: Cuando se especifica un grupo, solo se muestran sucursales de ese grupo
 5. **Compatibilidad de marca**: Cuando se especifica una marca, se verifica que el producto sea compatible
 
+
+

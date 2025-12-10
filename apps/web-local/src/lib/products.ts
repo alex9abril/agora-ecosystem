@@ -48,6 +48,7 @@ export interface Product {
   sku?: string;
   description?: string;
   image_url?: string;
+  primary_image_url?: string; // URL de la imagen principal de product_images
   price: number;
   product_type: ProductType;
   category_id?: string;
@@ -351,6 +352,77 @@ export const productsService = {
       return response;
     } catch (error: any) {
       console.error('Error actualizando disponibilidad por sucursal:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener todas las imágenes de un producto
+   */
+  async getProductImages(productId: string): Promise<any[]> {
+    try {
+      const response = await apiRequest<any[]>(`/catalog/products/${productId}/images`, {
+        method: 'GET',
+      });
+      // apiRequest ya extrae data.data, así que response es directamente el array
+      return Array.isArray(response) ? response : [];
+    } catch (error: any) {
+      console.error('Error obteniendo imágenes del producto:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Subir una imagen para un producto
+   */
+  async uploadProductImage(productId: string, file: File, altText?: string, isPrimary?: boolean): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (altText) formData.append('alt_text', altText);
+      if (isPrimary !== undefined) formData.append('is_primary', isPrimary.toString());
+
+      const response = await apiRequest<any>(`/catalog/products/${productId}/images`, {
+        method: 'POST',
+        body: formData,
+        headers: {}, // No establecer Content-Type, el navegador lo hará automáticamente con FormData
+      });
+      
+      // apiRequest ya extrae data.data, así que response es directamente el objeto de la imagen
+      console.log('📸 Respuesta de uploadProductImage:', response);
+      
+      return response;
+    } catch (error: any) {
+      console.error('Error subiendo imagen:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Eliminar una imagen de un producto
+   */
+  async deleteProductImage(productId: string, imageId: string): Promise<void> {
+    try {
+      await apiRequest(`/catalog/products/${productId}/images/${imageId}`, {
+        method: 'DELETE',
+      });
+    } catch (error: any) {
+      console.error('Error eliminando imagen:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Marcar una imagen como principal
+   */
+  async setPrimaryImage(productId: string, imageId: string): Promise<void> {
+    try {
+      await apiRequest(`/catalog/products/${productId}/images/${imageId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_primary: true }),
+      });
+    } catch (error: any) {
+      console.error('Error marcando imagen como principal:', error);
       throw error;
     }
   },

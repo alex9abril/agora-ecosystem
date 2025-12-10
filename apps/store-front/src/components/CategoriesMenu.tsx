@@ -150,7 +150,7 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
   return (
     <div className={`flex bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
       {/* Menú lateral izquierdo */}
-      <div className="w-64 border-r border-gray-200 bg-gray-50">
+      <div className="w-80 border-r border-gray-200 bg-gray-50">
         <div className="p-4 bg-toyota-gray-dark text-white">
           <h3 className="font-bold text-sm uppercase">Todos los Departamentos</h3>
         </div>

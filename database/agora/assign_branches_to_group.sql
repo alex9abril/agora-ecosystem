@@ -85,3 +85,5 @@ LEFT JOIN core.businesses b ON b.business_group_id = bg.id
 GROUP BY bg.id, bg.name, bg.slug
 ORDER BY bg.name;
 
+
+

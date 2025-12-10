@@ -29,6 +29,8 @@ export interface OrderItem {
   item_subtotal: number | string;
   special_instructions?: string;
   tax_breakdown?: TaxBreakdown;
+  product_image_path?: string;
+  product_image_url?: string;
   created_at: string;
 }
 

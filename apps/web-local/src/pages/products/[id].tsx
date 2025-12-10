@@ -7,6 +7,7 @@ import { productsService, Product, ProductCategory, ProductType, CreateProductDa
 import { taxesService, TaxType, ProductTax } from '@/lib/taxes';
 import { vehiclesService, ProductCompatibility } from '@/lib/vehicles';
 import ImageUpload from '@/components/ImageUpload';
+import MultipleImageUpload, { ProductImage } from '@/components/MultipleImageUpload';
 import CategorySelector from '@/components/CategorySelector';
 import { ProductForm } from './index';
 
@@ -39,6 +40,8 @@ export default function ProductDetailPage() {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [variantGroups, setVariantGroups] = useState<ProductVariantGroup[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
@@ -104,6 +107,27 @@ export default function ProductDetailPage() {
     }
   }, []);
 
+  // Función para cargar imágenes del producto
+  const loadProductImages = useCallback(async (productId: string) => {
+    try {
+      setLoadingImages(true);
+      const images = await productsService.getProductImages(productId);
+      console.log('🖼️ Imágenes cargadas del producto:', images);
+      setProductImages(images.map((img: any) => ({
+        id: img.id,
+        public_url: img.public_url || img.url,
+        alt_text: img.alt_text || null,
+        is_primary: img.is_primary || false,
+        display_order: img.display_order || 0,
+      })));
+    } catch (err: any) {
+      console.error('Error cargando imágenes del producto:', err);
+      setProductImages([]);
+    } finally {
+      setLoadingImages(false);
+    }
+  }, []);
+
   // Cargar producto cuando cambie el ID de la URL
   // Los productos son globales, no requieren tienda seleccionada
   useEffect(() => {
@@ -114,17 +138,18 @@ export default function ProductDetailPage() {
     }
   }, [router.isReady, id]);
 
-  // Cargar impuestos, compatibilidades y disponibilidad por sucursal cuando el producto esté cargado
+  // Cargar impuestos, compatibilidades, disponibilidad por sucursal e imágenes cuando el producto esté cargado
   useEffect(() => {
     if (product?.id) {
       loadProductTaxes(product.id);
       loadBranchAvailabilities(product.id);
+      loadProductImages(product.id);
       // Solo cargar compatibilidades si es refaccion o accesorio
       if (product.product_type === 'refaccion' || product.product_type === 'accesorio') {
         loadProductCompatibilities(product.id);
       }
     }
-  }, [product?.id, product?.product_type, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities]);
+  }, [product?.id, product?.product_type, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities, loadProductImages]);
 
   const loadProduct = async (productId: string) => {
     try {
@@ -500,6 +525,10 @@ export default function ProductDetailPage() {
           setBranchAvailabilities={setBranchAvailabilities}
           loadingBranchAvailabilities={loadingBranchAvailabilities}
           onLoadBranchAvailabilities={loadBranchAvailabilities}
+          productImages={productImages}
+          setProductImages={setProductImages}
+          loadingImages={loadingImages}
+          onLoadProductImages={product?.id ? () => loadProductImages(product.id) : undefined}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
         />

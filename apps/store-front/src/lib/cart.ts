@@ -56,6 +56,7 @@ export interface AddToCartPayload {
   quantity: number;
   variantSelections?: Record<string, string | string[]>;
   specialInstructions?: string;
+  branchId?: string;
 }
 
 class CartService {
@@ -82,8 +83,19 @@ class CartService {
    */
   async addItem(payload: AddToCartPayload): Promise<Cart> {
     try {
+      // Validar que productId sea un string válido
+      if (!payload.productId || typeof payload.productId !== 'string') {
+        throw new Error(`productId inválido: ${payload.productId} (tipo: ${typeof payload.productId})`);
+      }
+
+      // Validar formato UUID básico
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(payload.productId.trim())) {
+        throw new Error(`productId no es un UUID válido: ${payload.productId}`);
+      }
+
       const requestBody: any = {
-        productId: payload.productId,
+        productId: payload.productId.trim(), // Asegurar que no haya espacios
         quantity: payload.quantity,
         variantSelections: payload.variantSelections || {},
         specialInstructions: payload.specialInstructions,
@@ -91,15 +103,26 @@ class CartService {
       
       // Incluir branchId si está disponible (para contexto global con sucursal seleccionada)
       if (payload.branchId) {
-        requestBody.branchId = payload.branchId;
+        // Validar branchId también si está presente
+        if (typeof payload.branchId === 'string' && uuidRegex.test(payload.branchId.trim())) {
+          requestBody.branchId = payload.branchId.trim();
+        } else {
+          console.warn('⚠️ [cartService.addItem] branchId inválido, omitiendo:', payload.branchId);
+        }
       }
+      
+      console.log('📤 [cartService.addItem] Enviando request:', {
+        productId: requestBody.productId,
+        quantity: requestBody.quantity,
+        branchId: requestBody.branchId,
+      });
       
       return await apiRequest<Cart>('/cart/items', {
         method: 'POST',
         body: JSON.stringify(requestBody),
       });
     } catch (error) {
-      console.error('Error agregando item al carrito:', error);
+      console.error('❌ [cartService.addItem] Error agregando item al carrito:', error);
       throw error;
     }
   }

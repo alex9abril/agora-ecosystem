@@ -896,13 +896,30 @@ export class BusinessesService {
       }
     }
 
+    // Buscar si el owner tiene un grupo empresarial activo
+    // Si existe, asignarlo automáticamente a la nueva sucursal
+    let businessGroupId: string | null = null;
+    try {
+      const groupResult = await pool.query(
+        'SELECT id FROM core.business_groups WHERE owner_id = $1 AND is_active = TRUE ORDER BY created_at DESC LIMIT 1',
+        [ownerId]
+      );
+      if (groupResult.rows.length > 0) {
+        businessGroupId = groupResult.rows[0].id;
+        console.log(`[BusinessesService.create] Grupo empresarial encontrado para owner ${ownerId}: ${businessGroupId}`);
+      }
+    } catch (groupError: any) {
+      console.warn('[BusinessesService.create] Error al buscar grupo empresarial (continuando sin grupo):', groupError);
+      // No lanzamos error, simplemente continuamos sin asignar grupo
+    }
+
     // Crear el negocio
     const businessResult = await pool.query(
       `INSERT INTO core.businesses (
         owner_id, name, legal_name, description, category, category_id, tags,
         phone, email, website_url, address_id, location,
-        is_active, accepts_orders, accepts_pickup, uses_eco_packaging, opening_hours, slug
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ST_MakePoint($12, $13)::point, $14, $15, $16, $17, $18, $19)
+        is_active, accepts_orders, accepts_pickup, uses_eco_packaging, opening_hours, slug, business_group_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ST_MakePoint($12, $13)::point, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *`,
       [
         ownerId,
@@ -924,6 +941,7 @@ export class BusinessesService {
         createDto.uses_eco_packaging || false,
         openingHoursJsonb, // JSONB o null
         createDto.slug || null, // slug (se generará automáticamente si es null por el trigger)
+        businessGroupId, // business_group_id (asignado automáticamente si existe)
       ]
     );
 
@@ -2174,6 +2192,7 @@ export class BusinessesService {
 
   /**
    * Crear un nuevo grupo empresarial
+   * Automáticamente asigna todas las sucursales del owner al nuevo grupo
    */
   async createBusinessGroup(ownerId: string, createDto: CreateBusinessGroupDto) {
     if (!dbPool) {
@@ -2207,7 +2226,32 @@ export class BusinessesService {
         ]
       );
 
-      return result.rows[0];
+      const newGroup = result.rows[0];
+
+      // Asignar automáticamente todas las sucursales del owner al nuevo grupo
+      // Solo las que no tienen grupo asignado
+      try {
+        const updateResult = await pool.query(
+          `UPDATE core.businesses 
+           SET business_group_id = $1 
+           WHERE owner_id = $2 
+             AND business_group_id IS NULL
+           RETURNING id, name`,
+          [newGroup.id, ownerId]
+        );
+
+        if (updateResult.rows.length > 0) {
+          console.log(`[BusinessesService.createBusinessGroup] ✅ ${updateResult.rows.length} sucursal(es) asignada(s) automáticamente al grupo "${newGroup.name}"`);
+          console.log(`[BusinessesService.createBusinessGroup] Sucursales asignadas:`, updateResult.rows.map(r => r.name).join(', '));
+        } else {
+          console.log(`[BusinessesService.createBusinessGroup] ℹ️  No hay sucursales sin grupo para asignar al nuevo grupo "${newGroup.name}"`);
+        }
+      } catch (assignError: any) {
+        console.warn('[BusinessesService.createBusinessGroup] ⚠️  Error al asignar sucursales automáticamente (el grupo se creó correctamente):', assignError);
+        // No lanzamos error, el grupo se creó correctamente
+      }
+
+      return newGroup;
     } catch (error: any) {
       if (error.code === '23505') { // Unique violation
         throw new BadRequestException('El slug ya está en uso');

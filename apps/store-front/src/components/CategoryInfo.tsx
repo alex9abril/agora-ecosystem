@@ -18,7 +18,7 @@ interface CategoryInfoProps {
 
 export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryInfoProps) {
   const router = useRouter();
-  const { getContextualUrl } = useStoreContext();
+  const { getContextualUrl, contextType } = useStoreContext();
   const [category, setCategory] = useState<ProductCategory | null>(null);
   const [subcategories, setSubcategories] = useState<ProductCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,9 +108,15 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
           )}
           <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
         </div>
-        {category.total_products !== undefined && category.total_products > 0 && (
+        {/* Solo mostrar total_products en contexto global, ya que en grupo/sucursal puede no ser preciso */}
+        {contextType === 'global' && category.total_products !== undefined && category.total_products > 0 && (
           <p className="text-xs text-gray-500 mb-3">
             {category.total_products} {category.total_products === 1 ? 'producto' : 'productos'} disponible{category.total_products === 1 ? '' : 's'}
+          </p>
+        )}
+        {contextType !== 'global' && (
+          <p className="text-xs text-gray-500 mb-3 italic">
+            Productos disponibles según filtros aplicados
           </p>
         )}
       </div>

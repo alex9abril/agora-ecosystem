@@ -116,6 +116,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     
+    // Detectar ruta global: /global
+    const globalMatch = asPath.match(/^\/global/);
+    if (globalMatch) {
+      setContextType('global');
+      setSlug(null);
+      setGroupId(null);
+      setBranchId(null);
+      setBrandId(null);
+      setGroupData(null);
+      setBranchData(null);
+      setBrandData(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+    
     // Contexto global (sin prefijo - por defecto)
     setContextType('global');
     setSlug(null);

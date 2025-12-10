@@ -1,13 +1,14 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderFilters } from '@/lib/orders';
+import { businessService } from '@/lib/business';
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, isLoading: isLoadingBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -28,15 +29,141 @@ export default function OrdersPage() {
     totalRevenue: 0,
   });
 
-  useEffect(() => {
-    if (selectedBusiness?.business_id) {
-      loadOrders();
+  // Verificar si el usuario es admin o superadmin
+  const isAdmin = availableBusinesses.some(b => b.role === 'admin' || b.role === 'superadmin');
+
+  const loadOrders = useCallback(async () => {
+    // Si es admin/superadmin y no hay tienda seleccionada, cargar de todas las sucursales
+    if (!selectedBusiness?.business_id) {
+      if (isAdmin && availableBusinesses.length > 0) {
+        try {
+          setLoading(true);
+          setError(null);
+
+          const filters: OrderFilters = {};
+          if (statusFilter !== 'all') {
+            filters.status = statusFilter;
+          }
+          if (paymentStatusFilter !== 'all') {
+            filters.payment_status = paymentStatusFilter;
+          }
+          if (searchTerm) {
+            filters.search = searchTerm;
+          }
+
+          // Obtener todas las sucursales de los grupos empresariales
+          // Primero, obtener los grupos empresariales únicos de las sucursales asignadas
+          const groupIdsSet = new Set<string>();
+          
+          // Obtener información completa de las sucursales asignadas para identificar sus grupos
+          const businessesWithGroups = await Promise.all(
+            availableBusinesses.map(async (business) => {
+              try {
+                const fullBusiness = await businessService.getMyBusiness(business.business_id);
+                if (fullBusiness?.business_group_id) {
+                  groupIdsSet.add(fullBusiness.business_group_id);
+                }
+                return { business, groupId: fullBusiness?.business_group_id };
+              } catch (err) {
+                console.error(`Error obteniendo información de ${business.business_name}:`, err);
+                return { business, groupId: undefined };
+              }
+            })
+          );
+
+          // Obtener todas las sucursales de cada grupo único (una sola vez por grupo)
+          const groupBranchesPromises = Array.from(groupIdsSet).map(async (groupId) => {
+            try {
+              const branchesResponse = await businessService.getBranches({
+                groupId,
+                isActive: true,
+              });
+              return branchesResponse.data || [];
+            } catch (err) {
+              console.error(`Error obteniendo sucursales del grupo ${groupId}:`, err);
+              return [];
+            }
+          });
+
+          const allGroupBranchesArrays = await Promise.all(groupBranchesPromises);
+          const allGroupBranches = allGroupBranchesArrays.flat();
+          
+          // Combinar sucursales asignadas con sucursales del grupo (sin duplicados)
+          const allBranchesMap = new Map<string, typeof availableBusinesses[0]>();
+          
+          // Agregar sucursales asignadas directamente
+          availableBusinesses.forEach(business => {
+            allBranchesMap.set(business.business_id, business);
+          });
+          
+          // Agregar sucursales del grupo (convertir Business a BusinessSummary)
+          allGroupBranches.forEach(branch => {
+            if (!allBranchesMap.has(branch.id)) {
+              // Crear un BusinessSummary a partir del Business
+              // Si el usuario es admin/superadmin del grupo, puede acceder a todas las sucursales
+              allBranchesMap.set(branch.id, {
+                business_id: branch.id,
+                business_name: branch.name,
+                role: availableBusinesses.find(b => b.business_id === branch.id)?.role || 
+                      (isAdmin ? 'admin' : 'operations_staff'), // Si es admin, dar acceso admin a las sucursales del grupo
+                permissions: {},
+                is_active: branch.is_active,
+                can_access: branch.is_active,
+                assigned_at: branch.created_at || new Date().toISOString(),
+              });
+            }
+          });
+
+          const allBranchesToLoad = Array.from(allBranchesMap.values());
+
+          console.log(`📦 Cargando pedidos de ${allBranchesToLoad.length} sucursales (${availableBusinesses.length} asignadas + ${allGroupBranches.length} del grupo)`);
+
+          // Obtener pedidos de todas las sucursales
+          const allOrdersPromises = allBranchesToLoad.map(business =>
+            ordersService.getOrders(business.business_id, filters).catch(err => {
+              console.error(`Error cargando pedidos de ${business.business_name}:`, err);
+              return []; // Retornar array vacío si hay error en alguna sucursal
+            })
+          );
+
+          const allOrdersArrays = await Promise.all(allOrdersPromises);
+          const allOrders = allOrdersArrays.flat();
+
+          // Ordenar por fecha de creación (más recientes primero)
+          allOrders.sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+
+          setOrders(allOrders);
+
+          // Calcular estadísticas
+          const newStats = {
+            total: allOrders.length,
+            pending: allOrders.filter(o => o.status === 'pending').length,
+            preparing: allOrders.filter(o => o.status === 'preparing').length,
+            ready: allOrders.filter(o => o.status === 'ready').length,
+            delivered: allOrders.filter(o => o.status === 'delivered').length,
+            totalRevenue: allOrders
+              .filter(o => o.payment_status === 'paid' || o.payment_status === 'overcharged')
+              .reduce((sum, o) => sum + parseFloat(o.total_amount.toString()), 0),
+          };
+          setStats(newStats);
+        } catch (err: any) {
+          console.error('Error cargando pedidos:', err);
+          setError('Error al cargar los pedidos');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      } else {
+        // No es admin y no hay tienda seleccionada
+        setLoading(false);
+        setError('No hay una tienda seleccionada. Por favor, selecciona una tienda para ver los pedidos.');
+        return;
+      }
     }
-  }, [selectedBusiness?.business_id, statusFilter, paymentStatusFilter, searchTerm]);
 
-  const loadOrders = async () => {
-    if (!selectedBusiness?.business_id) return;
-
+    // Si hay tienda seleccionada, cargar normalmente
     try {
       setLoading(true);
       setError(null);
@@ -73,10 +200,25 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedBusiness?.business_id, isAdmin, availableBusinesses, statusFilter, paymentStatusFilter, searchTerm]);
 
-  const handleOrderClick = (orderId: string) => {
-    router.push(`/orders/${orderId}`);
+  useEffect(() => {
+    // Esperar a que termine de cargar el contexto de business
+    if (isLoadingBusiness) {
+      return;
+    }
+
+    // Cargar órdenes (la función loadOrders maneja el caso de admin sin tienda seleccionada)
+    loadOrders();
+  }, [isLoadingBusiness, selectedBusiness?.business_id, loadOrders]);
+
+  const handleOrderClick = (order: Order) => {
+    // Si estamos mostrando todas las sucursales, necesitamos el business_id del pedido
+    if (!selectedBusiness?.business_id && isAdmin) {
+      // Guardar temporalmente el business_id del pedido para que el detalle pueda cargarlo
+      sessionStorage.setItem('temp_order_business_id', order.business_id);
+    }
+    router.push(`/orders/${order.id}`);
   };
 
   const getStatusBadge = (status: Order['status']) => {
@@ -169,9 +311,18 @@ export default function OrdersPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Pedidos</h1>
+              <h1 className="text-2xl font-semibold text-gray-900">
+                Pedidos
+                {!selectedBusiness?.business_id && isAdmin && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    (Todas las sucursales)
+                  </span>
+                )}
+              </h1>
               <p className="text-sm text-gray-500 mt-1">
-                Gestiona y rastrea todos los pedidos de tu negocio
+                {!selectedBusiness?.business_id && isAdmin
+                  ? 'Gestiona y rastrea todos los pedidos de todas las sucursales'
+                  : 'Gestiona y rastrea todos los pedidos de tu negocio'}
               </p>
             </div>
           </div>
@@ -323,6 +474,11 @@ export default function OrdersPage() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Fecha
                     </th>
+                    {(!selectedBusiness?.business_id && isAdmin) && (
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Sucursal
+                      </th>
+                    )}
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Cliente
                     </th>
@@ -341,37 +497,49 @@ export default function OrdersPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredOrders.map((order) => (
-                    <tr
-                      key={order.id}
-                      onClick={() => handleOrderClick(order.id)}
-                      className="hover:bg-gray-50 cursor-pointer transition-colors"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        #{order.id.slice(-8).toUpperCase()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(order.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {order.client_first_name && order.client_last_name
-                          ? `${order.client_first_name} ${order.client_last_name}`
-                          : 'Cliente'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getPaymentStatusBadge(order.payment_status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(order.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {formatCurrency(parseFloat(order.total_amount.toString()))}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        Web
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredOrders.map((order) => {
+                    // Obtener nombre de la sucursal si estamos mostrando todas las sucursales
+                    const businessName = (!selectedBusiness?.business_id && isAdmin)
+                      ? availableBusinesses.find(b => b.business_id === order.business_id)?.business_name || 'N/A'
+                      : null;
+
+                    return (
+                      <tr
+                        key={order.id}
+                        onClick={() => handleOrderClick(order)}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          #{order.id.slice(-8).toUpperCase()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(order.created_at)}
+                        </td>
+                        {(!selectedBusiness?.business_id && isAdmin) && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {businessName}
+                          </td>
+                        )}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {order.client_first_name && order.client_last_name
+                            ? `${order.client_first_name} ${order.client_last_name}`
+                            : 'Cliente'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getPaymentStatusBadge(order.payment_status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(order.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatCurrency(parseFloat(order.total_amount.toString()))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          Web
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

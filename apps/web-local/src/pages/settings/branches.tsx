@@ -308,6 +308,7 @@ const generateSlug = (text: string): string => {
 };
 
 function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<CreateBusinessData>({
     name: '',
     legal_name: '',
@@ -336,6 +337,10 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
   
   // Estado para rastrear si el slug fue editado manualmente
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  
+  // Estado para grupo empresarial
+  const [businessGroup, setBusinessGroup] = useState<{ id: string; name: string } | null>(null);
+  const [loadingGroup, setLoadingGroup] = useState(true);
 
   // Cargar categorías al montar el componente
   useEffect(() => {
@@ -450,6 +455,40 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-6">Agregar Nueva Sucursal</h2>
+      {/* Mensaje informativo sobre asignación automática al grupo */}
+      {!loadingGroup && (
+        businessGroup ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm text-blue-800">
+                  <strong>Asignación automática:</strong> Esta sucursal será asignada automáticamente al grupo <strong>{businessGroup.name}</strong> al crearla.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm text-gray-700">
+                  Puedes crear un grupo empresarial después para organizar tus sucursales. Ve a <strong>Configuración → Tienda</strong> para crear un grupo.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      )}
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMNA IZQUIERDA - Información Principal */}

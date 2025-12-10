@@ -31,6 +31,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Error interno del servidor';
 
+    // Log detallado del error
+    console.error('🔴 [EXCEPTION FILTER] ============================================');
+    console.error('🔴 [EXCEPTION FILTER] Error capturado por HttpExceptionFilter');
+    console.error('🔴 [EXCEPTION FILTER] Path:', request.url);
+    console.error('🔴 [EXCEPTION FILTER] Method:', request.method);
+    console.error('🔴 [EXCEPTION FILTER] Status:', status);
+    console.error('🔴 [EXCEPTION FILTER] Exception type:', exception?.constructor?.name || typeof exception);
+    console.error('🔴 [EXCEPTION FILTER] Exception:', exception);
+    if (exception instanceof Error) {
+      console.error('🔴 [EXCEPTION FILTER] Error message:', exception.message);
+      console.error('🔴 [EXCEPTION FILTER] Error stack:', exception.stack);
+    }
+    if (exception && typeof exception === 'object' && 'code' in exception) {
+      console.error('🔴 [EXCEPTION FILTER] Error code:', (exception as any).code);
+      console.error('🔴 [EXCEPTION FILTER] Error detail:', (exception as any).detail);
+      console.error('🔴 [EXCEPTION FILTER] Error hint:', (exception as any).hint);
+    }
+    console.error('🔴 [EXCEPTION FILTER] ============================================');
+
     const errorResponse = {
       success: false,
       statusCode: status,

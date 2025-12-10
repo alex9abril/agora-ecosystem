@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -135,5 +136,20 @@ export class OrdersController {
       estimated_delivery_time: body.estimated_delivery_time,
       cancellation_reason: body.cancellation_reason,
     });
+  }
+
+  @Delete('business/:businessId/:id')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: '⚠️ TEMPORAL: Eliminar pedido físicamente de la base de datos' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido eliminado exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  async deleteOrder(
+    @Param('businessId') businessId: string,
+    @Param('id') id: string,
+  ) {
+    return this.ordersService.deleteOrder(id, businessId);
   }
 }

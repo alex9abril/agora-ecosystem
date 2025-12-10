@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Image from 'next/image';
+import agoraLogo from '@/images/agora_logo.png';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
@@ -19,6 +21,11 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import BusinessIcon from '@mui/icons-material/Business';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import HomeIcon from '@mui/icons-material/Home';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import StoreSelectorDialog from '../StoreSelectorDialog';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
@@ -30,12 +37,13 @@ export default function Header() {
     branchData,
     getStoreName,
   } = useStoreContext();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, signOut } = useAuth();
   const { itemCount } = useCart();
   const { getCartUrl } = useStoreRouting();
   const [searchQuery, setSearchQuery] = useState('');
   const [showStoreSelector, setShowStoreSelector] = useState(false);
   const [showNavigationDialog, setShowNavigationDialog] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showCategoriesMenu, setShowCategoriesMenu] = useState(false);
   const [storeInfo, setStoreInfo] = useState<{ name: string; address: string; isOpen: boolean; nextOpenTime: string } | null>(null);
@@ -103,15 +111,17 @@ export default function Header() {
               {/* Logo y branding */}
               <div className="flex items-center gap-4">
                 <ContextualLink href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-semibold text-toyota-gray uppercase tracking-wider leading-tight">
-                      REFACCIONES Y ACCESORIOS
-                    </span>
-                    <span className="text-3xl font-bold text-black leading-tight" style={{ fontFamily: 'Arial, sans-serif', letterSpacing: '-0.5px' }}>
-                      AGORA PARTS
-                    </span>
-                    <span className="text-[10px] font-medium text-toyota-gray leading-tight">
-                      VAS A LA SEGURA
+                  <div className="relative">
+                    <Image
+                      src={agoraLogo}
+                      alt="AGORA PARTS"
+                      width={200}
+                      height={60}
+                      className="object-contain"
+                      priority
+                    />
+                    <span className="absolute text-[9px] text-gray-600 uppercase tracking-wide whitespace-nowrap" style={{ left: '75px', top: '53px', fontWeight: 600 }}>
+                      EL CENTRO DE TUS REFACCIONES.
                     </span>
                   </div>
                 </ContextualLink>
@@ -134,13 +144,77 @@ export default function Header() {
                     Ingresar
                   </ContextualLink>
                 ) : (
-                  <ContextualLink 
-                    href="/profile" 
-                    className="flex items-center gap-1 text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
-                  >
-                    <PersonIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">Mi Cuenta</span>
-                  </ContextualLink>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                      className="flex items-center gap-1 text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
+                    >
+                      <PersonIcon className="w-5 h-5" />
+                      <span className="hidden sm:inline">
+                        Bienvenido {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
+                      </span>
+                      <ArrowDropDownIcon className="w-4 h-4" />
+                    </button>
+                    
+                    {showUserMenu && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowUserMenu(false)}
+                        />
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-2">
+                          <div className="px-4 py-2 border-b border-gray-200">
+                            <p className="text-sm font-medium text-gray-900">
+                              Bienvenido
+                            </p>
+                            <p className="text-sm text-gray-600 truncate">
+                              {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
+                            </p>
+                          </div>
+                          
+                          <ContextualLink
+                            href="/profile"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <HomeIcon className="w-5 h-5 text-gray-400" />
+                            <span>Mis direcciones</span>
+                          </ContextualLink>
+                          
+                          <ContextualLink
+                            href="/orders"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <ReceiptIcon className="w-5 h-5 text-gray-400" />
+                            <span>Mis pedidos</span>
+                          </ContextualLink>
+                          
+                          <ContextualLink
+                            href="/profile?tab=payment"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            <CreditCardIcon className="w-5 h-5 text-gray-400" />
+                            <span>Mis formas de pago</span>
+                          </ContextualLink>
+                          
+                          <div className="border-t border-gray-200 mt-1 pt-1">
+                            <button
+                              onClick={async () => {
+                                setShowUserMenu(false);
+                                await signOut();
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <ExitToAppIcon className="w-5 h-5" />
+                              <span>Salir</span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
                 
                 <ContextualLink 
@@ -149,7 +223,7 @@ export default function Header() {
                 >
                   <ShoppingCartIcon className="w-5 h-5" />
                   <span className="hidden sm:inline">Carrito</span>
-                  {isAuthenticated && itemCount > 0 && (
+                  {itemCount > 0 && (
                     <span className="absolute -top-2 -right-2 bg-toyota-red text-white text-xs font-bold rounded-full min-w-[18px] h-4 flex items-center justify-center px-1">
                       {itemCount > 99 ? '99+' : itemCount}
                     </span>
@@ -181,7 +255,7 @@ export default function Header() {
                 {/* Menú de categorías flotante */}
                 {showCategoriesMenu && (
                   <div
-                    className="absolute top-full left-0 mt-2 z-50 w-[800px] shadow-2xl"
+                    className="absolute top-full left-0 mt-2 z-50 w-[1200px] shadow-2xl"
                     onMouseLeave={() => setShowCategoriesMenu(false)}
                   >
                     <CategoriesMenu onCategoryClick={() => setShowCategoriesMenu(false)} />

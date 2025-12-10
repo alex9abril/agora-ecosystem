@@ -57,6 +57,74 @@ export class AuthService {
   /**
    * Obtiene el perfil completo del usuario (incluyendo datos de user_profiles)
    */
+  /**
+   * Actualizar perfil del usuario
+   */
+  async updateProfile(userId: string, updateDto: { first_name?: string; last_name?: string; phone?: string }) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    try {
+      // Verificar que el perfil existe
+      const existing = await this.getUserProfile(userId);
+      if (!existing) {
+        throw new UnauthorizedException('Perfil de usuario no encontrado');
+      }
+
+      // Construir la consulta UPDATE dinámicamente
+      const updateFields: string[] = [];
+      const updateValues: any[] = [];
+      let paramIndex = 1;
+
+      if (updateDto.first_name !== undefined) {
+        updateFields.push(`first_name = $${paramIndex++}`);
+        updateValues.push(updateDto.first_name || null);
+      }
+      if (updateDto.last_name !== undefined) {
+        updateFields.push(`last_name = $${paramIndex++}`);
+        updateValues.push(updateDto.last_name || null);
+      }
+      if (updateDto.phone !== undefined) {
+        // Validar que el teléfono no esté en uso por otro usuario
+        if (updateDto.phone) {
+          const phoneCheck = await dbPool.query(
+            'SELECT id FROM core.user_profiles WHERE phone = $1 AND id != $2',
+            [updateDto.phone, userId]
+          );
+          if (phoneCheck.rows.length > 0) {
+            throw new ConflictException('Este teléfono ya está registrado por otro usuario');
+          }
+        }
+        updateFields.push(`phone = $${paramIndex++}`);
+        updateValues.push(updateDto.phone || null);
+      }
+
+      if (updateFields.length === 0) {
+        return existing; // No hay cambios
+      }
+
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      updateValues.push(userId);
+
+      const result = await dbPool.query(
+        `UPDATE core.user_profiles 
+         SET ${updateFields.join(', ')}
+         WHERE id = $${paramIndex}
+         RETURNING *`,
+        updateValues
+      );
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException || error instanceof ConflictException) {
+        throw error;
+      }
+      console.error('❌ Error actualizando perfil:', error);
+      throw new ServiceUnavailableException(`Error al actualizar perfil: ${error.message}`);
+    }
+  }
+
   async getUserProfile(userId: string) {
     // Usar conexión directa a PostgreSQL porque la tabla está en el schema 'core'
     if (!dbPool) {
@@ -253,8 +321,8 @@ export class AuthService {
     let session: any = null;
 
     if (platformRole === 'client' && supabaseAdmin) {
-      // Usar admin client para crear usuario con email confirmado automáticamente
-      console.log('📧 Creando usuario client con email confirmado automáticamente...');
+      // Intentar usar admin client para crear usuario con email confirmado automáticamente
+      console.log('📧 Intentando crear usuario client con email confirmado automáticamente...');
       const { data: adminData, error: adminError } = await supabaseAdmin.auth.admin.createUser({
         email: signUpDto.email,
         password: signUpDto.password,
@@ -267,7 +335,66 @@ export class AuthService {
       });
 
       if (adminError) {
-        authError = adminError;
+        // Si falla con "User not allowed" o similar, usar enfoque alternativo
+        if (adminError.message.includes('not allowed') || adminError.message.includes('User not allowed') || adminError.code === 'not_admin') {
+          console.log('🔄 Admin client falló, usando enfoque alternativo: signUp normal + confirmación...');
+          
+          // Verificar si el usuario ya existe
+          try {
+            const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+            if (!listError && existingUsers?.users) {
+              const existingUser = (existingUsers.users as any[]).find(
+                (u: any) => u.email?.toLowerCase() === signUpDto.email.toLowerCase()
+              );
+              if (existingUser) {
+                throw new ConflictException('Este email ya está registrado. Si ya tienes una cuenta, intenta iniciar sesión.');
+              }
+            }
+          } catch (checkError: any) {
+            if (checkError instanceof ConflictException) {
+              throw checkError;
+            }
+            console.warn('⚠️  No se pudo verificar usuarios existentes:', checkError.message);
+          }
+
+          // Crear usuario con signUp normal
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: signUpDto.email,
+            password: signUpDto.password,
+            options: {
+              data: {
+                first_name: signUpDto.firstName,
+                last_name: signUpDto.lastName,
+                phone: signUpDto.phone,
+              },
+            },
+          });
+
+          if (signUpError) {
+            authError = signUpError;
+            authData = signUpData;
+            session = signUpData?.session;
+          } else if (signUpData?.user) {
+            const userId = signUpData.user.id;
+            authData = { user: signUpData.user };
+            session = signUpData.session;
+            console.log('✅ Usuario client creado con signUp normal:', userId);
+
+            // Confirmar email usando admin client
+            try {
+              await supabaseAdmin.auth.admin.updateUserById(userId, {
+                email_confirm: true,
+              });
+              console.log('✅ Email confirmado automáticamente');
+            } catch (confirmError: any) {
+              console.warn('⚠️  No se pudo confirmar email automáticamente:', confirmError.message);
+              // Continuar de todas formas, el usuario puede confirmar manualmente
+            }
+          }
+        } else {
+          // Otro tipo de error del admin client
+          authError = adminError;
+        }
       } else if (adminData.user) {
         authData = { user: adminData.user };
         // Para usuarios creados con admin, necesitamos crear una sesión manualmente

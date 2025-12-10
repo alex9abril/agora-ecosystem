@@ -14,6 +14,7 @@ import { taxesService } from '@/lib/taxes';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import ContextualLink from '@/components/ContextualLink';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
+import { formatPrice } from '@/lib/format';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -25,6 +26,7 @@ export default function CartPage() {
   const { getCheckoutUrl } = useStoreRouting();
   const [productsData, setProductsData] = useState<Record<string, Product>>({});
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   // No redirigir automáticamente - permitir ver carrito sin login
   // Solo requerir login al proceder al checkout
@@ -103,17 +105,71 @@ export default function CartPage() {
     }
   };
 
-  const subtotal = useMemo(() => {
-    if (!cart || !cart.items) return 0;
-    return cart.items.reduce((sum, item) => sum + parseFloat(String(item.item_subtotal || 0)), 0);
+  // Agrupar items por tienda/sucursal
+  const itemsByStore = useMemo(() => {
+    if (!cart || !cart.items) return {};
+    
+    const grouped: Record<string, CartItem[]> = {};
+    cart.items.forEach((item) => {
+      const storeKey = item.business_id || 'unknown';
+      if (!grouped[storeKey]) {
+        grouped[storeKey] = [];
+      }
+      grouped[storeKey].push(item);
+    });
+    
+    return grouped;
   }, [cart]);
 
-  const totalTax = useMemo(() => {
-    return Object.values(itemsTaxBreakdowns).reduce((sum, breakdown) => sum + (breakdown.total_tax || 0), 0);
-  }, [itemsTaxBreakdowns]);
+  // Obtener información de cada tienda
+  const storesInfo = useMemo(() => {
+    const stores: Record<string, { name: string; items: CartItem[] }> = {};
+    Object.entries(itemsByStore).forEach(([businessId, items]) => {
+      if (items.length > 0) {
+        stores[businessId] = {
+          name: items[0].business_name || 'Tienda desconocida',
+          items,
+        };
+      }
+    });
+    return stores;
+  }, [itemsByStore]);
 
-  const deliveryFee = 0; // TODO: Calcular según distancia
-  const total = subtotal + totalTax + deliveryFee;
+  // Calcular subtotales por tienda
+  const subtotalsByStore = useMemo(() => {
+    const subtotals: Record<string, number> = {};
+    Object.entries(storesInfo).forEach(([businessId, store]) => {
+      subtotals[businessId] = store.items.reduce(
+        (sum, item) => sum + parseFloat(String(item.item_subtotal || 0)),
+        0
+      );
+    });
+    return subtotals;
+  }, [storesInfo]);
+
+  // Calcular impuestos por tienda
+  const taxesByStore = useMemo(() => {
+    const taxes: Record<string, number> = {};
+    Object.entries(storesInfo).forEach(([businessId, store]) => {
+      taxes[businessId] = store.items.reduce((sum, item) => {
+        const breakdown = itemsTaxBreakdowns[item.id];
+        return sum + (breakdown?.total_tax || 0);
+      }, 0);
+    });
+    return taxes;
+  }, [storesInfo, itemsTaxBreakdowns]);
+
+  const subtotal = useMemo(() => {
+    return Object.values(subtotalsByStore).reduce((sum, storeSubtotal) => sum + storeSubtotal, 0);
+  }, [subtotalsByStore]);
+
+  const totalTax = useMemo(() => {
+    return Object.values(taxesByStore).reduce((sum, storeTax) => sum + storeTax, 0);
+  }, [taxesByStore]);
+
+  // El costo de envío se calculará en el checkout según la dirección de entrega
+  // Por ahora no incluimos el envío en el total del carrito
+  const total = subtotal + totalTax;
 
   if (loading) {
     return (
@@ -133,7 +189,7 @@ export default function CartPage() {
         </Head>
         <StoreLayout>
           <div className="text-center py-12">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Tu carrito está vacío</h1>
+            <h1 className="text-2xl font-medium text-gray-900 mb-4">Tu carrito está vacío</h1>
             <p className="text-gray-600 mb-6">
               {!isAuthenticated 
                 ? 'Inicia sesión o regístrate para agregar productos al carrito'
@@ -166,117 +222,238 @@ export default function CartPage() {
         <title>Carrito - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Carrito de Compras</h1>
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-medium text-gray-900 mb-8">Carrito de Compras</h1>
 
-          {/* Items del carrito */}
-          <div className="bg-white rounded-lg shadow-sm mb-6">
-            {cart.items.map((item: CartItem) => (
-              <div key={item.id} className="border-b border-gray-200 last:border-b-0 p-6">
-                <div className="flex gap-4">
-                  {item.product_image_url && (
-                    <img
-                      src={item.product_image_url}
-                      alt={item.product_name}
-                      className="w-24 h-24 object-cover rounded"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-1">{item.product_name}</h3>
-                    {item.product_description && (
-                      <p className="text-sm text-gray-600 mb-2">{item.product_description}</p>
-                    )}
-                    <p className="text-lg font-bold text-black mb-2">
-                      {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
-                    </p>
-                    {itemsTaxBreakdowns[item.id] && (
-                      <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Items del carrito - Columna izquierda (2/3) */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                {Object.entries(storesInfo).map(([businessId, store], storeIndex) => (
+                  <div key={businessId} className={storeIndex > 0 ? 'border-t-2 border-gray-300' : ''}>
+                    {/* Encabezado de la tienda */}
+                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-lg font-medium text-gray-900">{store.name}</h2>
+                          <p className="text-sm text-gray-500 mt-0.5">
+                            {store.items.length} {store.items.length === 1 ? 'producto' : 'productos'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-500">Subtotal de tienda</p>
+                          <p className="text-lg font-medium text-gray-900">
+                            {formatPrice(subtotalsByStore[businessId] || 0)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Items de esta tienda */}
+                    {store.items.map((item: CartItem) => (
+                      <div key={item.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
+                        <div className="p-6">
+                          <div className="flex gap-6">
+                            {/* Imagen del producto */}
+                            <div className="flex-shrink-0">
+                              <div className="w-32 h-32 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
+                                {item.product_image_url && !imageErrors[item.id] ? (
+                                  <img
+                                    src={item.product_image_url}
+                                    alt={item.product_name}
+                                    className="w-full h-full object-contain p-2"
+                                    onError={() => {
+                                      setImageErrors(prev => ({ ...prev, [item.id]: true }));
+                                    }}
+                                  />
+                                ) : (
+                                  <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Información del producto */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-normal text-lg text-gray-900 mb-2 leading-tight">{item.product_name}</h3>
+                                  {item.product_description && (
+                                    <p className="text-sm text-gray-500 mb-3 line-clamp-2">{item.product_description}</p>
+                                  )}
+                                  <div className="flex items-center gap-4">
+                                    <div>
+                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Precio unitario</span>
+                                      <p className="text-base font-normal text-gray-700 mt-0.5">
+                                        {formatPrice(parseFloat(String(item.unit_price || 0)))}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Subtotal</span>
+                                      <p className="text-lg font-normal text-gray-900 mt-0.5">
+                                        {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {itemsTaxBreakdowns[item.id] && (
+                                    <div className="mt-2">
+                                      <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Controles de cantidad y eliminar */}
+                                <div className="flex flex-col items-end gap-4">
+                                  <button
+                                    onClick={() => handleRemoveItem(item.id)}
+                                    className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
+                                    title="Eliminar producto"
+                                  >
+                                    <DeleteIcon className="w-5 h-5" />
+                                  </button>
+                                  
+                                  <div className="flex flex-col items-end gap-2">
+                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Cantidad</span>
+                                    <div className="flex items-center gap-3 border border-gray-200 rounded-lg p-1 bg-white">
+                                      <button
+                                        onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+                                        aria-label="Disminuir cantidad"
+                                      >
+                                        <RemoveIcon className="w-4 h-4" />
+                                      </button>
+                                      <span className="w-10 text-center font-normal text-gray-900 text-base">{item.quantity}</span>
+                                      <button
+                                        onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+                                        aria-label="Aumentar cantidad"
+                                      >
+                                        <AddIcon className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Resumen de la tienda */}
+                    {Object.keys(storesInfo).length > 1 && (
+                      <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">Subtotal {store.name}:</span>
+                          <span className="font-medium text-gray-900">
+                            {formatPrice(subtotalsByStore[businessId] || 0)}
+                          </span>
+                        </div>
+                        {taxesByStore[businessId] > 0 && (
+                          <div className="flex justify-between items-center text-sm mt-1">
+                            <span className="text-gray-600">Impuestos {store.name}:</span>
+                            <span className="font-medium text-gray-900">
+                              {formatPrice(taxesByStore[businessId] || 0)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <button
-                      onClick={() => handleRemoveItem(item.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <DeleteIcon />
-                    </button>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                        className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-100"
-                      >
-                        <RemoveIcon className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center font-medium">{item.quantity}</span>
-                      <button
-                        onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                        className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center hover:bg-gray-100"
-                      >
-                        <AddIcon className="w-4 h-4" />
-                      </button>
+                ))}
+
+                {/* Nota sobre múltiples tiendas */}
+                {Object.keys(storesInfo).length > 1 && (
+                  <div className="bg-blue-50 border-t-2 border-blue-200 px-6 py-4">
+                    <div className="flex items-start gap-3">
+                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-900 mb-1">
+                          Productos de múltiples tiendas
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          Tu pedido contiene productos de {Object.keys(storesInfo).length} {Object.keys(storesInfo).length === 1 ? 'tienda' : 'tiendas diferentes'}. 
+                          Es posible que se generen costos de envío adicionales o que el pedido se divida en múltiples entregas.
+                        </p>
+                      </div>
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resumen - Columna derecha (1/3) */}
+            <div className="lg:col-span-1">
+              <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
+                <h2 className="text-xl font-normal text-gray-900 mb-6">Resumen del Pedido</h2>
+                <div className="space-y-4 mb-6">
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="text-gray-900 font-normal">{formatPrice(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-gray-600">Impuestos</span>
+                    <span className="text-gray-900 font-normal">{formatPrice(totalTax)}</span>
+                  </div>
+                  <div className="flex justify-between items-start py-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600">Envío</span>
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-gray-500 mt-1 block">
+                        Se calculará al finalizar la compra
+                      </span>
+                    </div>
+                    <span className="text-gray-400 text-sm font-normal">—</span>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200 pt-4 mb-6">
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-medium text-gray-900">Total</span>
+                    <span className="text-2xl font-medium text-gray-900">{formatPrice(total)}</span>
+                  </div>
+                </div>
+
+                {/* Acciones */}
+                <div className="space-y-3">
+                  {isAuthenticated ? (
+                    <ContextualLink
+                      href={getCheckoutUrl()}
+                      className="block w-full px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-normal shadow-md hover:shadow-lg"
+                    >
+                      Proceder al Pago
+                    </ContextualLink>
+                  ) : (
+                    <ContextualLink
+                      href={getCheckoutUrl()}
+                      className="block w-full px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-normal shadow-md hover:shadow-lg"
+                    >
+                      Proceder a la compra
+                    </ContextualLink>
+                  )}
+                  <ContextualLink
+                    href="/products"
+                    className="block w-full px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all text-center font-normal"
+                  >
+                    Seguir Comprando
+                  </ContextualLink>
+                  {isAuthenticated && (
+                    <button
+                      onClick={handleClearCart}
+                      className="w-full px-6 py-3 text-gray-600 hover:text-red-600 hover:bg-red-50 transition-all rounded-lg font-normal border border-transparent hover:border-red-200"
+                    >
+                      Vaciar Carrito
+                    </button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Resumen */}
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Resumen</h2>
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Impuestos</span>
-                <span>{formatPrice(totalTax)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Envío</span>
-                <span>{formatPrice(deliveryFee)}</span>
-              </div>
             </div>
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex justify-between items-center">
-                <span className="text-lg font-bold">Total</span>
-                <span className="text-2xl font-bold">{formatPrice(total)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Acciones */}
-          <div className="flex gap-3">
-            <ContextualLink
-              href="/products"
-              className="flex-1 px-6 py-3 bg-gray-100 text-black rounded-lg hover:bg-gray-200 transition-colors text-center font-medium"
-            >
-              Seguir Comprando
-            </ContextualLink>
-            {isAuthenticated && (
-              <button
-                onClick={handleClearCart}
-                className="px-6 py-2 text-red-500 hover:text-red-700 transition-colors font-medium"
-              >
-                Vaciar Carrito
-              </button>
-            )}
-            {isAuthenticated ? (
-              <ContextualLink
-                href={getCheckoutUrl()}
-                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-medium"
-              >
-                Proceder al Pago
-              </ContextualLink>
-            ) : (
-              <ContextualLink
-                href="/auth/login"
-                className="flex-1 px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors text-center font-medium"
-              >
-                Iniciar Sesión para Comprar
-              </ContextualLink>
-            )}
           </div>
         </div>
       </StoreLayout>

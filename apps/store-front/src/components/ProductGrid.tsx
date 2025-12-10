@@ -2,13 +2,18 @@
  * Grid de productos con filtros por contexto
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { productsService, Product } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
 import ProductCard from './ProductCard';
+import ProductListItem from './ProductListItem';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import ViewModuleIcon from '@mui/icons-material/ViewModule';
+import ViewListIcon from '@mui/icons-material/ViewList';
+
+type ViewMode = 'grid' | 'list';
 
 interface ProductGridProps {
   filters?: {
@@ -18,9 +23,10 @@ interface ProductGridProps {
   };
   onProductClick?: (product: Product) => void;
   className?: string;
+  defaultView?: ViewMode;
 }
 
-export default function ProductGrid({ filters, onProductClick, className = '' }: ProductGridProps) {
+export default function ProductGrid({ filters, onProductClick, className = '', defaultView = 'list' }: ProductGridProps) {
   const router = useRouter();
   const { contextType, groupId, branchId, brandId } = useStoreContext();
   const { addItem } = useCart();
@@ -28,10 +34,35 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
+
+  // Guardar preferencia de vista en localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedView = localStorage.getItem('productViewMode') as ViewMode;
+      if (savedView === 'grid' || savedView === 'list') {
+        setViewMode(savedView);
+      }
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('productViewMode', mode);
+    }
+  };
+
+  // Memoizar los parámetros para evitar llamadas innecesarias
+  // Usar JSON.stringify para comparar filters de forma estable
+  const filtersKey = useMemo(() => {
+    return JSON.stringify(filters || {});
+  }, [filters]);
 
   useEffect(() => {
     loadProducts();
-  }, [contextType, groupId, branchId, brandId, filters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextType, groupId, branchId, brandId, filtersKey]);
 
   const loadProducts = async () => {
     try {
@@ -52,7 +83,20 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
         params.vehicleBrandId = brandId;
       }
 
+      console.log('🔍 [ProductGrid] Loading products with params:', {
+        contextType,
+        groupId,
+        branchId,
+        brandId,
+        filters,
+        finalParams: params,
+      });
+
       const response = await productsService.getProducts(params);
+      console.log('✅ [ProductGrid] Products loaded:', {
+        count: response.data?.length || 0,
+        products: response.data?.map(p => ({ id: p.id, name: p.name })) || [],
+      });
       setProducts(response.data || []);
     } catch (err: any) {
       console.error('Error cargando productos:', err);
@@ -63,17 +107,16 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
   };
 
   const handleAddToCart = async (product: Product) => {
-    // Requerir login solo al agregar al carrito
-    if (!isAuthenticated) {
-      const shouldLogin = confirm('Debes iniciar sesión para agregar productos al carrito. ¿Deseas iniciar sesión ahora?');
-      if (shouldLogin) {
-        router.push('/auth/login');
-      }
-      return;
-    }
-
     try {
-      await addItem(product.id, 1);
+      // Obtener branchId del contexto
+      // En contexto de sucursal, branchId ES el business_id
+      const branchIdToUse = contextType === 'sucursal' && branchId ? branchId : undefined;
+      
+      // Para invitados, necesitamos el businessId
+      // Si hay branchId, ese es el business_id; si no, usar el business_id del producto
+      const businessIdToUse = branchIdToUse || product.business_id;
+      
+      await addItem(product.id, 1, undefined, undefined, branchIdToUse);
     } catch (error: any) {
       console.error('Error agregando al carrito:', error);
       alert(error.message || 'Error al agregar producto al carrito');
@@ -164,14 +207,59 @@ export default function ProductGrid({ filters, onProductClick, className = '' }:
   }
 
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 ${className}`}>
-      {products.map((product) => (
-        <ProductCard
-          key={product.id}
-          product={product}
-          onAddToCart={onProductClick ? undefined : handleAddToCart}
-        />
-      ))}
+    <div className={className}>
+      {/* Controles de vista */}
+      <div className="flex justify-end mb-4">
+        <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1 shadow-sm">
+          <button
+            onClick={() => handleViewModeChange('grid')}
+            className={`p-2 rounded transition-colors ${
+              viewMode === 'grid'
+                ? 'bg-toyota-red text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            aria-label="Vista de cuadrícula"
+            title="Vista de cuadrícula"
+          >
+            <ViewModuleIcon className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => handleViewModeChange('list')}
+            className={`p-2 rounded transition-colors ${
+              viewMode === 'list'
+                ? 'bg-toyota-red text-white'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            aria-label="Vista de lista"
+            title="Vista de lista"
+          >
+            <ViewListIcon className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Contenido según el modo de vista */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onAddToCart={onProductClick ? undefined : handleAddToCart}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {products.map((product) => (
+            <ProductListItem
+              key={product.id}
+              product={product}
+              onAddToCart={onProductClick ? undefined : handleAddToCart}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

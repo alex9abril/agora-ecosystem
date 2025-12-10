@@ -6,11 +6,13 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { dbPool } from '../../config/database.config';
+import { supabaseAdmin } from '../../config/supabase.config';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 
 @Injectable()
 export class CartService {
+  private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
   /**
    * Obtener o crear el carrito del usuario
    */
@@ -67,6 +69,8 @@ export class CartService {
       const cart = cartResult.rows[0];
 
       // Obtener items del carrito con información del producto
+      // Incluir imagen principal de product_images si está disponible
+      // Si hay branch_id, usar ese business_id para obtener el nombre de la sucursal
       const itemsResult = await dbPool.query(
         `SELECT 
           sci.id,
@@ -77,30 +81,67 @@ export class CartService {
           sci.variant_price_adjustment,
           sci.item_subtotal,
           sci.special_instructions,
+          sci.branch_id,
           sci.created_at,
           sci.updated_at,
           p.name as product_name,
           p.description as product_description,
-          p.image_url as product_image_url,
+          p.image_url as product_image_url_fallback,
           p.is_available as product_is_available,
-          b.id as business_id,
-          b.name as business_name
+          -- Usar branch_id si existe, sino usar el business_id del producto
+          COALESCE(branch_b.id, p.business_id) as business_id,
+          COALESCE(branch_b.name, b.name) as business_name,
+          pi_main.file_path as primary_image_path
         FROM orders.shopping_cart_items sci
         INNER JOIN catalog.products p ON sci.product_id = p.id
         INNER JOIN core.businesses b ON p.business_id = b.id
+        -- LEFT JOIN para obtener información de la sucursal si branch_id está presente
+        LEFT JOIN core.businesses branch_b ON sci.branch_id = branch_b.id
+        -- LEFT JOIN para obtener la imagen principal (primera imagen activa ordenada por is_primary y display_order)
+        LEFT JOIN LATERAL (
+          SELECT pi_lat.file_path
+          FROM catalog.product_images pi_lat
+          WHERE pi_lat.product_id = p.id
+          AND pi_lat.is_active = TRUE
+          ORDER BY pi_lat.is_primary DESC, pi_lat.display_order ASC
+          LIMIT 1
+        ) pi_main ON TRUE
         WHERE sci.cart_id = $1
         ORDER BY sci.created_at ASC`,
         [cart.id]
       );
 
+      // Procesar items para agregar URLs de imágenes
+      const processedItems = itemsResult.rows.map((item) => {
+        let productImageUrl = item.product_image_url_fallback;
+        
+        // Si hay una imagen principal de product_images, generar su URL pública
+        if (item.primary_image_path && supabaseAdmin) {
+          try {
+            const { data: urlData } = supabaseAdmin.storage
+              .from(this.BUCKET_NAME)
+              .getPublicUrl(item.primary_image_path);
+            productImageUrl = urlData.publicUrl;
+          } catch (error) {
+            console.error('Error generando URL de imagen principal en carrito:', error);
+            // Mantener el fallback si hay error
+          }
+        }
+
+        return {
+          ...item,
+          product_image_url: productImageUrl,
+        };
+      });
+
       // Calcular totales
-      const subtotal = itemsResult.rows.reduce((sum, item) => sum + parseFloat(item.item_subtotal), 0);
-      const itemCount = itemsResult.rows.length;
-      const totalQuantity = itemsResult.rows.reduce((sum, item) => sum + item.quantity, 0);
+      const subtotal = processedItems.reduce((sum, item) => sum + parseFloat(item.item_subtotal), 0);
+      const itemCount = processedItems.length;
+      const totalQuantity = processedItems.reduce((sum, item) => sum + item.quantity, 0);
 
       return {
         ...cart,
-        items: itemsResult.rows,
+        items: processedItems,
         subtotal: subtotal.toFixed(2),
         itemCount,
         totalQuantity,
@@ -183,11 +224,25 @@ export class CartService {
         }
       }
 
-      // Si el carrito ya tiene un business_id, verificar que sea el mismo
+      // Permitir múltiples grupos de tiendas en el mismo carrito
+      // Si el carrito ya tiene un business_id diferente, establecerlo a NULL
+      // para indicar que el carrito contiene productos de múltiples tiendas
+      // Los items se agruparán por business_id en el frontend
       if (cart.business_id && cart.business_id !== targetBusinessId) {
-        throw new ConflictException(
-          'No se pueden agregar productos de diferentes tiendas al mismo carrito. Por favor, completa tu pedido actual o vacía el carrito.'
+        // El carrito tiene productos de diferentes tiendas
+        // Establecer business_id a NULL para indicar múltiples tiendas
+        await client.query(
+          `UPDATE orders.shopping_cart SET business_id = NULL WHERE id = $1`,
+          [cart.id]
         );
+        cart.business_id = null;
+      } else if (!cart.business_id && targetBusinessId) {
+        // Si no tiene business_id y este es el primer producto, establecerlo
+        await client.query(
+          `UPDATE orders.shopping_cart SET business_id = $1 WHERE id = $2`,
+          [targetBusinessId, cart.id]
+        );
+        cart.business_id = targetBusinessId;
       }
 
       // Calcular precio de variantes
@@ -258,14 +313,16 @@ export class CartService {
 
       // Intentar encontrar item idéntico existente
       // Usar operadores JSONB para comparación correcta
+      // También considerar branch_id para no agrupar items de diferentes sucursales
       const existingItemResult = await client.query(
         `SELECT * FROM orders.shopping_cart_items
          WHERE cart_id = $1
            AND product_id = $2
            AND variant_selections @> $3::jsonb
            AND variant_selections <@ $3::jsonb
-           AND special_instructions_normalized = $4`,
-        [cart.id, addItemDto.productId, variantSelectionsJson, specialInstructionsNormalized]
+           AND special_instructions_normalized = $4
+           AND (branch_id IS NOT DISTINCT FROM $5::uuid)`,
+        [cart.id, addItemDto.productId, variantSelectionsJson, specialInstructionsNormalized, addItemDto.branchId || null]
       );
 
       if (existingItemResult.rows.length > 0) {
@@ -298,8 +355,8 @@ export class CartService {
       await client.query(
         `INSERT INTO orders.shopping_cart_items (
           cart_id, product_id, variant_selections, quantity,
-          unit_price, variant_price_adjustment, item_subtotal, special_instructions
-        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)`,
+          unit_price, variant_price_adjustment, item_subtotal, special_instructions, branch_id
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)`,
         [
           cart.id,
           addItemDto.productId,
@@ -309,6 +366,7 @@ export class CartService {
           variantPriceAdjustment,
           itemSubtotal,
           addItemDto.specialInstructions || null,
+          addItemDto.branchId || null, // Guardar branch_id si está disponible
         ]
       );
 

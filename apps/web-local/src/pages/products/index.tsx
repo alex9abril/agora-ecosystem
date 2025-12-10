@@ -8,6 +8,7 @@ import { taxesService, TaxType, ProductTax } from '@/lib/taxes';
 import { getUserVehicle } from '@/lib/storage';
 import { vehiclesService, ProductCompatibility, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec } from '@/lib/vehicles';
 import ImageUpload from '@/components/ImageUpload';
+import MultipleImageUpload, { ProductImage } from '@/components/MultipleImageUpload';
 import CategorySelector from '@/components/CategorySelector';
 
 export default function ProductsPage() {
@@ -41,6 +42,8 @@ export default function ProductsPage() {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [productImages, setProductImages] = useState<ProductImage[]>([]);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [variantGroups, setVariantGroups] = useState<ProductVariantGroup[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
@@ -251,6 +254,25 @@ export default function ProductsPage() {
     } catch (err: any) {
       console.error('Error guardando compatibilidades:', err);
       // No fallar el guardado del producto si hay error en compatibilidades
+    }
+  };
+
+  const loadProductImages = async (productId: string) => {
+    try {
+      setLoadingImages(true);
+      const images = await productsService.getProductImages(productId);
+      setProductImages(images.map((img: any) => ({
+        id: img.id,
+        public_url: img.public_url || img.url,
+        alt_text: img.alt_text,
+        is_primary: img.is_primary,
+        display_order: img.display_order,
+      })));
+    } catch (err: any) {
+      console.error('Error cargando imágenes del producto:', err);
+      setProductImages([]);
+    } finally {
+      setLoadingImages(false);
     }
   };
 
@@ -1257,6 +1279,10 @@ export interface ProductFormProps {
   }>>>;
   loadingBranchAvailabilities: boolean;
   onLoadBranchAvailabilities?: (productId: string) => void;
+  productImages?: ProductImage[];
+  setProductImages?: React.Dispatch<React.SetStateAction<ProductImage[]>>;
+  loadingImages?: boolean;
+  onLoadProductImages?: () => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
 }
@@ -1291,6 +1317,10 @@ export function ProductForm({
   setBranchAvailabilities,
   loadingBranchAvailabilities,
   onLoadBranchAvailabilities,
+  productImages = [],
+  setProductImages,
+  loadingImages = false,
+  onLoadProductImages,
   onSubmit,
   onCancel,
 }: ProductFormProps) {
@@ -1547,11 +1577,43 @@ export function ProductForm({
                 <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
                   Media
                 </h3>
-                <ImageUpload
-                  currentImageUrl={imagePreview || undefined}
-                  onImageChange={onImageChange}
-                  label="Imagen del Producto"
-                />
+                {editingProduct && setProductImages ? (
+                  <MultipleImageUpload
+                    productId={editingProduct.id}
+                    images={productImages || []}
+                    onImagesChange={setProductImages}
+                    label="Imágenes del Producto"
+                    maxImages={10}
+                    onUploadImage={async (file, productId) => {
+                      console.log('📤 Subiendo imagen para producto:', productId);
+                      const uploaded = await productsService.uploadProductImage(productId, file);
+                      console.log('📥 Imagen subida, respuesta:', uploaded);
+                      return {
+                        id: uploaded.id,
+                        public_url: uploaded.public_url,
+                        alt_text: uploaded.alt_text || null,
+                        is_primary: uploaded.is_primary || false,
+                        display_order: uploaded.display_order || 0,
+                      };
+                    }}
+                    onDeleteImage={async (imageId) => {
+                      if (editingProduct?.id) {
+                        await productsService.deleteProductImage(editingProduct.id, imageId);
+                      }
+                    }}
+                    onSetPrimary={async (imageId) => {
+                      if (editingProduct?.id) {
+                        await productsService.setPrimaryImage(editingProduct.id, imageId);
+                      }
+                    }}
+                  />
+                ) : (
+                  <ImageUpload
+                    currentImageUrl={imagePreview || undefined}
+                    onImageChange={onImageChange}
+                    label="Imagen del Producto"
+                  />
+                )}
               </div>
             )}
 

@@ -58,9 +58,13 @@ export async function apiRequest<T = any>(
   // Agregar token de autenticación si está disponible y no se especificó explícitamente
   const authToken = getAuthTokenFromStorage();
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
     ...options.headers,
   };
+  
+  // Solo establecer Content-Type si no es FormData (el navegador lo establece automáticamente para FormData)
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   // Si hay token y no se especificó Authorization en headers, agregarlo
   if (authToken && !headers.Authorization && !(options.headers as HeadersInit)?.Authorization) {

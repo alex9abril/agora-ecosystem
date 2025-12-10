@@ -7,6 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { dbPool } from '../../config/database.config';
+import { supabaseAdmin } from '../../config/supabase.config';
 import { CheckoutDto } from './dto/checkout.dto';
 import { TaxesService } from '../catalog/taxes/taxes.service';
 
@@ -42,7 +43,7 @@ export class OrdersService {
 
       const cart = cartResult.rows[0];
 
-      // 2. Obtener items del carrito
+      // 2. Obtener items del carrito con información de sucursal
       const itemsResult = await client.query(
         `SELECT 
           sci.id,
@@ -53,6 +54,7 @@ export class OrdersService {
           sci.variant_price_adjustment,
           sci.item_subtotal,
           sci.special_instructions,
+          sci.branch_id,
           p.name as product_name,
           p.business_id
         FROM orders.shopping_cart_items sci
@@ -65,15 +67,25 @@ export class OrdersService {
         throw new BadRequestException('El carrito está vacío');
       }
 
-      // 3. Validar que todos los items son del mismo negocio
-      const businessIds = [...new Set(itemsResult.rows.map((item: any) => item.business_id))];
-      if (businessIds.length > 1) {
-        throw new BadRequestException('Todos los productos deben ser del mismo negocio');
+      // 3. Agrupar items por sucursal (business_id)
+      // Usar branch_id si está disponible, sino usar business_id del producto
+      const itemsByBusiness = new Map<string, any[]>();
+      
+      for (const item of itemsResult.rows) {
+        // Determinar la sucursal: usar branch_id si existe, sino business_id del producto
+        const businessId = item.branch_id || item.business_id;
+        
+        if (!itemsByBusiness.has(businessId)) {
+          itemsByBusiness.set(businessId, []);
+        }
+        itemsByBusiness.get(businessId)!.push(item);
       }
 
-      const businessId = businessIds[0];
+      // 4. Generar order_group_id para todas las órdenes relacionadas
+      const orderGroupIdResult = await client.query('SELECT gen_random_uuid() as id');
+      const orderGroupId = orderGroupIdResult.rows[0].id;
 
-      // 4. Validar dirección
+      // 5. Validar dirección (una sola vez, se usa para todas las órdenes)
       const addressResult = await client.query(
         `SELECT 
           id,
@@ -98,53 +110,7 @@ export class OrdersService {
 
       const address = addressResult.rows[0];
 
-      // 5. Obtener información del negocio
-      const businessResult = await client.query(
-        `SELECT id, name, location FROM core.businesses WHERE id = $1 AND is_active = TRUE`,
-        [businessId]
-      );
-
-      if (businessResult.rows.length === 0) {
-        throw new NotFoundException('Negocio no encontrado');
-      }
-
-      const business = businessResult.rows[0];
-
-      // 6. Calcular montos y impuestos
-      const subtotal = itemsResult.rows.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
-      
-      // Calcular impuestos usando el nuevo sistema
-      let totalTaxAmount = 0;
-      const itemTaxBreakdowns: any[] = [];
-      
-      for (const item of itemsResult.rows) {
-        try {
-          const taxBreakdown = await this.taxesService.calculateProductTaxes(
-            item.product_id,
-            parseFloat(item.item_subtotal)
-          );
-          totalTaxAmount += taxBreakdown.total_tax;
-          itemTaxBreakdowns.push({
-            product_id: item.product_id,
-            tax_breakdown: taxBreakdown,
-          });
-        } catch (error) {
-          // Si hay error calculando impuestos, continuar sin impuestos para ese producto
-          console.warn(`⚠️ Error calculando impuestos para producto ${item.product_id}:`, error);
-          itemTaxBreakdowns.push({
-            product_id: item.product_id,
-            tax_breakdown: { taxes: [], total_tax: 0 },
-          });
-        }
-      }
-      
-      const taxAmount = Math.round(totalTaxAmount * 100) / 100;
-      const deliveryFee = 0; // Por ahora gratis, se puede calcular después
-      const discountAmount = 0; // Por ahora sin descuentos
-      const tipAmount = checkoutDto.tipAmount || 0;
-      const totalAmount = subtotal + taxAmount + deliveryFee + tipAmount - discountAmount;
-
-      // 7. Construir texto de dirección
+      // 6. Construir texto de dirección
       const addressText = [
         address.street,
         address.street_number,
@@ -155,57 +121,124 @@ export class OrdersService {
         address.country,
       ].filter(Boolean).join(', ');
 
-      // 8. Crear pedido
-      const orderResult = await client.query(
-        `INSERT INTO orders.orders (
-          client_id, business_id, status,
-          delivery_address_id, delivery_address_text, delivery_location,
-          subtotal, tax_amount, delivery_fee, discount_amount, tip_amount, total_amount,
-          payment_method, payment_status,
-          delivery_notes
-        ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, 'cash', 'pending', $13)
-        RETURNING *`,
-        [
-          userId,
-          businessId,
-          checkoutDto.addressId,
-          addressText,
-          address.longitude,
-          address.latitude,
-          subtotal.toFixed(2),
-          taxAmount.toFixed(2),
-          deliveryFee.toFixed(2),
-          discountAmount.toFixed(2),
-          tipAmount.toFixed(2),
-          totalAmount.toFixed(2),
-          checkoutDto.deliveryNotes || null,
-        ]
-      );
+      // 7. Calcular montos globales (delivery_fee y tip se distribuirán proporcionalmente)
+      const globalSubtotal = itemsResult.rows.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
+      const deliveryFee = 0; // Por ahora gratis, se puede calcular después
+      const discountAmount = 0; // Por ahora sin descuentos
+      const tipAmount = checkoutDto.tipAmount || 0;
 
-      const order = orderResult.rows[0];
-
-      // 9. Crear order_items con tax_breakdown
-      for (let i = 0; i < itemsResult.rows.length; i++) {
-        const item = itemsResult.rows[i];
-        const taxBreakdown = itemTaxBreakdowns.find(tb => tb.product_id === item.product_id)?.tax_breakdown || { taxes: [], total_tax: 0 };
-        
-        await client.query(
-          `INSERT INTO orders.order_items (
-            order_id, product_id, item_name, item_price,
-            quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [
-            order.id,
+      // 8. Calcular impuestos y tax_breakdowns para todos los items
+      const itemTaxBreakdownsMap = new Map<string, any>();
+      
+      for (const item of itemsResult.rows) {
+        try {
+          const taxBreakdown = await this.taxesService.calculateProductTaxes(
             item.product_id,
-            item.product_name,
-            item.unit_price,
-            item.quantity,
-            item.variant_selections ? JSON.stringify(item.variant_selections) : null,
-            item.item_subtotal,
-            item.special_instructions || null,
-            JSON.stringify(taxBreakdown),
+            parseFloat(item.item_subtotal)
+          );
+          itemTaxBreakdownsMap.set(item.product_id, taxBreakdown);
+        } catch (error) {
+          // Si hay error calculando impuestos, continuar sin impuestos para ese producto
+          console.warn(`⚠️ Error calculando impuestos para producto ${item.product_id}:`, error);
+          itemTaxBreakdownsMap.set(item.product_id, { taxes: [], total_tax: 0 });
+        }
+      }
+
+      // 9. Crear una orden por cada sucursal
+      const createdOrders: any[] = [];
+      const businessSubtotals = new Map<string, number>();
+
+      // Primero, calcular subtotales por sucursal
+      for (const [businessId, items] of itemsByBusiness.entries()) {
+        const subtotal = items.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
+        businessSubtotals.set(businessId, subtotal);
+      }
+
+      // Crear órdenes para cada sucursal
+      for (const [businessId, items] of itemsByBusiness.entries()) {
+        // Validar que la sucursal existe y está activa
+        const businessResult = await client.query(
+          `SELECT id, name, location FROM core.businesses WHERE id = $1 AND is_active = TRUE`,
+          [businessId]
+        );
+
+        if (businessResult.rows.length === 0) {
+          throw new NotFoundException(`Sucursal ${businessId} no encontrada o inactiva`);
+        }
+
+        const business = businessResult.rows[0];
+        const businessSubtotal = businessSubtotals.get(businessId)!;
+
+        // Calcular impuestos para esta sucursal
+        let businessTaxAmount = 0;
+        for (const item of items) {
+          const taxBreakdown = itemTaxBreakdownsMap.get(item.product_id);
+          if (taxBreakdown) {
+            businessTaxAmount += taxBreakdown.total_tax;
+          }
+        }
+        businessTaxAmount = Math.round(businessTaxAmount * 100) / 100;
+
+        // Distribuir delivery_fee y tip proporcionalmente
+        const subtotalRatio = businessSubtotal / globalSubtotal;
+        const businessDeliveryFee = Math.round(deliveryFee * subtotalRatio * 100) / 100;
+        const businessTipAmount = Math.round(tipAmount * subtotalRatio * 100) / 100;
+        const businessTotalAmount = businessSubtotal + businessTaxAmount + businessDeliveryFee + businessTipAmount - discountAmount;
+
+        // Crear la orden
+        const orderResult = await client.query(
+          `INSERT INTO orders.orders (
+            client_id, business_id, status,
+            delivery_address_id, delivery_address_text, delivery_location,
+            subtotal, tax_amount, delivery_fee, discount_amount, tip_amount, total_amount,
+            payment_method, payment_status,
+            delivery_notes,
+            order_group_id
+          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, 'cash', 'pending', $13, $14)
+          RETURNING *`,
+          [
+            userId,
+            businessId,
+            checkoutDto.addressId,
+            addressText,
+            address.longitude,
+            address.latitude,
+            businessSubtotal.toFixed(2),
+            businessTaxAmount.toFixed(2),
+            businessDeliveryFee.toFixed(2),
+            discountAmount.toFixed(2),
+            businessTipAmount.toFixed(2),
+            businessTotalAmount.toFixed(2),
+            checkoutDto.deliveryNotes || null,
+            orderGroupId, // ⭐ Relacionar con el grupo
           ]
         );
+
+        const order = orderResult.rows[0];
+        createdOrders.push(order);
+
+        // Crear order_items para esta orden
+        for (const item of items) {
+          const taxBreakdown = itemTaxBreakdownsMap.get(item.product_id) || { taxes: [], total_tax: 0 };
+          
+          await client.query(
+            `INSERT INTO orders.order_items (
+              order_id, product_id, item_name, item_price,
+              quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+              order.id,
+              item.product_id,
+              item.product_name,
+              item.unit_price,
+              item.quantity,
+              item.variant_selections ? JSON.stringify(item.variant_selections) : null,
+              item.item_subtotal,
+              item.special_instructions || null,
+              JSON.stringify(taxBreakdown),
+            ]
+          );
+        }
       }
 
       // 10. Limpiar carrito
@@ -220,8 +253,18 @@ export class OrdersService {
 
       await client.query('COMMIT');
 
-      // 11. Obtener pedido completo con items
-      return await this.findOne(order.id, userId);
+      // 11. Obtener todas las órdenes creadas con sus items
+      // Retornar la primera orden como principal (para compatibilidad con código existente)
+      // pero incluir información del grupo
+      const primaryOrder = await this.findOne(createdOrders[0].id, userId);
+      
+      // Agregar información del grupo a la respuesta
+      return {
+        ...primaryOrder,
+        order_group_id: orderGroupId,
+        related_orders_count: createdOrders.length,
+        related_orders: createdOrders.map(o => ({ id: o.id, business_id: o.business_id, total_amount: o.total_amount })),
+      };
     } catch (error: any) {
       await client.query('ROLLBACK');
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -312,35 +355,61 @@ export class OrdersService {
 
       const order = orderResult.rows[0];
 
-      // Obtener items del pedido
+      // Obtener items del pedido con imagen del producto
       const itemsResult = await dbPool.query(
         `SELECT 
-          id,
-          product_id,
-          item_name,
-          item_price,
-          quantity,
-          variant_selection,
-          item_subtotal,
-          special_instructions,
-          tax_breakdown,
-          created_at
-        FROM orders.order_items
-        WHERE order_id = $1
-        ORDER BY created_at ASC`,
+          oi.id,
+          oi.product_id,
+          oi.item_name,
+          oi.item_price,
+          oi.quantity,
+          oi.variant_selection,
+          oi.item_subtotal,
+          oi.special_instructions,
+          oi.tax_breakdown,
+          oi.created_at,
+          -- Obtener la imagen principal del producto
+          (
+            SELECT pi.file_path
+            FROM catalog.product_images pi
+            WHERE pi.product_id = oi.product_id
+            AND pi.is_active = TRUE
+            ORDER BY pi.is_primary DESC, pi.display_order ASC
+            LIMIT 1
+          ) as product_image_path
+        FROM orders.order_items oi
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC`,
         [orderId]
       );
 
       // Parsear tax_breakdown si viene como string (JSONB de PostgreSQL)
-      const items = itemsResult.rows.map(item => ({
-        ...item,
-        tax_breakdown: typeof item.tax_breakdown === 'string' 
-          ? JSON.parse(item.tax_breakdown) 
-          : item.tax_breakdown,
-        variant_selection: typeof item.variant_selection === 'string'
-          ? JSON.parse(item.variant_selection)
-          : item.variant_selection,
-      }));
+      // Y generar URLs públicas de las imágenes
+      const BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const items = itemsResult.rows.map(item => {
+        let product_image_url = null;
+        if (item.product_image_path && supabaseAdmin) {
+          try {
+            const { data: urlData } = supabaseAdmin.storage
+              .from(BUCKET_NAME)
+              .getPublicUrl(item.product_image_path);
+            product_image_url = urlData.publicUrl;
+          } catch (error) {
+            console.error('Error generando URL de imagen del producto:', error);
+          }
+        }
+
+        return {
+          ...item,
+          tax_breakdown: typeof item.tax_breakdown === 'string' 
+            ? JSON.parse(item.tax_breakdown) 
+            : item.tax_breakdown,
+          variant_selection: typeof item.variant_selection === 'string'
+            ? JSON.parse(item.variant_selection)
+            : item.variant_selection,
+          product_image_url,
+        };
+      });
 
       return {
         ...order,
@@ -400,6 +469,63 @@ export class OrdersService {
       }
       console.error('❌ Error cancelando pedido:', error);
       throw new ServiceUnavailableException(`Error al cancelar pedido: ${error.message}`);
+    }
+  }
+
+  /**
+   * ⚠️ TEMPORAL: Eliminar pedido físicamente de la base de datos
+   * Este método es temporal y debe ser removido en producción
+   */
+  async deleteOrder(orderId: string, businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const client = await dbPool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Verificar que el pedido existe y pertenece al negocio
+      const orderResult = await client.query(
+        `SELECT id FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        [orderId, businessId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundException('Pedido no encontrado');
+      }
+
+      // Eliminar order_items primero (CASCADE debería hacerlo, pero por seguridad)
+      await client.query(
+        `DELETE FROM orders.order_items WHERE order_id = $1`,
+        [orderId]
+      );
+
+      // Eliminar deliveries relacionados
+      await client.query(
+        `DELETE FROM orders.deliveries WHERE order_id = $1`,
+        [orderId]
+      );
+
+      // Eliminar la orden
+      await client.query(
+        `DELETE FROM orders.orders WHERE id = $1`,
+        [orderId]
+      );
+
+      await client.query('COMMIT');
+
+      return { success: true, message: 'Pedido eliminado exitosamente' };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error eliminando pedido:', error);
+      throw new ServiceUnavailableException(`Error al eliminar pedido: ${error.message}`);
+    } finally {
+      client.release();
     }
   }
 

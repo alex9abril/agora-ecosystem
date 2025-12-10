@@ -182,14 +182,20 @@ export async function apiRequest<T = any>(
   const needsAuth = requiresAuthentication(endpoint);
   
   const authToken = getAuthTokenFromStorage();
+  const existingHeaders = options.headers as HeadersInit || {};
+  const hasExistingAuth = existingHeaders.Authorization;
+  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...existingHeaders,
   };
 
-  // Solo agregar token si existe y el endpoint lo requiere
-  if (authToken && !headers.Authorization && !(options.headers as HeadersInit)?.Authorization) {
+  // Agregar token si existe y no hay uno ya en los headers
+  if (authToken && !hasExistingAuth) {
     headers.Authorization = `Bearer ${authToken}`;
+    console.log('🔑 [apiRequest] Token agregado al header para:', endpoint);
+  } else if (needsAuth && !authToken) {
+    console.warn('⚠️ [apiRequest] Endpoint requiere autenticación pero no hay token:', endpoint);
   }
   
   const response = await fetch(url, {

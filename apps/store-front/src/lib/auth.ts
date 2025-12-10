@@ -114,6 +114,19 @@ export const authService = {
   },
 
   /**
+   * Actualizar perfil del usuario autenticado
+   */
+  async updateProfile(token: string, data: { first_name?: string; last_name?: string; phone?: string }): Promise<any> {
+    return apiRequest('/auth/me', {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
    * Cerrar sesión
    */
   async signOut(token: string): Promise<{ message: string; success: boolean }> {

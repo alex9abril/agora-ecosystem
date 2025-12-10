@@ -269,3 +269,5 @@ if (!taxSettings.included_in_price) {
 - [Sistema de Impuestos](../database/segments/17_sistema_impuestos.sql)
 - [API de Impuestos](../../apps/backend/src/modules/catalog/taxes)
 
+
+
