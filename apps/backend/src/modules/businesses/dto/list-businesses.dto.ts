@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListBusinessesDto {
@@ -33,6 +33,15 @@ export class ListBusinessesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiProperty({
+    description: 'ID del grupo empresarial para filtrar sucursales',
+    required: false,
+    type: String,
+  })
+  @IsOptional()
+  @IsUUID()
+  businessGroupId?: string;
 
   @ApiPropertyOptional({ description: 'Ordenar por', example: 'created_at', enum: ['created_at', 'name', 'rating_average', 'total_orders'] })
   @IsOptional()

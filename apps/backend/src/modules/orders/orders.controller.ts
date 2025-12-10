@@ -120,7 +120,7 @@ export class OrdersController {
 
   @Post('business/:businessId/:id/status')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Actualizar estado de pedido' })
+  @ApiOperation({ summary: 'Actualizar estado de pedido (para negocios)' })
   @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
   @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
   @ApiResponse({ status: 200, description: 'Estado actualizado exitosamente' })
@@ -131,11 +131,100 @@ export class OrdersController {
     @Param('id') id: string,
     @Param('businessId') businessId: string,
     @Body() body: { status: string; estimated_delivery_time?: number; cancellation_reason?: string },
+    @CurrentUser() user: User,
   ) {
+    // Obtener rol del usuario desde el perfil
+    let userRole = 'local';
+    try {
+      const userProfile = await this.ordersService.getUserProfile(user.id);
+      userRole = userProfile?.role || 'local';
+    } catch (error) {
+      console.warn('No se pudo obtener perfil de usuario, usando rol por defecto:', error);
+    }
+    
     return this.ordersService.updateStatus(id, businessId, body.status, {
       estimated_delivery_time: body.estimated_delivery_time,
       cancellation_reason: body.cancellation_reason,
+      changed_by_user_id: user.id,
+      changed_by_role: userRole as any,
     });
+  }
+
+  @Post('business/:businessId/:id/payment-status')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar estado de pago (modo prueba)' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Estado de pago actualizado exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  @ApiResponse({ status: 400, description: 'Estado de pago inválido' })
+  async updatePaymentStatus(
+    @Param('id') id: string,
+    @Param('businessId') businessId: string,
+    @Body() body: { payment_status: string },
+    @CurrentUser() user: User,
+  ) {
+    // Obtener rol del usuario desde el perfil
+    let userRole = 'local';
+    try {
+      const userProfile = await this.ordersService.getUserProfile(user.id);
+      userRole = userProfile?.role || 'local';
+    } catch (error) {
+      console.warn('No se pudo obtener perfil de usuario, usando rol por defecto:', error);
+    }
+    
+    return this.ordersService.updatePaymentStatus(id, businessId, body.payment_status, {
+      changed_by_user_id: user.id,
+      changed_by_role: userRole as any,
+    });
+  }
+
+  // ============================================================================
+  // ENDPOINTS PARA REPARTIDORES
+  // ============================================================================
+
+  @Post('delivery/:id/pickup')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Marcar pedido como recogido (repartidor)' })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido marcado como recogido' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  @ApiResponse({ status: 400, description: 'El pedido no está asignado a este repartidor' })
+  async pickupOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.updateDeliveryStatus(id, user.id, 'picked_up');
+  }
+
+  @Post('delivery/:id/in-transit')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Marcar pedido como en tránsito (repartidor)' })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido marcado como en tránsito' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  async markInTransit(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.updateDeliveryStatus(id, user.id, 'in_transit');
+  }
+
+  @Post('delivery/:id/delivered')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Marcar pedido como entregado (repartidor)' })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido marcado como entregado' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  async markDelivered(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.updateDeliveryStatus(id, user.id, 'delivered');
   }
 
   @Delete('business/:businessId/:id')

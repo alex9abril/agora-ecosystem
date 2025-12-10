@@ -35,6 +35,14 @@ export interface Order {
   total_quantity?: number;
   items?: OrderItem[];
   delivery?: Delivery;
+  payment_status_change_info?: {
+    changed_at: string;
+    changed_by_user_id?: string;
+    changed_by_role?: string;
+    changed_by_name: string;
+    change_reason?: string;
+    is_automatic: boolean;
+  };
 }
 
 export interface OrderItem {
@@ -80,6 +88,10 @@ export interface UpdateOrderStatusData {
   cancellation_reason?: string;
 }
 
+export interface UpdatePaymentStatusData {
+  payment_status: string;
+}
+
 export const ordersService = {
   /**
    * Obtener pedidos de un negocio
@@ -111,6 +123,49 @@ export const ordersService = {
     });
 
     return response;
+  },
+
+  /**
+   * Actualizar estado de pago (modo prueba)
+   */
+  async updatePaymentStatus(
+    businessId: string,
+    orderId: string,
+    data: UpdatePaymentStatusData
+  ): Promise<Order> {
+    console.log('🔵 [ORDERS SERVICE] Actualizando payment_status:', {
+      businessId,
+      orderId,
+      data,
+    });
+    
+    const response = await apiRequest<Order>(`/orders/business/${businessId}/${orderId}/payment-status`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+
+    console.log('🔵 [ORDERS SERVICE] Respuesta recibida (tipo):', typeof response);
+    console.log('🔵 [ORDERS SERVICE] Respuesta recibida (contenido):', JSON.stringify(response, null, 2));
+    
+    // apiRequest ya extrae data.data, así que response debería ser directamente el Order
+    // Pero verificamos por si acaso
+    if (response && typeof response === 'object') {
+      // Si tiene la estructura { success, data }, extraer data
+      if ('data' in response && !('id' in response)) {
+        console.log('🔵 [ORDERS SERVICE] Extrayendo data de la respuesta anidada');
+        const extracted = (response as any).data;
+        console.log('🔵 [ORDERS SERVICE] Data extraída:', extracted);
+        return extracted as Order;
+      }
+      // Si ya es un Order (tiene id, payment_status, etc.)
+      if ('id' in response && 'payment_status' in response) {
+        console.log('🔵 [ORDERS SERVICE] Respuesta ya es un Order válido');
+        return response as Order;
+      }
+    }
+    
+    console.warn('⚠️ [ORDERS SERVICE] Respuesta con formato inesperado:', response);
+    return response as Order;
   },
 
   /**

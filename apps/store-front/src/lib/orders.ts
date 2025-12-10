@@ -60,6 +60,8 @@ export interface Order {
   delivery_longitude?: number;
   delivery_latitude?: number;
   items?: OrderItem[];
+  item_count?: number; // Número de items diferentes en el pedido
+  total_quantity?: number; // Cantidad total de productos (suma de quantities)
 }
 
 export interface CheckoutDto {

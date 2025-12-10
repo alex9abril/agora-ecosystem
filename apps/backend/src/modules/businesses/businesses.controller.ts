@@ -2,12 +2,15 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Param,
   Query,
   Body,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
@@ -20,7 +23,9 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -33,12 +38,17 @@ import { UpdateBusinessAddressDto } from './dto/update-business-address.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
 import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
+import { UpdateBrandingDto } from './dto/branding.dto';
+import { BrandingImagesService } from './branding-images.service';
 
 @ApiTags('businesses')
 @Controller('businesses')
 @UseGuards(SupabaseAuthGuard)
 export class BusinessesController {
-  constructor(private readonly businessesService: BusinessesService) {}
+  constructor(
+    private readonly businessesService: BusinessesService,
+    private readonly brandingImagesService: BrandingImagesService,
+  ) {}
 
   @Get()
   @Public()
@@ -207,7 +217,17 @@ export class BusinessesController {
     return this.businessesService.getBusinessGroups(query);
   }
 
-  @Get('groups/:slug')
+  @Get('groups/:id')
+  @Public()
+  @ApiOperation({ summary: 'Obtener grupo empresarial por ID (Público)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 200, description: 'Grupo obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Grupo no encontrado' })
+  async getGroupById(@Param('id') id: string) {
+    return this.businessesService.getBusinessGroupById(id);
+  }
+
+  @Get('groups/slug/:slug')
   @Public()
   @ApiOperation({ summary: 'Obtener grupo empresarial por slug (Público)' })
   @ApiParam({ name: 'slug', description: 'Slug del grupo empresarial' })
@@ -397,6 +417,219 @@ export class BusinessesController {
     @CurrentUser() user: User
   ) {
     return this.businessesService.updateBusinessGroup(id, user.id, updateDto);
+  }
+
+  // ============================================================================
+  // BRANDING / PERSONALIZACIÓN
+  // ============================================================================
+
+  @Get('groups/:id/branding')
+  @Public()
+  @ApiOperation({ summary: 'Obtener branding de un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 200, description: 'Branding obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Grupo no encontrado' })
+  async getGroupBranding(@Param('id') id: string) {
+    return this.businessesService.getGroupBranding(id);
+  }
+
+  @Put('groups/:id/branding')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar branding de un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 200, description: 'Branding actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Grupo no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async updateGroupBranding(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBrandingDto,
+    @CurrentUser() user: User
+  ) {
+    return this.businessesService.updateGroupBranding(id, user.id, updateDto);
+  }
+
+  @Get(':id/branding')
+  @Public()
+  @ApiOperation({ summary: 'Obtener branding completo de una sucursal (incluye herencia del grupo)' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Branding obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  async getBusinessBranding(@Param('id') id: string) {
+    return this.businessesService.getBusinessBranding(id);
+  }
+
+  @Put(':id/branding')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar branding de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Branding actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async updateBusinessBranding(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBrandingDto,
+    @CurrentUser() user: User
+  ) {
+    return this.businessesService.updateBusinessBranding(id, user.id, updateDto);
+  }
+
+  // ============================================================================
+  // UPLOAD DE IMÁGENES DE BRANDING
+  // ============================================================================
+
+  @Post('groups/:id/branding/upload-logo')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo principal de un grupo' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGroupLogo(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('group', id, 'logo', file);
+    // Actualizar branding con la nueva URL
+    await this.businessesService.updateGroupBranding(id, user.id, {
+      branding: { logo_url: result.url },
+    });
+    return result;
+  }
+
+  @Post('groups/:id/branding/upload-logo-light')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo light de un grupo' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGroupLogoLight(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('group', id, 'logo_light', file);
+    await this.businessesService.updateGroupBranding(id, user.id, {
+      branding: { logo_light_url: result.url },
+    });
+    return result;
+  }
+
+  @Post('groups/:id/branding/upload-logo-dark')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo dark de un grupo' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGroupLogoDark(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('group', id, 'logo_dark', file);
+    await this.businessesService.updateGroupBranding(id, user.id, {
+      branding: { logo_dark_url: result.url },
+    });
+    return result;
+  }
+
+  @Post('groups/:id/branding/upload-favicon')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir favicon de un grupo' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial' })
+  @ApiResponse({ status: 201, description: 'Favicon subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGroupFavicon(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('group', id, 'favicon', file);
+    await this.businessesService.updateGroupBranding(id, user.id, {
+      branding: { favicon_url: result.url },
+    });
+    return result;
+  }
+
+  @Post(':id/branding/upload-logo')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo principal de una sucursal' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBusinessLogo(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('business', id, 'logo', file);
+    await this.businessesService.updateBusinessBranding(id, user.id, {
+      branding: { logo_url: result.url },
+    });
+    return result;
+  }
+
+  @Post(':id/branding/upload-logo-light')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo light de una sucursal' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBusinessLogoLight(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('business', id, 'logo_light', file);
+    await this.businessesService.updateBusinessBranding(id, user.id, {
+      branding: { logo_light_url: result.url },
+    });
+    return result;
+  }
+
+  @Post(':id/branding/upload-logo-dark')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir logo dark de una sucursal' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 201, description: 'Logo subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBusinessLogoDark(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('business', id, 'logo_dark', file);
+    await this.businessesService.updateBusinessBranding(id, user.id, {
+      branding: { logo_dark_url: result.url },
+    });
+    return result;
+  }
+
+  @Post(':id/branding/upload-favicon')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir favicon de una sucursal' })
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 201, description: 'Favicon subido exitosamente' })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadBusinessFavicon(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User
+  ) {
+    const result = await this.brandingImagesService.uploadImage('business', id, 'favicon', file);
+    await this.businessesService.updateBusinessBranding(id, user.id, {
+      branding: { favicon_url: result.url },
+    });
+    return result;
   }
 }
 

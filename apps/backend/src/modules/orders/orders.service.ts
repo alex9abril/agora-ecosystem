@@ -309,7 +309,17 @@ export class OrdersService {
           o.delivered_at,
           o.cancelled_at,
           b.name as business_name,
-          b.logo_url as business_logo_url
+          b.logo_url as business_logo_url,
+          (
+            SELECT COUNT(*)::integer
+            FROM orders.order_items
+            WHERE order_id = o.id
+          ) as item_count,
+          (
+            SELECT SUM(quantity)::integer
+            FROM orders.order_items
+            WHERE order_id = o.id
+          ) as total_quantity
         FROM orders.orders o
         INNER JOIN core.businesses b ON o.business_id = b.id
         WHERE o.client_id = $1
@@ -318,7 +328,14 @@ export class OrdersService {
       );
 
       console.log('📦 Pedidos encontrados en BD:', result.rows.length);
-      console.log('📦 Primer pedido (ejemplo):', result.rows[0] || 'Ninguno');
+      if (result.rows.length > 0) {
+        console.log('📦 Primer pedido (ejemplo):', {
+          id: result.rows[0].id,
+          item_count: result.rows[0].item_count,
+          total_quantity: result.rows[0].total_quantity,
+          status: result.rows[0].status,
+        });
+      }
       return result.rows;
     } catch (error: any) {
       console.error('❌ Error obteniendo pedidos:', error);
@@ -425,17 +442,141 @@ export class OrdersService {
   }
 
   /**
-   * Cancelar pedido
+   * Obtener perfil de usuario
+   */
+  async getUserProfile(userId: string) {
+    if (!dbPool) {
+      return null;
+    }
+
+    try {
+      const result = await dbPool.query(
+        `SELECT role FROM core.user_profiles WHERE id = $1`,
+        [userId]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error obteniendo perfil de usuario:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Actualizar estado de pago (modo prueba)
+   */
+  async updatePaymentStatus(
+    orderId: string,
+    businessId: string,
+    newPaymentStatus: string,
+    metadata?: {
+      changed_by_user_id?: string;
+      changed_by_role?: string;
+    }
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const client = await dbPool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Verificar que el pedido existe y pertenece al negocio
+      const orderResult = await client.query(
+        `SELECT id, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        [orderId, businessId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundException('Pedido no encontrado');
+      }
+
+      const order = orderResult.rows[0];
+      const currentPaymentStatus = order.payment_status;
+
+      // Validar estados de pago permitidos
+      const validPaymentStatuses = ['pending', 'paid', 'failed', 'refund_pending', 'refunded', 'partially_refunded'];
+      if (!validPaymentStatuses.includes(newPaymentStatus)) {
+        throw new BadRequestException(`Estado de pago inválido: ${newPaymentStatus}`);
+      }
+
+      // Actualizar estado de pago - SIMPLE Y DIRECTO
+      const result = await client.query(
+        `UPDATE orders.orders 
+         SET payment_status = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND business_id = $2
+         RETURNING *`,
+        [orderId, businessId, newPaymentStatus]
+      );
+
+      if (result.rowCount === 0) {
+        throw new Error('No se pudo actualizar el estado de pago');
+      }
+
+      const updatedOrder = result.rows[0];
+
+      // Hacer COMMIT PRIMERO para asegurar que el cambio persista
+      await client.query('COMMIT');
+      
+      // Registrar cambio en historial DESPUÉS del COMMIT (no crítico)
+      // Usar una nueva conexión para no afectar la transacción principal
+      try {
+        const historyClient = await dbPool.connect();
+        try {
+          await historyClient.query(
+            `INSERT INTO orders.order_status_history (
+              order_id, previous_status, new_status, 
+              changed_by_user_id, changed_by_role, change_reason
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              orderId,
+              `payment_${currentPaymentStatus}`,
+              `payment_${newPaymentStatus}`,
+              metadata?.changed_by_user_id || null,
+              metadata?.changed_by_role || null,
+              metadata?.changed_by_user_id 
+                ? `Cambio manual de estado de pago: ${currentPaymentStatus} → ${newPaymentStatus}`
+                : `Cambio automático de estado de pago (pasarela): ${currentPaymentStatus} → ${newPaymentStatus}`
+            ]
+          );
+        } finally {
+          historyClient.release();
+        }
+      } catch (historyError) {
+        // No crítico, solo loguear - el pago ya se actualizó
+        console.warn('⚠️ No se pudo registrar en historial:', historyError);
+      }
+      
+      return updatedOrder;
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('❌ Error actualizando estado de pago:', error);
+      throw new ServiceUnavailableException(`Error al actualizar estado de pago: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Cancelar pedido (para clientes)
    */
   async cancel(orderId: string, userId: string, reason?: string) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
+    const client = await dbPool.connect();
+    
     try {
+      await client.query('BEGIN');
+
       // Verificar que el pedido existe y pertenece al usuario
-      const orderResult = await dbPool.query(
-        `SELECT id, status FROM orders.orders WHERE id = $1 AND client_id = $2`,
+      const orderResult = await client.query(
+        `SELECT id, status, payment_status, business_id FROM orders.orders WHERE id = $1 AND client_id = $2`,
         [orderId, userId]
       );
 
@@ -445,30 +586,205 @@ export class OrdersService {
 
       const order = orderResult.rows[0];
 
-      // Solo se puede cancelar si está pendiente o confirmado
+      // Validar que se puede cancelar según reglas de negocio
+      // Cliente solo puede cancelar si está pending o confirmed
       if (!['pending', 'confirmed'].includes(order.status)) {
-        throw new BadRequestException('El pedido no se puede cancelar en su estado actual');
+        throw new BadRequestException(
+          `El pedido no se puede cancelar en su estado actual (${order.status}). Solo se puede cancelar cuando está pendiente o confirmado.`
+        );
       }
 
+      const currentStatus = order.status;
+
       // Actualizar pedido
-      const result = await dbPool.query(
+      const updateFields = [
+        'status = $1',
+        'cancelled_at = CURRENT_TIMESTAMP',
+        'updated_at = CURRENT_TIMESTAMP',
+        'cancellation_reason = $2'
+      ];
+      const updateParams: any[] = ['cancelled', reason || null];
+
+      // Si el pago ya fue procesado, cambiar payment_status
+      if (order.payment_status === 'paid') {
+        updateFields.push('payment_status = $3');
+        updateParams.push('refund_pending');
+      }
+
+      const result = await client.query(
         `UPDATE orders.orders 
-         SET status = 'cancelled', 
-             cancelled_at = CURRENT_TIMESTAMP,
-             cancellation_reason = $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2 AND client_id = $3
+         SET ${updateFields.join(', ')}
+         WHERE id = $4 AND client_id = $5
          RETURNING *`,
-        [reason || null, orderId, userId]
+        [...updateParams, orderId, userId]
       );
 
-      return result.rows[0];
+      const cancelledOrder = result.rows[0];
+
+      // Registrar en historial de estados
+      try {
+        const userProfile = await this.getUserProfile(userId);
+        await client.query(
+          `INSERT INTO orders.order_status_history (
+            order_id, previous_status, new_status, 
+            changed_by_user_id, changed_by_role, change_reason
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            orderId,
+            currentStatus,
+            'cancelled',
+            userId,
+            userProfile?.role || 'client',
+            reason || null
+          ]
+        );
+      } catch (historyError) {
+        console.warn('⚠️ No se pudo registrar en historial:', historyError);
+      }
+
+      await client.query('COMMIT');
+      return cancelledOrder;
     } catch (error: any) {
+      await client.query('ROLLBACK');
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
       console.error('❌ Error cancelando pedido:', error);
       throw new ServiceUnavailableException(`Error al cancelar pedido: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Actualizar estado de entrega (para repartidores)
+   */
+  async updateDeliveryStatus(orderId: string, repartidorId: string, newStatus: 'picked_up' | 'in_transit' | 'delivered') {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const client = await dbPool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Verificar que el pedido existe y está asignado a este repartidor
+      const deliveryResult = await client.query(
+        `SELECT 
+          d.order_id,
+          d.repartidor_id,
+          o.status,
+          o.business_id,
+          o.payment_status
+        FROM orders.deliveries d
+        INNER JOIN orders.orders o ON d.order_id = o.id
+        WHERE d.order_id = $1 AND d.repartidor_id = $2`,
+        [orderId, repartidorId]
+      );
+
+      if (deliveryResult.rows.length === 0) {
+        throw new NotFoundException('Pedido no encontrado o no asignado a este repartidor');
+      }
+
+      const delivery = deliveryResult.rows[0];
+      const currentStatus = delivery.status;
+
+      // Validar transiciones permitidas para repartidores
+      const validTransitions: { [key: string]: string[] } = {
+        'assigned': ['picked_up'],
+        'picked_up': ['in_transit'],
+        'in_transit': ['delivered'],
+      };
+
+      if (!validTransitions[currentStatus]?.includes(newStatus)) {
+        throw new BadRequestException(
+          `No se puede cambiar el estado de entrega de "${currentStatus}" a "${newStatus}"`
+        );
+      }
+
+      // Actualizar estado de entrega
+      await client.query(
+        `UPDATE orders.deliveries 
+         SET status = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $2 AND repartidor_id = $3`,
+        [newStatus, orderId, repartidorId]
+      );
+
+      // Actualizar estado del pedido y timestamps
+      const orderUpdateFields: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+      const orderUpdateParams: any[] = [orderId];
+      let paramIndex = 2;
+
+      if (newStatus === 'picked_up') {
+        orderUpdateFields.push('status = $' + paramIndex);
+        orderUpdateParams.push('picked_up');
+        paramIndex++;
+        orderUpdateFields.push('picked_up_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'in_transit') {
+        orderUpdateFields.push('status = $' + paramIndex);
+        orderUpdateParams.push('in_transit');
+        paramIndex++;
+        orderUpdateFields.push('in_transit_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'delivered') {
+        orderUpdateFields.push('status = $' + paramIndex);
+        orderUpdateParams.push('delivered');
+        paramIndex++;
+        orderUpdateFields.push('delivered_at = CURRENT_TIMESTAMP');
+        // Calcular tiempo real de entrega
+        const timeResult = await client.query(
+          `SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - created_at)) / 60 as minutes
+           FROM orders.orders WHERE id = $1`,
+          [orderId]
+        );
+        if (timeResult.rows[0]?.minutes) {
+          orderUpdateFields.push(`actual_delivery_time = $${paramIndex}`);
+          orderUpdateParams.push(Math.round(timeResult.rows[0].minutes));
+          paramIndex++;
+        }
+      }
+
+      const orderResult = await client.query(
+        `UPDATE orders.orders 
+         SET ${orderUpdateFields.join(', ')}
+         WHERE id = $1
+         RETURNING *`,
+        orderUpdateParams
+      );
+
+      const updatedOrder = orderResult.rows[0];
+
+      // Registrar en historial de estados
+      try {
+        const userProfile = await this.getUserProfile(repartidorId);
+        await client.query(
+          `INSERT INTO orders.order_status_history (
+            order_id, previous_status, new_status, 
+            changed_by_user_id, changed_by_role
+          ) VALUES ($1, $2, $3, $4, $5)`,
+          [
+            orderId,
+            delivery.status,
+            newStatus,
+            repartidorId,
+            userProfile?.role || 'repartidor'
+          ]
+        );
+      } catch (historyError) {
+        console.warn('⚠️ No se pudo registrar en historial:', historyError);
+      }
+
+      await client.query('COMMIT');
+      return updatedOrder;
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('❌ Error actualizando estado de entrega:', error);
+      throw new ServiceUnavailableException(`Error al actualizar estado de entrega: ${error.message}`);
+    } finally {
+      client.release();
     }
   }
 
@@ -664,9 +980,55 @@ export class OrdersService {
               : item.variant_selection,
           }));
 
+          // Obtener información del último cambio de payment_status desde el historial
+          let paymentStatusChangeInfo = null;
+          try {
+            const paymentHistoryResult = await dbPool.query(
+              `SELECT 
+                osh.previous_status,
+                osh.new_status,
+                osh.created_at as changed_at,
+                osh.changed_by_user_id,
+                osh.changed_by_role,
+                osh.change_reason,
+                up.first_name,
+                up.last_name,
+                au.email
+              FROM orders.order_status_history osh
+              LEFT JOIN core.user_profiles up ON osh.changed_by_user_id = up.id
+              LEFT JOIN auth.users au ON osh.changed_by_user_id = au.id
+              WHERE osh.order_id = $1 
+                AND osh.new_status LIKE 'payment_%'
+                AND osh.new_status = $2
+              ORDER BY osh.created_at DESC
+              LIMIT 1`,
+              [order.id, `payment_${order.payment_status}`]
+            );
+
+            if (paymentHistoryResult.rows.length > 0) {
+              const history = paymentHistoryResult.rows[0];
+              paymentStatusChangeInfo = {
+                changed_at: history.changed_at,
+                changed_by_user_id: history.changed_by_user_id,
+                changed_by_role: history.changed_by_role,
+                changed_by_name: history.first_name && history.last_name 
+                  ? `${history.first_name} ${history.last_name}` 
+                  : history.email || 'Sistema',
+                change_reason: history.change_reason,
+                is_automatic: history.change_reason?.includes('pasarela') || 
+                             history.change_reason?.includes('automático') ||
+                             history.change_reason?.includes('webhook') ||
+                             !history.changed_by_user_id,
+              };
+            }
+          } catch (historyError) {
+            console.warn(`No se pudo obtener historial de payment_status para orden ${order.id}:`, historyError);
+          }
+
           return {
             ...order,
             items,
+            payment_status_change_info: paymentStatusChangeInfo,
           };
         })
       );
@@ -687,6 +1049,24 @@ export class OrdersService {
     }
 
     try {
+      console.log('🔵 [FIND ONE BY BUSINESS] Buscando pedido:', {
+        orderId,
+        businessId,
+      });
+      
+      // Primero verificar si el pedido existe (sin filtro de business_id)
+      const orderExistsCheck = await dbPool.query(
+        `SELECT id, business_id, status, payment_status 
+         FROM orders.orders 
+         WHERE id = $1`,
+        [orderId]
+      );
+      
+      console.log('🔵 [FIND ONE BY BUSINESS] Pedido encontrado (sin filtro business_id):', {
+        found: orderExistsCheck.rows.length > 0,
+        order: orderExistsCheck.rows[0] || null,
+      });
+      
       // Obtener pedido
       const orderResult = await dbPool.query(
         `SELECT 
@@ -704,7 +1084,25 @@ export class OrdersService {
         [orderId, businessId]
       );
 
+      console.log('🔵 [FIND ONE BY BUSINESS] Resultado con filtro business_id:', {
+        found: orderResult.rows.length > 0,
+        order: orderResult.rows[0] || null,
+      });
+
       if (orderResult.rows.length === 0) {
+        // Si el pedido existe pero no pertenece al business_id, dar más información
+        if (orderExistsCheck.rows.length > 0) {
+          const actualOrder = orderExistsCheck.rows[0];
+          console.error('❌ [FIND ONE BY BUSINESS] Pedido existe pero no pertenece al negocio:', {
+            orderId,
+            requestedBusinessId: businessId,
+            actualBusinessId: actualOrder.business_id,
+            match: actualOrder.business_id === businessId,
+          });
+          throw new NotFoundException(
+            `Pedido no encontrado o no pertenece al negocio especificado. Pedido pertenece a: ${actualOrder.business_id}`
+          );
+        }
         throw new NotFoundException('Pedido no encontrado');
       }
 
@@ -749,10 +1147,56 @@ export class OrdersService {
         delivery = deliveryResult.rows[0];
       }
 
+      // Obtener información del último cambio de payment_status desde el historial
+      let paymentStatusChangeInfo = null;
+      try {
+        const paymentHistoryResult = await dbPool.query(
+          `SELECT 
+            osh.previous_status,
+            osh.new_status,
+            osh.created_at as changed_at,
+            osh.changed_by_user_id,
+            osh.changed_by_role,
+            osh.change_reason,
+            up.first_name,
+            up.last_name,
+            au.email
+          FROM orders.order_status_history osh
+          LEFT JOIN core.user_profiles up ON osh.changed_by_user_id = up.id
+          LEFT JOIN auth.users au ON osh.changed_by_user_id = au.id
+          WHERE osh.order_id = $1 
+            AND osh.new_status LIKE 'payment_%'
+            AND osh.new_status = $2
+          ORDER BY osh.created_at DESC
+          LIMIT 1`,
+          [orderId, `payment_${order.payment_status}`]
+        );
+
+        if (paymentHistoryResult.rows.length > 0) {
+          const history = paymentHistoryResult.rows[0];
+          paymentStatusChangeInfo = {
+            changed_at: history.changed_at,
+            changed_by_user_id: history.changed_by_user_id,
+            changed_by_role: history.changed_by_role,
+            changed_by_name: history.first_name && history.last_name 
+              ? `${history.first_name} ${history.last_name}` 
+              : history.email || 'Sistema',
+            change_reason: history.change_reason,
+            is_automatic: history.change_reason?.includes('pasarela') || 
+                         history.change_reason?.includes('automático') ||
+                         history.change_reason?.includes('webhook') ||
+                         !history.changed_by_user_id,
+          };
+        }
+      } catch (historyError) {
+        console.warn('No se pudo obtener historial de payment_status:', historyError);
+      }
+
       return {
         ...order,
         items: itemsResult.rows,
         delivery,
+        payment_status_change_info: paymentStatusChangeInfo,
       };
     } catch (error: any) {
       if (error instanceof NotFoundException) {
@@ -766,18 +1210,29 @@ export class OrdersService {
   /**
    * Actualizar estado de pedido (para negocios)
    */
-  async updateStatus(orderId: string, businessId: string, newStatus: string, metadata?: {
-    estimated_delivery_time?: number;
-    cancellation_reason?: string;
-  }) {
+  async updateStatus(
+    orderId: string, 
+    businessId: string, 
+    newStatus: string, 
+    metadata?: {
+      estimated_delivery_time?: number;
+      cancellation_reason?: string;
+      changed_by_user_id?: string;
+      changed_by_role?: string;
+    }
+  ) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
+    const client = await dbPool.connect();
+    
     try {
+      await client.query('BEGIN');
+
       // Verificar que el pedido existe y pertenece al negocio
-      const orderResult = await dbPool.query(
-        `SELECT id, status FROM orders.orders WHERE id = $1 AND business_id = $2`,
+      const orderResult = await client.query(
+        `SELECT id, status, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
         [orderId, businessId]
       );
 
@@ -786,25 +1241,71 @@ export class OrdersService {
       }
 
       const order = orderResult.rows[0];
+      const currentStatus = order.status;
+      const paymentStatus = order.payment_status;
 
-      // Validar transición de estado
-      const validTransitions: { [key: string]: string[] } = {
-        'pending': ['confirmed', 'cancelled'],
-        'confirmed': ['preparing', 'cancelled'],
-        'preparing': ['ready', 'cancelled'],
-        'ready': ['assigned', 'cancelled'],
-        'assigned': ['picked_up', 'cancelled'],
-        'picked_up': ['in_transit', 'cancelled'],
-        'in_transit': ['delivered', 'cancelled'],
-        'delivered': [],
-        'cancelled': [],
-        'refunded': [],
+      console.log('🟢 [UPDATE STATUS] Iniciando actualización:', {
+        orderId,
+        businessId,
+        currentStatus,
+        newStatus,
+        paymentStatus,
+      });
+
+      // Validar transición de estado usando reglas de negocio
+      const validTransitions: { [key: string]: { allowed: string[]; requires?: { payment_status?: string } } } = {
+        'pending': { 
+          allowed: ['confirmed', 'cancelled'],
+          requires: { payment_status: 'paid' } // Para confirmed
+        },
+        'confirmed': { 
+          allowed: ['preparing', 'cancelled']
+        },
+        'preparing': { 
+          allowed: ['ready', 'cancelled']
+        },
+        'ready': { 
+          allowed: ['assigned', 'delivered', 'cancelled']
+        },
+        'assigned': { 
+          allowed: ['picked_up', 'cancelled']
+        },
+        'picked_up': { 
+          allowed: ['in_transit', 'cancelled']
+        },
+        'in_transit': { 
+          allowed: ['delivered', 'cancelled']
+        },
+        'delivered': { 
+          allowed: ['refunded']
+        },
+        'cancelled': { 
+          allowed: ['refunded']
+        },
+        'refunded': { 
+          allowed: []
+        },
       };
 
-      if (!validTransitions[order.status]?.includes(newStatus)) {
+      const transitionRules = validTransitions[currentStatus];
+      if (!transitionRules || !transitionRules.allowed.includes(newStatus)) {
         throw new BadRequestException(
-          `No se puede cambiar el estado de "${order.status}" a "${newStatus}"`
+          `No se puede cambiar el estado de "${currentStatus}" a "${newStatus}"`
         );
+      }
+
+      // Validar requisitos adicionales
+      if (newStatus === 'confirmed' && transitionRules.requires?.payment_status) {
+        console.log('🟢 [UPDATE STATUS] Validando requisito de pago:', {
+          paymentStatus,
+          required: 'paid',
+          isValid: paymentStatus === 'paid',
+        });
+        if (paymentStatus !== 'paid') {
+          throw new BadRequestException(
+            'No se puede confirmar el pedido sin pago verificado'
+          );
+        }
       }
 
       // Construir query de actualización
@@ -815,8 +1316,29 @@ export class OrdersService {
       // Actualizar timestamps según el estado
       if (newStatus === 'confirmed') {
         updateFields.push('confirmed_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'preparing') {
+        updateFields.push('preparing_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'ready') {
+        updateFields.push('ready_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'assigned') {
+        updateFields.push('assigned_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'picked_up') {
+        updateFields.push('picked_up_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'in_transit') {
+        updateFields.push('in_transit_at = CURRENT_TIMESTAMP');
       } else if (newStatus === 'delivered') {
         updateFields.push('delivered_at = CURRENT_TIMESTAMP');
+        // Calcular tiempo real de entrega
+        const timeResult = await client.query(
+          `SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - created_at)) / 60 as minutes
+           FROM orders.orders WHERE id = $1`,
+          [orderId]
+        );
+        if (timeResult.rows[0]?.minutes) {
+          updateFields.push(`actual_delivery_time = $${paramIndex}`);
+          updateParams.push(Math.round(timeResult.rows[0].minutes));
+          paramIndex++;
+        }
       } else if (newStatus === 'cancelled') {
         updateFields.push('cancelled_at = CURRENT_TIMESTAMP');
         if (metadata?.cancellation_reason) {
@@ -824,6 +1346,17 @@ export class OrdersService {
           updateParams.push(metadata.cancellation_reason);
           paramIndex++;
         }
+        // Si el pago ya fue procesado, cambiar payment_status
+        if (paymentStatus === 'paid') {
+          updateFields.push(`payment_status = $${paramIndex}`);
+          updateParams.push('refund_pending');
+          paramIndex++;
+        }
+      } else if (newStatus === 'refunded') {
+        updateFields.push('refunded_at = CURRENT_TIMESTAMP');
+        updateFields.push(`payment_status = $${paramIndex}`);
+        updateParams.push('refunded');
+        paramIndex++;
       }
 
       // Actualizar tiempo estimado de entrega si se proporciona
@@ -833,7 +1366,13 @@ export class OrdersService {
         paramIndex++;
       }
 
-      const result = await dbPool.query(
+      // Actualizar estado del pedido
+      console.log('🟢 [UPDATE STATUS] Ejecutando UPDATE:', {
+        updateFields: updateFields.join(', '),
+        updateParams: updateParams.length,
+      });
+
+      const result = await client.query(
         `UPDATE orders.orders 
          SET ${updateFields.join(', ')}
          WHERE id = $1 AND business_id = $2
@@ -841,13 +1380,58 @@ export class OrdersService {
         updateParams
       );
 
-      return result.rows[0];
+      console.log('🟢 [UPDATE STATUS] Resultado del UPDATE:', {
+        rowCount: result.rowCount,
+        newStatus: result.rows[0]?.status,
+      });
+
+      if (result.rowCount === 0) {
+        throw new Error('No se actualizó ninguna fila');
+      }
+
+      const updatedOrder = result.rows[0];
+
+      // Hacer COMMIT PRIMERO para asegurar que el cambio persista
+      await client.query('COMMIT');
+      console.log('🟢 [UPDATE STATUS] COMMIT ejecutado. Estado final:', updatedOrder.status);
+      
+      // Registrar en historial DESPUÉS del COMMIT (no crítico)
+      // Usar una nueva conexión para no afectar la transacción principal
+      try {
+        const historyClient = await dbPool.connect();
+        try {
+          await historyClient.query(
+            `INSERT INTO orders.order_status_history (
+              order_id, previous_status, new_status, 
+              changed_by_user_id, changed_by_role, change_reason
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              orderId,
+              currentStatus,
+              newStatus,
+              metadata?.changed_by_user_id || null,
+              metadata?.changed_by_role || null,
+              metadata?.cancellation_reason || `Cambio de estado: ${currentStatus} → ${newStatus}`
+            ]
+          );
+        } finally {
+          historyClient.release();
+        }
+      } catch (historyError) {
+        // No crítico, solo loguear - el estado ya se actualizó
+        console.warn('⚠️ No se pudo registrar en historial:', historyError);
+      }
+      
+      return updatedOrder;
     } catch (error: any) {
+      await client.query('ROLLBACK');
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
       console.error('❌ Error actualizando estado de pedido:', error);
       throw new ServiceUnavailableException(`Error al actualizar estado: ${error.message}`);
+    } finally {
+      client.release();
     }
   }
 }

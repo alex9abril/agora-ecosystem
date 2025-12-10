@@ -44,6 +44,19 @@ Documentación del sistema de configuraciones del sitio y específicamente la co
 - Implementación técnica (backend y frontend)
 - Ejemplos de uso en storefront
 
+### 5. [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
+Documentación del sistema completo de personalización y branding para grupos y sucursales.
+
+**Contenido:**
+- Configuración de logos (principal, light, dark, favicon)
+- Configuración de colores (primario, secundario, acento, textos, fondos, estados)
+- Configuración de fuentes
+- Textos personalizados
+- Redes sociales
+- CSS/JavaScript personalizado
+- Herencia de branding (grupo → sucursal)
+- Implementación técnica (backend y frontend)
+
 ## 🗂️ Organización
 
 ### Documentación
@@ -54,6 +67,7 @@ Documentación del sistema de configuraciones del sitio y específicamente la co
   - `migration_product_types_refacciones.sql` - Migración de tipos de producto
   - `migration_vehicle_compatibility.sql` - Sistema de compatibilidad de vehículos
   - `migration_site_settings.sql` - Sistema de configuraciones del sitio
+  - `migration_business_branding.sql` - Sistema de personalización y branding
   - `seed_refacciones_catalog.sql` - Catálogo de categorías
   - `README.md` - Documentación de scripts SQL
 
@@ -63,8 +77,9 @@ Documentación del sistema de configuraciones del sitio y específicamente la co
 2. Revisar [Estructura de Categorías](./02-estructura-categorias-refacciones.md)
 3. Revisar [Sistema de Compatibilidad de Vehículos](./03-sistema-compatibilidad-vehiculos.md)
 4. Revisar [Sistema de Configuraciones e Impuestos](./04-sistema-configuraciones-impuestos.md)
-5. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
-6. Adaptar formularios y frontend según sea necesario
+5. Revisar [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
+6. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
+7. Adaptar formularios y frontend según sea necesario
 
 ## 📝 Notas
 

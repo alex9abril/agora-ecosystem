@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { supabaseAdmin } from '../../config/supabase.config';
 import { dbPool } from '../../config/database.config';
@@ -120,6 +121,7 @@ export class BusinessesService {
       isActive,
       category,
       search,
+      businessGroupId,
       sortBy = 'created_at',
       sortOrder = 'desc',
     } = query;
@@ -136,6 +138,7 @@ export class BusinessesService {
       isActive,
       category,
       search,
+      businessGroupId,
       sortBy,
       sortOrder,
     });
@@ -170,6 +173,13 @@ export class BusinessesService {
       whereConditions.push(`(name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`);
       queryParams.push(`%${search}%`, `%${search}%`);
       paramIndex += 2;
+    }
+
+    if (businessGroupId) {
+      whereConditions.push(`business_group_id = $${paramIndex}`);
+      queryParams.push(businessGroupId);
+      paramIndex++;
+      console.log('🔍 Filtrando por businessGroupId:', businessGroupId);
     }
 
     const whereClause = whereConditions.length > 0 
@@ -251,7 +261,13 @@ export class BusinessesService {
     console.log('✅ Businesses query result:', {
       count: total,
       dataLength: data?.length || 0,
-      firstItem: data?.[0] ? { id: data[0].id, name: data[0].name } : null,
+      firstItem: data?.[0] ? { 
+        id: data[0].id, 
+        name: data[0].name,
+        business_group_id: data[0].business_group_id 
+      } : null,
+      businessGroupId: businessGroupId || 'none',
+      whereClause,
     });
 
     // Enriquecer datos con información del propietario usando conexión directa a PostgreSQL
@@ -1938,20 +1954,21 @@ export class BusinessesService {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
-      // Contar total
+      // Contar total (usar la vista para mantener consistencia)
       const countResult = await pool.query(
-        `SELECT COUNT(*) as total FROM core.business_groups ${whereClause}`,
+        `SELECT COUNT(*) as total FROM core.business_groups_with_branches ${whereClause}`,
         queryParams
       );
       const total = parseInt(countResult.rows[0].total);
 
-      // Obtener datos
+      // Obtener datos usando la vista que incluye conteo de sucursales
       queryParams.push(limit, offset);
       const result = await pool.query(
         `SELECT 
           id, owner_id, name, legal_name, description, slug, logo_url, website_url,
-          tax_id, settings, is_active, created_at, updated_at
-        FROM core.business_groups
+          tax_id, settings, is_active, created_at, updated_at,
+          total_branches, active_branches, inactive_branches, total_orders, average_rating
+        FROM core.business_groups_with_branches
         ${whereClause}
         ORDER BY created_at DESC
         LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
@@ -1970,6 +1987,40 @@ export class BusinessesService {
     } catch (error: any) {
       console.error('❌ Error obteniendo grupos empresariales:', error);
       throw new ServiceUnavailableException(`Error al obtener grupos empresariales: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener grupo empresarial por ID (público)
+   */
+  async getBusinessGroupById(id: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT 
+          id, owner_id, name, legal_name, description, slug, logo_url, website_url,
+          tax_id, settings, is_active, created_at, updated_at
+        FROM core.business_groups
+        WHERE id = $1 AND is_active = TRUE`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo grupo empresarial:', error);
+      throw new ServiceUnavailableException(`Error al obtener grupo empresarial: ${error.message}`);
     }
   }
 
@@ -2357,6 +2408,206 @@ export class BusinessesService {
       }
       console.error('❌ Error actualizando grupo empresarial:', error);
       throw new ServiceUnavailableException(`Error al actualizar grupo empresarial: ${error.message}`);
+    }
+  }
+
+  // ============================================================================
+  // BRANDING / PERSONALIZACIÓN
+  // ============================================================================
+
+  /**
+   * Obtener branding de un grupo empresarial
+   */
+  async getGroupBranding(groupId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT core.get_group_branding($1) as branding`,
+        [groupId]
+      );
+
+      if (!result.rows[0]) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      return {
+        branding: result.rows[0].branding || {},
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo branding del grupo:', error);
+      throw new ServiceUnavailableException(`Error al obtener branding: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualizar branding de un grupo empresarial
+   */
+  async updateGroupBranding(groupId: string, userId: string, updateDto: any) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que el grupo existe y el usuario es el propietario
+      const groupCheck = await pool.query(
+        `SELECT id, owner_id FROM core.business_groups WHERE id = $1`,
+        [groupId]
+      );
+
+      if (groupCheck.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      if (groupCheck.rows[0].owner_id !== userId) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+
+      // Obtener settings actuales
+      const currentSettings = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings FROM core.business_groups WHERE id = $1`,
+        [groupId]
+      );
+
+      const currentSettingsObj = currentSettings.rows[0].settings || {};
+      const currentBranding = currentSettingsObj.branding || {};
+      
+      // Combinar branding nuevo con branding existente (merge, no reemplazo)
+      const updatedBranding = {
+        ...currentBranding,
+        ...updateDto.branding,
+      };
+      
+      // Combinar con settings existentes
+      const updatedSettings = {
+        ...currentSettingsObj,
+        branding: updatedBranding,
+      };
+
+      // Actualizar
+      const result = await pool.query(
+        `UPDATE core.business_groups
+         SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING settings->'branding' as branding`,
+        [JSON.stringify(updatedSettings), groupId]
+      );
+
+      return {
+        branding: result.rows[0].branding || {},
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('❌ Error actualizando branding del grupo:', error);
+      throw new ServiceUnavailableException(`Error al actualizar branding: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtener branding completo de una sucursal (incluye herencia del grupo)
+   */
+  async getBusinessBranding(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT core.get_business_branding($1) as branding`,
+        [businessId]
+      );
+
+      if (!result.rows[0]) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return result.rows[0].branding || { branding: {} };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo branding de la sucursal:', error);
+      throw new ServiceUnavailableException(`Error al obtener branding: ${error.message}`);
+    }
+  }
+
+  /**
+   * Actualizar branding de una sucursal
+   */
+  async updateBusinessBranding(businessId: string, userId: string, updateDto: any) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      // Verificar que la sucursal existe y el usuario es el propietario
+      const businessCheck = await pool.query(
+        `SELECT id, owner_id FROM core.businesses WHERE id = $1`,
+        [businessId]
+      );
+
+      if (businessCheck.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      if (businessCheck.rows[0].owner_id !== userId) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+
+      // Obtener settings actuales
+      const currentSettings = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings FROM core.businesses WHERE id = $1`,
+        [businessId]
+      );
+
+      const currentSettingsObj = currentSettings.rows[0].settings || {};
+      const currentBranding = currentSettingsObj.branding || {};
+      
+      // Combinar branding nuevo con branding existente (merge, no reemplazo)
+      const updatedBranding = {
+        ...currentBranding,
+        ...updateDto.branding,
+      };
+      
+      // Combinar con settings existentes
+      const updatedSettings = {
+        ...currentSettingsObj,
+        branding: updatedBranding,
+      };
+
+      // Actualizar
+      const result = await pool.query(
+        `UPDATE core.businesses
+         SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2
+         RETURNING settings->'branding' as branding`,
+        [JSON.stringify(updatedSettings), businessId]
+      );
+
+      return {
+        branding: result.rows[0].branding || {},
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('❌ Error actualizando branding de la sucursal:', error);
+      throw new ServiceUnavailableException(`Error al actualizar branding: ${error.message}`);
     }
   }
 }

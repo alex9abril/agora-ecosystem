@@ -142,6 +142,82 @@ Script que crea el sistema genérico y extensible de configuraciones del sitio.
 \i database/agora/migration_site_settings.sql
 ```
 
+### `migration_business_branding.sql` ✅ RECOMENDADO
+
+Script que agrega soporte para personalización de branding tanto a nivel de grupo empresarial como a nivel de sucursal individual.
+
+**Contenido:**
+- ✅ Agrega columna `settings` (JSONB) a `core.businesses` para personalización a nivel sucursal
+- ✅ Índice GIN para búsquedas eficientes en JSONB
+- ✅ Función `core.get_business_branding()` - Obtiene branding completo con herencia del grupo
+- ✅ Función `core.get_group_branding()` - Obtiene branding del grupo
+
+**Características:**
+- ✅ **Herencia de Branding**: Las sucursales heredan configuración del grupo
+- ✅ **Sobrescritura**: Las sucursales pueden sobrescribir valores específicos del grupo
+- ✅ **Estructura Flexible**: JSONB permite agregar nuevos campos sin migraciones
+- ✅ **Branding Completo**: Logos, colores, fuentes, textos, redes sociales, CSS/JS personalizado
+
+**Estructura de Branding:**
+```json
+{
+  "branding": {
+    "logo_url": "...",
+    "logo_light_url": "...",
+    "logo_dark_url": "...",
+    "favicon_url": "...",
+    "colors": {
+      "primary_color": "#FF5733",
+      "secondary_color": "#33C3F0",
+      ...
+    },
+    "fonts": { ... },
+    "texts": { ... },
+    "social_media": { ... },
+    "custom_css": "...",
+    "custom_js": "..."
+  }
+}
+```
+
+**Uso:**
+```sql
+-- Ejecutar después de migration_business_groups.sql
+\i database/agora/migration_business_branding.sql
+```
+
+**Documentación:** Ver `docs/agora/05-sistema-personalizacion-branding.md`
+
+### `setup_storage_policies_branding.sql` ✅ RECOMENDADO
+
+Script para configurar políticas RLS de Supabase Storage para imágenes de branding.
+
+**Contenido:**
+- ✅ Crea el bucket `localia-uploads` si no existe (o usa el configurado en `SUPABASE_STORAGE_BUCKET`)
+- ✅ Política para INSERT (subir imágenes de branding)
+- ✅ Política para SELECT (lectura pública de imágenes)
+- ✅ Política para UPDATE (actualizar imágenes existentes)
+- ✅ Política para DELETE (eliminar imágenes)
+- ✅ Verificación de políticas creadas
+
+**Características:**
+- ✅ **Bucket Público**: Permite acceso directo a las imágenes
+- ✅ **Límite de Tamaño**: 5MB por imagen
+- ✅ **Tipos Permitidos**: JPEG, JPG, PNG, WebP, SVG
+- ✅ **Estructura de Carpetas**: `branding/{type}/{id}/{imageType}-{timestamp}-{random}.{ext}`
+- ✅ **Seguridad**: Políticas RLS que solo permiten acceso a la carpeta `branding`
+
+**Uso:**
+```sql
+-- Ejecutar después de migration_business_branding.sql
+\i database/agora/setup_storage_policies_branding.sql
+```
+
+**Notas:**
+- Ajusta el nombre del bucket si usas uno diferente a `localia-uploads`
+- El bucket se configura en la variable de entorno `SUPABASE_STORAGE_BUCKET`
+- Las políticas verifican que los archivos estén en la carpeta `branding`
+
 ### `migration_business_vehicle_brands.sql` 🆕
 
 Script de migración que crea la relación entre sucursales y marcas de vehículos.
@@ -328,13 +404,15 @@ Script que crea el sistema completo de compatibilidad de vehículos para refacci
 1. `migration_product_types_refacciones.sql` (migra tipos de producto)
 2. `migration_vehicle_compatibility.sql` (crea sistema de compatibilidad)
 3. `migration_site_settings.sql` (crea sistema de configuraciones) ✅
-4. `migration_branch_fields.sql` (agrega campos adicionales a sucursales)
-5. `migration_add_sku_to_products.sql` (agrega campo SKU a productos)
-6. `migration_business_vehicle_brands.sql` (crea relación sucursales-marcas)
-7. `migration_product_branch_availability.sql` (crea disponibilidad por sucursal)
-8. `migration_business_groups.sql` (crea grupos empresariales y relación con sucursales) 🆕
-9. `seed_toyota_vehicles.sql` (pobla catálogo de vehículos Toyota)
-10. `seed_refacciones_catalog.sql` (crea categorías)
+4. `migration_business_groups.sql` (crea grupos empresariales y relación con sucursales) ✅
+5. `migration_business_branding.sql` (crea sistema de branding) ✅
+6. `setup_storage_policies_branding.sql` (configura políticas de Storage para branding) ✅
+7. `migration_branch_fields.sql` (agrega campos adicionales a sucursales)
+8. `migration_add_sku_to_products.sql` (agrega campo SKU a productos)
+9. `migration_business_vehicle_brands.sql` (crea relación sucursales-marcas)
+10. `migration_product_branch_availability.sql` (crea disponibilidad por sucursal)
+11. `seed_toyota_vehicles.sql` (pobla catálogo de vehículos Toyota)
+12. `seed_refacciones_catalog.sql` (crea categorías)
 
 ### `cleanup_old_categories.sql` ⚠️ OPCIONAL
 

@@ -26,6 +26,8 @@ import HomeIcon from '@mui/icons-material/Home';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import StoreSelectorDialog from '../StoreSelectorDialog';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
@@ -38,7 +40,7 @@ export default function Header() {
     getStoreName,
   } = useStoreContext();
   const { isAuthenticated, user, signOut } = useAuth();
-  const { itemCount } = useCart();
+  const { itemCount, cart } = useCart();
   const { getCartUrl } = useStoreRouting();
   const [searchQuery, setSearchQuery] = useState('');
   const [showStoreSelector, setShowStoreSelector] = useState(false);
@@ -48,6 +50,7 @@ export default function Header() {
   const [showCategoriesMenu, setShowCategoriesMenu] = useState(false);
   const [storeInfo, setStoreInfo] = useState<{ name: string; address: string; isOpen: boolean; nextOpenTime: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const [showCartPreview, setShowCartPreview] = useState(false);
 
   // Solo cargar información de localStorage en el cliente para evitar problemas de hidratación
   useEffect(() => {
@@ -128,32 +131,47 @@ export default function Header() {
               </div>
 
               {/* Acciones de usuario */}
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1">
+                {/* Separador visual */}
+                <div className="h-6 w-px bg-gray-300 mx-2" />
+                
+                {/* Botón Navegar */}
                 <button
                   onClick={() => setShowNavigationDialog(true)}
-                  className="text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap flex items-center gap-1"
+                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
                 >
                   <BusinessIcon className="w-5 h-5" />
                   <span className="hidden sm:inline">Navegar</span>
                 </button>
+
+                {/* Sección de Usuario */}
                 {!isAuthenticated ? (
                   <ContextualLink 
                     href="/auth/login" 
-                    className="text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
+                    className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
                   >
-                    Ingresar
+                    <PersonIcon className="w-5 h-5" />
+                    <span className="hidden sm:inline">Ingresar</span>
                   </ContextualLink>
                 ) : (
                   <div className="relative">
                     <button
                       onClick={() => setShowUserMenu(!showUserMenu)}
-                      className="flex items-center gap-1 text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
+                      onMouseEnter={() => setShowUserMenu(true)}
+                      className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 group"
                     >
-                      <PersonIcon className="w-5 h-5" />
-                      <span className="hidden sm:inline">
-                        Bienvenido {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
-                      </span>
-                      <ArrowDropDownIcon className="w-4 h-4" />
+                      <div className="flex items-center gap-2">
+                        <AccountCircleIcon className="w-5 h-5 text-gray-500 group-hover:text-toyota-red transition-colors" />
+                        <div className="hidden sm:flex flex-col items-start leading-tight">
+                          <span className="text-xs text-gray-500 group-hover:text-gray-600">
+                            Hola,
+                          </span>
+                          <span className="text-sm font-semibold text-gray-900 group-hover:text-toyota-red">
+                            {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
+                          </span>
+                        </div>
+                      </div>
+                      <ArrowDropDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
                     </button>
                     
                     {showUserMenu && (
@@ -161,54 +179,81 @@ export default function Header() {
                         <div 
                           className="fixed inset-0 z-40" 
                           onClick={() => setShowUserMenu(false)}
+                          onMouseLeave={() => setShowUserMenu(false)}
                         />
-                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 py-2">
-                          <div className="px-4 py-2 border-b border-gray-200">
-                            <p className="text-sm font-medium text-gray-900">
+                        <div 
+                          className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
+                          onMouseEnter={() => setShowUserMenu(true)}
+                          onMouseLeave={() => setShowUserMenu(false)}
+                        >
+                          {/* Header del menú */}
+                          <div className="bg-gradient-to-r from-toyota-red to-toyota-red-dark px-5 py-4">
+                            <p className="text-xs text-white/90 font-medium uppercase tracking-wide mb-1">
                               Bienvenido
                             </p>
-                            <p className="text-sm text-gray-600 truncate">
+                            <p className="text-base font-bold text-white truncate">
                               {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
                             </p>
+                            {user?.email && (
+                              <p className="text-xs text-white/80 truncate mt-1">
+                                {user.email}
+                              </p>
+                            )}
                           </div>
                           
-                          <ContextualLink
-                            href="/profile"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <HomeIcon className="w-5 h-5 text-gray-400" />
-                            <span>Mis direcciones</span>
-                          </ContextualLink>
+                          {/* Opciones del menú */}
+                          <div className="py-2">
+                            <ContextualLink
+                              href="/profile"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <HomeIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                <span className="font-medium">Mis direcciones</span>
+                              </div>
+                              <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                            </ContextualLink>
+                            
+                            <ContextualLink
+                              href="/orders"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <ReceiptIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                <span className="font-medium">Mis pedidos</span>
+                              </div>
+                              <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                            </ContextualLink>
+                            
+                            <ContextualLink
+                              href="/profile?tab=payment"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <CreditCardIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                <span className="font-medium">Mis formas de pago</span>
+                              </div>
+                              <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                            </ContextualLink>
+                          </div>
                           
-                          <ContextualLink
-                            href="/orders"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <ReceiptIcon className="w-5 h-5 text-gray-400" />
-                            <span>Mis pedidos</span>
-                          </ContextualLink>
+                          {/* Separador */}
+                          <div className="border-t border-gray-200" />
                           
-                          <ContextualLink
-                            href="/profile?tab=payment"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                          >
-                            <CreditCardIcon className="w-5 h-5 text-gray-400" />
-                            <span>Mis formas de pago</span>
-                          </ContextualLink>
-                          
-                          <div className="border-t border-gray-200 mt-1 pt-1">
+                          {/* Botón salir */}
+                          <div className="py-2">
                             <button
                               onClick={async () => {
                                 setShowUserMenu(false);
                                 await signOut();
                               }}
-                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                              className="w-full flex items-center gap-3 px-5 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
                             >
                               <ExitToAppIcon className="w-5 h-5" />
-                              <span>Salir</span>
+                              <span>Cerrar sesión</span>
                             </button>
                           </div>
                         </div>
@@ -217,18 +262,110 @@ export default function Header() {
                   </div>
                 )}
                 
-                <ContextualLink 
-                  href={getCartUrl()} 
-                  className="relative flex items-center gap-1 text-sm font-medium text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
+                {/* Separador visual */}
+                <div className="h-6 w-px bg-gray-300 mx-2" />
+                
+                {/* Carrito con preview */}
+                <div 
+                  className="relative"
+                  onMouseEnter={() => setShowCartPreview(true)}
+                  onMouseLeave={() => setShowCartPreview(false)}
                 >
-                  <ShoppingCartIcon className="w-5 h-5" />
-                  <span className="hidden sm:inline">Carrito</span>
-                  {itemCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-toyota-red text-white text-xs font-bold rounded-full min-w-[18px] h-4 flex items-center justify-center px-1">
-                      {itemCount > 99 ? '99+' : itemCount}
-                    </span>
+                  <ContextualLink 
+                    href={getCartUrl()} 
+                    className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap group"
+                  >
+                    <div className="relative">
+                      <ShoppingCartIcon className="w-6 h-6 text-gray-600 group-hover:text-toyota-red transition-colors" />
+                      {itemCount > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-toyota-red text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md">
+                          {itemCount > 99 ? '99+' : itemCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="hidden sm:flex flex-col items-start leading-tight">
+                      <span className="text-xs text-gray-500 group-hover:text-gray-600">
+                        Carrito
+                      </span>
+                      {cart?.subtotal && (
+                        <span className="text-sm font-semibold text-gray-900 group-hover:text-toyota-red">
+                          ${parseFloat(cart.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </ContextualLink>
+                  
+                  {/* Preview del carrito */}
+                  {showCartPreview && itemCount > 0 && cart && (
+                    <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                      <div className="bg-gradient-to-r from-toyota-red to-toyota-red-dark px-5 py-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-base font-bold text-white">
+                            Tu carrito ({itemCount} {itemCount === 1 ? 'artículo' : 'artículos'})
+                          </h3>
+                        </div>
+                      </div>
+                      
+                      <div className="max-h-96 overflow-y-auto">
+                        {cart.items && cart.items.length > 0 ? (
+                          <div className="py-2">
+                            {cart.items.slice(0, 5).map((item) => (
+                              <div key={item.id} className="px-5 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                      {item.product_name}
+                                    </p>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-xs text-gray-500">
+                                        Cantidad: {item.quantity}
+                                      </span>
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        ${parseFloat(String(item.item_subtotal || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            {cart.items.length > 5 && (
+                              <div className="px-5 py-2 text-center">
+                                <p className="text-xs text-gray-500">
+                                  y {cart.items.length - 5} {cart.items.length - 5 === 1 ? 'artículo más' : 'artículos más'}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="px-5 py-8 text-center">
+                            <ShoppingCartIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">Tu carrito está vacío</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {cart.items && cart.items.length > 0 && (
+                        <>
+                          <div className="border-t border-gray-200 px-5 py-4 bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-medium text-gray-700">Subtotal:</span>
+                              <span className="text-lg font-bold text-gray-900">
+                                ${parseFloat(cart.subtotal || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <ContextualLink
+                              href={getCartUrl()}
+                              onClick={() => setShowCartPreview(false)}
+                              className="block w-full bg-toyota-red text-white text-center py-2.5 rounded-md font-semibold hover:bg-toyota-red-dark transition-colors"
+                            >
+                              Ver carrito completo
+                            </ContextualLink>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
-                </ContextualLink>
+                </div>
               </div>
             </div>
           </div>

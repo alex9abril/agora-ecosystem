@@ -36,7 +36,20 @@ export default function OrderDetailPage() {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔵 [LOAD ORDER] Cargando pedido:', {
+        orderId: id,
+        businessId,
+        source: selectedBusiness?.business_id ? 'selectedBusiness' : 'sessionStorage',
+      });
+      
       const orderData = await ordersService.getOrder(businessId, id as string);
+      console.log('🔵 [LOAD ORDER] Pedido cargado exitosamente:', {
+        orderId: orderData.id,
+        businessId: orderData.business_id,
+        status: orderData.status,
+        payment_status: orderData.payment_status,
+      });
+      
       setOrder(orderData);
 
       // Cargar información de productos para obtener imágenes y SKUs
@@ -76,15 +89,31 @@ export default function OrderDetailPage() {
         }
       }
     } catch (err: any) {
-      console.error('Error cargando pedido:', err);
-      setError('Error al cargar el pedido');
+      console.error('❌ [LOAD ORDER] Error cargando pedido:', err);
+      console.error('❌ [LOAD ORDER] Detalles del error:', {
+        message: err.message,
+        statusCode: err.statusCode,
+        orderId: id,
+        businessId,
+      });
+      
+      if (err.statusCode === 404) {
+        setError('Pedido no encontrado. Puede que haya sido eliminado o no pertenezca a esta tienda.');
+      } else {
+        setError(`Error al cargar el pedido: ${err.message || 'Error desconocido'}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStatusUpdate = async (newStatus: string) => {
+  const handleConfirmPayment = async () => {
     if (!order) return;
+    
+    // Confirmar acción
+    if (!confirm('¿Confirmar que el pago ha sido recibido? Esta acción cambiará el estado de pago a "Pagado".')) {
+      return;
+    }
     
     // Obtener business_id: primero de selectedBusiness, luego de sessionStorage, luego del order
     const businessId = selectedBusiness?.business_id || 
@@ -98,13 +127,107 @@ export default function OrderDetailPage() {
 
     try {
       setUpdating(true);
+      
+      console.log('🔵 [CONFIRMAR PAGO] Iniciando confirmación de pago...');
+      console.log('🔵 [CONFIRMAR PAGO] Order ID:', order.id);
+      console.log('🔵 [CONFIRMAR PAGO] Business ID:', businessId);
+      console.log('🔵 [CONFIRMAR PAGO] Payment status actual:', order.payment_status);
+      
+      const updatedOrder = await ordersService.updatePaymentStatus(businessId, order.id, {
+        payment_status: 'paid',
+      });
+      
+      console.log('🔵 [CONFIRMAR PAGO] Respuesta del backend (tipo):', typeof updatedOrder);
+      console.log('🔵 [CONFIRMAR PAGO] Respuesta del backend (completa):', JSON.stringify(updatedOrder, null, 2));
+      
+      // Verificar si la respuesta tiene payment_status
+      const paymentStatusInResponse = updatedOrder?.payment_status || (updatedOrder as any)?.data?.payment_status;
+      console.log('🔵 [CONFIRMAR PAGO] Payment status en respuesta:', paymentStatusInResponse);
+      
+      // Siempre esperar un momento para que la transacción se complete en la BD
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Recargar el pedido para actualizar la UI
+      console.log('🔄 [CONFIRMAR PAGO] Recargando pedido...');
+      await loadOrder(businessId);
+      
+      // Verificar el estado actualizado directamente desde la BD
+      const reloadedOrder = await ordersService.getOrder(businessId, order.id);
+      console.log('🔵 [CONFIRMAR PAGO] Order recargado - payment_status:', reloadedOrder.payment_status);
+      console.log('🔵 [CONFIRMAR PAGO] Order recargado - estado completo:', JSON.stringify(reloadedOrder, null, 2));
+      
+      if (reloadedOrder.payment_status === 'paid') {
+        console.log('✅ [CONFIRMAR PAGO] Pago confirmado exitosamente en la base de datos');
+        alert('Pago confirmado exitosamente');
+      } else {
+        console.error('❌ [CONFIRMAR PAGO] El pago NO se actualizó en la base de datos');
+        console.error('❌ [CONFIRMAR PAGO] Estado esperado: paid');
+        console.error('❌ [CONFIRMAR PAGO] Estado actual:', reloadedOrder.payment_status);
+        console.error('❌ [CONFIRMAR PAGO] Respuesta del backend fue:', updatedOrder);
+        console.error('❌ [CONFIRMAR PAGO] Payment status en respuesta fue:', paymentStatusInResponse);
+        
+        // Verificar si el backend al menos reportó éxito
+        if (paymentStatusInResponse === 'paid') {
+          alert('El backend reportó éxito, pero el estado no se actualizó en la base de datos. Por favor, recarga la página manualmente.');
+        } else {
+          alert('Error: El pago no se actualizó correctamente. Por favor, revisa los logs en la consola y contacta al administrador.');
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ [CONFIRMAR PAGO] Error confirmando pago:', err);
+      console.error('❌ [CONFIRMAR PAGO] Error completo:', JSON.stringify(err, null, 2));
+      alert(err.message || 'Error al confirmar el pago. Por favor, revisa la consola para más detalles.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleStatusUpdate = async (newStatus: string, requiresConfirmation: boolean = false) => {
+    if (!order) return;
+    
+    // Si requiere confirmación, preguntar al usuario
+    if (requiresConfirmation) {
+      const confirmMessage = newStatus === 'cancelled' 
+        ? '¿Estás seguro de que deseas cancelar este pedido? Esta acción puede requerir un reembolso.'
+        : `¿Estás seguro de cambiar el estado a "${newStatus}"?`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+    }
+    
+    // Obtener business_id: primero de selectedBusiness, luego de sessionStorage, luego del order
+    const businessId = selectedBusiness?.business_id || 
+                       sessionStorage.getItem('temp_order_business_id') || 
+                       order.business_id;
+    
+    if (!businessId) {
+      alert('No se pudo determinar la tienda del pedido');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      
+      // Si es cancelación, pedir razón
+      let cancellationReason = null;
+      if (newStatus === 'cancelled') {
+        cancellationReason = prompt('Por favor, proporciona una razón para la cancelación (opcional):');
+        if (cancellationReason === null) {
+          // Usuario canceló el prompt
+          setUpdating(false);
+          return;
+        }
+      }
+      
       await ordersService.updateOrderStatus(businessId, order.id, {
         status: newStatus,
+        cancellation_reason: cancellationReason || undefined,
       });
       await loadOrder(businessId);
     } catch (err: any) {
       console.error('Error actualizando estado:', err);
-      alert('Error al actualizar el estado del pedido');
+      alert(err.message || 'Error al actualizar el estado del pedido');
     } finally {
       setUpdating(false);
     }
@@ -246,38 +369,61 @@ export default function OrderDetailPage() {
   const getStatusTimeline = (orderData: Order) => {
     if (!orderData) return [];
 
-    const timeline = [
-      {
-        status: 'pending',
-        label: 'Pedido creado',
-        date: orderData.created_at,
-        completed: true,
-      },
-      {
-        status: 'confirmed',
-        label: 'Pedido confirmado',
-        date: orderData.confirmed_at,
-        completed: ['confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'in_transit', 'delivered'].includes(orderData.status),
-      },
-      {
-        status: 'preparing',
-        label: 'En preparación',
-        date: null,
-        completed: ['preparing', 'ready', 'assigned', 'picked_up', 'in_transit', 'delivered'].includes(orderData.status),
-      },
-      {
-        status: 'ready',
-        label: 'Listo para recoger',
-        date: null,
-        completed: ['ready', 'assigned', 'picked_up', 'in_transit', 'delivered'].includes(orderData.status),
-      },
-      {
-        status: 'delivered',
-        label: 'Entregado',
-        date: orderData.delivered_at,
-        completed: orderData.status === 'delivered',
-      },
+    // Definir todos los estados posibles en orden
+    const allStates = [
+      { status: 'pending', label: 'Pedido creado', dateField: 'created_at' },
+      { status: 'confirmed', label: 'Pedido confirmado', dateField: 'confirmed_at' },
+      { status: 'preparing', label: 'En preparación', dateField: 'preparing_at' },
+      { status: 'ready', label: 'Listo para recoger', dateField: 'ready_at' },
+      { status: 'assigned', label: 'Asignado a repartidor', dateField: 'assigned_at' },
+      { status: 'picked_up', label: 'Recogido por repartidor', dateField: 'picked_up_at' },
+      { status: 'in_transit', label: 'En camino', dateField: 'in_transit_at' },
+      { status: 'delivered', label: 'Entregado', dateField: 'delivered_at' },
     ];
+
+    // Determinar qué estados están completados
+    const statusOrder = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'in_transit', 'delivered'];
+    const currentIndex = statusOrder.indexOf(orderData.status);
+    
+    // Si está cancelado o reembolsado, mostrar hasta donde llegó
+    const isCancelled = orderData.status === 'cancelled';
+    const isRefunded = orderData.status === 'refunded';
+
+    const timeline = allStates.map((state, index) => {
+      const isCompleted = currentIndex >= index && !isCancelled && !isRefunded;
+      const isCurrent = currentIndex === index && !isCancelled && !isRefunded;
+      const date = (orderData as any)[state.dateField] || null;
+
+      return {
+        status: state.status,
+        label: state.label,
+        date: date,
+        completed: isCompleted,
+        current: isCurrent,
+      };
+    });
+
+    // Si está cancelado, agregar estado de cancelación
+    if (isCancelled) {
+      timeline.push({
+        status: 'cancelled',
+        label: 'Cancelado',
+        date: (orderData as any).cancelled_at || null,
+        completed: true,
+        current: true,
+      });
+    }
+
+    // Si está reembolsado, agregar estado de reembolso
+    if (isRefunded) {
+      timeline.push({
+        status: 'refunded',
+        label: 'Reembolsado',
+        date: (orderData as any).refunded_at || null,
+        completed: true,
+        current: true,
+      });
+    }
 
     return timeline;
   };
@@ -285,16 +431,100 @@ export default function OrderDetailPage() {
   const getNextActions = (orderData: Order) => {
     if (!orderData) return [];
 
-    const actions: Array<{ status: string; label: string; color: string; isPrimary: boolean }> = [];
+    const actions: Array<{ 
+      status: string; 
+      label: string; 
+      color: string; 
+      isPrimary: boolean;
+      requiresConfirmation?: boolean;
+      isPaymentAction?: boolean; // Indica si es una acción de pago
+    }> = [];
 
-    if (orderData.status === 'pending') {
-      actions.push({ status: 'confirmed', label: 'Confirmar pedido', color: 'bg-black hover:bg-gray-800 text-white', isPrimary: true });
-      actions.push({ status: 'cancelled', label: 'Cancelar pedido', color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300', isPrimary: false });
-    } else if (orderData.status === 'confirmed') {
-      actions.push({ status: 'preparing', label: 'Comenzar preparación', color: 'bg-black hover:bg-gray-800 text-white', isPrimary: true });
-      actions.push({ status: 'cancelled', label: 'Cancelar pedido', color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300', isPrimary: false });
-    } else if (orderData.status === 'preparing') {
-      actions.push({ status: 'ready', label: 'Marcar como listo', color: 'bg-black hover:bg-gray-800 text-white', isPrimary: true });
+    // Definir acciones según el estado actual
+    switch (orderData.status) {
+      case 'pending':
+        // Botón para confirmar pedido (solo si el pago está verificado)
+        if (orderData.payment_status === 'paid') {
+          actions.push({ 
+            status: 'confirmed', 
+            label: 'Confirmar pedido', 
+            color: 'bg-black hover:bg-gray-800 text-white', 
+            isPrimary: true 
+          });
+        }
+        actions.push({ 
+          status: 'cancelled', 
+          label: 'Cancelar pedido', 
+          color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300', 
+          isPrimary: false,
+          requiresConfirmation: true
+        });
+        break;
+      
+      case 'confirmed':
+        actions.push({ 
+          status: 'prepare', 
+          label: 'Comenzar preparación', 
+          color: 'bg-black hover:bg-gray-800 text-white', 
+          isPrimary: true,
+          isNavigationAction: true // Indica que debe navegar en lugar de cambiar estado
+        });
+        actions.push({ 
+          status: 'cancelled', 
+          label: 'Cancelar pedido', 
+          color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300', 
+          isPrimary: false,
+          requiresConfirmation: true
+        });
+        break;
+      
+      case 'preparing':
+        actions.push({ 
+          status: 'ready', 
+          label: 'Marcar como listo', 
+          color: 'bg-black hover:bg-gray-800 text-white', 
+          isPrimary: true 
+        });
+        actions.push({ 
+          status: 'cancelled', 
+          label: 'Cancelar pedido', 
+          color: 'bg-red-600 hover:bg-red-700 text-white', 
+          isPrimary: false,
+          requiresConfirmation: true
+        });
+        break;
+      
+      case 'ready':
+        // Si hay entrega a domicilio, se puede asignar repartidor
+        // Si es recogida en tienda, se puede marcar como entregado directamente
+        actions.push({ 
+          status: 'delivered', 
+          label: 'Marcar como entregado (recogida en tienda)', 
+          color: 'bg-green-600 hover:bg-green-700 text-white', 
+          isPrimary: true 
+        });
+        // Nota: La asignación de repartidor se hace desde otra interfaz
+        break;
+      
+      case 'assigned':
+      case 'picked_up':
+      case 'in_transit':
+        // Estos estados son manejados por repartidores, no por el negocio
+        // Pero se puede cancelar en casos excepcionales
+        actions.push({ 
+          status: 'cancelled', 
+          label: 'Cancelar pedido (excepcional)', 
+          color: 'bg-red-600 hover:bg-red-700 text-white', 
+          isPrimary: false,
+          requiresConfirmation: true
+        });
+        break;
+      
+      case 'delivered':
+      case 'cancelled':
+      case 'refunded':
+        // Estados finales, no hay acciones disponibles
+        break;
     }
 
     return actions;
@@ -368,17 +598,26 @@ export default function OrderDetailPage() {
                 Creado el {formatDate(order.created_at)}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              {nextActions.map((action) => (
-                <button
-                  key={action.status}
-                  onClick={() => handleStatusUpdate(action.status)}
-                  disabled={updating}
-                  className={`px-4 py-2 rounded-md text-sm font-medium ${action.color} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
-                >
-                  {action.label}
-                </button>
-              ))}
+              <div className="flex items-center gap-3">
+                {nextActions.map((action) => (
+                  <button
+                    key={action.status}
+                    onClick={() => {
+                      if (action.isPaymentAction) {
+                        handleConfirmPayment();
+                      } else if (action.isNavigationAction) {
+                        // Navegar a la página de preparación
+                        router.push(`/orders/${order.id}/prepare`);
+                      } else {
+                        handleStatusUpdate(action.status, action.requiresConfirmation);
+                      }
+                    }}
+                    disabled={updating}
+                    className={`px-4 py-2 rounded-md text-sm font-medium ${action.color} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+                  >
+                    {action.label}
+                  </button>
+                ))}
               {/* ⚠️ Botón temporal para eliminar pedido */}
               <button
                 onClick={handleDeleteOrder}
@@ -554,10 +793,36 @@ export default function OrderDetailPage() {
 
                 {/* Resumen de pago */}
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Resumen de pago</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Resumen de pago</h2>
+                    {/* Botón temporal para confirmar pago - Solo para pago a contra entrega o transferencia con referencia */}
+                    {(() => {
+                      const paymentMethod = order.payment_method?.toLowerCase() || '';
+                      const isCashOnDelivery = paymentMethod.includes('contra entrega') || 
+                                               paymentMethod.includes('cash on delivery') || 
+                                               paymentMethod.includes('cod') ||
+                                               paymentMethod === 'cash';
+                      const isTransfer = paymentMethod.includes('transferencia') || 
+                                         paymentMethod.includes('transfer') ||
+                                         paymentMethod.includes('referencia');
+                      const canShowButton = (isCashOnDelivery || isTransfer) && 
+                                           (order.payment_status === 'pending' || order.payment_status === 'failed');
+                      
+                      return canShowButton ? (
+                        <button
+                          onClick={handleConfirmPayment}
+                          disabled={updating}
+                          className="px-2 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          title="Confirmar que el pago ha sido recibido"
+                        >
+                          {updating ? '...' : '✓ Confirmar pago'}
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
                   <p className="text-xs text-gray-500 mb-4">Un resumen de todos los pagos de las transacciones registradas</p>
                   <div className="space-y-2 text-sm">
-                    <div className="mb-2">
+                    <div className="mb-2 space-y-2">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         order.payment_status === 'paid' || order.payment_status === 'overcharged'
                           ? 'text-green-700 bg-green-50'
@@ -571,6 +836,31 @@ export default function OrderDetailPage() {
                          order.payment_status === 'refunded' ? 'Reembolsado' :
                          'Pendiente'}
                       </span>
+                      {order.payment_status_change_info && (
+                        <div className="text-xs text-gray-500">
+                          {order.payment_status_change_info.is_automatic ? (
+                            <span className="flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              Confirmado automáticamente por pasarela de pagos
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                              Confirmado por {order.payment_status_change_info.changed_by_name}
+                              {order.payment_status_change_info.changed_by_role && ` (${order.payment_status_change_info.changed_by_role})`}
+                            </span>
+                          )}
+                          {order.payment_status_change_info.changed_at && (
+                            <span className="ml-1 text-gray-400">
+                              • {formatDate(order.payment_status_change_info.changed_at)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pendiente</span>

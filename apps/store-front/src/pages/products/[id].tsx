@@ -28,7 +28,7 @@ export default function ProductDetailPage() {
   const { id } = router.query;
   const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
-  const { contextType, branchId, groupId, brandId, branchData } = useStoreContext();
+  const { contextType, branchId, groupId, brandId, branchData, isLoading: contextLoading } = useStoreContext();
   const { push } = useStoreRouting();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,8 +81,15 @@ export default function ProductDetailPage() {
       branchId,
       groupId,
       brandId,
+      contextLoading,
       routerReady: router.isReady,
     });
+
+    // Esperar a que el contexto esté completamente cargado antes de cargar disponibilidades
+    if (contextLoading) {
+      console.log('⏳ [ProductDetail] Context still loading, waiting...');
+      return;
+    }
 
     if (id) {
       loadProduct();
@@ -90,16 +97,33 @@ export default function ProductDetailPage() {
       // Cargar disponibilidad según el contexto
       // Reglas:
       // - Global: mostrar todas las sucursales
-      // - Grupo: mostrar solo sucursales del grupo
+      // - Grupo: mostrar solo sucursales del grupo (esperar a que groupId esté disponible)
       // - Sucursal: mostrar solo la sucursal actual (NO cargar todas)
-      // - Brand: mostrar todas las sucursales que venden productos de esa marca
+      // - Brand: mostrar todas las sucursales que venden productos de esa marca (esperar a que brandId esté disponible)
       if (contextType === 'sucursal' && branchId) {
         console.log('✅ [ProductDetail] In branch context, NOT loading availabilities. Only showing current branch:', branchId);
         // En contexto de sucursal, NO cargar disponibilidades, solo usar la sucursal del contexto
         setSelectedBranchId(branchId);
         setBranchAvailabilities([]); // Limpiar disponibilidades
-      } else if (contextType !== 'sucursal') {
-        console.log('✅ [ProductDetail] Loading branch availabilities. Context:', contextType, { groupId, brandId });
+      } else if (contextType === 'grupo') {
+        // En contexto de grupo, esperar a que groupId esté disponible
+        if (groupId) {
+          console.log('✅ [ProductDetail] Loading branch availabilities for group. Context:', contextType, { groupId });
+          loadBranchAvailabilities();
+        } else {
+          console.log('⏳ [ProductDetail] Waiting for groupId to be loaded...', { contextType, groupId });
+        }
+      } else if (contextType === 'brand') {
+        // En contexto de marca, esperar a que brandId esté disponible
+        if (brandId) {
+          console.log('✅ [ProductDetail] Loading branch availabilities for brand. Context:', contextType, { brandId });
+          loadBranchAvailabilities();
+        } else {
+          console.log('⏳ [ProductDetail] Waiting for brandId to be loaded...', { contextType, brandId });
+        }
+      } else if (contextType === 'global') {
+        // En contexto global, cargar inmediatamente (no necesita IDs)
+        console.log('✅ [ProductDetail] Loading branch availabilities for global context');
         loadBranchAvailabilities();
       } else {
         console.log('❌ [ProductDetail] Branch context but no branchId:', { contextType, branchId });
@@ -107,7 +131,7 @@ export default function ProductDetailPage() {
     } else {
       console.log('⏸️ [ProductDetail] No product ID yet, waiting...');
     }
-  }, [id, branchId, contextType, groupId, brandId]);
+  }, [id, branchId, contextType, groupId, brandId, contextLoading]);
 
   const loadProduct = async () => {
     if (!id || typeof id !== 'string') {
@@ -167,12 +191,32 @@ export default function ProductDetailPage() {
         brandId,
       });
       setLoadingAvailabilities(true);
+      
+      // Validar que los IDs necesarios estén disponibles según el contexto
+      if (contextType === 'grupo' && !groupId) {
+        console.error('❌ [loadBranchAvailabilities] Context is grupo but groupId is not available!', {
+          contextType,
+          groupId,
+        });
+        setLoadingAvailabilities(false);
+        return;
+      }
+      
+      if (contextType === 'brand' && !brandId) {
+        console.error('❌ [loadBranchAvailabilities] Context is brand but brandId is not available!', {
+          contextType,
+          brandId,
+        });
+        setLoadingAvailabilities(false);
+        return;
+      }
+      
       // Pasar parámetros de filtrado según el contexto
       // - Global: sin filtros (groupId y brandId undefined)
-      // - Grupo: filtrar por groupId
-      // - Brand: filtrar por brandId
-      const filterGroupId = contextType === 'grupo' ? groupId || undefined : undefined;
-      const filterBrandId = contextType === 'brand' ? brandId || undefined : undefined;
+      // - Grupo: filtrar por groupId (ya validado que existe)
+      // - Brand: filtrar por brandId (ya validado que existe)
+      const filterGroupId = contextType === 'grupo' ? groupId : undefined;
+      const filterBrandId = contextType === 'brand' ? brandId : undefined;
       
       console.log('🔍 [loadBranchAvailabilities] Filters applied:', { 
         contextType, 

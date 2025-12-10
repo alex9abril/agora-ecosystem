@@ -34,6 +34,10 @@ export default function OrdersPage() {
     try {
       setLoading(true);
       const data = await ordersService.findAll();
+      console.log('📦 Pedidos cargados:', data);
+      console.log('📦 Primer pedido (ejemplo):', data[0]);
+      console.log('📦 item_count del primer pedido:', data[0]?.item_count);
+      console.log('📦 items del primer pedido:', data[0]?.items);
       setOrders(data);
     } catch (error) {
       console.error('Error cargando pedidos:', error);
@@ -155,7 +159,18 @@ export default function OrdersPage() {
                           {formatPrice(Number(order.total_amount))}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {order.items?.length || 0} {order.items?.length === 1 ? 'producto' : 'productos'}
+                          {(() => {
+                            // Priorizar item_count del backend, luego items?.length, luego 0
+                            const count = order.item_count !== undefined && order.item_count !== null 
+                              ? order.item_count 
+                              : (order.items?.length ?? 0);
+                            return count;
+                          })()} {(() => {
+                            const count = order.item_count !== undefined && order.item_count !== null 
+                              ? order.item_count 
+                              : (order.items?.length ?? 0);
+                            return count === 1 ? 'producto' : 'productos';
+                          })()}
                         </p>
                       </div>
                     </div>
