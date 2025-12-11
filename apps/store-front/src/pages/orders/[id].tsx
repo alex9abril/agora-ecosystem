@@ -74,15 +74,24 @@ export default function OrderDetailPage() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'confirmed':
-      case 'preparing':
-        return 'text-blue-600 bg-blue-50';
-      case 'ready':
+      case 'pending':
         return 'text-yellow-600 bg-yellow-50';
+      case 'confirmed':
+        return 'text-blue-600 bg-blue-50';
+      case 'completed':
+        return 'text-green-600 bg-green-50';
+      case 'in_transit':
+        return 'text-orange-600 bg-orange-50';
       case 'delivered':
         return 'text-green-600 bg-green-50';
+      case 'delivery_failed':
+        return 'text-red-600 bg-red-50';
+      case 'returned':
+        return 'text-purple-600 bg-purple-50';
       case 'cancelled':
         return 'text-red-600 bg-red-50';
+      case 'refunded':
+        return 'text-gray-600 bg-gray-50';
       default:
         return 'text-gray-600 bg-gray-50';
     }
@@ -92,11 +101,13 @@ export default function OrderDetailPage() {
     const labels: Record<string, string> = {
       pending: 'Pendiente',
       confirmed: 'Confirmado',
-      preparing: 'Preparando',
-      ready: 'Listo',
-      out_for_delivery: 'En camino',
+      completed: 'Completado',
+      in_transit: 'En tránsito',
       delivered: 'Entregado',
+      delivery_failed: 'Entrega fallida',
+      returned: 'Devuelto',
       cancelled: 'Cancelado',
+      refunded: 'Reembolsado',
     };
     return labels[status.toLowerCase()] || status;
   };

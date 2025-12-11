@@ -95,7 +95,13 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       const response = await productsService.getProducts(params);
       console.log('✅ [ProductGrid] Products loaded:', {
         count: response.data?.length || 0,
-        products: response.data?.map(p => ({ id: p.id, name: p.name })) || [],
+        products: response.data?.map(p => ({ 
+          id: p.id, 
+          name: p.name?.substring(0, 30),
+          hasPrimaryImageUrl: !!p.primary_image_url,
+          primary_image_url: p.primary_image_url?.substring(0, 80) + '...',
+          hasImageUrl: !!p.image_url,
+        })) || [],
       });
       setProducts(response.data || []);
     } catch (err: any) {

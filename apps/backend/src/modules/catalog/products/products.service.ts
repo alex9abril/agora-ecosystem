@@ -4,10 +4,35 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { dbPool } from '../../../config/database.config';
 import { supabaseAdmin } from '../../../config/supabase.config';
+import { normalizeStoragePath } from '../../../utils/storage.utils';
 
 @Injectable()
 export class ProductsService {
-  private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+  /**
+   * Normaliza el nombre del bucket: si viene una URL completa, extrae solo el nombre
+   */
+  private normalizeBucketName(bucketName: string): string {
+    if (!bucketName) return 'products';
+    
+    // Si es una URL completa, intentar extraer el nombre del bucket
+    if (bucketName.startsWith('http')) {
+      console.warn('⚠️ [ProductsService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS contiene una URL completa:', bucketName);
+      console.warn('⚠️ [ProductsService] Usando nombre por defecto: products');
+      return 'products';
+    }
+    
+    // Si contiene caracteres especiales de URL, probablemente es una URL mal configurada
+    if (bucketName.includes('://') || bucketName.includes('/storage/')) {
+      console.warn('⚠️ [ProductsService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS parece contener una URL:', bucketName);
+      console.warn('⚠️ [ProductsService] Usando nombre por defecto: products');
+      return 'products';
+    }
+    
+    // Si es solo el nombre del bucket, retornarlo tal cual
+    return bucketName.trim();
+  }
+
+  private readonly BUCKET_NAME = this.normalizeBucketName(process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products');
 
   /**
    * Detecta si una URL es un data URI (base64)
@@ -412,8 +437,16 @@ export class ProductsService {
         pc.name as category_name,
         pc.display_order as category_display_order,
         pc.business_id as category_business_id,
-        -- Obtener el file_path de la imagen principal del producto
-        pi_main.file_path as primary_image_path,
+        -- Obtener el file_path de la imagen principal usando subconsulta escalar (funciona mejor con GROUP BY)
+        -- IMPORTANTE: file_path debe ser una ruta relativa, no una URL completa
+        (
+          SELECT pi_sub.file_path
+          FROM catalog.product_images pi_sub
+          WHERE pi_sub.product_id = p.id
+          AND pi_sub.is_active = TRUE
+          ORDER BY pi_sub.is_primary DESC, pi_sub.display_order ASC
+          LIMIT 1
+        ) as primary_image_path,
         COALESCE(
           json_agg(
             json_build_object(
@@ -450,21 +483,12 @@ export class ProductsService {
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id
       LEFT JOIN catalog.product_variant_groups vg ON vg.product_id = p.id
-      -- LEFT JOIN para obtener la imagen principal (primera imagen activa ordenada por is_primary y display_order)
-      LEFT JOIN LATERAL (
-        SELECT pi_lat.file_path
-        FROM catalog.product_images pi_lat
-        WHERE pi_lat.product_id = p.id
-        AND pi_lat.is_active = TRUE
-        ORDER BY pi_lat.is_primary DESC, pi_lat.display_order ASC
-        LIMIT 1
-      ) pi_main ON TRUE
       ${whereClause}
       GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
-               b.name, pc.name, pc.business_id, pc.display_order, pi_main.file_path
+               b.name, pc.name, pc.business_id, pc.display_order
       ORDER BY COALESCE(pc.display_order, 999) ASC, ${orderByColumn} ${orderDirection}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -479,8 +503,25 @@ export class ProductsService {
       const result = await pool.query(sqlQuery, queryParams);
       const data = result.rows || [];
 
-      return {
-        data: data.map(row => {
+      // Debug: Verificar qué está devolviendo la query para los primeros productos
+      if (data.length > 0 && process.env.NODE_ENV !== 'production') {
+        const productosConImagen = data.filter(r => r.primary_image_path).length;
+        console.log('🔍 [findAll] Resultado SQL - Primeros productos:', {
+          total: data.length,
+          productosConImagen,
+          productosSinImagen: data.length - productosConImagen,
+          primerosProductos: data.slice(0, 5).map(r => ({
+            id: r.id,
+            name: r.name?.substring(0, 30),
+            primary_image_path: r.primary_image_path, // Mostrar completo, no truncar
+            primary_image_path_length: r.primary_image_path?.length || 0,
+            isUrl: r.primary_image_path?.startsWith('http') || false,
+            image_url: r.image_url,
+          })),
+        });
+      }
+
+      const mappedData = data.map((row, index) => {
           // Parsear variant_groups estructuradas
           let variantGroupsStructured = [];
           if (row.variant_groups_structured) {
@@ -539,15 +580,87 @@ export class ProductsService {
           }
 
           // Generar URL pública de la imagen principal si existe
+          // Usar la misma lógica que getProductImages para consistencia
           let primaryImageUrl: string | undefined = undefined;
           if (row.primary_image_path && supabaseAdmin) {
             try {
-              const { data: urlData } = supabaseAdmin.storage
-                .from(this.BUCKET_NAME)
-                .getPublicUrl(row.primary_image_path);
-              primaryImageUrl = urlData.publicUrl;
+              const originalPath = row.primary_image_path;
+              let finalPath: string | null = null;
+              
+              // Si ya es un path relativo (no empieza con http), usarlo directamente
+              if (!originalPath.startsWith('http')) {
+                finalPath = originalPath;
+              } else {
+                // Si es una URL completa, extraer directamente el patrón UUID/filename
+                // PRIORIDAD 1: Buscar el patrón UUID/filename con extensión
+                const uuidMatch = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
+                if (uuidMatch && uuidMatch[1]) {
+                  finalPath = uuidMatch[1];
+                } else {
+                  // PRIORIDAD 2: Buscar sin extensión
+                  const uuidMatchNoExt = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
+                  if (uuidMatchNoExt && uuidMatchNoExt[1]) {
+                    finalPath = uuidMatchNoExt[1];
+                  }
+                }
+              }
+              
+              // Debug logging SIEMPRE (no solo para los primeros 3) para ver qué está pasando
+              console.log('🔍 [findAll] Procesando primary_image_path:', {
+                productId: row.id,
+                originalPath: originalPath?.substring(0, 200),
+                finalPath,
+                isUrl: originalPath?.startsWith('http') || false,
+                finalPathIsUrl: finalPath?.startsWith('http') || false,
+              });
+              
+              // Solo generar URL si tenemos un path relativo válido (no empieza con http)
+              // IMPORTANTE: Verificar que finalPath NO sea una URL completa antes de pasarlo a getPublicUrl
+              if (finalPath && !finalPath.startsWith('http') && !finalPath.startsWith('https') && finalPath.includes('/')) {
+                // Verificar que finalPath tenga el formato correcto (UUID/filename)
+                if (finalPath.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i)) {
+                  // Asegurarse de que finalPath no contenga caracteres de URL
+                  if (!finalPath.includes('://') && !finalPath.includes('.supabase.co') && !finalPath.includes('.storage.supabase.co')) {
+                    const { data: urlData } = supabaseAdmin.storage
+                      .from(this.BUCKET_NAME)
+                      .getPublicUrl(finalPath);
+                    primaryImageUrl = urlData.publicUrl;
+                    
+                    console.log('✅ [findAll] URL generada correctamente:', {
+                      productId: row.id,
+                      finalPath,
+                      bucket: this.BUCKET_NAME,
+                      primaryImageUrl: primaryImageUrl?.substring(0, 200),
+                    });
+                  } else {
+                    console.error('❌ [findAll] finalPath contiene caracteres de URL:', {
+                      productId: row.id,
+                      finalPath: finalPath?.substring(0, 200),
+                    });
+                  }
+                } else {
+                  console.error('❌ [findAll] finalPath no tiene el formato correcto (UUID/filename):', {
+                    productId: row.id,
+                    finalPath: finalPath?.substring(0, 200),
+                  });
+                }
+              } else {
+                console.error('❌ [findAll] No se pudo extraer path relativo de primary_image_path:', {
+                  productId: row.id,
+                  originalPath: originalPath?.substring(0, 200),
+                  finalPath: finalPath?.substring(0, 200) || null,
+                  isUrl: originalPath?.startsWith('http') || false,
+                  finalPathIsUrl: finalPath?.startsWith('http') || false,
+                  hasSlash: finalPath?.includes('/') || false,
+                });
+              }
             } catch (error) {
-              console.error('Error generando URL de imagen principal:', error);
+              console.error('❌ [findAll] Error generando URL de imagen principal:', {
+                productId: row.id,
+                productName: row.name?.substring(0, 50),
+                error: error instanceof Error ? error.message : String(error),
+                primary_image_path: row.primary_image_path?.substring(0, 200),
+              });
             }
           }
 
@@ -579,7 +692,26 @@ export class ProductsService {
             created_at: row.created_at,
             updated_at: row.updated_at,
           };
-        }),
+        });
+
+      // Debug: Verificar que primary_image_url se está incluyendo en la respuesta
+      if (mappedData.length > 0 && process.env.NODE_ENV !== 'production') {
+        const productosConImagen = mappedData.filter(p => p.primary_image_url).length;
+        console.log('🔍 [findAll] Resumen de productos con imágenes:', {
+          total: mappedData.length,
+          conImagen: productosConImagen,
+          sinImagen: mappedData.length - productosConImagen,
+          primerosProductos: mappedData.slice(0, 3).map(p => ({
+            id: p.id,
+            name: p.name?.substring(0, 30),
+            hasPrimaryImageUrl: !!p.primary_image_url,
+            primary_image_url: p.primary_image_url?.substring(0, 80) + '...',
+          })),
+        });
+      }
+
+      return {
+        data: mappedData,
         pagination: {
           page,
           limit,
@@ -813,19 +945,47 @@ export class ProductsService {
       let primaryImageUrl: string | undefined = undefined;
       if (row.primary_image_path && supabaseAdmin) {
         try {
-          const { data: urlData } = supabaseAdmin.storage
-            .from(this.BUCKET_NAME)
-            .getPublicUrl(row.primary_image_path);
-          primaryImageUrl = urlData.publicUrl;
-          console.log('✅ Imagen principal generada:', primaryImageUrl);
+          const originalPath = row.primary_image_path;
+          let finalPath: string | null = null;
+          
+          // Si ya es un path relativo (no empieza con http), usarlo directamente
+          if (!originalPath.startsWith('http')) {
+            finalPath = originalPath;
+          } else {
+            // Si es una URL completa, extraer directamente el patrón UUID/filename
+            // PRIORIDAD 1: Buscar el patrón UUID/filename con extensión
+            const uuidMatch = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
+            if (uuidMatch) {
+              finalPath = uuidMatch[1];
+            } else {
+              // PRIORIDAD 2: Buscar sin extensión
+              const uuidMatchNoExt = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
+              if (uuidMatchNoExt) {
+                finalPath = uuidMatchNoExt[1];
+              }
+            }
+          }
+          
+          // Solo generar URL si tenemos un path relativo válido (no empieza con http)
+          if (finalPath && !finalPath.startsWith('http')) {
+            const { data: urlData } = supabaseAdmin.storage
+              .from(this.BUCKET_NAME)
+              .getPublicUrl(finalPath);
+            primaryImageUrl = urlData.publicUrl;
+          } else {
+            console.error('❌ [findOne] No se pudo extraer path relativo de primary_image_path:', {
+              productId: row.id,
+              originalPath: originalPath?.substring(0, 200),
+              finalPath: finalPath?.substring(0, 200) || null,
+            });
+          }
         } catch (error) {
-          console.error('❌ Error generando URL de imagen principal:', error);
+          console.error('❌ [findOne] Error generando URL de imagen principal:', {
+            productId: row.id,
+            error: error instanceof Error ? error.message : String(error),
+            primary_image_path: row.primary_image_path?.substring(0, 200),
+          });
         }
-      } else {
-        console.log('⚠️ No hay primary_image_path o supabaseAdmin no está configurado:', {
-          hasPrimaryImagePath: !!row.primary_image_path,
-          hasSupabaseAdmin: !!supabaseAdmin,
-        });
       }
 
       return {

@@ -23,6 +23,12 @@ interface StockShortageOption {
   type: 'refund' | 'other_branch' | 'wallet';
   label: string;
   description: string;
+  selectedBranchId?: string; // Para opción 'other_branch'
+  otherBranches?: Array<{
+    branch_id: string;
+    branch_name: string;
+    stock: number | null;
+  }>; // Lista de otras sucursales con stock disponible
 }
 
 export default function PrepareOrderPage() {
@@ -59,6 +65,12 @@ export default function PrepareOrderPage() {
       const orderData = await ordersService.getOrder(businessId, id as string);
       setOrder(orderData);
 
+      console.log('🔵 [PREPARE] Pedido cargado:', { 
+        orderId: orderData.id, 
+        itemsCount: orderData.items?.length || 0,
+        items: orderData.items 
+      });
+
       if (!orderData.items || orderData.items.length === 0) {
         setError('El pedido no tiene items');
         setLoading(false);
@@ -66,12 +78,15 @@ export default function PrepareOrderPage() {
       }
 
       // Obtener información de la sucursal
-      const branch = await businessService.getBusiness(businessId);
+      const branch = await businessService.getMyBusiness(businessId);
       if (!branch) {
         setError('No se pudo obtener información de la sucursal');
         setLoading(false);
         return;
       }
+
+      // Guardar groupId para usarlo después
+      const groupId = branch.business_group_id || undefined;
 
       // Cargar stock de cada producto
       const stockInfoPromises = orderData.items
@@ -82,15 +97,25 @@ export default function PrepareOrderPage() {
             const product = await productsService.getProduct(item.product_id!);
             
             // Obtener disponibilidad en la sucursal
-            const availability = await productsService.getProductBranchAvailability(
-              item.product_id!,
-              branch.business_group_id || undefined
+            const availabilityResponse = await productsService.getProductBranchAvailability(
+              item.product_id!
             );
 
             // Buscar la sucursal específica del pedido
-            const branchAvailability = availability.find(
+            const branchAvailability = availabilityResponse.availabilities?.find(
               (av: any) => av.branch_id === businessId
             );
+
+            console.log('🔵 [PREPARE] Disponibilidad:', {
+              productId: item.product_id,
+              businessId,
+              availabilities: availabilityResponse.availabilities?.length || 0,
+              branchAvailability: branchAvailability ? {
+                branch_id: branchAvailability.branch_id,
+                stock: branchAvailability.stock,
+                is_enabled: branchAvailability.is_enabled
+              } : null
+            });
 
             const availableStock = branchAvailability?.stock ?? null;
             const requestedQuantity = item.quantity;
@@ -119,6 +144,12 @@ export default function PrepareOrderPage() {
 
       const stockInfoResults = await Promise.all(stockInfoPromises);
       const validStockInfo = stockInfoResults.filter((info): info is ProductStockInfo => info !== null);
+      
+      console.log('🔵 [PREPARE] Stock info cargado:', {
+        totalItems: orderData.items.length,
+        validStockInfo: validStockInfo.length,
+        stockInfo: validStockInfo
+      });
       
       setProductsStock(validStockInfo);
 
@@ -166,14 +197,56 @@ export default function PrepareOrderPage() {
     );
   };
 
-  const handleShortageOptionChange = (productId: string, option: StockShortageOption) => {
+  const handleShortageOptionChange = async (productId: string, optionType: 'refund' | 'other_branch' | 'wallet') => {
+    const productInfo = productsStock.find(p => p.productId === productId);
+    if (!productInfo) return;
+
+    let newOption: StockShortageOption = {
+      type: optionType,
+      label: optionType === 'refund' ? 'Devolución' : 
+             optionType === 'other_branch' ? 'Buscar en otra sucursal' :
+             'Monedero electrónico',
+      description: optionType === 'refund' ? 'Devolver el dinero al cliente' :
+                    optionType === 'other_branch' ? 'Buscar el producto en otra sucursal del grupo' :
+                    'Devolver el saldo al monedero para usar en futuras compras',
+    };
+
+    // Si se selecciona "otra sucursal", buscar sucursales con stock disponible
+    if (optionType === 'other_branch') {
+      try {
+        // Obtener el grupo empresarial de la sucursal actual
+        const branch = await businessService.getMyBusiness(productInfo.branchId);
+        const groupId = branch?.business_group_id || undefined;
+        
+        const availabilityResponse = await productsService.getProductBranchAvailability(
+          productId
+        );
+        
+        // Filtrar sucursales que no sean la actual y que tengan stock disponible
+        const otherBranches = availabilityResponse.availabilities
+          .filter((av: any) => av.branch_id !== productInfo.branchId && av.is_enabled)
+          .map((av: any) => ({
+            branch_id: av.branch_id,
+            branch_name: av.branch_name,
+            stock: av.stock,
+          }));
+
+        newOption.otherBranches = otherBranches;
+        if (otherBranches.length > 0) {
+          newOption.selectedBranchId = otherBranches[0].branch_id;
+        }
+      } catch (err) {
+        console.error('Error buscando otras sucursales:', err);
+      }
+    }
+
     setShortageOptions((prev) => ({
       ...prev,
-      [productId]: option,
+      [productId]: newOption,
     }));
   };
 
-  const handleSave = async () => {
+  const handleMarkAsCompleted = async () => {
     if (!order) return;
 
     const businessId = selectedBusiness?.business_id || sessionStorage.getItem('temp_order_business_id');
@@ -203,25 +276,51 @@ export default function PrepareOrderPage() {
       return;
     }
 
+    // Confirmar acción
+    if (!confirm('¿Estás seguro de que deseas marcar este pedido como completado? El pedido quedará listo para distribución.')) {
+      return;
+    }
+
     try {
       setSaving(true);
 
-      // TODO: Implementar lógica de guardado
-      // 1. Actualizar cantidades de items del pedido
-      // 2. Procesar opciones de escasez (devolución, otra sucursal, monedero)
-      // 3. Actualizar stock de productos
-      // 4. Cambiar estado del pedido a 'preparing'
+      // Primero guardar la preparación
+      const items = productsStock.map((info) => ({
+        item_id: info.orderItem.id,
+        quantity: info.adjustedQuantity,
+      }));
 
-      // Por ahora, solo cambiar el estado
+      const shortageOptionsArray = productsStock
+        .filter((info) => info.stockShortage > 0)
+        .map((info) => {
+          const option = shortageOptions[info.productId];
+          if (!option) return null;
+
+          return {
+            product_id: info.productId,
+            option_type: option.type,
+            alternative_branch_id: option.type === 'other_branch' ? option.selectedBranchId : undefined,
+            shortage_quantity: info.stockShortage,
+          };
+        })
+        .filter((opt): opt is NonNullable<typeof opt> => opt !== null);
+
+      // Guardar preparación
+      await ordersService.prepareOrder(businessId, order.id, {
+        items,
+        shortage_options: shortageOptionsArray.length > 0 ? shortageOptionsArray : undefined,
+      });
+
+      // Luego marcar como completado
       await ordersService.updateOrderStatus(businessId, order.id, {
-        status: 'preparing',
+        status: 'completed',
       });
 
       // Regresar a la página de detalle del pedido
       router.push(`/orders/${order.id}`);
     } catch (err: any) {
-      console.error('Error guardando preparación:', err);
-      alert('Error al guardar la preparación: ' + (err.message || 'Error desconocido'));
+      console.error('Error marcando pedido como completado:', err);
+      alert('Error al marcar el pedido como completado: ' + (err.message || 'Error desconocido'));
     } finally {
       setSaving(false);
     }
@@ -276,31 +375,32 @@ export default function PrepareOrderPage() {
       <Head>
         <title>Preparar pedido #{order.id.slice(0, 8)} - LOCALIA Local</title>
       </Head>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full h-full flex flex-col bg-white">
         {/* Header */}
-        <div className="mb-6">
+        <div className="px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">
           <button
             onClick={() => router.back()}
-            className="mb-4 flex items-center text-gray-600 hover:text-gray-900"
+            className="mb-4 flex items-center text-gray-500 hover:text-gray-700 font-normal"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
             Volver
           </button>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-medium text-gray-700">
             No. de orden {order.id.slice(0, 8)} - Agregar envío
           </h1>
         </div>
 
         {/* Items listos para envío */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Ítems listos para envío</h2>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="flex-1 overflow-auto bg-white">
+          <div className="bg-white w-full h-full flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+              <h2 className="text-base font-normal text-gray-600">Ítems listos para envío</h2>
+            </div>
+            
+            <div className="flex-1 overflow-auto">
+              <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -310,13 +410,13 @@ export default function PrepareOrderPage() {
                     SKU
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quantity
+                    Cantidad
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Stock
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Warehouse
+                    Almacén
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Acción
@@ -324,7 +424,14 @@ export default function PrepareOrderPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {productsStock.map((info) => (
+                {productsStock.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                      No hay items para preparar
+                    </td>
+                  </tr>
+                ) : (
+                  productsStock.map((info) => (
                   <tr key={info.productId} className={info.stockShortage > 0 ? 'bg-yellow-50' : ''}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -341,12 +448,12 @@ export default function PrepareOrderPage() {
                             </svg>
                           )}
                         </div>
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-normal text-gray-700">
                           {info.product.name}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-normal text-gray-500">
                       {info.product.sku || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -356,8 +463,11 @@ export default function PrepareOrderPage() {
                           min="0"
                           max={info.availableStock !== null ? info.availableStock : undefined}
                           value={info.adjustedQuantity}
-                          onChange={(e) => handleQuantityChange(info.productId, parseInt(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 border border-gray-300 rounded-md text-sm"
+                          onChange={(e) => {
+                            const newValue = parseInt(e.target.value) || 0;
+                            handleQuantityChange(info.productId, newValue);
+                          }}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <span className="text-sm text-gray-500">
                           / {info.requestedQuantity}
@@ -369,7 +479,7 @@ export default function PrepareOrderPage() {
                         </p>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-normal text-gray-600">
                       {info.availableStock !== null ? info.availableStock : 'Sin límite'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -382,49 +492,75 @@ export default function PrepareOrderPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {info.stockShortage > 0 && (
-                        <select
-                          value={shortageOptions[info.productId]?.type || 'wallet'}
-                          onChange={(e) => {
-                            const optionType = e.target.value as 'refund' | 'other_branch' | 'wallet';
-                            handleShortageOptionChange(info.productId, {
-                              type: optionType,
-                              label: optionType === 'refund' ? 'Devolución' : 
-                                     optionType === 'other_branch' ? 'Buscar en otra sucursal' :
-                                     'Monedero electrónico',
-                              description: optionType === 'refund' ? 'Devolver el dinero al cliente' :
-                                          optionType === 'other_branch' ? 'Buscar el producto en otra sucursal del grupo' :
-                                          'Devolver el saldo al monedero para usar en futuras compras',
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                        >
-                          <option value="wallet">Monedero electrónico</option>
-                          <option value="other_branch">Buscar en otra sucursal</option>
-                          <option value="refund">Devolución</option>
-                        </select>
+                        <div className="space-y-2">
+                          <select
+                            value={shortageOptions[info.productId]?.type || 'wallet'}
+                            onChange={(e) => {
+                              const optionType = e.target.value as 'refund' | 'other_branch' | 'wallet';
+                              handleShortageOptionChange(info.productId, optionType);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="wallet">Monedero electrónico</option>
+                            <option value="other_branch">Buscar en otra sucursal</option>
+                            <option value="refund">Devolución</option>
+                          </select>
+                          {shortageOptions[info.productId]?.type === 'other_branch' && 
+                           shortageOptions[info.productId]?.otherBranches && 
+                           shortageOptions[info.productId]!.otherBranches!.length > 0 && (
+                            <select
+                              value={shortageOptions[info.productId]?.selectedBranchId || ''}
+                              onChange={(e) => {
+                                setShortageOptions((prev) => ({
+                                  ...prev,
+                                  [info.productId]: {
+                                    ...prev[info.productId]!,
+                                    selectedBranchId: e.target.value,
+                                  },
+                                }));
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              {shortageOptions[info.productId]!.otherBranches!.map((branch) => (
+                                <option key={branch.branch_id} value={branch.branch_id}>
+                                  {branch.branch_name} {branch.stock !== null ? `(Stock: ${branch.stock})` : '(Sin límite)'}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {shortageOptions[info.productId]?.type === 'other_branch' && 
+                           (!shortageOptions[info.productId]?.otherBranches || 
+                            shortageOptions[info.productId]!.otherBranches!.length === 0) && (
+                            <p className="text-xs text-yellow-600">
+                              No hay otras sucursales con stock disponible
+                            </p>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Botones de acción */}
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 flex-shrink-0 bg-white">
             <button
               onClick={() => router.back()}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-normal text-gray-600 bg-white hover:bg-gray-50"
             >
               Cancelar
             </button>
             <button
-              onClick={handleSave}
+              onClick={handleMarkAsCompleted}
               disabled={saving}
-              className="px-4 py-2 bg-black text-white rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-black text-white rounded-md text-sm font-normal hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {saving ? 'Guardando...' : 'Guardar y continuar'}
+              {saving ? 'Completando...' : 'Marcar como completado'}
             </button>
+          </div>
           </div>
         </div>
       </div>

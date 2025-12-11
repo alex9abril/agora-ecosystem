@@ -2,213 +2,367 @@
 
 Este directorio contiene el esquema de base de datos para la plataforma LOCALIA.
 
-## 📁 Archivos SQL - Documentación Completa
+## 📁 Estructura de Carpetas
 
-### Secuencia de Creación y Descripción
-Test
+Los archivos SQL están organizados en carpetas según su propósito:
 
-Los archivos SQL están organizados por orden de creación y propósito. A continuación se documenta cada uno:
+```
+database/
+├── schema/              # Esquemas base y estructuras fundamentales
+├── migrations/          # Migraciones de la base de datos
+├── seeds/               # Datos de ejemplo y catálogos
+├── storage/             # Scripts de Supabase Storage (buckets, políticas)
+├── fixes/               # Correcciones y hotfixes
+├── diagnostics/         # Scripts de diagnóstico y verificación
+├── agora/               # Scripts específicos del proyecto Agora
+└── segments/             # Segmentos del schema (versión modular)
+```
 
-#### 1. **`schema.sql`** (Base - Ejecutar primero)
-**Descripción:** Script principal con la estructura completa de la base de datos.  
-**Contiene:** Schemas, tablas, índices, triggers, funciones, ENUMs, y toda la estructura base.  
-**Cuándo ejecutar:** Primero, antes que cualquier otro script.  
-**Dependencias:** Requiere extensión PostGIS.
+---
 
-#### 2. **`api_keys_schema.sql`**
-**Descripción:** Sistema de autenticación mediante API Keys para aplicaciones externas.  
-**Contiene:** Tablas `api_keys` y `api_key_requests` para tracking de peticiones.  
-**Cuándo ejecutar:** Después de `schema.sql`, si necesitas autenticación de aplicaciones.  
-**Dependencias:** `schema.sql`
+## 📂 Descripción de Carpetas
 
-#### 3. **`business_categories_catalog.sql`**
-**Descripción:** Catálogo de categorías de negocios (tipos de establecimientos).  
-**Contiene:** Categorías predefinidas para clasificar negocios (Restaurante, Café, Tienda, etc.).  
-**Cuándo ejecutar:** Después de `schema.sql`, para tener categorías base.  
-**Dependencias:** `schema.sql`
+### 📋 `schema/` - Esquemas Base
 
-#### 4. **`service_regions.sql`**
-**Descripción:** Sistema de regiones de servicio (áreas de cobertura de delivery).  
-**Contiene:** Tabla `service_regions` con polígonos GeoJSON para definir zonas de entrega.  
-**Cuándo ejecutar:** Después de `schema.sql`, si necesitas definir regiones de servicio.  
-**Dependencias:** `schema.sql`
+Contiene los archivos fundamentales que definen la estructura base de la base de datos.
 
-#### 4.1. **`get_location_region.sql`** 🆕
-**Descripción:** Función SQL para identificar en qué zona de cobertura está un punto específico.  
-**Contiene:** Función `core.get_location_region()` que retorna la región (zona) en la que está ubicado un punto, incluyendo el nombre de la zona (ej: "La Roma", "Polanco").  
-**Cuándo ejecutar:** Después de `service_regions.sql`, para habilitar la identificación de zonas.  
-**Dependencias:** `service_regions.sql`  
-**Nota:** Esta función es utilizada por el backend para validar y mostrar la zona específica cuando se selecciona una ubicación en el mapa.
+**Archivos principales:**
+- **`schema.sql`** ⭐ - Script principal con la estructura completa de la base de datos (schemas, tablas, índices, triggers, funciones, ENUMs). **Debe ejecutarse primero.**
+- **`init_agora_ecosystem.sql`** - Inicialización del ecosistema Agora
+- **`api_keys_schema.sql`** - Sistema de autenticación mediante API Keys para aplicaciones externas
+- **`business_categories_catalog.sql`** - Catálogo de categorías de negocios (tipos de establecimientos)
+- **`business_roles_and_multi_store.sql`** - Sistema de roles de negocio y soporte para múltiples tiendas por cuenta
+- **`service_regions.sql`** - Sistema de regiones de servicio (áreas de cobertura de delivery)
+- **`superadmin_account_users.sql`** - Funciones para gestión de usuarios a nivel de cuenta del superadmin
+- **`get_location_region.sql`** - Función SQL para identificar en qué zona de cobertura está un punto específico
 
-#### 5. **`migration_fix_wallet_types.sql`**
-**Descripción:** Migración para cambiar campos de wallet de UUID a VARCHAR(255).  
-**Contiene:** ALTER TABLE para campos `wallet_*` en múltiples tablas.  
-**Cuándo ejecutar:** Solo si ya tienes datos y necesitas cambiar tipos de wallet.  
-**Dependencias:** `schema.sql` (con datos existentes)
-
-#### 6. **`business_roles_and_multi_store.sql`** 🆕
-**Descripción:** Sistema de roles de negocio y soporte para múltiples tiendas por cuenta.  
-**Contiene:** 
-- ENUM `business_role` (superadmin, admin, operativo_aceptador, operativo_cocina)
-- Tabla `core.business_users` (relación muchos-a-muchos usuarios-negocios)
-- Funciones para gestión de usuarios y permisos
-- Triggers de validación
-- Migración automática de owners existentes a superadmin
-**Cuándo ejecutar:** Después de `schema.sql`, para habilitar roles de negocio.  
-**Dependencias:** `schema.sql`  
-**Documentación:** Ver `docs/18-roles-negocio-multi-tiendas.md`
-
-#### 7. **`superadmin_account_users.sql`** 🆕
-**Descripción:** Funciones para gestión de usuarios a nivel de cuenta del superadmin.  
-**Contiene:**
-- `get_superadmin_account_users()` - Ver usuarios de todas las tiendas del superadmin
-- `get_available_users_for_superadmin_account()` - Usuarios disponibles para asignar
-- `remove_user_from_superadmin_account()` - Remover de todas las tiendas
-- `get_superadmin_account_users_summary()` - Resumen por tienda
-**Cuándo ejecutar:** Después de `business_roles_and_multi_store.sql`.  
-**Dependencias:** `business_roles_and_multi_store.sql`
-
-#### 8. **`migrate_user_to_roles.sql`**
-**Descripción:** Script de migración para usuarios existentes al nuevo sistema de roles.  
-**Contiene:** Migración específica para un usuario (configurado con UUID del usuario).  
-**Cuándo ejecutar:** Después de `business_roles_and_multi_store.sql`, para migrar usuarios existentes.  
-**Dependencias:** `business_roles_and_multi_store.sql`  
-**Nota:** Este script está configurado para un usuario específico. Modifica el UUID antes de ejecutar.
-
-#### 8.1. **`migrate_existing_businesses_to_business_users.sql`** 🔧
-**Descripción:** Migración masiva de negocios existentes al sistema de roles.  
-**Contiene:** Asigna rol `superadmin` a todos los `owner_id` de negocios que no tengan registro en `business_users`.  
-**Cuándo ejecutar:** Después de `business_roles_and_multi_store.sql`, si tienes negocios creados antes del sistema de roles.  
-**Dependencias:** `business_roles_and_multi_store.sql`
-
-#### 8.2. **`fix_missing_business_users.sql`** 🔧
-**Descripción:** Corrección rápida para negocios sin registro en `business_users`.  
-**Contiene:** Asigna automáticamente el rol `superadmin` a negocios que existen pero no tienen registro en `business_users`.  
-**Cuándo ejecutar:** Si un negocio existe pero el usuario no lo ve en web-local (404 en `/api/businesses/my-business`).  
-**Dependencias:** `business_roles_and_multi_store.sql`  
-**Nota:** Este script es idempotente y seguro de ejecutar múltiples veces.
-
-#### 9. **`seed_catalog.sql`**
-**Descripción:** Datos de catálogo básicos (categorías globales de ejemplo).  
-**Contiene:** Categorías de productos predefinidas (Entradas, Platos Principales, Bebidas, Postres).  
-**Cuándo ejecutar:** Después de `schema.sql`, opcional para tener categorías base.  
-**Dependencias:** `schema.sql`
-
-#### 10. **`seed_delivery_cycle.sql`**
-**Descripción:** Ciclo completo de delivery de ejemplo para pruebas.  
-**Contiene:** Usuarios, negocio, productos, pedido, entrega, evaluación y propina.  
-**Cuándo ejecutar:** Después de crear usuarios en Supabase Auth, para datos de prueba.  
-**Dependencias:** `schema.sql`, usuarios creados en `auth.users`
-
-#### 11. **`seed_roles_catalog.sql`** ⚠️ OPCIONAL
-**Descripción:** Catálogo de roles para documentación (no necesario para funcionamiento).  
-**Contiene:** Tabla `roles_catalog` con permisos y descripciones de roles.  
-**Cuándo ejecutar:** Opcional, solo si necesitas documentación de permisos.  
-**Dependencias:** `schema.sql`  
-**Nota:** Los roles funcionan perfectamente solo con el ENUM definido en `schema.sql`.
-
-#### 12. **`create_profiles_only.sql`**
-**Descripción:** Script simplificado para crear perfiles de usuarios existentes en Supabase Auth.  
-**Contiene:** Creación de `user_profiles` para usuarios predefinidos (cliente, repartidor, local).  
-**Cuándo ejecutar:** Después de crear usuarios en Supabase Dashboard.  
-**Dependencias:** Usuarios creados en `auth.users`
-
-#### 13. **`create_test_users.sql`** ⚠️ Puede fallar
-**Descripción:** Intenta crear usuarios y perfiles (requiere permisos de service_role).  
-**Contiene:** Creación de usuarios en `auth.users` y perfiles en `user_profiles`.  
-**Cuándo ejecutar:** Solo si tienes permisos de service_role (generalmente falla).  
-**Dependencias:** Permisos de service_role  
-**Nota:** ⚠️ Generalmente falla. Usa `create_profiles_only.sql` en su lugar.
-
-#### 14. **`fix_admin_role.sql`**
-**Descripción:** Script de corrección para roles de administrador.  
-**Contiene:** Correcciones específicas para roles admin.  
-**Cuándo ejecutar:** Solo si necesitas corregir roles admin existentes.  
-**Dependencias:** `schema.sql` (con datos existentes)
-
-#### 15. **`migration_advanced_catalog_system.sql`** 🆕
-**Descripción:** Sistema avanzado de catálogos de productos con funcionalidades completas.  
-**Contiene:**
-- ENUM `product_type` (food, beverage, medicine, grocery, non_food)
-- Atributos múltiples para categorías de productos (JSONB)
-- Sistema estructurado de variantes de productos (tablas `product_variant_groups` y `product_variants`)
-- Mejora de colecciones (paquetes como productos, cantidades fraccionarias)
-- Campos para productos de farmacia (receta, edad, límites)
-- Funciones auxiliares y vistas útiles
-**Cuándo ejecutar:** Después de `schema.sql`, para habilitar funcionalidades avanzadas de catálogos.  
-**Dependencias:** `schema.sql`  
-**Documentación:** Ver `docs/20-sistema-catalogos-productos-avanzado.md`  
-**Nota:** Este script es idempotente y seguro de ejecutar múltiples veces. Migra automáticamente productos existentes.
-
-#### 15.1. **`migration_product_type_field_config.sql`** 🆕
-**Descripción:** Configuración de campos por tipo de producto. Define qué campos del formulario deben mostrarse según el tipo de producto seleccionado (ej: alérgenos solo para alimentos, campos de farmacia solo para medicamentos).  
-**Contiene:** 
-- Verificación y creación automática del tipo `catalog.product_type` si no existe
-- Tabla `catalog.product_type_field_config` con configuración de visibilidad y requerimiento de campos
-- Función `catalog.get_product_type_field_config(product_type)` para obtener configuración
-- Datos iniciales para todos los tipos de producto (food, beverage, medicine, grocery, non_food)
-**Cuándo ejecutar:** Después de `schema.sql` (y opcionalmente `migration_advanced_catalog_system.sql`), para configurar qué campos mostrar en el formulario.  
-**Dependencias:** `schema.sql` (requerido), `migration_advanced_catalog_system.sql` (opcional, se crea automáticamente si falta)  
-**Nota:** Esta migración permite personalizar el formulario de productos según el tipo, evitando mostrar campos irrelevantes (ej: alérgenos para medicamentos). La migración es robusta y crea automáticamente el tipo `product_type` si no existe.
-
-#### 16. **`examples_advanced_catalog.sql`** 🆕
-**Descripción:** Ejemplos prácticos de uso del sistema avanzado de catálogos.  
-**Contiene:**
-- Ejemplo 1: Producto con variantes (Papas Fritas - Chica, Mediana, Grande)
-- Ejemplo 2: Producto con múltiples grupos de variantes (Hamburguesa con Tamaño + Extras)
-- Ejemplo 3: Categoría con atributos múltiples
-- Ejemplo 4: Combo con cantidades fraccionarias
-- Ejemplo 5: Producto de farmacia
-- Consultas útiles para trabajar con el sistema
-**Cuándo ejecutar:** Después de `migration_advanced_catalog_system.sql`, para ver ejemplos de uso.  
-**Dependencias:** `migration_advanced_catalog_system.sql`  
-**Nota:** Este script es solo para referencia y aprendizaje. No es necesario ejecutarlo para el funcionamiento del sistema.
-
-#### 17. **`seed_advanced_catalog_admin.sql`** 🆕
-**Descripción:** Catálogo completo y avanzado de tipos de productos y categorías gestionado por administradores.  
-**Contiene:**
-- Atributos completos para cada tipo de producto (food, beverage, medicine, grocery, non_food)
-- Categorías principales globales (Entradas, Platos Principales, Acompañamientos, Bebidas, Postres, Combos)
-- Subcategorías jerárquicas (Bebidas Frías, Bebidas Calientes, Bebidas Alcohólicas, Hamburguesas, Pizzas, Tacos, Pastas, Ensaladas, etc.)
-- Categorías especiales (Analgésicos, Vitaminas y Suplementos para farmacia)
-- Atributos JSONB completos para cada categoría (temperatura, tamaño de porción, sugerencias, etc.)
-**Cuándo ejecutar:** Después de `migration_advanced_catalog_system.sql`, para poblar el catálogo base.  
-**Dependencias:** `migration_advanced_catalog_system.sql`  
-**Nota:** Este catálogo es gestionado exclusivamente por administradores. Los locales solo pueden seleccionar categorías y tipos de producto existentes, no crear nuevos.
-
-### Orden Recomendado de Ejecución
-
+**Orden de ejecución recomendado:**
 ```sql
 -- 1. Base (OBLIGATORIO)
-\i database/schema.sql
+\i database/schema/schema.sql
 
 -- 2. Extensiones y sistemas adicionales (OPCIONAL)
-\i database/api_keys_schema.sql
-\i database/business_categories_catalog.sql
-\i database/service_regions.sql
+\i database/schema/api_keys_schema.sql
+\i database/schema/business_categories_catalog.sql
+\i database/schema/service_regions.sql
+\i database/schema/get_location_region.sql
 
 -- 3. Sistema de roles de negocio (OBLIGATORIO para gestión de usuarios)
-\i database/business_roles_and_multi_store.sql
-\i database/superadmin_account_users.sql
-
--- 4. Sistema avanzado de catálogos (OPCIONAL pero recomendado)
-\i database/migration_advanced_catalog_system.sql
-
--- 5. Migraciones de usuarios existentes (si aplica)
-\i database/migrate_user_to_roles.sql  -- Modificar UUID antes de ejecutar
-
--- 6. Catálogo avanzado para administradores (RECOMENDADO)
-\i database/seed_advanced_catalog_admin.sql  -- Catálogo completo de tipos y categorías
-
--- 7. Datos de ejemplo (OPCIONAL)
-\i database/seed_catalog.sql
-\i database/seed_delivery_cycle.sql  -- Requiere usuarios en auth.users
-\i database/examples_advanced_catalog.sql  -- Ejemplos del sistema avanzado de catálogos
-
--- 6. Scripts opcionales
-\i database/seed_roles_catalog.sql  -- Solo si necesitas documentación
-\i database/create_profiles_only.sql  -- Después de crear usuarios en Dashboard
+\i database/schema/business_roles_and_multi_store.sql
+\i database/schema/superadmin_account_users.sql
 ```
+
+---
+
+### 🔄 `migrations/` - Migraciones
+
+Contiene scripts de migración que modifican la estructura de la base de datos o agregan nuevas funcionalidades.
+
+**Archivos:**
+- **`migration_advanced_catalog_system.sql`** - Sistema avanzado de catálogos de productos con funcionalidades completas
+- **`migration_product_type_field_config.sql`** - Configuración de campos por tipo de producto
+- **`migration_fix_wallet_types.sql`** - Migración para cambiar campos de wallet de UUID a VARCHAR(255)
+- **`migration_shopping_cart.sql`** - Sistema de carrito de compras
+- **`migration_tax_system.sql`** - Sistema de impuestos
+- **`migration_order_tracking_postventa.sql`** - Sistema de seguimiento de pedidos postventa
+- **`migration_update_order_status_simplified.sql`** - Actualización simplificada del sistema de estados de pedidos
+- **`migration_add_branch_id_to_cart_items.sql`** - Agregar branch_id a items del carrito
+- **`migration_add_order_group_id.sql`** - Agregar order_group_id a pedidos
+- **`migration_add_receiver_to_addresses.sql`** - Agregar campo receiver a direcciones
+- **`migration_fix_product_images_file_path.sql`** - Corrección de rutas de imágenes de productos
+
+**Uso:**
+```sql
+-- Ejecutar migraciones según necesidad
+\i database/migrations/migration_advanced_catalog_system.sql
+\i database/migrations/migration_product_type_field_config.sql
+```
+
+---
+
+### 🌱 `seeds/` - Datos de Ejemplo
+
+Contiene scripts para poblar la base de datos con datos de ejemplo, catálogos y datos de prueba.
+
+**Archivos:**
+- **`seed_catalog.sql`** - Datos de catálogo básicos (categorías globales de ejemplo)
+- **`seed_delivery_cycle.sql`** - Ciclo completo de delivery de ejemplo para pruebas
+- **`seed_advanced_catalog_admin.sql`** - Catálogo completo y avanzado de tipos de productos y categorías gestionado por administradores
+- **`seed_roles_catalog.sql`** ⚠️ OPCIONAL - Catálogo de roles para documentación (no necesario para funcionamiento)
+- **`seed_test_products_pescaditos.sql`** - Productos de prueba para "Pescaditos"
+- **`seed_test_products_pescaditos_set2.sql`** - Segunda versión de productos de prueba
+- **`examples_advanced_catalog.sql`** - Ejemplos prácticos de uso del sistema avanzado de catálogos
+- **`create_profiles_only.sql`** - Script simplificado para crear perfiles de usuarios existentes en Supabase Auth
+- **`create_test_users.sql`** ⚠️ Puede fallar - Intenta crear usuarios y perfiles (requiere permisos de service_role)
+- **`insert_la_roma_zone.sql`** - Insertar zona "La Roma" para pruebas
+- **`update_la_roma_polygon.sql`** - Actualizar polígono de la zona "La Roma"
+
+**Uso:**
+```sql
+-- Catálogo básico
+\i database/seeds/seed_catalog.sql
+
+-- Ciclo completo de delivery (recomendado para pruebas)
+\i database/seeds/seed_delivery_cycle.sql
+
+-- Catálogo avanzado para administradores
+\i database/seeds/seed_advanced_catalog_admin.sql
+```
+
+---
+
+### 🗄️ `storage/` - Supabase Storage
+
+Contiene todos los scripts relacionados con la configuración y gestión de Supabase Storage (buckets, políticas RLS, permisos).
+
+**Categorías de archivos:**
+
+**Creación de buckets:**
+- `create_products_bucket.sql` - Crear bucket de productos
+- `create_products_bucket_complete.sql` - Crear bucket de productos (versión completa)
+- `create_and_configure_products_bucket.sql` - Crear y configurar bucket de productos
+
+**Configuración de políticas:**
+- `setup_storage_policies_products.sql` - Configurar políticas RLS para bucket de productos
+- `template_new_bucket_policies.sql` - Plantilla para políticas de nuevos buckets
+- `create_permissive_policies_final.sql` - Crear políticas permisivas finales
+
+**Correcciones de políticas:**
+- `fix_storage_policies_service_role.sql` - Corregir políticas para service_role
+- `fix_storage_policies_add_service_role.sql` - Agregar service_role a políticas
+- `fix_storage_permissions_complete.sql` - Corrección completa de permisos de storage
+- `fix_products_policies_*.sql` - Múltiples scripts de corrección de políticas de productos
+- `fix_policies_*.sql` - Scripts de corrección de políticas generales
+
+**Recreación y restauración:**
+- `recreate_products_bucket_from_scratch.sql` - Recrear bucket de productos desde cero
+- `recreate_products_policies_exact_copy.sql` - Recrear políticas exactas de productos
+
+**Deshabilitación:**
+- `disable_rls_storage_products.sql` - Deshabilitar RLS en storage de productos
+- `disable_storage_rls_products.sql` - Deshabilitar RLS en storage de productos (alternativa)
+
+**Verificación:**
+- `verify_products_bucket_status.sql` - Verificar estado del bucket de productos
+- `verify_and_fix_storage_policies.sql` - Verificar y corregir políticas de storage
+- `verify_and_compare_policies.sql` - Verificar y comparar políticas
+- `verify_bucket_exists.sql` - Verificar existencia de bucket
+
+**Utilidades:**
+- `compare_buckets_and_fix.sql` - Comparar buckets y corregir diferencias
+- `copy_personalizacion_policies_to_products.sql` - Copiar políticas de personalización a productos
+
+**Uso:**
+```sql
+-- Crear bucket de productos
+\i database/storage/create_products_bucket.sql
+
+-- Configurar políticas
+\i database/storage/setup_storage_policies_products.sql
+
+-- Verificar estado
+\i database/storage/verify_products_bucket_status.sql
+```
+
+---
+
+### 🔧 `fixes/` - Correcciones y Hotfixes
+
+Contiene scripts de corrección para problemas específicos y migraciones de datos existentes.
+
+**Archivos:**
+- **`fix_admin_role.sql`** - Script de corrección para roles de administrador
+- **`fix_business_role_type.sql`** - Corregir tipos de roles de negocio
+- **`fix_medicine_allergens_config.sql`** - Corregir configuración de alérgenos de medicamentos
+- **`fix_missing_business_users.sql`** - Corrección rápida para negocios sin registro en `business_users`
+- **`fix_roles_data_after_enum_rename.sql`** - Corregir datos de roles después de renombrar ENUM
+- **`migrate_existing_businesses_to_business_users.sql`** - Migración masiva de negocios existentes al sistema de roles
+- **`migrate_user_to_roles.sql`** - Script de migración para usuarios existentes al nuevo sistema de roles
+- **`update_business_roles_data.sql`** - Actualizar datos de roles de negocio
+
+**Uso:**
+```sql
+-- Corregir negocios sin usuarios asignados
+\i database/fixes/fix_missing_business_users.sql
+
+-- Migrar negocios existentes al sistema de roles
+\i database/fixes/migrate_existing_businesses_to_business_users.sql
+```
+
+---
+
+### 🔍 `diagnostics/` - Diagnóstico y Verificación
+
+Contiene scripts para diagnosticar problemas, verificar datos y realizar pruebas.
+
+**Archivos:**
+- **`diagnose_business_addresses.sql`** - Diagnosticar direcciones de negocios
+- **`diagnose_business_addresses_specific.sql`** - Diagnosticar direcciones específicas de negocios
+- **`diagnose_businesses_in_zone.sql`** - Diagnosticar negocios en una zona
+- **`diagnose_location_coordinates.sql`** - Diagnosticar coordenadas de ubicación
+- **`verify_product_images.sql`** - Verificar imágenes de productos
+- **`test_get_superadmin_businesses.sql`** - Probar función de obtención de negocios de superadmin
+
+**Uso:**
+```sql
+-- Diagnosticar direcciones de negocios
+\i database/diagnostics/diagnose_business_addresses.sql
+
+-- Verificar imágenes de productos
+\i database/diagnostics/verify_product_images.sql
+```
+
+---
+
+### 🏢 `agora/` - Scripts Específicos de Agora
+
+Contiene scripts específicos del proyecto Agora (grupos empresariales, branding, vehículos, refacciones, etc.).
+
+**Categorías:**
+
+**Grupos empresariales:**
+- `migration_business_groups.sql` - Migración de grupos empresariales
+- `assign_branches_to_group.sql` - Asignar sucursales a grupos
+- `assign_missing_branch.sql` - Asignar sucursal faltante a grupo
+- `seed_business_groups_from_existing.sql` - Crear grupos desde negocios existentes
+- `seed_business_groups_specific.sql` - Crear grupos específicos
+- `verify_business_groups_summary.sql` - Verificar resumen de grupos empresariales
+
+**Branding:**
+- `migration_business_branding.sql` - Migración de branding de negocios
+- `fix_branding_functions.sql` - Corregir funciones de branding
+- `setup_storage_policies_branding.sql` - Configurar políticas de storage para branding
+
+**Productos y catálogos:**
+- `migration_product_images.sql` - Migración de imágenes de productos
+- `migration_add_sku_to_products.sql` - Agregar SKU a productos
+- `migration_product_types_refacciones.sql` - Tipos de productos para refacciones
+- `migration_product_branch_availability.sql` - Disponibilidad de productos por sucursal
+- `seed_refacciones_catalog.sql` - Catálogo de refacciones
+- `seed_toyota_products_test_data.sql` - Datos de prueba de productos Toyota
+- `cleanup_old_categories.sql` - Limpiar categorías antiguas
+
+**Vehículos:**
+- `migration_business_vehicle_brands.sql` - Migración de marcas de vehículos de negocios
+- `migration_vehicle_compatibility.sql` - Compatibilidad de vehículos
+- `seed_toyota_vehicles.sql` - Datos de vehículos Toyota
+
+**Configuración:**
+- `migration_branch_fields.sql` - Campos de sucursales
+- `migration_site_settings.sql` - Configuración del sitio
+- `fix_businesses_settings_column.sql` - Corregir columna de settings de negocios
+- `setup_storage_policies.sql` - Configurar políticas de storage generales
+- `fix_storage_policies_products.sql` - Corregir políticas de storage de productos
+
+**Documentación:**
+- `README.md` - Documentación específica de Agora
+- `README_PRODUCT_IMAGES.md` - Documentación de imágenes de productos
+
+---
+
+### 📦 `segments/` - Segmentos del Schema
+
+Contiene una versión modular del schema, dividido en segmentos temáticos. Útil para desarrollo incremental o para entender partes específicas del schema.
+
+**Estructura:**
+- `00_habilitar_postgis.sql` - Habilitar extensión PostGIS
+- `00_diagnostico_postgis.sql` - Diagnóstico de PostGIS
+- `01_tablas_schema_core.sql` - Tablas del schema core
+- `02_tablas_schema_catalog.sql` - Tablas del schema catalog
+- `03_tablas_schema_orders.sql` - Tablas del schema orders
+- `04_tablas_schema_reviews.sql` - Tablas del schema reviews
+- `05_tablas_schema_communication.sql` - Tablas del schema communication
+- `06_tablas_schema_commerce.sql` - Tablas del schema commerce
+- `07_tablas_schema_social.sql` - Tablas del schema social
+- `08_triggers_y_funciones.sql` - Triggers y funciones
+- `09_sistema_api_keys.sql` - Sistema de API keys
+- `10_catalogo_categorias_negocios.sql` - Catálogo de categorías de negocios
+- `11_sistema_regiones_servicio.sql` - Sistema de regiones de servicio
+- `12_funcion_get_location_region.sql` - Función get_location_region
+- `13_roles_negocio_multi_tiendas.sql` - Roles de negocio y múltiples tiendas
+- `14_gestion_usuarios_cuenta_superadmin.sql` - Gestión de usuarios de cuenta superadmin
+- `15_sistema_avanzado_catalogos.sql` - Sistema avanzado de catálogos
+- `16_config_campos_por_tipo_producto.sql` - Configuración de campos por tipo de producto
+- `17_sistema_impuestos.sql` - Sistema de impuestos
+- `18_sistema_carrito_compras.sql` - Sistema de carrito de compras
+
+---
+
+## 🚀 Guía de Inicio Rápido
+
+### 1. Crear la Base de Datos
+
+```bash
+# Conectar a PostgreSQL (como superusuario)
+psql -U postgres
+
+# Crear base de datos
+CREATE DATABASE delivery_ecosystem;
+
+# Conectar a la base de datos
+\c delivery_ecosystem
+
+# IMPORTANTE: Crear extensión PostGIS (requiere permisos de superusuario)
+# En Supabase, puedes habilitarla desde el Dashboard: Database > Extensions
+CREATE EXTENSION IF NOT EXISTS "postgis" WITH SCHEMA public;
+```
+
+### 2. Ejecutar el Schema Base
+
+```sql
+-- Ejecutar el schema principal (OBLIGATORIO)
+\i database/schema/schema.sql
+
+-- Extensiones y sistemas adicionales (OPCIONAL)
+\i database/schema/api_keys_schema.sql
+\i database/schema/business_categories_catalog.sql
+\i database/schema/service_regions.sql
+\i database/schema/get_location_region.sql
+
+-- Sistema de roles de negocio (OBLIGATORIO para gestión de usuarios)
+\i database/schema/business_roles_and_multi_store.sql
+\i database/schema/superadmin_account_users.sql
+```
+
+### 3. Ejecutar Migraciones (según necesidad)
+
+```sql
+-- Sistema avanzado de catálogos (RECOMENDADO)
+\i database/migrations/migration_advanced_catalog_system.sql
+\i database/migrations/migration_product_type_field_config.sql
+
+-- Otras migraciones según necesidad
+\i database/migrations/migration_shopping_cart.sql
+\i database/migrations/migration_tax_system.sql
+```
+
+### 4. Poblar Datos de Ejemplo (OPCIONAL)
+
+```sql
+-- Catálogo básico
+\i database/seeds/seed_catalog.sql
+
+-- Ciclo completo de delivery (recomendado para pruebas)
+\i database/seeds/seed_delivery_cycle.sql
+
+-- Catálogo avanzado para administradores
+\i database/seeds/seed_advanced_catalog_admin.sql
+```
+
+### 5. Configurar Storage (si es necesario)
+
+```sql
+-- Crear bucket de productos
+\i database/storage/create_products_bucket.sql
+
+-- Configurar políticas
+\i database/storage/setup_storage_policies_products.sql
+
+-- Verificar estado
+\i database/storage/verify_products_bucket_status.sql
+```
+
+---
 
 ## 🗄️ Estructura de la Base de Datos
 
@@ -238,7 +392,9 @@ La base de datos está organizada en **7 schemas** para mejor mantenibilidad:
 4. **`reviews`** - Evaluaciones: reseñas, propinas
 5. **`communication`** - Comunicación: notificaciones, mensajes
 6. **`commerce`** - Comercio: promociones, suscripciones, publicidad
-7. **`social`** - Red social ecológica: posts, likes, comentarios, perfiles  
+7. **`social`** - Red social ecológica: posts, likes, comentarios, perfiles
+
+---
 
 ## 📋 Tablas Principales
 
@@ -246,7 +402,7 @@ La base de datos está organizada en **7 schemas** para mejor mantenibilidad:
 - `user_profiles` - Perfiles de usuario que extienden `auth.users` de Supabase (roles, información personal)
 - `addresses` - Direcciones de usuarios con geolocalización
 - `businesses` - Locales/negocios registrados
-- `business_users` - 🆕 Relación muchos-a-muchos entre usuarios y negocios (roles de negocio y múltiples tiendas por cuenta) - Ver `docs/18-roles-negocio-multi-tiendas.md`
+- `business_users` - Relación muchos-a-muchos entre usuarios y negocios (roles de negocio y múltiples tiendas por cuenta)
 - `repartidores` - Información específica de repartidores
 
 **Nota:** La autenticación se maneja mediante Supabase Auth (`auth.users`). Esta tabla solo contiene información de perfil y roles.
@@ -283,6 +439,8 @@ La base de datos está organizada en **7 schemas** para mejor mantenibilidad:
 - `social_follows` - Relaciones de seguimiento
 - `user_eco_profile` - Perfil ecológico y métricas de impacto
 
+---
+
 ## 🔐 Integración con Supabase Auth
 
 Este schema está diseñado para trabajar con **Supabase Authentication**:
@@ -296,6 +454,8 @@ Este schema está diseñado para trabajar con **Supabase Authentication**:
 - Usa Supabase Auth API desde tu aplicación
 - O crea usuarios manualmente desde Supabase Dashboard
 - El perfil se crea automáticamente si el trigger está configurado
+
+---
 
 ## 🔗 Integración con Wallet
 
@@ -312,219 +472,7 @@ El sistema de **Wallet (LocalCoins)** es un proyecto separado. Este schema inclu
 
 Estas referencias permiten la integración mediante APIs sin duplicar datos.
 
-## 🚀 Uso
-
-### Estructura de Scripts
-
-Los scripts están organizados en tres archivos:
-
-1. **`schema.sql`**: Estructura de la base de datos (tablas, índices, triggers, funciones)
-   - Debe ejecutarse primero
-   - Crea todos los schemas, tablas y relaciones
-
-2. **`seed_catalog.sql`**: Datos de catálogo básicos
-   - Categorías globales de ejemplo
-   - Útil para tener categorías base sin datos de negocio
-
-3. **`seed_delivery_cycle.sql`**: Ciclo completo de delivery
-   - Usuarios (cliente, repartidor, dueño de local)
-   - Negocio completo con productos y colecciones
-   - Pedido completo con items
-   - Entrega realizada
-   - Evaluación y propina
-   - **Recomendado para pruebas y desarrollo**
-
-### Crear la Base de Datos
-
-```bash
-# Conectar a PostgreSQL (como superusuario)
-psql -U postgres
-
-# Crear base de datos
-CREATE DATABASE delivery_ecosystem;
-
-# Conectar a la base de datos
-\c delivery_ecosystem
-
-# IMPORTANTE: Crear extensión PostGIS (requiere permisos de superusuario)
-# En Supabase, puedes habilitarla desde el Dashboard: Database > Extensions
-CREATE EXTENSION IF NOT EXISTS "postgis" WITH SCHEMA public;
-
-# Nota: Los UUIDs usan gen_random_uuid() nativo, no requiere extensión uuid-ossp
-
-# Ejecutar el schema (estructura)
-\i database/schema.sql
-
-# (Opcional) Poblar datos de ejemplo
-# Opción 1: Solo catálogo básico
-\i database/seed_catalog.sql
-
-# Opción 2: Ciclo completo de delivery (recomendado para pruebas)
-\i database/seed_delivery_cycle.sql
-```
-
-### Verificar Instalación
-
-```sql
--- Ver todos los schemas
-\dn
-
--- Ver todas las tablas (por schema)
-\dt core.*
-\dt catalog.*
-\dt orders.*
-\dt reviews.*
-\dt communication.*
-\dt commerce.*
-\dt social.*
-
--- Ver estructura de una tabla
-\d core.user_profiles
-\d catalog.products
-\d orders.orders
-
--- Ver índices
-\di
-
--- Ver triggers
-\dy
-
--- Ver todas las tablas en todos los schemas
-SELECT table_schema, table_name
-FROM information_schema.tables
-WHERE table_schema IN ('core', 'catalog', 'orders', 'reviews', 'communication', 'commerce', 'social')
-ORDER BY table_schema, table_name;
-```
-
-## 📊 Diagrama de Relaciones
-
-### Entidades Principales (por Schema)
-
-```
-SCHEMA: core
-├── user_profiles (1) ──┬── (N) addresses
-│                       ├── (1) repartidores
-│                       ├── (N) orders (como client_id)
-│                       └── (N) social_posts
-│
-├── businesses (1) ──┬── (N) product_categories
-│                    ├── (N) products
-│                    ├── (N) collections
-│                    ├── (N) orders
-│                    ├── (N) promotions
-│                    └── (N) ads
-│
-└── repartidores (1) ──┬── (N) deliveries
-                       └── (N) tips
-
-NOTA: user_profiles.id referencia auth.users.id (Supabase Auth)
-
-SCHEMA: catalog
-├── product_categories (1) ──┬── (N) products
-│                             └── (1) parent_category (auto-referencia)
-│
-├── products (1) ──┬── (N) collection_products
-│                  └── (N) order_items
-│
-└── collections (1) ──┬── (N) collection_products
-                       └── (N) order_items
-
-SCHEMA: orders
-├── orders (1) ──┬── (N) order_items (productos o colecciones)
-│                ├── (1) deliveries
-│                ├── (1) reviews
-│                └── (1) tips
-│
-└── deliveries (1) ── (N) repartidores
-
-SCHEMA: reviews
-├── reviews (1) ── (1) orders
-└── tips (1) ──┬── (1) orders
-               └── (1) repartidores
-
-SCHEMA: communication
-├── notifications (1) ── (N) users
-└── messages (1) ──┬── (1) sender (users)
-                   └── (1) recipient (users)
-
-SCHEMA: commerce
-├── promotions (1) ──┬── (N) promotion_uses
-│                    └── (N) businesses
-├── subscriptions (1) ── (N) users
-└── ads (1) ── (N) businesses
-
-SCHEMA: social
-├── social_posts (1) ──┬── (N) social_likes
-│                      ├── (N) social_comments
-│                      └── (1) users
-│
-├── social_follows (1) ──┬── (1) follower (users)
-│                        └── (1) following (users)
-│
-└── user_eco_profile (1) ── (1) users
-```
-
-## 📦 Sistema de Categorías y Colecciones
-
-### Categorías de Productos
-
-El sistema de categorías está **normalizado** y soporta:
-
-- ✅ **Categorías globales**: Categorías compartidas por todos los negocios (ej: "Entradas", "Bebidas")
-- ✅ **Categorías por negocio**: Categorías específicas de un local (ej: "Especialidades de la casa")
-- ✅ **Jerarquía**: Categorías padre/hijo para subcategorías (ej: "Bebidas" → "Bebidas frías" → "Jugos")
-- ✅ **Orden personalizado**: Control del orden de visualización
-
-**Ejemplo de uso:**
-```sql
--- Crear categoría global
-INSERT INTO product_categories (name, description) 
-VALUES ('Bebidas', 'Todas las bebidas disponibles');
-
--- Crear subcategoría
-INSERT INTO product_categories (name, parent_category_id) 
-VALUES ('Bebidas frías', (SELECT id FROM product_categories WHERE name = 'Bebidas'));
-
--- Asignar producto a categoría
-UPDATE products SET category_id = (SELECT id FROM product_categories WHERE name = 'Bebidas')
-WHERE id = 'uuid-del-producto';
-```
-
-### Colecciones de Productos
-
-Las colecciones permiten agrupar productos en:
-
-- 🍔 **Combos**: Paquetes fijos con precio especial (ej: "Combo Hamburguesa + Papas + Bebida")
-- 📅 **Menús del día**: Menús especiales con validez por fecha
-- 📦 **Paquetes**: Agrupaciones promocionales
-- 🎁 **Bundles promocionales**: Paquetes con descuento
-
-**Características:**
-- Precio fijo para la colección (puede ser menor que la suma de productos individuales)
-- Múltiples productos con cantidades específicas
-- Precios override por producto (opcional)
-- Validez por fechas (para menús temporales)
-- Orden de visualización personalizado
-
-**Ejemplo de uso:**
-```sql
--- Crear combo
-INSERT INTO collections (business_id, name, type, price, original_price)
-VALUES (
-    'uuid-del-negocio',
-    'Combo Familiar',
-    'combo',
-    250.00,  -- Precio del combo
-    320.00   -- Precio si se compraran los productos por separado
-);
-
--- Agregar productos al combo
-INSERT INTO collection_products (collection_id, product_id, quantity)
-VALUES 
-    ('uuid-del-combo', 'uuid-hamburguesa', 2),
-    ('uuid-del-combo', 'uuid-papas', 2),
-    ('uuid-del-combo', 'uuid-bebida', 2);
-```
+---
 
 ## 🔍 Consultas Útiles
 
@@ -578,52 +526,6 @@ GROUP BY pc.id, pc.name
 ORDER BY total_productos DESC;
 ```
 
-### Colecciones Disponibles de un Negocio
-```sql
-SELECT c.name, c.type, c.price, c.original_price,
-       COUNT(cp.product_id) as productos_incluidos
-FROM catalog.collections c
-LEFT JOIN catalog.collection_products cp ON cp.collection_id = c.id
-WHERE c.business_id = 'uuid-del-negocio'
-  AND c.is_available = TRUE
-  AND (c.valid_until IS NULL OR c.valid_until >= CURRENT_DATE)
-GROUP BY c.id, c.name, c.type, c.price, c.original_price
-ORDER BY c.display_order;
-```
-
-### Productos de una Colección
-```sql
-SELECT p.name, p.price, cp.quantity, cp.price_override
-FROM catalog.collections c
-JOIN catalog.collection_products cp ON cp.collection_id = c.id
-JOIN catalog.products p ON p.id = cp.product_id
-WHERE c.id = 'uuid-de-la-coleccion'
-ORDER BY cp.display_order;
-```
-
-### Repartidores Disponibles en Radio
-```sql
-SELECT r.id, up.first_name, up.last_name, r.current_location
-FROM core.repartidores r
-JOIN core.user_profiles up ON r.user_id = up.id
-WHERE r.is_available = TRUE
-  AND ST_DWithin(
-    r.current_location::geography,
-    ST_MakePoint(-99.1332, 19.4326)::geography, -- Coordenadas ejemplo
-    3000 -- 3 km en metros
-  );
-```
-
-### Publicaciones Ecológicas Más Populares
-```sql
-SELECT sp.id, up.first_name, sp.co2_saved_kg, sp.likes_count
-FROM social.social_posts sp
-JOIN core.user_profiles up ON sp.user_id = up.id
-WHERE sp.is_visible = TRUE
-ORDER BY sp.likes_count DESC
-LIMIT 10;
-```
-
 ### Verificar Schemas Creados
 ```sql
 -- Listar todos los schemas
@@ -638,12 +540,16 @@ WHERE table_schema IN ('core', 'catalog', 'orders', 'reviews', 'communication', 
 ORDER BY table_schema, table_name;
 ```
 
+---
+
 ## 🔐 Seguridad
 
 - **Passwords:** Almacenados como hash (no en texto plano)
 - **Tokens:** Tokens de verificación y reset con expiración
 - **Soft Delete:** Campos `is_active`, `is_blocked` para desactivación sin eliminar
 - **Constraints:** Validaciones a nivel de base de datos
+
+---
 
 ## 📈 Optimizaciones
 
@@ -658,14 +564,18 @@ ORDER BY table_schema, table_name;
 - Actualización de ratings promedio de negocios y repartidores
 - Actualización de contadores de likes/comentarios en posts sociales
 
+---
+
 ## 🔄 Migraciones Futuras
 
 Para futuras modificaciones del schema, se recomienda:
 
-1. Crear scripts de migración numerados: `migrations/001_add_column.sql`
+1. Crear scripts de migración en `migrations/` con nombres descriptivos
 2. Usar herramientas como `node-pg-migrate` o `knex.js`
 3. Mantener versionado del schema
 4. Documentar cambios en CHANGELOG.md
+
+---
 
 ## 📝 Notas
 
@@ -674,6 +584,8 @@ Para futuras modificaciones del schema, se recomienda:
 - Los montos monetarios usan `DECIMAL(10,2)` para precisión
 - Las coordenadas geográficas usan PostGIS `POINT` type
 - Los arrays (tags, badges) usan tipos nativos de PostgreSQL
+
+---
 
 ## 👥 Crear Usuarios de Prueba
 
@@ -693,7 +605,7 @@ Para futuras modificaciones del schema, se recomienda:
 
 2. **Crea los perfiles usando el script simplificado:**
    ```sql
-   \i database/create_profiles_only.sql
+   \i database/seeds/create_profiles_only.sql
    ```
 
 Este script:
@@ -703,10 +615,10 @@ Este script:
 
 ### Scripts Disponibles
 
-#### `create_profiles_only.sql` (✅ RECOMENDADO)
+#### `seeds/create_profiles_only.sql` (✅ RECOMENDADO)
 Solo crea perfiles. Usa esto después de crear usuarios en el Dashboard.
 
-#### `create_test_users.sql` (⚠️ Puede fallar)
+#### `seeds/create_test_users.sql` (⚠️ Puede fallar)
 Intenta crear usuarios y perfiles, pero requiere permisos de `service_role`. Generalmente falla con error de `instance_id`.
 
 ### Verificar Usuarios Creados
@@ -715,6 +627,8 @@ Intenta crear usuarios y perfiles, pero requiere permisos de `service_role`. Gen
 SELECT id, email FROM auth.users 
 WHERE email IN ('cliente@example.com', 'repartidor@example.com', 'local@example.com');
 ```
+
+---
 
 ## 👥 Roles del Sistema
 
@@ -739,7 +653,7 @@ CREATE TYPE user_role AS ENUM (
 
 ### Catálogo de Roles (OPCIONAL - Solo para documentación)
 
-⚠️ **IMPORTANTE:** El script `seed_roles_catalog.sql` es **OPCIONAL**. Solo crea una tabla de documentación.
+⚠️ **IMPORTANTE:** El script `seeds/seed_roles_catalog.sql` es **OPCIONAL**. Solo crea una tabla de documentación.
 
 **Si NO necesitas documentación de permisos, NO ejecutes este script.**
 
@@ -751,113 +665,7 @@ El catálogo crea:
 
 **Los roles funcionan perfectamente solo con el ENUM.**
 
-### Relación entre `user_profiles` y `roles_catalog`
-
-**Relación lógica (no hay Foreign Key directa):**
-- `user_profiles.role` (tipo: `user_role` ENUM) → valores: `'client'`, `'repartidor'`, `'local'`, `'admin'`
-- `roles_catalog.role_code` (tipo: `VARCHAR`) → debe coincidir con los valores del ENUM
-- **JOIN:** `user_profiles.role::text = roles_catalog.role_code`
-
-**Ejemplo de consulta:**
-```sql
--- Ver usuarios con información del catálogo de roles
-SELECT 
-    up.id,
-    up.first_name,
-    up.last_name,
-    up.role,
-    rc.role_name,
-    rc.description,
-    rc.permissions
-FROM core.user_profiles up
-LEFT JOIN core.roles_catalog rc ON up.role::text = rc.role_code
-WHERE up.is_active = TRUE;
-```
-
-**O usar la vista predefinida:**
-```sql
--- Vista que ya combina user_profiles con catálogo de roles
-SELECT * FROM core.user_profiles_with_role_info WHERE is_active = TRUE;
-```
-
-**Verificar permisos de un usuario:**
-```sql
--- Obtener todos los permisos de un usuario
-SELECT core.get_user_permissions('user-uuid-here');
-
--- Verificar si un usuario tiene un permiso específico
-SELECT core.user_has_permission('user-uuid-here', 'can_order');
-```
-
-## 🔄 Migraciones
-
-### migration_fix_wallet_types.sql
-
-Si ya tienes las tablas creadas y necesitas cambiar los campos de wallet de `UUID` a `VARCHAR(255)`:
-
-```sql
-\i database/migration_fix_wallet_types.sql
-```
-
-Este script altera las siguientes columnas:
-- `core.user_profiles.wallet_user_id`
-- `core.businesses.wallet_business_id`
-- `core.repartidores.wallet_repartidor_id`
-- `orders.orders.wallet_transaction_id`
-- `reviews.tips.wallet_transaction_id`
-- `commerce.subscriptions.wallet_subscription_id`
-
-**Nota:** Si estás creando el schema desde cero, no necesitas ejecutar esta migración.
-
-## 📝 Scripts de Seed Data
-
-### seed_catalog.sql
-
-Incluye categorías globales de ejemplo que pueden ser usadas por cualquier negocio:
-- Entradas
-- Platos Principales
-- Bebidas (con subcategorías: Frías y Calientes)
-- Postres
-- Especialidades
-
-**Uso:**
-```sql
-\i database/seed_catalog.sql
-```
-
-### seed_delivery_cycle.sql
-
-Script completo que crea un ciclo de delivery de extremo a extremo:
-
-**Incluye:**
-- ✅ 3 perfiles de usuario: Cliente, Repartidor, Dueño de Local
-- ✅ Direcciones con geolocalización (La Roma, CDMX)
-- ✅ Negocio completo: "Restaurante La Roma"
-- ✅ 4 categorías de productos específicas del negocio
-- ✅ 7 productos: Tacos, Hamburguesas, Bebidas, Postres
-- ✅ 1 colección: "Combo Familiar" con productos incluidos
-- ✅ Repartidor ecológico (bicicleta)
-- ✅ Pedido completo con estado "delivered"
-- ✅ Items del pedido (combo + producto individual)
-- ✅ Entrega completada (22 minutos, 0.8 km)
-- ✅ Evaluación: 5 estrellas a negocio y repartidor
-- ✅ Propina: $50 MXN
-
-**Datos de ejemplo:**
-- Cliente: `cliente@example.com` (ID: `aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa`)
-- Repartidor: `repartidor@example.com` (ID: `bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb`)
-- Local: `local@example.com` (ID: `11111111-1111-1111-1111-111111111111`)
-- Pedido ID: `order0001-0000-0000-0000-000000000001`
-
-**IMPORTANTE - Uso con Supabase:**
-1. **Crear usuarios primero** en Supabase Auth (Dashboard o API)
-2. **Ejecutar el script** para crear perfiles y datos:
-```sql
-\i database/seed_delivery_cycle.sql
-```
-
-**Verificar datos insertados:**
-El script incluye una consulta al final que muestra un resumen de todos los datos insertados.
+---
 
 ## 🔗 Referencias
 
@@ -867,6 +675,6 @@ El script incluye una consulta al final que muestra un resumen de todos los dato
 
 ---
 
-**Última actualización:** Noviembre 2024  
-**Versión del Schema:** 1.1
-
+**Última actualización:** Enero 2025  
+**Versión del Schema:** 1.2  
+**Estructura:** Reorganizada en carpetas temáticas

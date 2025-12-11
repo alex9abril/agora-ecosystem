@@ -241,4 +241,34 @@ export class OrdersController {
   ) {
     return this.ordersService.deleteOrder(id, businessId);
   }
+
+  @Post('business/:businessId/:id/prepare')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Procesar preparación de pedido' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Preparación procesada exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  async prepareOrder(
+    @Param('id') id: string,
+    @Param('businessId') businessId: string,
+    @Body() prepareDto: any,
+    @CurrentUser() user: User,
+  ) {
+    // Obtener rol del usuario desde el perfil
+    let userRole = 'local';
+    try {
+      const userProfile = await this.ordersService.getUserProfile(user.id);
+      userRole = userProfile?.role || 'local';
+    } catch (error) {
+      console.warn('No se pudo obtener perfil de usuario, usando rol por defecto:', error);
+    }
+    
+    return this.ordersService.prepareOrder(id, businessId, prepareDto, {
+      changed_by_user_id: user.id,
+      changed_by_role: userRole as any,
+    });
+  }
 }

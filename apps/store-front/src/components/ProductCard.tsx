@@ -29,6 +29,18 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
 
   // Usar primary_image_url si existe, sino usar image_url como fallback
   const displayImageUrl = product.primary_image_url || product.image_url;
+  
+  // Debug logging (solo en desarrollo, para primeros productos)
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && Math.random() < 0.1) {
+    console.log('🔍 [ProductCard] Imagen del producto:', {
+      productId: product.id,
+      productName: product.name?.substring(0, 50),
+      primary_image_url: product.primary_image_url?.substring(0, 100),
+      image_url: product.image_url?.substring(0, 100),
+      displayImageUrl: displayImageUrl?.substring(0, 100),
+      hasDisplayImage: !!displayImageUrl,
+    });
+  }
 
   return (
     <ContextualLink href={`/products/${product.id}`} className="h-full block">

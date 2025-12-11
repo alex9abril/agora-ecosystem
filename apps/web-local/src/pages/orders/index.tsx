@@ -23,8 +23,8 @@ export default function OrdersPage() {
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
-    preparing: 0,
-    ready: 0,
+    completed: 0,
+    in_transit: 0,
     delivered: 0,
     totalRevenue: 0,
   });
@@ -140,8 +140,8 @@ export default function OrdersPage() {
           const newStats = {
             total: allOrders.length,
             pending: allOrders.filter(o => o.status === 'pending').length,
-            preparing: allOrders.filter(o => o.status === 'preparing').length,
-            ready: allOrders.filter(o => o.status === 'ready').length,
+            completed: allOrders.filter(o => o.status === 'completed').length,
+            in_transit: allOrders.filter(o => o.status === 'in_transit').length,
             delivered: allOrders.filter(o => o.status === 'delivered').length,
             totalRevenue: allOrders
               .filter(o => o.payment_status === 'paid' || o.payment_status === 'overcharged')
@@ -186,8 +186,8 @@ export default function OrdersPage() {
       const newStats = {
         total: ordersData.length,
         pending: ordersData.filter(o => o.status === 'pending').length,
-        preparing: ordersData.filter(o => o.status === 'preparing').length,
-        ready: ordersData.filter(o => o.status === 'ready').length,
+        completed: ordersData.filter(o => o.status === 'completed').length,
+        in_transit: ordersData.filter(o => o.status === 'in_transit').length,
         delivered: ordersData.filter(o => o.status === 'delivered').length,
         totalRevenue: ordersData
           .filter(o => o.payment_status === 'paid' || o.payment_status === 'overcharged')
@@ -225,12 +225,11 @@ export default function OrdersPage() {
     const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
       pending: { label: 'Pendiente', color: 'text-yellow-700', bgColor: 'bg-yellow-50' },
       confirmed: { label: 'Confirmado', color: 'text-blue-700', bgColor: 'bg-blue-50' },
-      preparing: { label: 'En preparación', color: 'text-purple-700', bgColor: 'bg-purple-50' },
-      ready: { label: 'Listo', color: 'text-indigo-700', bgColor: 'bg-indigo-50' },
-      assigned: { label: 'Asignado', color: 'text-cyan-700', bgColor: 'bg-cyan-50' },
-      picked_up: { label: 'Recogido', color: 'text-teal-700', bgColor: 'bg-teal-50' },
-      in_transit: { label: 'En camino', color: 'text-orange-700', bgColor: 'bg-orange-50' },
+      completed: { label: 'Completado', color: 'text-green-700', bgColor: 'bg-green-50' },
+      in_transit: { label: 'En tránsito', color: 'text-orange-700', bgColor: 'bg-orange-50' },
       delivered: { label: 'Entregado', color: 'text-green-700', bgColor: 'bg-green-50' },
+      delivery_failed: { label: 'Entrega fallida', color: 'text-red-700', bgColor: 'bg-red-50' },
+      returned: { label: 'Devuelto', color: 'text-purple-700', bgColor: 'bg-purple-50' },
       cancelled: { label: 'Cancelado', color: 'text-red-700', bgColor: 'bg-red-50' },
       refunded: { label: 'Reembolsado', color: 'text-gray-700', bgColor: 'bg-gray-50' },
     };
@@ -361,12 +360,26 @@ export default function OrdersPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">En preparación</p>
-                <p className="text-2xl font-semibold text-purple-600 mt-1">{stats.preparing}</p>
+                <p className="text-sm font-medium text-gray-600">Completados</p>
+                <p className="text-2xl font-semibold text-green-600 mt-1">{stats.completed}</p>
               </div>
-              <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">En tránsito</p>
+                <p className="text-2xl font-semibold text-orange-600 mt-1">{stats.in_transit}</p>
+              </div>
+              <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
             </div>
@@ -418,13 +431,13 @@ export default function OrdersPage() {
                 <option value="all">Todos los estados</option>
                 <option value="pending">Pendiente</option>
                 <option value="confirmed">Confirmado</option>
-                <option value="preparing">En preparación</option>
-                <option value="ready">Listo</option>
-                <option value="assigned">Asignado</option>
-                <option value="picked_up">Recogido</option>
-                <option value="in_transit">En camino</option>
+                <option value="completed">Completado</option>
+                <option value="in_transit">En tránsito</option>
                 <option value="delivered">Entregado</option>
+                <option value="delivery_failed">Entrega fallida</option>
+                <option value="returned">Devuelto</option>
                 <option value="cancelled">Cancelado</option>
+                <option value="refunded">Reembolsado</option>
               </select>
 
               <select

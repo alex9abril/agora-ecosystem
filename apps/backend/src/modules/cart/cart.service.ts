@@ -9,6 +9,7 @@ import { dbPool } from '../../config/database.config';
 import { supabaseAdmin } from '../../config/supabase.config';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { normalizeStoragePath } from '../../utils/storage.utils';
 
 @Injectable()
 export class CartService {
@@ -118,10 +119,13 @@ export class CartService {
         // Si hay una imagen principal de product_images, generar su URL pública
         if (item.primary_image_path && supabaseAdmin) {
           try {
-            const { data: urlData } = supabaseAdmin.storage
-              .from(this.BUCKET_NAME)
-              .getPublicUrl(item.primary_image_path);
-            productImageUrl = urlData.publicUrl;
+            const normalizedPath = normalizeStoragePath(item.primary_image_path);
+            if (normalizedPath) {
+              const { data: urlData } = supabaseAdmin.storage
+                .from(this.BUCKET_NAME)
+                .getPublicUrl(normalizedPath);
+              productImageUrl = urlData.publicUrl;
+            }
           } catch (error) {
             console.error('Error generando URL de imagen principal en carrito:', error);
             // Mantener el fallback si hay error

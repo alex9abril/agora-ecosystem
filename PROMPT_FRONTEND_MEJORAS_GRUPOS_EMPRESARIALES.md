@@ -205,3 +205,4 @@ Content-Type: application/json
 - El campo `business_group_id` es opcional en todas las operaciones
 - Las sucursales pueden existir sin grupo empresarial (compatibilidad hacia atrás)
 
+

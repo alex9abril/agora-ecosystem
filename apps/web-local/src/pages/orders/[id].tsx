@@ -295,16 +295,16 @@ export default function OrderDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           );
-        case 'preparing':
+        case 'completed':
           return (
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           );
-        case 'ready':
+        case 'in_transit':
           return (
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           );
         case 'delivered':
@@ -335,16 +335,16 @@ export default function OrderDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           );
-        case 'preparing':
+        case 'completed':
           return (
             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           );
-        case 'ready':
+        case 'in_transit':
           return (
             <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           );
         case 'delivered':
@@ -369,20 +369,17 @@ export default function OrderDetailPage() {
   const getStatusTimeline = (orderData: Order) => {
     if (!orderData) return [];
 
-    // Definir todos los estados posibles en orden
+    // Definir todos los estados posibles en orden (flujo simplificado)
     const allStates = [
       { status: 'pending', label: 'Pedido creado', dateField: 'created_at' },
       { status: 'confirmed', label: 'Pedido confirmado', dateField: 'confirmed_at' },
-      { status: 'preparing', label: 'En preparación', dateField: 'preparing_at' },
-      { status: 'ready', label: 'Listo para recoger', dateField: 'ready_at' },
-      { status: 'assigned', label: 'Asignado a repartidor', dateField: 'assigned_at' },
-      { status: 'picked_up', label: 'Recogido por repartidor', dateField: 'picked_up_at' },
-      { status: 'in_transit', label: 'En camino', dateField: 'in_transit_at' },
+      { status: 'completed', label: 'Pedido completado', dateField: 'completed_at' },
+      { status: 'in_transit', label: 'En tránsito', dateField: 'in_transit_at' },
       { status: 'delivered', label: 'Entregado', dateField: 'delivered_at' },
     ];
 
     // Determinar qué estados están completados
-    const statusOrder = ['pending', 'confirmed', 'preparing', 'ready', 'assigned', 'picked_up', 'in_transit', 'delivered'];
+    const statusOrder = ['pending', 'confirmed', 'completed', 'in_transit', 'delivered'];
     const currentIndex = statusOrder.indexOf(orderData.status);
     
     // Si está cancelado o reembolsado, mostrar hasta donde llegó
@@ -402,6 +399,28 @@ export default function OrderDetailPage() {
         current: isCurrent,
       };
     });
+
+    // Si está en delivery_failed, agregar estado
+    if (orderData.status === 'delivery_failed') {
+      timeline.push({
+        status: 'delivery_failed',
+        label: 'Entrega fallida',
+        date: (orderData as any).delivery_failed_at || null,
+        completed: true,
+        current: true,
+      });
+    }
+
+    // Si está devuelto, agregar estado
+    if (orderData.status === 'returned') {
+      timeline.push({
+        status: 'returned',
+        label: 'Devuelto',
+        date: (orderData as any).returned_at || null,
+        completed: true,
+        current: true,
+      });
+    }
 
     // Si está cancelado, agregar estado de cancelación
     if (isCancelled) {
@@ -462,9 +481,10 @@ export default function OrderDetailPage() {
         break;
       
       case 'confirmed':
+        // Botón para ir a la interfaz de preparación/surtido
         actions.push({ 
           status: 'prepare', 
-          label: 'Comenzar preparación', 
+          label: 'Surtir pedido', 
           color: 'bg-black hover:bg-gray-800 text-white', 
           isPrimary: true,
           isNavigationAction: true // Indica que debe navegar en lugar de cambiar estado
@@ -478,42 +498,37 @@ export default function OrderDetailPage() {
         });
         break;
       
-      case 'preparing':
-        actions.push({ 
-          status: 'ready', 
-          label: 'Marcar como listo', 
-          color: 'bg-black hover:bg-gray-800 text-white', 
-          isPrimary: true 
-        });
+      case 'completed':
+        // El pedido está surtido, listo para entregar al proveedor de logística
+        // El proveedor tomará control y cambiará a in_transit
+        // El negocio solo puede cancelar en casos excepcionales
         actions.push({ 
           status: 'cancelled', 
-          label: 'Cancelar pedido', 
+          label: 'Cancelar pedido (excepcional)', 
           color: 'bg-red-600 hover:bg-red-700 text-white', 
           isPrimary: false,
           requiresConfirmation: true
         });
         break;
       
-      case 'ready':
-        // Si hay entrega a domicilio, se puede asignar repartidor
-        // Si es recogida en tienda, se puede marcar como entregado directamente
-        actions.push({ 
-          status: 'delivered', 
-          label: 'Marcar como entregado (recogida en tienda)', 
-          color: 'bg-green-600 hover:bg-green-700 text-white', 
-          isPrimary: true 
-        });
-        // Nota: La asignación de repartidor se hace desde otra interfaz
-        break;
-      
-      case 'assigned':
-      case 'picked_up':
       case 'in_transit':
-        // Estos estados son manejados por repartidores, no por el negocio
-        // Pero se puede cancelar en casos excepcionales
+        // Estado controlado por proveedor de logística
+        // El negocio solo puede cancelar en casos excepcionales
         actions.push({ 
           status: 'cancelled', 
           label: 'Cancelar pedido (excepcional)', 
+          color: 'bg-red-600 hover:bg-red-700 text-white', 
+          isPrimary: false,
+          requiresConfirmation: true
+        });
+        break;
+      
+      case 'delivery_failed':
+        // Entrega fallida, el proveedor gestiona reintentos o devolución
+        // El negocio solo puede cancelar
+        actions.push({ 
+          status: 'cancelled', 
+          label: 'Cancelar pedido', 
           color: 'bg-red-600 hover:bg-red-700 text-white', 
           isPrimary: false,
           requiresConfirmation: true
@@ -734,7 +749,14 @@ export default function OrderDetailPage() {
                               <span className="text-sm text-gray-600">{productSku || '-'}</span>
                             </td>
                             <td className="py-4 px-4">
-                              <span className="text-sm text-gray-900">{item.quantity}</span>
+                              <span className="text-sm text-gray-900">
+                                {item.quantity}
+                                {item.original_quantity && item.original_quantity !== item.quantity && (
+                                  <span className="text-xs text-gray-500 ml-1">
+                                    (solicitado: {item.original_quantity})
+                                  </span>
+                                )}
+                              </span>
                             </td>
                             <td className="py-4 px-4 text-right">
                               <span className="text-sm text-gray-900">{formatCurrency(parseFloat(item.item_price.toString()))}</span>

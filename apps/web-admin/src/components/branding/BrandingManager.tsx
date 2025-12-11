@@ -109,6 +109,29 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
     loadBranding();
   }, [token, type, id]);
 
+  // Prevenir comportamiento por defecto del navegador al arrastrar archivos
+  useEffect(() => {
+    const handleDragOverGlobal = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+      }
+    };
+
+    const handleDropGlobal = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('dragover', handleDragOverGlobal);
+    document.addEventListener('drop', handleDropGlobal);
+
+    return () => {
+      document.removeEventListener('dragover', handleDragOverGlobal);
+      document.removeEventListener('drop', handleDropGlobal);
+    };
+  }, []);
+
   // Guardar branding
   const handleSave = async () => {
     if (!token) return;
@@ -200,16 +223,73 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
 
       const result = await response.json();
 
-      // Actualizar el branding con la nueva URL
+      // Actualizar el branding con la nueva URL inmediatamente
       const fieldName = imageType === 'logo' ? 'logo_url' : 
                        imageType === 'logo_light' ? 'logo_light_url' :
                        imageType === 'logo_dark' ? 'logo_dark_url' :
                        'favicon_url';
 
+      // Obtener la URL de la respuesta (puede estar en diferentes formatos)
+      const imageUrl = result.url || result.data?.url || result.publicUrl || result.imageUrl;
+      
+      if (!imageUrl) {
+        console.error('No se recibió URL de la imagen en la respuesta:', result);
+        throw new Error('No se recibió URL de la imagen');
+      }
+
+      // Agregar timestamp para forzar recarga de la imagen (cache-busting)
+      const imageUrlWithCache = `${imageUrl}${imageUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+
+      // Actualizar el estado inmediatamente con la URL de la respuesta
       setBranding((prev) => ({
         ...prev,
-        [fieldName]: result.url,
+        [fieldName]: imageUrlWithCache,
       }));
+
+      // Recargar branding completo desde el servidor para asegurar sincronización
+      // y forzar re-renderizado de todos los componentes
+      try {
+        const refreshEndpoint = type === 'group' 
+          ? `/businesses/groups/${id}/branding`
+          : `/businesses/${id}/branding`;
+        
+        const refreshResponse = await apiRequest<{ branding: Branding }>(refreshEndpoint, {
+          method: 'GET',
+        });
+
+        if (refreshResponse.branding) {
+          // Agregar cache-busting a las URLs de imágenes para forzar recarga
+          const brandingWithCache = { ...refreshResponse.branding };
+          const timestamp = Date.now();
+          
+          if (brandingWithCache.logo_url) {
+            brandingWithCache.logo_url = `${brandingWithCache.logo_url}${brandingWithCache.logo_url.includes('?') ? '&' : '?'}t=${timestamp}`;
+          }
+          if (brandingWithCache.logo_light_url) {
+            brandingWithCache.logo_light_url = `${brandingWithCache.logo_light_url}${brandingWithCache.logo_light_url.includes('?') ? '&' : '?'}t=${timestamp}`;
+          }
+          if (brandingWithCache.logo_dark_url) {
+            brandingWithCache.logo_dark_url = `${brandingWithCache.logo_dark_url}${brandingWithCache.logo_dark_url.includes('?') ? '&' : '?'}t=${timestamp}`;
+          }
+          if (brandingWithCache.favicon_url) {
+            brandingWithCache.favicon_url = `${brandingWithCache.favicon_url}${brandingWithCache.favicon_url.includes('?') ? '&' : '?'}t=${timestamp}`;
+          }
+
+          // Actualizar con la respuesta completa del servidor
+          setBranding({
+            ...brandingWithCache,
+            // Asegurar que todos los campos existan
+            colors: brandingWithCache.colors || {},
+            fonts: brandingWithCache.fonts || {},
+            texts: brandingWithCache.texts || {},
+            social_media: brandingWithCache.social_media || {},
+          });
+        }
+      } catch (refreshError) {
+        console.error('Error refrescando branding:', refreshError);
+        // Si falla el refresh, mantener la URL del resultado
+        // La imagen debería mostrarse con la URL que ya tenemos
+      }
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -218,6 +298,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       alert(error.message || 'Error al subir la imagen');
     } finally {
       setUploading(null);
+      // Forzar re-renderizado después de limpiar el estado de carga
+      setBranding((prev) => ({ ...prev }));
     }
   };
 
@@ -225,18 +307,29 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
   const handleDragEnter = (e: React.DragEvent, imageType: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragging(imageType);
+    if (e.dataTransfer.types.includes('Files')) {
+      setDragging(imageType);
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragging(null);
+    // Verificar si realmente salimos del contenedor
+    const currentTarget = e.currentTarget as HTMLElement;
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    
+    if (!currentTarget.contains(relatedTarget)) {
+      setDragging(null);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
   };
 
   const handleDrop = (e: React.DragEvent, imageType: 'logo' | 'logo_light' | 'logo_dark' | 'favicon') => {
@@ -244,10 +337,24 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
     e.stopPropagation();
     setDragging(null);
 
-    const file = e.dataTransfer.files[0];
-    if (file) {
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
       handleUploadImage(imageType, file);
+    } else if (file) {
+      alert('Por favor, arrastra solo archivos de imagen (JPEG, PNG, WebP, SVG)');
     }
+  };
+
+  // Prevenir comportamiento por defecto en el input
+  const handleInputDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleInputDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // No hacer nada aquí, el drop se maneja en el contenedor padre
   };
 
   // Renderizar preview de color
@@ -357,8 +464,11 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         type="url"
                         value={branding.logo_url || ''}
                         onChange={(e) => setBranding({ ...branding, logo_url: e.target.value })}
+                        onDragOver={handleInputDragOver}
+                        onDrop={handleInputDrop}
+                        draggable={false}
                         placeholder="https://example.com/logo.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
                       />
                       <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo' ? (
@@ -435,8 +545,11 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         type="url"
                         value={branding.logo_light_url || ''}
                         onChange={(e) => setBranding({ ...branding, logo_light_url: e.target.value })}
+                        onDragOver={handleInputDragOver}
+                        onDrop={handleInputDrop}
+                        draggable={false}
                         placeholder="https://example.com/logo-light.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
                       />
                       <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo_light' ? (
@@ -513,8 +626,11 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         type="url"
                         value={branding.logo_dark_url || ''}
                         onChange={(e) => setBranding({ ...branding, logo_dark_url: e.target.value })}
+                        onDragOver={handleInputDragOver}
+                        onDrop={handleInputDrop}
+                        draggable={false}
                         placeholder="https://example.com/logo-dark.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
                       />
                       <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo_dark' ? (
@@ -591,8 +707,11 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         type="url"
                         value={branding.favicon_url || ''}
                         onChange={(e) => setBranding({ ...branding, favicon_url: e.target.value })}
+                        onDragOver={handleInputDragOver}
+                        onDrop={handleInputDrop}
+                        draggable={false}
                         placeholder="https://example.com/favicon.ico o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
                       />
                       <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'favicon' ? (

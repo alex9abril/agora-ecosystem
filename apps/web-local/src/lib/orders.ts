@@ -51,7 +51,8 @@ export interface OrderItem {
   collection_id?: string;
   item_name: string;
   item_price: number;
-  quantity: number;
+  quantity: number; // Cantidad surtida (puede ser diferente a original_quantity después de prepareOrder)
+  original_quantity?: number; // Cantidad original solicitada
   variant_selection?: any;
   item_subtotal: number;
   special_instructions?: string;
@@ -166,6 +167,37 @@ export const ordersService = {
     
     console.warn('⚠️ [ORDERS SERVICE] Respuesta con formato inesperado:', response);
     return response as Order;
+  },
+
+  /**
+   * Procesar preparación de pedido
+   */
+  async prepareOrder(
+    businessId: string,
+    orderId: string,
+    data: {
+      items: Array<{ item_id: string; quantity: number }>;
+      shortage_options?: Array<{
+        product_id: string;
+        option_type: 'refund' | 'other_branch' | 'wallet';
+        alternative_branch_id?: string;
+        shortage_quantity: number;
+      }>;
+    }
+  ): Promise<Order> {
+    try {
+      const order = await apiRequest<Order>(
+        `/orders/business/${businessId}/${orderId}/prepare`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        }
+      );
+      return order;
+    } catch (error: any) {
+      console.error('Error procesando preparación:', error);
+      throw error;
+    }
   },
 
   /**

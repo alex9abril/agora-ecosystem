@@ -52,16 +52,20 @@ export default function OrdersPage() {
         return 'bg-yellow-100 text-yellow-800';
       case 'confirmed':
         return 'bg-blue-100 text-blue-800';
-      case 'preparing':
-        return 'bg-purple-100 text-purple-800';
-      case 'ready':
-        return 'bg-indigo-100 text-indigo-800';
-      case 'delivering':
-        return 'bg-cyan-100 text-cyan-800';
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_transit':
+        return 'bg-orange-100 text-orange-800';
       case 'delivered':
         return 'bg-green-100 text-green-800';
+      case 'delivery_failed':
+        return 'bg-red-100 text-red-800';
+      case 'returned':
+        return 'bg-purple-100 text-purple-800';
       case 'cancelled':
         return 'bg-red-100 text-red-800';
+      case 'refunded':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -71,11 +75,13 @@ export default function OrdersPage() {
     const labels: Record<string, string> = {
       pending: 'Pendiente',
       confirmed: 'Confirmado',
-      preparing: 'Preparando',
-      ready: 'Listo',
-      delivering: 'En camino',
+      completed: 'Completado',
+      in_transit: 'En tránsito',
       delivered: 'Entregado',
+      delivery_failed: 'Entrega fallida',
+      returned: 'Devuelto',
       cancelled: 'Cancelado',
+      refunded: 'Reembolsado',
     };
     return labels[status.toLowerCase()] || status;
   };

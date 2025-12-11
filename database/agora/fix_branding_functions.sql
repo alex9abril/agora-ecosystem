@@ -3,12 +3,43 @@
 -- ============================================================================
 -- Descripción: Crea las funciones get_group_branding y get_business_branding
 --              si no existen en la base de datos
+--              También agrega la columna settings a businesses si no existe
 -- 
--- Uso: Ejecutar si obtienes el error "function does not exist"
+-- Uso: Ejecutar si obtienes el error "function does not exist" o "column settings does not exist"
 -- ============================================================================
 
 -- Configurar search_path
 SET search_path TO core, catalog, orders, reviews, communication, commerce, social, public;
+
+-- ============================================================================
+-- AGREGAR COLUMNA SETTINGS A BUSINESSES (si no existe)
+-- ============================================================================
+
+DO $$
+BEGIN
+  -- Verificar si la columna settings existe
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM information_schema.columns 
+    WHERE table_schema = 'core' 
+      AND table_name = 'businesses' 
+      AND column_name = 'settings'
+  ) THEN
+    -- Agregar columna settings
+    ALTER TABLE core.businesses
+    ADD COLUMN settings JSONB DEFAULT '{}'::jsonb;
+    
+    RAISE NOTICE 'Columna settings agregada a core.businesses';
+  ELSE
+    RAISE NOTICE 'Columna settings ya existe en core.businesses';
+  END IF;
+END $$;
+
+-- Agregar comentario a la columna
+COMMENT ON COLUMN core.businesses.settings IS 'Configuraciones de personalización y branding de la sucursal (JSONB). Incluye colores, textos, logos, etc.';
+
+-- Crear índice GIN para búsquedas eficientes en JSONB (si no existe)
+CREATE INDEX IF NOT EXISTS idx_businesses_settings_gin ON core.businesses USING GIN (settings);
 
 -- ============================================================================
 -- FUNCIÓN: Obtener branding del grupo

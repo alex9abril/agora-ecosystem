@@ -224,14 +224,14 @@ export class OrdersService {
           await client.query(
             `INSERT INTO orders.order_items (
               order_id, product_id, item_name, item_price,
-              quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+              quantity, original_quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown
+            ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9)`,
             [
               order.id,
               item.product_id,
               item.product_name,
               item.unit_price,
-              item.quantity,
+              item.quantity, // quantity y original_quantity son iguales al crear el pedido
               item.variant_selections ? JSON.stringify(item.variant_selections) : null,
               item.item_subtotal,
               item.special_instructions || null,
@@ -407,10 +407,15 @@ export class OrdersService {
         let product_image_url = null;
         if (item.product_image_path && supabaseAdmin) {
           try {
-            const { data: urlData } = supabaseAdmin.storage
-              .from(BUCKET_NAME)
-              .getPublicUrl(item.product_image_path);
-            product_image_url = urlData.publicUrl;
+            // Normalizar el path por si contiene una URL completa
+            const { normalizeStoragePath } = require('../../utils/storage.utils');
+            const normalizedPath = normalizeStoragePath(item.product_image_path);
+            if (normalizedPath) {
+              const { data: urlData } = supabaseAdmin.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(normalizedPath);
+              product_image_url = urlData.publicUrl;
+            }
           } catch (error) {
             console.error('Error generando URL de imagen del producto:', error);
           }
@@ -1117,6 +1122,7 @@ export class OrdersService {
           item_name,
           item_price,
           quantity,
+          COALESCE(original_quantity, quantity) as original_quantity,
           variant_selection,
           item_subtotal,
           special_instructions,
@@ -1252,38 +1258,35 @@ export class OrdersService {
         paymentStatus,
       });
 
-      // Validar transición de estado usando reglas de negocio
+      // Validar transición de estado usando reglas de negocio (flujo simplificado)
       const validTransitions: { [key: string]: { allowed: string[]; requires?: { payment_status?: string } } } = {
         'pending': { 
           allowed: ['confirmed', 'cancelled'],
           requires: { payment_status: 'paid' } // Para confirmed
         },
         'confirmed': { 
-          allowed: ['preparing', 'cancelled']
+          allowed: ['completed', 'cancelled']
         },
-        'preparing': { 
-          allowed: ['ready', 'cancelled']
-        },
-        'ready': { 
-          allowed: ['assigned', 'delivered', 'cancelled']
-        },
-        'assigned': { 
-          allowed: ['picked_up', 'cancelled']
-        },
-        'picked_up': { 
+        'completed': { 
           allowed: ['in_transit', 'cancelled']
         },
         'in_transit': { 
-          allowed: ['delivered', 'cancelled']
+          allowed: ['delivered', 'delivery_failed', 'cancelled']
+        },
+        'delivery_failed': { 
+          allowed: ['in_transit', 'returned', 'cancelled']
         },
         'delivered': { 
+          allowed: ['returned', 'refunded']
+        },
+        'returned': { 
           allowed: ['refunded']
         },
         'cancelled': { 
           allowed: ['refunded']
         },
         'refunded': { 
-          allowed: []
+          allowed: [] // Estado final
         },
       };
 
@@ -1313,19 +1316,15 @@ export class OrdersService {
       const updateParams: any[] = [orderId, businessId, newStatus];
       let paramIndex = 4;
 
-      // Actualizar timestamps según el estado
+      // Actualizar timestamps según el estado (flujo simplificado)
       if (newStatus === 'confirmed') {
         updateFields.push('confirmed_at = CURRENT_TIMESTAMP');
-      } else if (newStatus === 'preparing') {
-        updateFields.push('preparing_at = CURRENT_TIMESTAMP');
-      } else if (newStatus === 'ready') {
-        updateFields.push('ready_at = CURRENT_TIMESTAMP');
-      } else if (newStatus === 'assigned') {
-        updateFields.push('assigned_at = CURRENT_TIMESTAMP');
-      } else if (newStatus === 'picked_up') {
-        updateFields.push('picked_up_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'completed') {
+        updateFields.push('completed_at = CURRENT_TIMESTAMP');
       } else if (newStatus === 'in_transit') {
         updateFields.push('in_transit_at = CURRENT_TIMESTAMP');
+      } else if (newStatus === 'delivery_failed') {
+        updateFields.push('delivery_failed_at = CURRENT_TIMESTAMP');
       } else if (newStatus === 'delivered') {
         updateFields.push('delivered_at = CURRENT_TIMESTAMP');
         // Calcular tiempo real de entrega
@@ -1339,6 +1338,8 @@ export class OrdersService {
           updateParams.push(Math.round(timeResult.rows[0].minutes));
           paramIndex++;
         }
+      } else if (newStatus === 'returned') {
+        updateFields.push('returned_at = CURRENT_TIMESTAMP');
       } else if (newStatus === 'cancelled') {
         updateFields.push('cancelled_at = CURRENT_TIMESTAMP');
         if (metadata?.cancellation_reason) {
@@ -1430,6 +1431,178 @@ export class OrdersService {
       }
       console.error('❌ Error actualizando estado de pedido:', error);
       throw new ServiceUnavailableException(`Error al actualizar estado: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Procesar preparación de pedido
+   * Actualiza cantidades de items, stock de productos y procesa opciones de escasez
+   */
+  async prepareOrder(
+    orderId: string,
+    businessId: string,
+    prepareDto: {
+      items: Array<{ item_id: string; quantity: number }>;
+      shortage_options?: Array<{
+        product_id: string;
+        option_type: 'refund' | 'other_branch' | 'wallet';
+        alternative_branch_id?: string;
+        shortage_quantity: number;
+      }>;
+    },
+    metadata?: {
+      changed_by_user_id?: string;
+      changed_by_role?: string;
+    }
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const client = await dbPool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // Verificar que el pedido existe y pertenece al negocio
+      const orderResult = await client.query(
+        `SELECT id, status, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        [orderId, businessId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        throw new NotFoundException('Pedido no encontrado');
+      }
+
+      const order = orderResult.rows[0];
+      if (order.status !== 'confirmed') {
+        throw new BadRequestException(`El pedido debe estar en estado 'confirmed' para comenzar la preparación. Estado actual: ${order.status}`);
+      }
+
+      // 1. Actualizar cantidades de items del pedido
+      for (const itemUpdate of prepareDto.items) {
+        // Obtener el item actual para recalcular subtotal
+        const itemResult = await client.query(
+          `SELECT id, item_price, quantity FROM orders.order_items WHERE id = $1 AND order_id = $2`,
+          [itemUpdate.item_id, orderId]
+        );
+
+        if (itemResult.rows.length === 0) {
+          throw new NotFoundException(`Item ${itemUpdate.item_id} no encontrado en el pedido`);
+        }
+
+        const item = itemResult.rows[0];
+        const newSubtotal = parseFloat(item.item_price) * itemUpdate.quantity;
+
+        // Actualizar cantidad y subtotal
+        await client.query(
+          `UPDATE orders.order_items 
+           SET quantity = $1, item_subtotal = $2 
+           WHERE id = $3 AND order_id = $4`,
+          [itemUpdate.quantity, newSubtotal, itemUpdate.item_id, orderId]
+        );
+      }
+
+      // 2. Actualizar stock de productos y procesar opciones de escasez
+      if (prepareDto.shortage_options && prepareDto.shortage_options.length > 0) {
+        for (const shortageOption of prepareDto.shortage_options) {
+          const productId = shortageOption.product_id;
+          const shortageQuantity = shortageOption.shortage_quantity;
+
+          // Obtener el item del pedido para este producto
+          const itemResult = await client.query(
+            `SELECT id, quantity FROM orders.order_items 
+             WHERE order_id = $1 AND product_id = $2 LIMIT 1`,
+            [orderId, productId]
+          );
+
+          if (itemResult.rows.length === 0) {
+            console.warn(`⚠️ No se encontró item para producto ${productId} en el pedido ${orderId}`);
+            continue;
+          }
+
+          const item = itemResult.rows[0];
+          const finalQuantity = item.quantity - shortageQuantity; // Cantidad que sí se puede surtir
+
+          // Actualizar stock de la sucursal actual (reducir por la cantidad que sí se surte)
+          if (finalQuantity > 0) {
+            await client.query(
+              `UPDATE catalog.product_branch_availability 
+               SET stock = GREATEST(0, stock - $1), updated_at = CURRENT_TIMESTAMP
+               WHERE product_id = $2 AND branch_id = $3 AND stock IS NOT NULL`,
+              [finalQuantity, productId, businessId]
+            );
+          }
+
+          // Procesar opción de escasez
+          switch (shortageOption.option_type) {
+            case 'wallet':
+              // TODO: Integrar con sistema de monedero electrónico
+              // Por ahora, solo loguear
+              console.log(`💰 Monedero: Devolver ${shortageQuantity} unidades del producto ${productId} al monedero del cliente`);
+              // Aquí se haría la llamada al sistema de monedero para acreditar el saldo
+              break;
+
+            case 'other_branch':
+              if (shortageOption.alternative_branch_id) {
+                // Reducir stock de la sucursal alternativa
+                await client.query(
+                  `UPDATE catalog.product_branch_availability 
+                   SET stock = GREATEST(0, stock - $1), updated_at = CURRENT_TIMESTAMP
+                   WHERE product_id = $2 AND branch_id = $3 AND stock IS NOT NULL`,
+                  [shortageQuantity, productId, shortageOption.alternative_branch_id]
+                );
+                console.log(`🏪 Otra sucursal: ${shortageQuantity} unidades del producto ${productId} desde sucursal ${shortageOption.alternative_branch_id}`);
+              }
+              break;
+
+            case 'refund':
+              // TODO: Procesar devolución de dinero
+              console.log(`💵 Devolución: Devolver dinero por ${shortageQuantity} unidades del producto ${productId}`);
+              // Aquí se haría la devolución del dinero al cliente
+              break;
+          }
+        }
+      } else {
+        // Si no hay opciones de escasez, solo actualizar stock por las cantidades ajustadas
+        for (const itemUpdate of prepareDto.items) {
+          const itemResult = await client.query(
+            `SELECT product_id FROM orders.order_items WHERE id = $1`,
+            [itemUpdate.item_id]
+          );
+
+          if (itemResult.rows.length > 0 && itemResult.rows[0].product_id) {
+            const productId = itemResult.rows[0].product_id;
+            // Reducir stock por la cantidad ajustada
+            await client.query(
+              `UPDATE catalog.product_branch_availability 
+               SET stock = GREATEST(0, stock - $1), updated_at = CURRENT_TIMESTAMP
+               WHERE product_id = $2 AND branch_id = $3 AND stock IS NOT NULL`,
+              [itemUpdate.quantity, productId, businessId]
+            );
+          }
+        }
+      }
+
+      // 3. No cambiar el estado aquí, solo guardar las cantidades
+      // El cambio de estado se hará cuando se marque como completado desde el frontend
+      const updatedOrderResult = await client.query(
+        `SELECT * FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        [orderId, businessId]
+      );
+
+      await client.query('COMMIT');
+
+      return updatedOrderResult.rows[0];
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error('❌ Error procesando preparación de pedido:', error);
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new ServiceUnavailableException(`Error al procesar preparación: ${error.message}`);
     } finally {
       client.release();
     }

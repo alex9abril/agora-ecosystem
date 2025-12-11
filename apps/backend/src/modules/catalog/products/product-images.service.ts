@@ -2,20 +2,47 @@ import { Injectable, NotFoundException, BadRequestException, ServiceUnavailableE
 import { supabaseAdmin } from '../../../config/supabase.config';
 import { dbPool } from '../../../config/database.config';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
+import { normalizeStoragePath } from '../../../utils/storage.utils';
 
 @Injectable()
 export class ProductImagesService {
-  private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+  // Normalizar el nombre del bucket: si viene una URL, extraer solo el nombre
+  private readonly BUCKET_NAME = this.normalizeBucketName(process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products');
   private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
   private readonly ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 
-  constructor() {
-    // Log de configuración del bucket (solo en desarrollo)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('🔍 [ProductImagesService] Bucket configurado:', this.BUCKET_NAME);
-      console.log('🔍 [ProductImagesService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS:', process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'no configurada (usando default: products)');
+  /**
+   * Normaliza el nombre del bucket: si viene una URL completa, extrae solo el nombre
+   */
+  private normalizeBucketName(bucketName: string): string {
+    if (!bucketName) return 'products';
+    
+    // Si es una URL completa, intentar extraer el nombre del bucket
+    if (bucketName.startsWith('http')) {
+      console.warn('⚠️ [ProductImagesService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS contiene una URL completa:', bucketName);
+      console.warn('⚠️ [ProductImagesService] Usando nombre por defecto: products');
+      return 'products';
     }
+    
+    // Si contiene caracteres especiales de URL, probablemente es una URL mal configurada
+    if (bucketName.includes('://') || bucketName.includes('/storage/')) {
+      console.warn('⚠️ [ProductImagesService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS parece contener una URL:', bucketName);
+      console.warn('⚠️ [ProductImagesService] Usando nombre por defecto: products');
+      return 'products';
+    }
+    
+    // Si es solo el nombre del bucket, retornarlo tal cual
+    return bucketName.trim();
   }
+
+  constructor() {
+    // Log de configuración del bucket (siempre, para debugging)
+    console.log('🔍 [ProductImagesService] Constructor inicializado');
+    console.log('🔍 [ProductImagesService] Bucket configurado:', this.BUCKET_NAME);
+    console.log('🔍 [ProductImagesService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS (raw):', process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'no configurada (usando default: products)');
+    console.log('🔍 [ProductImagesService] Bucket normalizado:', this.BUCKET_NAME);
+  }
+
 
   /**
    * Valida el archivo de imagen
@@ -88,13 +115,41 @@ export class ProductImagesService {
     }
 
     try {
+      // Verificar que supabaseAdmin esté configurado
+      if (!supabaseAdmin) {
+        console.error('❌ [uploadImage] supabaseAdmin no está configurado');
+        throw new ServiceUnavailableException('Supabase Storage no está configurado');
+      }
+
+      console.log('🔍 [uploadImage] Iniciando subida de imagen...');
+      console.log('🔍 [uploadImage] Bucket configurado (normalizado):', this.BUCKET_NAME);
+      console.log('🔍 [uploadImage] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS (raw):', process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'no configurada');
+      console.log('🔍 [uploadImage] SUPABASE_URL:', process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.substring(0, 40)}...` : 'NO CONFIGURADO');
+      console.log('🔍 [uploadImage] SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Configurado' : '❌ NO CONFIGURADO');
+      
+      // Validar que el nombre del bucket sea válido (no una URL)
+      if (this.BUCKET_NAME.includes('://') || this.BUCKET_NAME.includes('/storage/') || this.BUCKET_NAME.startsWith('http')) {
+        console.error('❌ [uploadImage] ERROR: El nombre del bucket parece ser una URL:', this.BUCKET_NAME);
+        throw new ServiceUnavailableException(`Nombre de bucket inválido. Debe ser solo el nombre (ej: 'products'), no una URL completa. Valor actual: ${this.BUCKET_NAME}`);
+      }
+
       // Generar ID para la imagen
       const imageId = `image-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       
       // Generar ruta del archivo
       const filePath = this.generateFilePath(productId, imageId, file.originalname);
 
-      // Subir archivo a Supabase Storage
+      // Debug antes de subir (igual que BrandingImagesService - no verificamos el bucket, solo intentamos subir)
+      console.log('🔍 [uploadImage] Intentando subir:', {
+        bucket: this.BUCKET_NAME,
+        filePath,
+        fileSize: file.buffer.length,
+        contentType: file.mimetype,
+        supabaseUrl: process.env.SUPABASE_URL?.substring(0, 40) + '...',
+        hasSupabaseAdmin: !!supabaseAdmin,
+      });
+
+      // Subir archivo a Supabase Storage (igual que BrandingImagesService)
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from(this.BUCKET_NAME)
         .upload(filePath, file.buffer, {
@@ -103,7 +158,24 @@ export class ProductImagesService {
         });
 
       if (uploadError) {
-        console.error('❌ Error subiendo archivo a Storage:', uploadError);
+        const errorStatus = (uploadError as any).statusCode || (uploadError as any).status || 'unknown';
+        console.error('❌ Error subiendo archivo a Storage:', {
+          error: uploadError,
+          message: uploadError.message,
+          statusCode: errorStatus,
+          bucket: this.BUCKET_NAME,
+          filePath,
+          errorDetails: JSON.stringify(uploadError, null, 2),
+        });
+        
+        // Si el error es "Bucket not found", dar más contexto
+        if (uploadError.message?.includes('not found') || errorStatus === 404 || errorStatus === '404') {
+          throw new ServiceUnavailableException(
+            `Bucket '${this.BUCKET_NAME}' no encontrado o no accesible: ${uploadError.message}. ` +
+            `Verifica que el bucket existe en el Dashboard de Supabase y que las políticas RLS están configuradas correctamente.`
+          );
+        }
+        
         throw new ServiceUnavailableException(`Error al subir archivo: ${uploadError.message}`);
       }
 
@@ -173,10 +245,14 @@ export class ProductImagesService {
         );
       }
 
-      // Obtener URL pública
+      // Obtener URL pública (normalizar filePath por si acaso)
+      const normalizedPath = normalizeStoragePath(filePath);
+      if (!normalizedPath) {
+        throw new ServiceUnavailableException('Error al normalizar la ruta del archivo');
+      }
       const { data: urlData } = supabaseAdmin.storage
         .from(this.BUCKET_NAME)
-        .getPublicUrl(filePath);
+        .getPublicUrl(normalizedPath);
 
       return {
         ...imageRecord,
@@ -234,11 +310,16 @@ export class ProductImagesService {
 
       const result = await dbPool.query(query, params);
 
-      // Agregar URLs públicas
+      // Agregar URLs públicas (normalizar filePath)
       const imagesWithUrls = result.rows.map((image) => {
+        const normalizedPath = normalizeStoragePath(image.file_path);
+        if (!normalizedPath) {
+          console.warn('⚠️ [getProductImages] No se pudo normalizar file_path para imagen:', image.id);
+          return { ...image, public_url: null };
+        }
         const { data: urlData } = supabaseAdmin.storage
           .from(this.BUCKET_NAME)
-          .getPublicUrl(image.file_path);
+          .getPublicUrl(normalizedPath);
 
         return {
           ...image,
@@ -280,10 +361,14 @@ export class ProductImagesService {
 
       const image = result.rows[0];
 
-      // Agregar URL pública
+      // Agregar URL pública (normalizar filePath)
+      const normalizedPath = normalizeStoragePath(image.file_path);
+      if (!normalizedPath) {
+        throw new ServiceUnavailableException('Error al normalizar la ruta del archivo');
+      }
       const { data: urlData } = supabaseAdmin.storage
         .from(this.BUCKET_NAME)
-        .getPublicUrl(image.file_path);
+        .getPublicUrl(normalizedPath);
 
       return {
         ...image,
@@ -414,14 +499,17 @@ export class ProductImagesService {
 
       const image = imageResult.rows[0];
 
-      // Eliminar de Storage
-      const { error: storageError } = await supabaseAdmin.storage
-        .from(this.BUCKET_NAME)
-        .remove([image.file_path]);
+      // Eliminar de Storage (normalizar filePath)
+      const normalizedPath = normalizeStoragePath(image.file_path);
+      if (normalizedPath) {
+        const { error: storageError } = await supabaseAdmin.storage
+          .from(this.BUCKET_NAME)
+          .remove([normalizedPath]);
 
-      if (storageError) {
-        console.warn('⚠️  Error eliminando archivo de Storage (continuando):', storageError);
-        // No lanzamos error, solo logueamos, porque puede que el archivo ya no exista
+        if (storageError) {
+          console.warn('⚠️  Error eliminando archivo de Storage (continuando):', storageError);
+          // No lanzamos error, solo logueamos, porque puede que el archivo ya no exista
+        }
       }
 
       // Eliminar de la base de datos

@@ -134,6 +134,37 @@ Bienvenido a la documentación completa del proyecto LOCALIA. Esta documentació
 - Productos de farmacia con restricciones especiales
 - Propuesta de implementación con cambios en base de datos, backend y frontend
 
+### 21. [Sistema de Impuestos Configurable](./21-sistema-impuestos-configurable.md)
+- Configuración de impuestos por negocio
+- Cálculo de impuestos incluidos vs agregados
+- Integración con checkout y facturación
+
+### 22. [Roles de Negocio e Interfaces Diferenciadas](./22-roles-negocio-interfaces-diferenciadas.md)
+- Roles específicos por tipo de negocio
+- Interfaces personalizadas según el rol
+- Permisos y funcionalidades diferenciadas
+
+### 23. [Proceso de Seguimiento de Pedidos y Políticas de Postventa](./23-proceso-seguimiento-pedidos-postventa.md)
+- Ciclo de vida completo de un pedido
+- Transiciones entre estados
+- Políticas de cancelación, devolución y reembolso
+- Modificaciones en base de datos
+
+### 24. [Configuración de Políticas RLS para Supabase Storage Buckets](./24-configuracion-storage-buckets.md)
+- Configuración correcta de políticas RLS para buckets de Supabase Storage
+- Estructura exacta de las 4 políticas requeridas (INSERT, SELECT, UPDATE, DELETE)
+- Template reutilizable para nuevos buckets
+- Solución de problemas comunes
+- Checklist completo para configuración de nuevos buckets
+
+### 25. [Sistema de Monedero Electrónico (Wallet)](./25-sistema-monedero-electronico-wallet.md)
+- Sistema completo de monedero electrónico integrado
+- Notas de crédito por falta de stock
+- Wallet como método de pago (parcial o total)
+- Registro completo de transacciones (entradas y salidas)
+- Integración con preparación de pedidos y checkout
+- Consulta de historial y saldo
+
 ## 🗺️ Navegación
 
 Cada documento incluye enlaces de navegación al final para moverse entre secciones:
