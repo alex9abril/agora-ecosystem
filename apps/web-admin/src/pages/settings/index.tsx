@@ -3,6 +3,7 @@ import Head from 'next/head';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { settingsService, type SiteSetting, type TaxSettings } from '@/lib/settings';
 import { useAuth } from '@/contexts/AuthContext';
+import IntegrationsSection from '@/components/settings/IntegrationsSection';
 // Iconos SVG inline (sin dependencia externa)
 const InformationCircleIcon = ({ className }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -22,7 +23,7 @@ const XCircleIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-type SettingsCategory = 'taxes' | 'storefront' | 'delivery' | 'notifications' | 'general';
+type SettingsCategory = 'taxes' | 'storefront' | 'delivery' | 'notifications' | 'general' | 'integrations';
 
 interface CategoryInfo {
   id: SettingsCategory;
@@ -80,6 +81,16 @@ const categories: CategoryInfo[] = [
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'integrations',
+    name: 'Integraciones',
+    description: 'Configuración de métodos de pago y proveedores de logística',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
   },
@@ -472,6 +483,12 @@ export default function SettingsPage() {
                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                     <p className="text-sm text-gray-500 mt-4">Cargando configuraciones...</p>
                   </div>
+                ) : selectedCategory === 'integrations' ? (
+                  <IntegrationsSection
+                    settings={categorySettings}
+                    onUpdate={handleSaveSetting}
+                    saving={saving}
+                  />
                 ) : categorySettings.length === 0 ? (
                   <div className="text-center py-12">
                     <InformationCircleIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />

@@ -13,6 +13,7 @@ import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { taxesService } from '@/lib/taxes';
 import { formatPrice } from '@/lib/format';
 import { apiRequest } from '@/lib/api';
+import { walletService, Wallet } from '@/lib/wallet';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -47,7 +48,7 @@ interface Address {
 
 interface PaymentMethod {
   id: string;
-  type: 'card' | 'cash' | 'transfer';
+  type: 'card' | 'cash' | 'transfer' | 'wallet';
   label: string;
   icon?: string;
 }
@@ -144,10 +145,17 @@ export default function CheckoutPage() {
   
   // Estados para pago
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [useWallet, setUseWallet] = useState(false);
+  const [walletAmount, setWalletAmount] = useState<number>(0);
+  const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState<string | null>(null);
   const [paymentMethods] = useState<PaymentMethod[]>([
     { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
     { id: 'cash', type: 'cash', label: 'Efectivo al recibir' },
     { id: 'transfer', type: 'transfer', label: 'Transferencia bancaria' },
+    { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
+    { id: 'karlopay', type: 'card', label: 'Karlopay' },
   ]);
   
   // Estados para confirmación
@@ -159,6 +167,12 @@ export default function CheckoutPage() {
     shippingSelections: Record<string, string>;
     shippingOptionsByStore: Record<string, ShippingOption[]>;
     total: number;
+    paymentInfo?: {
+      method: string;
+      walletAmount?: number;
+      secondaryMethod?: string;
+      secondaryAmount?: number;
+    };
   } | null>(null);
 
   // Redirigir si no hay carrito (pero no si estamos en confirmación)
@@ -174,11 +188,36 @@ export default function CheckoutPage() {
       if (currentStep === 'auth') {
         setCurrentStep('shipping');
         loadAddresses();
+        loadWalletBalance();
       }
     } else {
       setCurrentStep('auth');
     }
   }, [isAuthenticated]);
+
+  // Cargar saldo del wallet cuando se llega al paso de pago
+  useEffect(() => {
+    if (isAuthenticated && currentStep === 'payment' && walletBalance === null) {
+      loadWalletBalance();
+    }
+  }, [isAuthenticated, currentStep]);
+
+  // Cargar saldo del wallet cuando el usuario está autenticado
+  const loadWalletBalance = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      setLoadingWallet(true);
+      const wallet = await walletService.getBalance();
+      setWalletBalance(wallet.balance);
+    } catch (error: any) {
+      console.error('Error cargando saldo del wallet:', error);
+      // Si no hay wallet, el saldo será null
+      setWalletBalance(0);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
 
   // Cargar direcciones cuando el usuario está autenticado
   const loadAddresses = async () => {
@@ -912,12 +951,33 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Validar distribución de pago si se usa wallet
+    if (selectedPaymentMethod === 'wallet' && useWallet && walletAmount < total && !secondaryPaymentMethod) {
+      setError('Por favor, selecciona un método de pago adicional para completar el pago');
+      return;
+    }
+
     setProcessingOrder(true);
     setError('');
 
     try {
       // Construir notas de entrega
-      let deliveryNotes = `Método de pago: ${paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}`;
+      let deliveryNotes = '';
+      
+      // Construir información de pago
+      if (selectedPaymentMethod === 'wallet' && useWallet) {
+        if (walletAmount >= total) {
+          // Pago completo con wallet
+          deliveryNotes = `Método de pago: Monedero electrónico (${formatPrice(walletAmount)})`;
+        } else {
+          // Pago distribuido
+          const secondaryMethodLabel = paymentMethods.find(m => m.id === secondaryPaymentMethod)?.label || secondaryPaymentMethod;
+          deliveryNotes = `Método de pago: Monedero electrónico (${formatPrice(walletAmount)}) + ${secondaryMethodLabel} (${formatPrice(total - walletAmount)})`;
+        }
+      } else {
+        // Método de pago tradicional
+        deliveryNotes = `Método de pago: ${paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}`;
+      }
       
       // Agregar información de dirección de facturación si es diferente
       if (!useSameAddressForBilling && selectedBillingAddressId) {
@@ -936,13 +996,45 @@ export default function CheckoutPage() {
         }
       }
       
-      const order = await apiRequest<{ id: string; order_number: string }>('/orders/checkout', {
+      // Preparar información de pago para el backend
+      const paymentInfo: any = {
+        method: selectedPaymentMethod,
+      };
+
+      // Si se usa wallet, agregar información de distribución
+      if (selectedPaymentMethod === 'wallet' && useWallet && walletAmount > 0) {
+        paymentInfo.wallet = {
+          amount: walletAmount,
+          use_full_balance: walletAmount >= walletBalance!,
+        };
+
+        // Si hay método secundario, agregarlo
+        if (walletAmount < total && secondaryPaymentMethod) {
+          paymentInfo.secondary_method = secondaryPaymentMethod;
+          paymentInfo.secondary_amount = total - walletAmount;
+        }
+      }
+      
+      const order = await apiRequest<{ id: string; order_number: string; karlopay_payment_url?: string }>('/orders/checkout', {
         method: 'POST',
         body: JSON.stringify({
           addressId: selectedAddressId,
           deliveryNotes: deliveryNotes.trim(),
+          payment: paymentInfo,
         }),
       });
+
+      // Si el método de pago es Karlopay y hay URL de pago, redirigir
+      if (selectedPaymentMethod === 'karlopay' && order.karlopay_payment_url) {
+        // Asegurar que la URL tenga protocolo
+        let paymentUrl = order.karlopay_payment_url;
+        if (!paymentUrl.startsWith('http://') && !paymentUrl.startsWith('https://')) {
+          paymentUrl = `https://${paymentUrl}`;
+        }
+        console.log(`🔗 Redirigiendo a Karlopay: ${paymentUrl}`);
+        window.location.href = paymentUrl;
+        return; // No continuar con el flujo normal
+      }
 
       // Guardar información del pedido antes de vaciar el carrito
       setConfirmedOrderData({
@@ -951,6 +1043,14 @@ export default function CheckoutPage() {
         shippingSelections,
         shippingOptionsByStore,
         total,
+        paymentInfo: selectedPaymentMethod === 'wallet' && useWallet ? {
+          method: 'wallet',
+          walletAmount: walletAmount,
+          secondaryMethod: walletAmount < total ? secondaryPaymentMethod || undefined : undefined,
+          secondaryAmount: walletAmount < total ? total - walletAmount : undefined,
+        } : {
+          method: selectedPaymentMethod || 'cash',
+        },
       });
       
       setOrderId(order.id);
@@ -1939,6 +2039,23 @@ export default function CheckoutPage() {
                   <div>
                     <h2 className="text-xl font-medium text-gray-900 mb-6">Método de Pago</h2>
 
+                    {/* Mostrar saldo del wallet si está disponible */}
+                    {isAuthenticated && walletBalance !== null && walletBalance > 0 && (
+                      <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-green-900">Saldo disponible en tu monedero</p>
+                            <p className="text-2xl font-bold text-green-700 mt-1">{formatPrice(walletBalance)}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-green-600">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-3 mb-6">
                       {paymentMethods.map((method) => (
                         <label
@@ -1947,7 +2064,7 @@ export default function CheckoutPage() {
                             selectedPaymentMethod === method.id
                               ? 'border-blue-500 bg-blue-50'
                               : 'border-gray-200 hover:border-gray-300'
-                          }`}
+                          } ${method.id === 'wallet' && (walletBalance === null || walletBalance === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           <div className="flex items-center gap-3">
                             <input
@@ -1955,17 +2072,182 @@ export default function CheckoutPage() {
                               name="payment"
                               value={method.id}
                               checked={selectedPaymentMethod === method.id}
-                              onChange={() => setSelectedPaymentMethod(method.id)}
+                              onChange={() => {
+                                setSelectedPaymentMethod(method.id);
+                                if (method.id === 'wallet') {
+                                  // Al seleccionar wallet, activar uso y usar todo el saldo disponible (o el total si es menor)
+                                  if (walletBalance !== null && walletBalance > 0) {
+                                    setUseWallet(true);
+                                    const amountToUse = Math.min(walletBalance, total);
+                                    setWalletAmount(amountToUse);
+                                    // Si el wallet no cubre todo, requerir método secundario
+                                    if (amountToUse < total) {
+                                      // No seleccionar automáticamente, dejar que el usuario elija
+                                      setSecondaryPaymentMethod(null);
+                                    } else {
+                                      setSecondaryPaymentMethod(null);
+                                    }
+                                  }
+                                } else {
+                                  setUseWallet(false);
+                                  setWalletAmount(0);
+                                  setSecondaryPaymentMethod(null);
+                                }
+                              }}
+                              disabled={method.id === 'wallet' && (walletBalance === null || walletBalance === 0)}
                               className="w-5 h-5"
                             />
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-1">
                               {method.type === 'card' && <CreditCardIcon className="w-6 h-6 text-gray-600" />}
+                              {method.type === 'wallet' && (
+                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
                               <span className="font-medium text-gray-900">{method.label}</span>
+                              {method.id === 'wallet' && walletBalance !== null && walletBalance > 0 && (
+                                <span className="text-sm text-gray-500 ml-auto">
+                                  ({formatPrice(walletBalance)} disponible)
+                                </span>
+                              )}
                             </div>
                           </div>
                         </label>
                       ))}
                     </div>
+
+                    {/* Opciones de distribución de pago si se selecciona wallet */}
+                    {selectedPaymentMethod === 'wallet' && walletBalance !== null && walletBalance > 0 && (
+                      <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                        <h3 className="text-sm font-medium text-gray-900 mb-4">Distribución de pago</h3>
+                        
+                        <div className="space-y-4">
+                          {/* Monto total */}
+                          <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                            <span className="text-sm text-gray-600">Total a pagar</span>
+                            <span className="text-lg font-semibold text-gray-900">{formatPrice(total)}</span>
+                          </div>
+
+                          {/* Usar wallet */}
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={useWallet}
+                                onChange={(e) => {
+                                  setUseWallet(e.target.checked);
+                                  if (e.target.checked) {
+                                    // Usar todo el saldo disponible o el total, lo que sea menor
+                                    setWalletAmount(Math.min(walletBalance, total));
+                                  } else {
+                                    setWalletAmount(0);
+                                    setSecondaryPaymentMethod(null);
+                                  }
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-sm font-medium text-gray-900">Usar monedero electrónico</span>
+                            </label>
+                            
+                            {useWallet && (
+                              <div className="ml-6 space-y-3">
+                                <div>
+                                  <label className="block text-sm text-gray-700 mb-1">
+                                    Monto a usar del monedero
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={Math.min(walletBalance, total)}
+                                    step="0.01"
+                                    value={walletAmount}
+                                    onChange={(e) => {
+                                      const amount = Math.min(Math.max(0, parseFloat(e.target.value) || 0), Math.min(walletBalance, total));
+                                      setWalletAmount(amount);
+                                      // Si el monto del wallet es menor al total, requerir método secundario
+                                      if (amount < total) {
+                                        // Si no hay método secundario seleccionado, no hacer nada
+                                      } else {
+                                        setSecondaryPaymentMethod(null);
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Disponible: {formatPrice(walletBalance)} | Máximo: {formatPrice(Math.min(walletBalance, total))}
+                                  </p>
+                                </div>
+
+                                {/* Mostrar saldo restante si el wallet no cubre todo */}
+                                {walletAmount < total && (
+                                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                                    <p className="text-sm text-yellow-800 mb-3">
+                                      Restante a pagar: <span className="font-semibold">{formatPrice(total - walletAmount)}</span>
+                                    </p>
+                                    
+                                    <div className="space-y-2">
+                                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                                        Selecciona un método de pago adicional:
+                                      </label>
+                                      {paymentMethods
+                                        .filter(m => m.id !== 'wallet')
+                                        .map((method) => (
+                                          <label
+                                            key={method.id}
+                                            className={`flex items-center gap-2 p-2 border rounded-md cursor-pointer transition-colors ${
+                                              secondaryPaymentMethod === method.id
+                                                ? 'border-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-gray-300'
+                                            }`}
+                                          >
+                                            <input
+                                              type="radio"
+                                              name="secondary-payment"
+                                              value={method.id}
+                                              checked={secondaryPaymentMethod === method.id}
+                                              onChange={() => setSecondaryPaymentMethod(method.id)}
+                                              className="w-4 h-4"
+                                            />
+                                            <div className="flex items-center gap-2">
+                                              {method.type === 'card' && <CreditCardIcon className="w-5 h-5 text-gray-600" />}
+                                              <span className="text-sm text-gray-900">{method.label}</span>
+                                            </div>
+                                          </label>
+                                        ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Resumen de distribución */}
+                                {walletAmount > 0 && (
+                                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                    <p className="text-sm font-medium text-blue-900 mb-2">Resumen de pago:</p>
+                                    <div className="space-y-1 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-blue-700">Monedero electrónico:</span>
+                                        <span className="font-semibold text-blue-900">{formatPrice(walletAmount)}</span>
+                                      </div>
+                                      {walletAmount < total && secondaryPaymentMethod && (
+                                        <div className="flex justify-between">
+                                          <span className="text-blue-700">
+                                            {paymentMethods.find(m => m.id === secondaryPaymentMethod)?.label || 'Otro método'}:
+                                          </span>
+                                          <span className="font-semibold text-blue-900">{formatPrice(total - walletAmount)}</span>
+                                        </div>
+                                      )}
+                                      <div className="flex justify-between pt-2 border-t border-blue-200">
+                                        <span className="font-semibold text-blue-900">Total:</span>
+                                        <span className="font-bold text-blue-900">{formatPrice(total)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="mt-6 flex justify-between">
                       <button
@@ -1979,7 +2261,11 @@ export default function CheckoutPage() {
                       </button>
                       <button
                         onClick={handlePlaceOrder}
-                        disabled={!selectedPaymentMethod || processingOrder}
+                        disabled={
+                          !selectedPaymentMethod || 
+                          processingOrder ||
+                          (selectedPaymentMethod === 'wallet' && useWallet && walletAmount < total && !secondaryPaymentMethod)
+                        }
                         className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
                         {processingOrder ? 'Procesando Orden...' : 'Realizar Pedido'}
@@ -2047,9 +2333,28 @@ export default function CheckoutPage() {
                       {/* Método de pago */}
                       <div className="mb-4 pb-4 border-b border-gray-200">
                         <p className="text-sm font-medium text-gray-700 mb-2">Método de pago</p>
-                        <p className="text-sm text-gray-600">
-                          {paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}
-                        </p>
+                        {confirmedOrderData?.paymentInfo?.walletAmount ? (
+                          <div className="text-sm text-gray-600 space-y-1">
+                            <div className="flex justify-between">
+                              <span>Monedero electrónico:</span>
+                              <span className="font-semibold">{formatPrice(confirmedOrderData.paymentInfo.walletAmount)}</span>
+                            </div>
+                            {confirmedOrderData.paymentInfo.secondaryMethod && confirmedOrderData.paymentInfo.secondaryAmount && (
+                              <div className="flex justify-between">
+                                <span>{paymentMethods.find(m => m.id === confirmedOrderData.paymentInfo?.secondaryMethod)?.label || 'Otro método'}:</span>
+                                <span className="font-semibold">{formatPrice(confirmedOrderData.paymentInfo.secondaryAmount)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between pt-1 border-t border-gray-200 mt-1">
+                              <span className="font-semibold">Total:</span>
+                              <span className="font-bold">{formatPrice(confirmedOrderData.total)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">
+                            {paymentMethods.find(m => m.id === selectedPaymentMethod)?.label || selectedPaymentMethod}
+                          </p>
+                        )}
                       </div>
 
                       {/* Métodos de envío seleccionados */}

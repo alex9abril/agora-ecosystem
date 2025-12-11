@@ -1,10 +1,12 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
 import { productsService, Product } from '@/lib/products';
+import { walletService, WalletTransaction } from '@/lib/wallet';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -16,6 +18,8 @@ export default function OrderDetailPage() {
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [products, setProducts] = useState<Record<string, Product>>({});
+  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
+  const [loadingWalletTransactions, setLoadingWalletTransactions] = useState(false);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -87,6 +91,32 @@ export default function OrderDetailPage() {
             // No fallar la carga de la orden si hay error cargando productos
           }
         }
+      }
+
+      // Cargar transacciones del wallet relacionadas con este pedido
+      try {
+        setLoadingWalletTransactions(true);
+        console.log('💰 [WALLET] Cargando transacciones del wallet para pedido:', orderData.id);
+        const transactionsResponse = await walletService.getTransactions({
+          page: 1,
+          limit: 50,
+        });
+        console.log('💰 [WALLET] Total de transacciones obtenidas:', transactionsResponse.data.length);
+        
+        // Filtrar solo las transacciones relacionadas con este pedido
+        const orderTransactions = transactionsResponse.data.filter(
+          tx => tx.order_id === orderData.id && tx.transaction_type === 'credit'
+        );
+        console.log('💰 [WALLET] Transacciones relacionadas con este pedido:', orderTransactions.length);
+        console.log('💰 [WALLET] Detalles de transacciones:', orderTransactions);
+        
+        setWalletTransactions(orderTransactions);
+      } catch (err) {
+        console.error('❌ [WALLET] Error cargando transacciones de wallet:', err);
+        // No fallar la carga de la orden si hay error cargando transacciones
+        setWalletTransactions([]);
+      } finally {
+        setLoadingWalletTransactions(false);
       }
     } catch (err: any) {
       console.error('❌ [LOAD ORDER] Error cargando pedido:', err);
@@ -817,27 +847,34 @@ export default function OrderDetailPage() {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Resumen de pago</h2>
-                    {/* Botón temporal para confirmar pago - Solo para pago a contra entrega o transferencia con referencia */}
+                    {/* Botón para confirmar pago - TEMPORAL: Habilitado para todos los métodos de pago */}
                     {(() => {
-                      const paymentMethod = order.payment_method?.toLowerCase() || '';
-                      const isCashOnDelivery = paymentMethod.includes('contra entrega') || 
-                                               paymentMethod.includes('cash on delivery') || 
-                                               paymentMethod.includes('cod') ||
-                                               paymentMethod === 'cash';
-                      const isTransfer = paymentMethod.includes('transferencia') || 
-                                         paymentMethod.includes('transfer') ||
-                                         paymentMethod.includes('referencia');
-                      const canShowButton = (isCashOnDelivery || isTransfer) && 
-                                           (order.payment_status === 'pending' || order.payment_status === 'failed');
+                      // TEMPORAL: Mostrar botón si el pago está pendiente o fallido, sin importar el método
+                      const canShowButton = order.payment_status === 'pending' || order.payment_status === 'failed';
                       
                       return canShowButton ? (
                         <button
                           onClick={handleConfirmPayment}
                           disabled={updating}
-                          className="px-2 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                           title="Confirmar que el pago ha sido recibido"
                         >
-                          {updating ? '...' : '✓ Confirmar pago'}
+                          {updating ? (
+                            <>
+                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Confirmando...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Confirmar pago
+                            </>
+                          )}
                         </button>
                       ) : null;
                     })()}
@@ -845,19 +882,26 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-gray-500 mb-4">Un resumen de todos los pagos de las transacciones registradas</p>
                   <div className="space-y-2 text-sm">
                     <div className="mb-2 space-y-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        order.payment_status === 'paid' || order.payment_status === 'overcharged'
-                          ? 'text-green-700 bg-green-50'
-                          : order.payment_status === 'failed'
-                          ? 'text-red-700 bg-red-50'
-                          : 'text-yellow-700 bg-yellow-50'
-                      }`}>
-                        {order.payment_status === 'paid' ? 'Totalmente Pagado' :
-                         order.payment_status === 'overcharged' ? 'Overcharged' :
-                         order.payment_status === 'failed' ? 'Fallido' :
-                         order.payment_status === 'refunded' ? 'Reembolsado' :
-                         'Pendiente'}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          order.payment_status === 'paid' || order.payment_status === 'overcharged'
+                            ? 'text-green-700 bg-green-50'
+                            : order.payment_status === 'failed'
+                            ? 'text-red-700 bg-red-50'
+                            : 'text-yellow-700 bg-yellow-50'
+                        }`}>
+                          {order.payment_status === 'paid' ? 'Totalmente Pagado' :
+                           order.payment_status === 'overcharged' ? 'Overcharged' :
+                           order.payment_status === 'failed' ? 'Fallido' :
+                           order.payment_status === 'refunded' ? 'Reembolsado' :
+                           'Pendiente'}
+                        </span>
+                        {order.payment_method && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-gray-700 bg-gray-100">
+                            Método: {order.payment_method}
+                          </span>
+                        )}
+                      </div>
                       {order.payment_status_change_info && (
                         <div className="text-xs text-gray-500">
                           {order.payment_status_change_info.is_automatic ? (
@@ -910,13 +954,73 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Refunds */}
+              {/* Créditos al Wallet */}
               <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Reembolsos</h2>
-                  <button className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Nuevo reembolso</button>
-                </div>
-                <p className="text-sm text-gray-500">No se han realizado reembolsos para este pedido.</p>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Créditos al Monedero</h2>
+                    <Link 
+                      href="/settings/wallet"
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                    >
+                      Ver monedero
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  </div>
+                  {loadingWalletTransactions ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                      <span className="ml-2 text-xs text-gray-500">Cargando transacciones...</span>
+                    </div>
+                  ) : walletTransactions.length > 0 ? (
+                    <>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Se acreditó saldo al monedero electrónico del cliente por productos no surtidos
+                      </p>
+                      <div className="space-y-3">
+                        {walletTransactions.map((transaction) => (
+                      <div key={transaction.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                              </svg>
+                              <span className="text-sm font-semibold text-green-600">
+                                +{formatCurrency(transaction.amount)}
+                              </span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                                Acreditado
+                              </span>
+                            </div>
+                            {transaction.reason && (
+                              <p className="text-xs text-gray-600 mb-2">{transaction.reason}</p>
+                            )}
+                            <p className="text-xs text-gray-500">
+                              {formatDate(transaction.created_at)}
+                            </p>
+                          </div>
+                          <Link
+                            href={`/settings/wallet?transaction=${transaction.id}`}
+                            className="ml-4 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 whitespace-nowrap"
+                            title="Ver detalles de la transacción"
+                          >
+                            Ver transacción
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                        </div>
+                      </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">
+                      No hay créditos al monedero para este pedido
+                    </p>
+                  )}
               </div>
 
             {/* Transacciones */}

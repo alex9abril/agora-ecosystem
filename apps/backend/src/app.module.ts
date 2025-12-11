@@ -24,6 +24,8 @@ import { AddressesModule } from './modules/addresses/addresses.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { VehiclesModule } from './modules/catalog/vehicles/vehicles.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
 
 @Module({
   imports: [
@@ -44,6 +46,8 @@ import { SettingsModule } from './modules/settings/settings.module';
     OrdersModule,
     VehiclesModule,
     SettingsModule,
+    WalletModule,
+    KarlopayModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

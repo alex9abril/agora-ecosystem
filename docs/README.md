@@ -1,6 +1,6 @@
-# 📚 Documentación LOCALIA
+# 📚 Documentación AGORA
 
-Bienvenido a la documentación completa del proyecto LOCALIA. Esta documentación está organizada de manera secuencial para guiarte a través de todos los aspectos del proyecto.
+Bienvenido a la documentación completa del proyecto AGORA. Esta documentación está organizada de manera secuencial para guiarte a través de todos los aspectos del proyecto.
 
 ## 📖 Índice de Documentación
 

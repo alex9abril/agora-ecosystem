@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { SettingsService, UpdateSettingDto } from './settings.service';
+import { IntegrationsService } from './integrations.service';
 import { BulkUpdateSettingsDto } from './dto/update-setting.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 
@@ -20,7 +21,10 @@ import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 @Controller('settings')
 @UseGuards(SupabaseAuthGuard)
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly integrationsService: IntegrationsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Obtener todas las configuraciones agrupadas por categoría' })
@@ -102,6 +106,54 @@ export class SettingsController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async bulkUpdate(@Body() bulkUpdateDto: BulkUpdateSettingsDto) {
     return this.settingsService.bulkUpdate(bulkUpdateDto.updates);
+  }
+
+  // ============================================================================
+  // ENDPOINTS DE INTEGRACIONES
+  // ============================================================================
+
+  @Get('integrations/mode')
+  @ApiOperation({ summary: 'Obtener el modo actual de integraciones (dev/prod)' })
+  @ApiResponse({ status: 200, description: 'Modo obtenido exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getIntegrationMode() {
+    const mode = await this.integrationsService.getMode();
+    return { mode };
+  }
+
+  @Get('integrations/payments/all')
+  @ApiOperation({ summary: 'Obtener todas las credenciales de métodos de pago activos' })
+  @ApiResponse({ status: 200, description: 'Credenciales obtenidas exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getAllPaymentCredentials() {
+    return this.integrationsService.getAllPaymentCredentials();
+  }
+
+  @Get('integrations/payments/karlopay')
+  @ApiOperation({ summary: 'Obtener credenciales de Karlopay según el modo activo' })
+  @ApiResponse({ status: 200, description: 'Credenciales obtenidas exitosamente' })
+  @ApiResponse({ status: 404, description: 'Karlopay no está habilitado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getKarlopayCredentials() {
+    return this.integrationsService.getKarlopayCredentials();
+  }
+
+  @Get('integrations/payments/mercadopago')
+  @ApiOperation({ summary: 'Obtener credenciales de Mercado Pago según el modo activo' })
+  @ApiResponse({ status: 200, description: 'Credenciales obtenidas exitosamente' })
+  @ApiResponse({ status: 404, description: 'Mercado Pago no está habilitado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getMercadoPagoCredentials() {
+    return this.integrationsService.getMercadoPagoCredentials();
+  }
+
+  @Get('integrations/payments/stripe')
+  @ApiOperation({ summary: 'Obtener credenciales de Stripe según el modo activo' })
+  @ApiResponse({ status: 200, description: 'Credenciales obtenidas exitosamente' })
+  @ApiResponse({ status: 404, description: 'Stripe no está habilitado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async getStripeCredentials() {
+    return this.integrationsService.getStripeCredentials();
   }
 }
 

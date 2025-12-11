@@ -10,12 +10,18 @@ import { dbPool } from '../../config/database.config';
 import { supabaseAdmin } from '../../config/supabase.config';
 import { CheckoutDto } from './dto/checkout.dto';
 import { TaxesService } from '../catalog/taxes/taxes.service';
+import { WalletService } from '../wallet/wallet.service';
+import { KarlopayService } from '../payments/karlopay/karlopay.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
     @Inject(forwardRef(() => TaxesService))
     private readonly taxesService: TaxesService,
+    @Inject(forwardRef(() => WalletService))
+    private readonly walletService: WalletService,
+    @Inject(forwardRef(() => KarlopayService))
+    private readonly karlopayService: KarlopayService,
   ) {}
 
   /**
@@ -144,7 +150,71 @@ export class OrdersService {
         }
       }
 
-      // 9. Crear una orden por cada sucursal
+      // 9. Calcular total global para procesar wallet
+      let globalTaxAmount = 0;
+      for (const item of itemsResult.rows) {
+        const taxBreakdown = itemTaxBreakdownsMap.get(item.product_id) || { taxes: [], total_tax: 0 };
+        globalTaxAmount += taxBreakdown.total_tax;
+      }
+      const totalAmount = globalSubtotal + globalTaxAmount + deliveryFee - discountAmount + tipAmount;
+
+      // 10. Procesar pago con wallet si se especifica
+      let walletAmountUsed = 0;
+      let paymentMethod = 'cash'; // Por defecto
+      let paymentStatus = 'pending'; // Por defecto
+
+      if (checkoutDto.payment) {
+        paymentMethod = checkoutDto.payment.method;
+
+        // Si se usa wallet, procesar el débito
+        if (checkoutDto.payment.method === 'wallet' && checkoutDto.payment.wallet) {
+          const walletAmount = parseFloat(checkoutDto.payment.wallet.amount.toString());
+
+          // Validar que el wallet tenga saldo suficiente
+          const canUse = await this.walletService.canUseWallet(userId, walletAmount);
+          if (!canUse) {
+            const balance = await this.walletService.getBalance(userId);
+            throw new BadRequestException(`Saldo insuficiente en el wallet. Saldo disponible: ${balance.toFixed(2)}`);
+          }
+
+          // Validar que el monto del wallet no exceda el total
+          if (walletAmount > totalAmount) {
+            throw new BadRequestException(`El monto del wallet (${walletAmount.toFixed(2)}) no puede exceder el total (${totalAmount.toFixed(2)})`);
+          }
+
+          // Debitar del wallet (el order_id se actualizará después de crear las órdenes)
+          await this.walletService.debitWallet(
+            userId,
+            {
+              amount: walletAmount,
+              description: 'Pago de pedido',
+              reason: `Pago ${walletAmount >= totalAmount ? 'completo' : 'parcial'} de pedido: ${walletAmount.toFixed(2)} de ${totalAmount.toFixed(2)}`,
+              order_id: null, // Se actualizará después de crear las órdenes
+            },
+            userId, // createdByUserId
+            'client' // createdByRole
+          );
+
+          walletAmountUsed = walletAmount;
+
+          // Si el wallet cubre todo el monto, el pago está completo
+          if (walletAmount >= totalAmount) {
+            paymentStatus = 'paid';
+          } else if (checkoutDto.payment.secondary_method) {
+            // Si hay método secundario, el pago está pendiente hasta que se procese el método secundario
+            paymentStatus = 'pending';
+          } else {
+            // Si no hay método secundario pero el wallet no cubre todo, error
+            throw new BadRequestException('El wallet no cubre el total y no se especificó un método de pago secundario');
+          }
+        } else {
+          // Método de pago tradicional (card, cash, transfer)
+          // El payment_status se mantiene como 'pending' hasta que se confirme el pago
+          paymentStatus = 'pending';
+        }
+      }
+
+      // 11. Crear una orden por cada sucursal
       const createdOrders: any[] = [];
       const businessSubtotals = new Map<string, number>();
 
@@ -194,7 +264,7 @@ export class OrdersService {
             payment_method, payment_status,
             delivery_notes,
             order_group_id
-          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, 'cash', 'pending', $13, $14)
+          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           RETURNING *`,
           [
             userId,
@@ -209,6 +279,8 @@ export class OrdersService {
             discountAmount.toFixed(2),
             businessTipAmount.toFixed(2),
             businessTotalAmount.toFixed(2),
+            paymentMethod, // Método de pago (wallet, card, cash, transfer)
+            paymentStatus, // Estado de pago (paid si wallet cubre todo, pending si no)
             checkoutDto.deliveryNotes || null,
             orderGroupId, // ⭐ Relacionar con el grupo
           ]
@@ -241,7 +313,26 @@ export class OrdersService {
         }
       }
 
-      // 10. Limpiar carrito
+      // 12. Actualizar transacciones de wallet con order_id (si se usó wallet)
+      if (walletAmountUsed > 0 && createdOrders.length > 0) {
+        // Actualizar la última transacción de débito con el order_id del primer pedido
+        // (en el futuro se podría distribuir proporcionalmente entre múltiples órdenes)
+        const primaryOrderId = createdOrders[0].id;
+        await client.query(
+          `UPDATE commerce.wallet_transactions
+           SET order_id = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $2 
+             AND transaction_type = 'debit'
+             AND order_id IS NULL
+             AND amount = $3
+             AND created_at > NOW() - INTERVAL '1 minute'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [primaryOrderId, userId, walletAmountUsed.toFixed(2)]
+        );
+      }
+
+      // 13. Limpiar carrito
       await client.query(
         `DELETE FROM orders.shopping_cart_items WHERE cart_id = $1`,
         [cart.id]
@@ -253,18 +344,120 @@ export class OrdersService {
 
       await client.query('COMMIT');
 
-      // 11. Obtener todas las órdenes creadas con sus items
+      // 14. Crear orden en Karlopay si el método de pago es karlopay (después del COMMIT)
+      let karlopayPaymentUrl: string | null = null;
+      if (paymentMethod === 'karlopay' && createdOrders.length > 0) {
+        try {
+          // Obtener información del usuario desde user_profiles y auth.users
+          const userProfileResult = await dbPool.query(
+            `SELECT up.first_name, up.last_name, up.phone
+             FROM core.user_profiles up
+             WHERE up.id = $1`,
+            [userId]
+          );
+
+          const userProfile = userProfileResult.rows[0] || {};
+          const userName = `${userProfile.first_name || ''} ${userProfile.last_name || ''}`.trim() || 'Cliente';
+          const userPhone = userProfile.phone || '';
+
+          // Obtener email desde Supabase Auth
+          let userEmail = '';
+          if (supabaseAdmin) {
+            try {
+              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+              userEmail = authUser?.user?.email || '';
+            } catch (error) {
+              console.warn('No se pudo obtener email desde auth.users:', error);
+            }
+          }
+
+          // Obtener información del receptor de la dirección
+          const addressReceiverResult = await dbPool.query(
+            `SELECT receiver_name, receiver_phone
+             FROM core.addresses
+             WHERE id = $1 AND user_id = $2`,
+            [checkoutDto.addressId, userId]
+          );
+          const receiverInfo = addressReceiverResult.rows[0] || {};
+          const receiverName = receiverInfo.receiver_name || userName;
+          const receiverPhone = receiverInfo.receiver_phone || userPhone;
+
+          // Construir operaciones desde los items del carrito
+          const operations = itemsResult.rows.map((item: any) => ({
+            description: item.product_name,
+            quantity: item.quantity,
+            price: parseFloat(item.item_subtotal),
+          }));
+
+          // Crear número de orden único (usar orderGroupId como base)
+          const numberOfOrder = `AGORA_${orderGroupId.replace(/-/g, '').substring(0, 20).toUpperCase()}`;
+
+          // Construir URL de redirección después del pago
+          // Esta es la URL a la que Karlopay redirigirá al usuario después de completar el pago
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3008';
+          const redirectUrl = `${frontendUrl}/karlopay-redirect?session_id=${numberOfOrder}`;
+          
+          console.log(`🔗 Redirect URL para Karlopay: ${redirectUrl}`);
+
+          // Crear orden en Karlopay
+          const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
+            businessArea: 'ventas',
+            numberOfOrder,
+            status: 'R', // Remission
+            total: totalAmount,
+            customer: {
+              foreignId: userId,
+              fullName: receiverName,
+              phoneNumber: receiverPhone,
+              email: userEmail,
+              invoiceProfile: null,
+            },
+            operations,
+            product: null,
+            redirectUrl,
+            additional: {
+              session_id: numberOfOrder,
+              order_group_id: orderGroupId,
+            },
+          });
+
+          karlopayPaymentUrl = karlopayOrder.urlPayment;
+
+          // Guardar la URL de pago y número de orden de Karlopay en la primera orden
+          await dbPool.query(
+            `UPDATE orders.orders
+             SET delivery_notes = COALESCE(delivery_notes, '') || E'\nKarlopay Order: ' || $1 || E'\nKarlopay Payment URL: ' || $2
+             WHERE id = $3`,
+            [numberOfOrder, karlopayPaymentUrl, createdOrders[0].id]
+          );
+
+          console.log(`✅ Orden creada en Karlopay: ${numberOfOrder}, URL de pago: ${karlopayPaymentUrl}`);
+        } catch (karlopayError: any) {
+          console.error('❌ Error creando orden en Karlopay:', karlopayError);
+          // No fallar el checkout si hay error con Karlopay, solo loguear
+          // El pedido ya está creado en la base de datos
+        }
+      }
+
+      // 15. Obtener todas las órdenes creadas con sus items
       // Retornar la primera orden como principal (para compatibilidad con código existente)
       // pero incluir información del grupo
       const primaryOrder = await this.findOne(createdOrders[0].id, userId);
       
       // Agregar información del grupo a la respuesta
-      return {
+      const response: any = {
         ...primaryOrder,
         order_group_id: orderGroupId,
         related_orders_count: createdOrders.length,
         related_orders: createdOrders.map(o => ({ id: o.id, business_id: o.business_id, total_amount: o.total_amount })),
       };
+
+      // Si se creó orden en Karlopay, agregar URL de pago
+      if (karlopayPaymentUrl) {
+        response.karlopay_payment_url = karlopayPaymentUrl;
+      }
+
+      return response;
     } catch (error: any) {
       await client.query('ROLLBACK');
       if (error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -1468,7 +1661,7 @@ export class OrdersService {
 
       // Verificar que el pedido existe y pertenece al negocio
       const orderResult = await client.query(
-        `SELECT id, status, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        `SELECT id, client_id, status, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
         [orderId, businessId]
       );
 
@@ -1477,15 +1670,22 @@ export class OrdersService {
       }
 
       const order = orderResult.rows[0];
+      const clientId = order.client_id;
+      
       if (order.status !== 'confirmed') {
         throw new BadRequestException(`El pedido debe estar en estado 'confirmed' para comenzar la preparación. Estado actual: ${order.status}`);
       }
 
-      // 1. Actualizar cantidades de items del pedido
+      // 1. Actualizar cantidades de items del pedido y calcular diferencias para acreditar al wallet
+      const itemsToCredit: Array<{ item_id: string; product_id: string; item_name: string; item_price: number; shortage_quantity: number }> = [];
+      
+      console.log('🔵 [PREPARE ORDER] Iniciando actualización de items. Total items:', prepareDto.items.length);
+      
       for (const itemUpdate of prepareDto.items) {
-        // Obtener el item actual para recalcular subtotal
+        // Obtener el item actual con original_quantity para calcular diferencia
         const itemResult = await client.query(
-          `SELECT id, item_price, quantity FROM orders.order_items WHERE id = $1 AND order_id = $2`,
+          `SELECT id, product_id, item_price, item_name, quantity, COALESCE(original_quantity, quantity) as original_quantity 
+           FROM orders.order_items WHERE id = $1 AND order_id = $2`,
           [itemUpdate.item_id, orderId]
         );
 
@@ -1494,6 +1694,30 @@ export class OrdersService {
         }
 
         const item = itemResult.rows[0];
+        const originalQuantity = parseInt(item.original_quantity) || parseInt(item.quantity);
+        const newQuantity = itemUpdate.quantity;
+        const shortageQuantity = originalQuantity - newQuantity;
+
+        console.log(`🔵 [PREPARE ORDER] Item ${item.item_name}:`, {
+          item_id: item.id,
+          original_quantity: originalQuantity,
+          new_quantity: newQuantity,
+          shortage_quantity: shortageQuantity,
+          product_id: item.product_id,
+        });
+
+        // Si hay diferencia, guardar para acreditar al wallet después
+        if (shortageQuantity > 0 && item.product_id) {
+          itemsToCredit.push({
+            item_id: item.id,
+            product_id: item.product_id,
+            item_name: item.item_name,
+            item_price: parseFloat(item.item_price),
+            shortage_quantity: shortageQuantity,
+          });
+          console.log(`💰 [PREPARE ORDER] Item agregado para acreditar al wallet: ${item.item_name}, cantidad faltante: ${shortageQuantity}`);
+        }
+
         const newSubtotal = parseFloat(item.item_price) * itemUpdate.quantity;
 
         // Actualizar cantidad y subtotal
@@ -1539,10 +1763,43 @@ export class OrdersService {
           // Procesar opción de escasez
           switch (shortageOption.option_type) {
             case 'wallet':
-              // TODO: Integrar con sistema de monedero electrónico
-              // Por ahora, solo loguear
-              console.log(`💰 Monedero: Devolver ${shortageQuantity} unidades del producto ${productId} al monedero del cliente`);
-              // Aquí se haría la llamada al sistema de monedero para acreditar el saldo
+              // Acreditar saldo al wallet del cliente
+              try {
+                // Obtener precio del item para calcular monto a acreditar
+                const itemPriceResult = await client.query(
+                  `SELECT item_price, item_name FROM orders.order_items 
+                   WHERE order_id = $1 AND product_id = $2 LIMIT 1`,
+                  [orderId, productId]
+                );
+
+                if (itemPriceResult.rows.length > 0) {
+                  const itemPrice = parseFloat(itemPriceResult.rows[0].item_price);
+                  const itemName = itemPriceResult.rows[0].item_name;
+                  const amountToCredit = itemPrice * shortageQuantity;
+
+                  // Acreditar al wallet usando el servicio
+                  await this.walletService.creditWallet(
+                    clientId,
+                    {
+                      amount: amountToCredit,
+                      reason: `Nota de crédito por falta de stock: ${shortageQuantity} unidad${shortageQuantity > 1 ? 'es' : ''} de ${itemName}`,
+                      description: 'Acreditación automática por producto no surtido',
+                      order_id: orderId,
+                      order_item_id: item.id,
+                    },
+                    metadata?.changed_by_user_id,
+                    metadata?.changed_by_role || 'admin',
+                  );
+
+                  console.log(`💰 Monedero: Acreditados $${amountToCredit.toFixed(2)} al wallet del cliente por ${shortageQuantity} unidad${shortageQuantity > 1 ? 'es' : ''} no surtidas de ${itemName}`);
+                } else {
+                  console.warn(`⚠️ No se pudo obtener precio del item para producto ${productId}`);
+                }
+              } catch (walletError: any) {
+                console.error('❌ Error acreditando saldo al wallet:', walletError);
+                // No lanzar error para no interrumpir el proceso de preparación
+                // El saldo se puede acreditar manualmente después
+              }
               break;
 
             case 'other_branch':
@@ -1583,6 +1840,51 @@ export class OrdersService {
               [itemUpdate.quantity, productId, businessId]
             );
           }
+        }
+      }
+
+      // 3. Acreditar automáticamente al wallet por items no surtidos (si no se especificó otra opción)
+      // Solo acreditar items que NO están en shortage_options (para no duplicar)
+      const processedProductIds = new Set(
+        (prepareDto.shortage_options || []).map(opt => opt.product_id)
+      );
+
+      console.log(`💰 [AUTO-WALLET] Items para acreditar: ${itemsToCredit.length}`);
+      console.log(`💰 [AUTO-WALLET] Productos procesados en shortage_options:`, Array.from(processedProductIds));
+      console.log(`💰 [AUTO-WALLET] Client ID: ${clientId}`);
+
+      for (const itemToCredit of itemsToCredit) {
+        // Si este producto ya fue procesado en shortage_options, saltarlo
+        if (processedProductIds.has(itemToCredit.product_id)) {
+          console.log(`💰 [AUTO-WALLET] Saltando ${itemToCredit.product_id} porque ya fue procesado en shortage_options`);
+          continue;
+        }
+
+        // Acreditar automáticamente al wallet
+        try {
+          const amountToCredit = itemToCredit.item_price * itemToCredit.shortage_quantity;
+          
+          console.log(`💰 [AUTO-WALLET] Intentando acreditar $${amountToCredit.toFixed(2)} al wallet del cliente ${clientId}...`);
+          
+          const transaction = await this.walletService.creditWallet(
+            clientId,
+            {
+              amount: amountToCredit,
+              reason: `Nota de crédito por falta de stock: ${itemToCredit.shortage_quantity} unidad${itemToCredit.shortage_quantity > 1 ? 'es' : ''} de ${itemToCredit.item_name}`,
+              description: 'Acreditación automática por producto no surtido',
+              order_id: orderId,
+              order_item_id: itemToCredit.item_id,
+            },
+            metadata?.changed_by_user_id,
+            metadata?.changed_by_role || 'admin',
+          );
+
+          console.log(`✅ [AUTO-WALLET] Acreditados $${amountToCredit.toFixed(2)} al wallet del cliente por ${itemToCredit.shortage_quantity} unidad${itemToCredit.shortage_quantity > 1 ? 'es' : ''} no surtidas de ${itemToCredit.item_name}`);
+          console.log(`✅ [AUTO-WALLET] Transacción creada:`, transaction.id);
+        } catch (walletError: any) {
+          console.error('❌ [AUTO-WALLET] Error acreditando saldo al wallet:', walletError);
+          console.error('❌ [AUTO-WALLET] Error completo:', JSON.stringify(walletError, null, 2));
+          // No lanzar error para no interrumpir el proceso de preparación
         }
       }
 

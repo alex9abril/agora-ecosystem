@@ -2,7 +2,7 @@
 
 ## 📋 Resumen Ejecutivo
 
-Este documento describe el sistema completo de monedero electrónico integrado en LOCALIA, que permite a los usuarios:
+Este documento describe el sistema completo de monedero electrónico integrado en AGORA, que permite a los usuarios:
 - Recibir créditos (notas de crédito) cuando no se surte la cantidad completa de un pedido
 - Usar el saldo del wallet como método de pago
 - Realizar pagos parciales combinando wallet + otro método de pago
