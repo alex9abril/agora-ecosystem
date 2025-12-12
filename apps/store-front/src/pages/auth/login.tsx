@@ -23,9 +23,16 @@ export default function LoginPage() {
     if (!authLoading && isAuthenticated) {
       const redirect = router.query.redirect as string;
       if (redirect) {
-        router.push(redirect);
+        router.push(decodeURIComponent(redirect));
       } else {
-        router.push('/');
+        // Mantener el contexto de tienda si existe en la URL actual
+        const currentPath = router.asPath.split('?')[0];
+        const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+        if (contextMatch) {
+          router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+        } else {
+          router.push('/');
+        }
       }
     }
   }, [isAuthenticated, authLoading, router]);
@@ -37,12 +44,19 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password);
-      // Redirigir a la URL de redirect si existe, sino al home
+      // Redirigir a la URL de redirect si existe, sino mantener el contexto o ir al home
       const redirect = router.query.redirect as string;
       if (redirect) {
-        router.push(redirect);
+        router.push(decodeURIComponent(redirect));
       } else {
-        router.push('/');
+        // Mantener el contexto de tienda si existe en la URL actual
+        const currentPath = router.asPath.split('?')[0];
+        const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+        if (contextMatch) {
+          router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+        } else {
+          router.push('/');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');

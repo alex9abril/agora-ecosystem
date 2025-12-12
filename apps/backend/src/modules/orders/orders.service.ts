@@ -394,10 +394,13 @@ export class OrdersService {
 
           // Construir URL de redirección después del pago
           // Esta es la URL a la que Karlopay redirigirá al usuario después de completar el pago
+          // Formato: http://localhost:8000{tienda}/karlopay-redirect?session_id={session_id}
           const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3008';
-          const redirectUrl = `${frontendUrl}/karlopay-redirect?session_id=${numberOfOrder}`;
+          const storeContext = checkoutDto.storeContext || ''; // Ruta de tienda (ej: /grupo/toyota-group o /sucursal/toyota-satelite)
+          const redirectUrl = `${frontendUrl}${storeContext}/karlopay-redirect?session_id=${numberOfOrder}`;
           
           console.log(`🔗 Redirect URL para Karlopay: ${redirectUrl}`);
+          console.log(`📦 Contexto de tienda: ${storeContext || '(global)'}`);
 
           // Crear orden en Karlopay
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({

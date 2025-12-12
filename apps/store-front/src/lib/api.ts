@@ -63,7 +63,16 @@ function handleSessionExpired(requiresAuth: boolean = false) {
   // Solo redirigir al login si el endpoint requiere autenticación
   // Endpoints públicos (productos, sucursales, grupos) no deben redirigir
   if (requiresAuth && window.location.pathname !== '/auth/login' && !window.location.pathname.startsWith('/auth/')) {
-    window.location.href = '/auth/login';
+    // Mantener el contexto de tienda en la URL de redirección
+    const currentPath = window.location.pathname;
+    const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+    if (contextMatch) {
+      // Redirigir al login manteniendo el contexto en el redirect parameter
+      const redirectPath = encodeURIComponent(`/${contextMatch[1]}/${contextMatch[2]}`);
+      window.location.href = `/auth/login?redirect=${redirectPath}`;
+    } else {
+      window.location.href = '/auth/login';
+    }
   }
 }
 

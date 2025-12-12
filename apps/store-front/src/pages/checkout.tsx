@@ -9,6 +9,7 @@ import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStoreContext } from '@/contexts/StoreContext';
 import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { taxesService } from '@/lib/taxes';
 import { formatPrice } from '@/lib/format';
@@ -70,6 +71,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, loading: cartLoading, refreshCart } = useCart();
   const { isAuthenticated, signIn, signUp, user } = useAuth();
+  const { contextType, slug } = useStoreContext();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -1015,12 +1017,19 @@ export default function CheckoutPage() {
         }
       }
       
+      // Construir ruta de tienda para la URL de redirección
+      let storePath = '';
+      if (contextType !== 'global' && slug) {
+        storePath = `/${contextType}/${slug}`;
+      }
+
       const order = await apiRequest<{ id: string; order_number: string; karlopay_payment_url?: string }>('/orders/checkout', {
         method: 'POST',
         body: JSON.stringify({
           addressId: selectedAddressId,
           deliveryNotes: deliveryNotes.trim(),
           payment: paymentInfo,
+          storeContext: storePath, // Ruta de la tienda para la URL de redirección
         }),
       });
 

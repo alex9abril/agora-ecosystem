@@ -21,7 +21,22 @@ export interface PaymentProviderCredentials {
   mode: 'dev' | 'prod';
 }
 
-export interface KarlopayCredentials extends PaymentProviderCredentials {}
+export interface KarlopayCredentials extends PaymentProviderCredentials {
+  domain: string;
+  loginEndpoint: string;
+  ordersEndpoint: string;
+  authEmail: string;
+  authPassword: string;
+  redirectUrl: string; // URL base con placeholders: {tienda} y {session_id}
+}
+
+/**
+ * Opciones para construir la URL de redirección de Karlopay
+ */
+export interface KarlopayRedirectUrlOptions {
+  sessionId: string;
+  storePath?: string; // Ej: '/grupo/toyota-group' o '/tienda/sucursal-centro'
+}
 
 export interface MercadoPagoCredentials extends PaymentProviderCredentials {
   accessToken: string;
@@ -71,9 +86,41 @@ export class IntegrationsService {
       ordersEndpoint: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.orders_endpoint`, ''),
       authEmail: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.auth_email`, ''),
       authPassword: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.auth_password`, ''),
+      redirectUrl: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.redirect_url`, ''),
       endpoint: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.domain`, ''),
       mode,
     };
+  }
+
+  /**
+   * Construir la URL de redirección de Karlopay reemplazando placeholders
+   * 
+   * @param options Opciones para construir la URL
+   * @returns URL completa con placeholders reemplazados
+   * 
+   * @example
+   * const url = await integrationsService.buildKarlopayRedirectUrl({
+   *   sessionId: 'payses_01JJD1VWT2ESR3101A9Q3TMN5V',
+   *   storePath: '/grupo/toyota-group'
+   * });
+   * // Resultado: 'https://agoramp.com/grupo/toyota-group/karlopay-redirect?session_id=payses_01JJD1VWT2ESR3101A9Q3TMN5V'
+   */
+  async buildKarlopayRedirectUrl(options: KarlopayRedirectUrlOptions): Promise<string> {
+    const credentials = await this.getKarlopayCredentials();
+    let redirectUrl = credentials.redirectUrl;
+
+    // Reemplazar {tienda} con la ruta de la tienda/grupo
+    if (options.storePath) {
+      redirectUrl = redirectUrl.replace('{tienda}', options.storePath);
+    } else {
+      // Si no se proporciona storePath, usar ruta vacía o ruta por defecto
+      redirectUrl = redirectUrl.replace('{tienda}', '');
+    }
+
+    // Reemplazar {session_id} con el ID de sesión real
+    redirectUrl = redirectUrl.replace('{session_id}', options.sessionId);
+
+    return redirectUrl;
   }
 
   /**

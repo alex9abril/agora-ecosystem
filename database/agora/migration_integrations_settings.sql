@@ -121,6 +121,18 @@ VALUES
         TRUE
     ),
     (
+        'integrations.payments.karlopay.dev.redirect_url',
+        '"http://localhost:8000{tienda}/karlopay-redirect?session_id={session_id}"'::jsonb,
+        'integrations',
+        'Karlopay - Redirect URL (Desarrollo)',
+        'URL base de redirección después del pago en desarrollo. Placeholders disponibles: {tienda} (ruta de la tienda/grupo), {session_id} (ID de sesión de pago).',
+        'Ejemplos: http://localhost:8000{tienda}/karlopay-redirect?session_id={session_id} o http://localhost:8000/grupo/toyota-group/karlopay-redirect?session_id={session_id}',
+        'string',
+        NULL,
+        16,
+        TRUE
+    ),
+    (
         'integrations.payments.karlopay.prod.domain',
         '"https://api.karlopay.com"'::jsonb,
         'integrations',
@@ -178,6 +190,18 @@ VALUES
         'string',
         NULL,
         20,
+        TRUE
+    ),
+    (
+        'integrations.payments.karlopay.prod.redirect_url',
+        '"https://agoramp.com{tienda}/karlopay-redirect?session_id={session_id}"'::jsonb,
+        'integrations',
+        'Karlopay - Redirect URL (Producción)',
+        'URL base de redirección después del pago en producción. Placeholders disponibles: {tienda} (ruta de la tienda/grupo), {session_id} (ID de sesión de pago).',
+        'Ejemplos: https://agoramp.com{tienda}/karlopay-redirect?session_id={session_id} o https://agoramp.com/grupo/toyota-group/karlopay-redirect?session_id={session_id}',
+        'string',
+        NULL,
+        21,
         TRUE
     )
 ON CONFLICT (key) DO UPDATE SET

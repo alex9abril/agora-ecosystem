@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/router';
+import ContextualLink from '@/components/ContextualLink';
 import PersonIcon from '@mui/icons-material/Person';
 import HomeIcon from '@mui/icons-material/Home';
 import ReceiptIcon from '@mui/icons-material/Receipt';
@@ -44,10 +45,6 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
     },
   ];
 
-  const handleNavigation = (href: string) => {
-    router.push(href);
-  };
-
   return (
     <aside className="w-64 flex-shrink-0">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -62,13 +59,13 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
               const isActive = activeTab === item.id || 
                 (item.id === 'addresses' && router.query.tab === 'addresses') ||
                 (item.id === 'payment' && router.query.tab === 'payment') ||
-                (item.id === 'orders' && router.pathname === '/orders') ||
-                (item.id === 'profile' && router.pathname === '/profile' && !router.query.tab);
+                (item.id === 'orders' && (router.pathname === '/orders' || router.pathname.includes('/orders'))) ||
+                (item.id === 'profile' && (router.pathname === '/profile' || router.pathname.includes('/profile')) && !router.query.tab);
 
               return (
                 <li key={item.id}>
-                  <button
-                    onClick={() => handleNavigation(item.href)}
+                  <ContextualLink
+                    href={item.href}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                       isActive
                         ? 'bg-toyota-red text-white'
@@ -77,7 +74,7 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
                   >
                     <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />
                     <span>{item.label}</span>
-                  </button>
+                  </ContextualLink>
                 </li>
               );
             })}

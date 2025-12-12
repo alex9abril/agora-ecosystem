@@ -47,7 +47,7 @@ export const businessGroupsService = {
    * Obtener un grupo por slug
    */
   async getGroupBySlug(slug: string): Promise<BusinessGroup> {
-    return apiRequest<BusinessGroup>(`/businesses/groups/${slug}`, { method: 'GET' });
+    return apiRequest<BusinessGroup>(`/businesses/groups/slug/${slug}`, { method: 'GET' });
   },
 
   /**

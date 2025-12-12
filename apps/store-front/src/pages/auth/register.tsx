@@ -51,7 +51,14 @@ export default function RegisterPage() {
   // Redirigir si ya está autenticado
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.push('/');
+      // Mantener el contexto de tienda si existe en la URL actual
+      const currentPath = router.asPath.split('?')[0];
+      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      if (contextMatch) {
+        router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+      } else {
+        router.push('/');
+      }
     }
   }, [isAuthenticated, authLoading, router]);
 
@@ -144,8 +151,14 @@ export default function RegisterPage() {
         }
       }
 
-      // 3. Redirigir
-      router.push('/');
+      // 3. Redirigir manteniendo el contexto de tienda si existe
+      const currentPath = router.asPath.split('?')[0];
+      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      if (contextMatch) {
+        router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+      } else {
+        router.push('/');
+      }
     } catch (err: any) {
       setError(err.message || 'Error al registrar usuario');
     } finally {

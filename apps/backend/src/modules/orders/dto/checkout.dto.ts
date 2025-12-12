@@ -57,5 +57,10 @@ export class CheckoutDto {
   @ValidateNested()
   @Type(() => PaymentInfoDto)
   payment?: PaymentInfoDto;
+
+  @ApiPropertyOptional({ description: 'Ruta de contexto de tienda para URL de redirección (ej: /grupo/toyota-group o /sucursal/toyota-satelite)', example: '/grupo/toyota-group' })
+  @IsOptional()
+  @IsString()
+  storeContext?: string;
 }
 

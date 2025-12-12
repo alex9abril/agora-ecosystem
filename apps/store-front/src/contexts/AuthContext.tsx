@@ -120,7 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRefreshToken(response.refreshToken);
       setUserInStorage(response.user);
       
-      router.push('/');
+      // No redirigir automáticamente - dejar que el componente que llama maneje la redirección
+      // Esto permite que el login page use el parámetro redirect si existe
     } catch (error: any) {
       console.error('[Auth] Error al iniciar sesión:', error);
       throw error;
@@ -140,7 +141,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUserInStorage(response.user);
       
-      router.push('/');
+      // Mantener el contexto de tienda si existe en la URL actual
+      const currentPath = router.asPath.split('?')[0]; // Obtener path sin query params
+      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      if (contextMatch) {
+        // Mantener el contexto: redirigir a la home del contexto
+        router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+      } else {
+        router.push('/');
+      }
     } catch (error: any) {
       throw error;
     }
@@ -157,7 +166,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setUser(null);
       clearAuth();
-      router.push('/');
+      
+      // Mantener el contexto de tienda si existe en la URL actual
+      const currentPath = router.asPath.split('?')[0]; // Obtener path sin query params
+      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      if (contextMatch) {
+        // Mantener el contexto: redirigir a la home del contexto
+        router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
+      } else {
+        router.push('/');
+      }
     }
   };
 

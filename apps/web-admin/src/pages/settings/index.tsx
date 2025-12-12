@@ -116,6 +116,12 @@ export default function SettingsPage() {
       try {
         const data = await settingsService.getAll();
         setSettings(data);
+        // Debug: Verificar que los settings de integrations se están cargando
+        if (data.integrations) {
+          const redirectUrlSettings = data.integrations.filter(s => s.key.includes('redirect_url'));
+          console.log('[SettingsPage] Settings de integrations cargados:', data.integrations.length);
+          console.log('[SettingsPage] Settings redirect_url encontrados:', redirectUrlSettings.length, redirectUrlSettings);
+        }
       } catch (error: any) {
         console.error('Error cargando configuraciones:', error);
         alert('Error al cargar las configuraciones');

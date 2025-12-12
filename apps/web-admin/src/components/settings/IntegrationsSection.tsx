@@ -20,7 +20,12 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
   }, [settings]);
 
   const getSetting = (key: string): SiteSetting | undefined => {
-    return settings.find(s => s.key === key);
+    const setting = settings.find(s => s.key === key);
+    // Debug: Log para verificar que los settings se están cargando
+    if (key.includes('redirect_url')) {
+      console.log(`[IntegrationsSection] Buscando setting: ${key}`, setting ? 'ENCONTRADO' : 'NO ENCONTRADO', settings.length);
+    }
+    return setting;
   };
 
   const getSettingValue = (key: string): any => {
@@ -112,6 +117,16 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                 const isActive = devMode && enabled;
                 const isEmpty = !value || value === '';
                 
+                // Debug: Log para campos redirect_url
+                if (key.includes('redirect_url')) {
+                  console.log(`[IntegrationsSection] Renderizando campo dev: ${key}`, {
+                    setting: setting ? 'EXISTS' : 'NOT FOUND',
+                    value,
+                    isEmpty,
+                    settingsCount: settings.length
+                  });
+                }
+                
                 return (
                   <div key={key} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -128,9 +143,18 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                     {setting?.help_text && (
                       <p className="text-xs text-gray-500 mb-1">{setting.help_text}</p>
                     )}
+                    {key.includes('redirect_url') && (
+                      <div className="mb-1 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                        <p className="text-blue-800 font-medium mb-1">Placeholders disponibles:</p>
+                        <ul className="list-disc list-inside text-blue-700 space-y-0.5">
+                          <li><code className="bg-blue-100 px-1 rounded">&#123;tienda&#125;</code> - Ruta de la tienda/grupo (ej: <code className="bg-blue-100 px-1 rounded">/grupo/toyota-group</code> o <code className="bg-blue-100 px-1 rounded">/tienda/sucursal-centro</code>)</li>
+                          <li><code className="bg-blue-100 px-1 rounded">&#123;session_id&#125;</code> - ID de sesión de pago (se reemplaza automáticamente)</li>
+                        </ul>
+                      </div>
+                    )}
                     <input
                       type={type}
-                      value={value}
+                      value={value || ''}
                       onChange={(e) => onUpdate(key, e.target.value)}
                       disabled={saving}
                       placeholder={setting?.description || ''}
@@ -165,6 +189,16 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                 const isActive = !devMode && enabled;
                 const isEmpty = !value || value === '';
                 
+                // Debug: Log para campos redirect_url
+                if (key.includes('redirect_url')) {
+                  console.log(`[IntegrationsSection] Renderizando campo prod: ${key}`, {
+                    setting: setting ? 'EXISTS' : 'NOT FOUND',
+                    value,
+                    isEmpty,
+                    settingsCount: settings.length
+                  });
+                }
+                
                 return (
                   <div key={key} className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -181,9 +215,18 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                     {setting?.help_text && (
                       <p className="text-xs text-gray-500 mb-1">{setting.help_text}</p>
                     )}
+                    {key.includes('redirect_url') && (
+                      <div className="mb-1 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                        <p className="text-blue-800 font-medium mb-1">Placeholders disponibles:</p>
+                        <ul className="list-disc list-inside text-blue-700 space-y-0.5">
+                          <li><code className="bg-blue-100 px-1 rounded">&#123;tienda&#125;</code> - Ruta de la tienda/grupo (ej: <code className="bg-blue-100 px-1 rounded">/grupo/toyota-group</code> o <code className="bg-blue-100 px-1 rounded">/tienda/sucursal-centro</code>)</li>
+                          <li><code className="bg-blue-100 px-1 rounded">&#123;session_id&#125;</code> - ID de sesión de pago (se reemplaza automáticamente)</li>
+                        </ul>
+                      </div>
+                    )}
                     <input
                       type={type}
-                      value={value}
+                      value={value || ''}
                       onChange={(e) => onUpdate(key, e.target.value)}
                       disabled={saving}
                       placeholder={setting?.description || ''}
@@ -264,6 +307,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
         { label: 'Órdenes Endpoint', key: 'integrations.payments.karlopay.dev.orders_endpoint' },
         { label: 'Auth Email', key: 'integrations.payments.karlopay.dev.auth_email' },
         { label: 'Auth Password', key: 'integrations.payments.karlopay.dev.auth_password', type: 'password' },
+        { label: 'Redirect URL', key: 'integrations.payments.karlopay.dev.redirect_url' },
           ],
           [
         { label: 'Dominio', key: 'integrations.payments.karlopay.prod.domain' },
@@ -271,6 +315,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
         { label: 'Órdenes Endpoint', key: 'integrations.payments.karlopay.prod.orders_endpoint' },
         { label: 'Auth Email', key: 'integrations.payments.karlopay.prod.auth_email' },
         { label: 'Auth Password', key: 'integrations.payments.karlopay.prod.auth_password', type: 'password' },
+        { label: 'Redirect URL', key: 'integrations.payments.karlopay.prod.redirect_url' },
           ]
         )}
 
