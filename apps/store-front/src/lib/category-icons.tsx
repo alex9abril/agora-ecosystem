@@ -205,9 +205,9 @@ export function getCategoryIcon(
   const name = categoryName.toLowerCase().trim();
   
   // Buscar coincidencias exactas primero
-  const exactMatch = categoryIconMap[name];
-  if (exactMatch) {
-    return <exactMatch className="w-5 h-5" />;
+  const ExactMatchIcon = categoryIconMap[name];
+  if (ExactMatchIcon) {
+    return <ExactMatchIcon className="w-5 h-5" />;
   }
 
   // Buscar coincidencias parciales
