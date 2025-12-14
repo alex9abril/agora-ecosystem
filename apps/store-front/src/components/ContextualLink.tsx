@@ -6,9 +6,9 @@
 import Link, { LinkProps } from 'next/link';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { useRouter } from 'next/router';
-import { ReactNode } from 'react';
+import { ReactNode, AnchorHTMLAttributes } from 'react';
 
-interface ContextualLinkProps extends Omit<LinkProps, 'href'> {
+interface ContextualLinkProps extends Omit<LinkProps, 'href'>, Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   href: string;
   children: ReactNode;
   className?: string;
@@ -45,8 +45,24 @@ export default function ContextualLink({
     }
   }
   
+  // Separar props de Link de props de anchor
+  const { style, onMouseEnter, onMouseLeave, className, ...linkProps } = props;
+  
+  // Si hay style o event handlers, necesitamos un wrapper
+  const needsWrapper = style || onMouseEnter || onMouseLeave;
+  
+  if (needsWrapper) {
+    return (
+      <Link href={contextualHref} {...linkProps}>
+        <span style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} className={className}>
+          {children}
+        </span>
+      </Link>
+    );
+  }
+  
   return (
-    <Link href={contextualHref} {...props}>
+    <Link href={contextualHref} {...linkProps} className={className}>
       {children}
     </Link>
   );
