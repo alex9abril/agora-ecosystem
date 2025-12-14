@@ -12,7 +12,7 @@ import CategoryBreadcrumbs from '@/components/CategoryBreadcrumbs';
 import CategoryInfo from '@/components/CategoryInfo';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { branchesService } from '@/lib/branches';
-import { Business } from '@/lib/branches';
+import { Business } from '@/contexts/StoreContext';
 
 export default function GlobalProductsPage() {
   const router = useRouter();
