@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { branchesService, Business } from '@/lib/branches';
+import { branchesService } from '@/lib/branches';
+import { Business } from '@/contexts/StoreContext';
 import { addressesService, Address } from '@/lib/addresses';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStoreContext } from '@/contexts/StoreContext';
