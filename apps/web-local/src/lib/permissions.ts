@@ -4,6 +4,9 @@
 
 import { BusinessRole } from './users';
 
+// Re-exportar BusinessRole para que esté disponible desde este módulo
+export type { BusinessRole };
+
 export interface RolePermissions {
   canManageProducts: boolean;
   canManagePrices: boolean;
