@@ -57,22 +57,39 @@ export async function apiRequest<T = any>(
   
   // Agregar token de autenticación si está disponible y no se especificó explícitamente
   const authToken = getAuthTokenFromStorage();
-  const headers: HeadersInit = {
-    ...options.headers,
-  };
+  
+  // Construir headers como objeto mutable
+  const headersObj: Record<string, string> = {};
+  
+  // Copiar headers existentes si es un objeto plano
+  if (options.headers && typeof options.headers === 'object' && !Array.isArray(options.headers) && !(options.headers instanceof Headers)) {
+    Object.assign(headersObj, options.headers);
+  }
   
   // Solo establecer Content-Type si no es FormData (el navegador lo establece automáticamente para FormData)
   if (!(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+    headersObj['Content-Type'] = 'application/json';
   }
 
   // Si hay token y no se especificó Authorization en headers, agregarlo
-  if (authToken && !headers.Authorization && !(options.headers as HeadersInit)?.Authorization) {
-    headers.Authorization = `Bearer ${authToken}`;
+  const existingHeaders = options.headers;
+  let hasExistingAuth = false;
+  if (existingHeaders instanceof Headers) {
+    hasExistingAuth = existingHeaders.has('Authorization');
+  } else if (Array.isArray(existingHeaders)) {
+    hasExistingAuth = existingHeaders.some(([key]) => key.toLowerCase() === 'authorization');
+  } else if (existingHeaders && typeof existingHeaders === 'object') {
+    hasExistingAuth = 'Authorization' in existingHeaders || 'authorization' in existingHeaders;
+  }
+  
+  if (authToken && !hasExistingAuth) {
+    headersObj['Authorization'] = `Bearer ${authToken}`;
     console.log('[API] Token agregado al header Authorization');
   } else if (!authToken) {
     console.warn('[API] No hay token disponible para la petición a:', endpoint);
   }
+  
+  const headers: HeadersInit = headersObj;
   
   console.log('[API] Realizando petición:', {
     url,
