@@ -422,8 +422,38 @@ def deployApp(String appName, String port) {
                 if [ "${IS_FRONTEND}" = "true" ]; then
                     echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
                     if grep -q '"build"' package.json; then
+                        # Cargar variables de entorno del .env antes del build
+                        set -a
+                        source ${deployPath}/.env
+                        set +a
+                        
+                        # Asegurar que NODE_ENV esté en producción para el build
+                        export NODE_ENV=production
+                        
                         npm run build
+                        
+                        # Verificar que el build se completó correctamente
+                        if [ ! -d ${deployPath}/.next ]; then
+                            echo "❌ Error: El build no generó la carpeta .next"
+                            exit 1
+                        fi
+                        
+                        if [ ! -d ${deployPath}/.next/static ]; then
+                            echo "❌ Error: El build no generó la carpeta .next/static"
+                            exit 1
+                        fi
+                        
                         echo "✅ Build completado en servidor"
+                        
+                        # Aplicar permisos correctos a los archivos generados por el build
+                        # Los archivos estáticos deben ser legibles
+                        echo "🔐 Aplicando permisos a archivos del build..."
+                        chgrp -R jenkins ${deployPath}/.next
+                        find ${deployPath}/.next -type d -exec chmod 2750 {} +
+                        find ${deployPath}/.next -type f -exec chmod 640 {} +
+                        # Asegurar que .next/static sea accesible
+                        chmod 2750 ${deployPath}/.next
+                        chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
                     else
                         echo "⚠️  No se encontró script 'build' en package.json"
                     fi
@@ -512,8 +542,38 @@ def deployApp(String appName, String port) {
             if [ "${env.IS_FRONTEND}" = "true" ]; then
                 echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
                 if grep -q '"build"' package.json; then
+                    # Cargar variables de entorno del .env antes del build
+                    set -a
+                    source ${deployPath}/.env
+                    set +a
+                    
+                    # Asegurar que NODE_ENV esté en producción para el build
+                    export NODE_ENV=production
+                    
                     npm run build
+                    
+                    # Verificar que el build se completó correctamente
+                    if [ ! -d ${deployPath}/.next ]; then
+                        echo "❌ Error: El build no generó la carpeta .next"
+                        exit 1
+                    fi
+                    
+                    if [ ! -d ${deployPath}/.next/static ]; then
+                        echo "❌ Error: El build no generó la carpeta .next/static"
+                        exit 1
+                    fi
+                    
                     echo "✅ Build completado en servidor"
+                    
+                    # Aplicar permisos correctos a los archivos generados por el build
+                    # Los archivos estáticos deben ser legibles
+                    echo "🔐 Aplicando permisos a archivos del build..."
+                    chgrp -R jenkins ${deployPath}/.next
+                    find ${deployPath}/.next -type d -exec chmod 2750 {} +
+                    find ${deployPath}/.next -type f -exec chmod 640 {} +
+                    # Asegurar que .next/static sea accesible
+                    chmod 2750 ${deployPath}/.next
+                    chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
                 else
                     echo "⚠️  No se encontró script 'build' en package.json"
                 fi
