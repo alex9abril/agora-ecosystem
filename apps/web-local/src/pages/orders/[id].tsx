@@ -473,8 +473,8 @@ export default function OrderDetailPage() {
       };
     });
 
-    // Si está en delivery_failed, agregar estado
-    if (orderData.status === 'delivery_failed') {
+    // Si está en delivery_failed, agregar estado (usando cast a any ya que puede venir del backend)
+    if ((orderData as any).status === 'delivery_failed') {
       timeline.push({
         status: 'delivery_failed',
         label: 'Entrega fallida',
@@ -484,8 +484,8 @@ export default function OrderDetailPage() {
       });
     }
 
-    // Si está devuelto, agregar estado
-    if (orderData.status === 'returned') {
+    // Si está devuelto, agregar estado (usando cast a any ya que puede venir del backend)
+    if ((orderData as any).status === 'returned') {
       timeline.push({
         status: 'returned',
         label: 'Devuelto',
