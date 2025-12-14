@@ -73,7 +73,7 @@ export default function OperationsPage() {
           in_transit: ordersData.filter(o => o.status === 'in_transit' || o.status === 'picked_up').length,
           totalRevenue: ordersData
             .filter(o => o.status === 'delivered')
-            .reduce((sum, o) => sum + parseFloat(String(o.total_amount || o.total || 0)), 0),
+            .reduce((sum, o) => sum + parseFloat(String(o.total_amount || 0)), 0),
         };
         setStats(newStats);
       } catch (err: any) {
