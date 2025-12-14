@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { useRouteGuard } from '@/lib/role-guards';
 import { ordersService, Order } from '@/lib/orders';
-import { productsService, Product } from '@/lib/products';
+import { productsService, Product, ProductVariant } from '@/lib/products';
 import KitchenLayout from '@/components/kitchen/KitchenLayout';
 import KitchenTimer from '@/components/kitchen/KitchenTimer';
 
@@ -429,7 +429,7 @@ export default function KitchenPage() {
         // Buscar por ID o nombre real
         // El backend puede devolver variant_id en lugar de id
         const variant = variantGroup.variants.find(
-          v => 
+          (v: ProductVariant) => 
             v.id === id || 
             (v as any).variant_id === id ||
             v.name === id || 
