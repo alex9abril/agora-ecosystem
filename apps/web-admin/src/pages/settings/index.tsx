@@ -146,6 +146,15 @@ export default function SettingsPage() {
   const handleSaveSetting = async (key: string, value: any, immediate: boolean = false) => {
     if (!token) return;
 
+    // Obtener valor original antes de actualizar
+    let originalValue: any = null;
+    Object.keys(settings).forEach((category) => {
+      const setting = settings[category as SettingsCategory]?.find((s) => s.key === key);
+      if (setting) {
+        originalValue = setting.value;
+      }
+    });
+
     // Actualizar estado local inmediatamente
     setSettings((prev) => {
       const updated = { ...prev };
@@ -171,6 +180,19 @@ export default function SettingsPage() {
         console.error('Error guardando configuración:', error);
         setErrors({ [key]: error.message || 'Error al guardar la configuración' });
         setTimeout(() => setErrors({}), 5000);
+        
+        // Revertir cambio en caso de error
+        if (originalValue !== null) {
+          setSettings((prev) => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach((category) => {
+              updated[category] = updated[category].map((setting) =>
+                setting.key === key ? { ...setting, value: originalValue } : setting
+              );
+            });
+            return updated;
+          });
+        }
       } finally {
         setSaving(false);
       }
