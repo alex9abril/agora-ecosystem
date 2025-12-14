@@ -193,13 +193,27 @@ export async function apiRequest<T = any>(
   const needsAuth = requiresAuthentication(endpoint);
   
   const authToken = getAuthTokenFromStorage();
-  const existingHeaders = options.headers as HeadersInit || {};
-  const hasExistingAuth = existingHeaders.Authorization;
+  const existingHeaders = options.headers;
   
-  const headers: HeadersInit = {
+  // Verificar si ya existe Authorization en los headers
+  let hasExistingAuth = false;
+  if (existingHeaders instanceof Headers) {
+    hasExistingAuth = existingHeaders.has('Authorization');
+  } else if (Array.isArray(existingHeaders)) {
+    hasExistingAuth = existingHeaders.some(([key]) => key.toLowerCase() === 'authorization');
+  } else if (existingHeaders && typeof existingHeaders === 'object') {
+    hasExistingAuth = 'Authorization' in existingHeaders || 'authorization' in existingHeaders;
+  }
+  
+  // Construir headers base
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...existingHeaders,
   };
+  
+  // Copiar headers existentes si es un objeto
+  if (existingHeaders && typeof existingHeaders === 'object' && !Array.isArray(existingHeaders) && !(existingHeaders instanceof Headers)) {
+    Object.assign(headers, existingHeaders);
+  }
 
   // Agregar token si existe y no hay uno ya en los headers
   if (authToken && !hasExistingAuth) {
