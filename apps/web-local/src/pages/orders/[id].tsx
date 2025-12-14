@@ -141,8 +141,8 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar guía de envío si la orden está en estado completed o superior
-      if (orderData.status === 'completed' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
+      // Cargar guía de envío si la orden está en estado in_transit o superior
+      if (orderData.status === 'in_transit' || orderData.status === 'delivered') {
         try {
           setLoadingShippingLabel(true);
           const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
