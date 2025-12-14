@@ -4,9 +4,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { useStoreContext } from '@/contexts/StoreContext';
-import { businessGroupsService, BusinessGroup } from '@/lib/business-groups';
-import { branchesService, Business } from '@/lib/branches';
+import { useStoreContext, BusinessGroup, Business } from '@/contexts/StoreContext';
+import { businessGroupsService } from '@/lib/business-groups';
+import { branchesService } from '@/lib/branches';
 import { vehicleBrandsService, VehicleBrand } from '@/lib/vehicle-brands';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
