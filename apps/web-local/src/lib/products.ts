@@ -256,28 +256,6 @@ export const productsService = {
     }
   },
 
-  /**
-   * Subir imagen de producto
-   * TODO: Implementar endpoint de subida de imágenes en el backend
-   * Por ahora, retorna la URL si ya está en el formData, o lanza error
-   */
-  async uploadProductImage(file: File, productId?: string): Promise<string> {
-    // TODO: Implementar subida real de imágenes
-    // Por ahora, retornamos una URL placeholder o lanzamos error
-    throw new Error('La subida de imágenes aún no está implementada. Por favor, usa una URL de imagen.');
-    
-    // Cuando esté implementado, usar algo como:
-    // const formData = new FormData();
-    // formData.append('image', file);
-    // if (productId) {
-    //   formData.append('product_id', productId);
-    // }
-    // const response = await apiRequest<{ image_url: string }>('/catalog/products/upload-image', {
-    //   method: 'POST',
-    //   body: formData,
-    // });
-    // return response.image_url;
-  },
 
   /**
    * Obtener disponibilidad de un producto en todas las sucursales
