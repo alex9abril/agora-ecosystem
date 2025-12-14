@@ -268,8 +268,8 @@ export default function KitchenPage() {
       if (products.length === 0 && !loadingProducts) {
         try {
           setLoadingProducts(true);
-          const productsData = await productsService.getProducts(selectedBusiness.business_id);
-          setProducts(productsData);
+          const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+          setProducts(productsResponse.data);
         } catch (err: any) {
           console.error('Error cargando productos:', err);
           // Continuar aunque falle la carga de productos
@@ -360,8 +360,8 @@ export default function KitchenPage() {
       
       try {
         setLoadingProducts(true);
-        const productsData = await productsService.getProducts(selectedBusiness.business_id);
-        setProducts(productsData);
+        const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+        setProducts(productsResponse.data);
       } catch (err: any) {
         console.error('Error cargando productos:', err);
         // No bloquear la UI si falla la carga de productos
