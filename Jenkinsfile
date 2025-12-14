@@ -423,8 +423,9 @@ def deployApp(String appName, String port) {
                     echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
                     if grep -q '"build"' package.json; then
                         # Cargar variables de entorno del .env antes del build
+                        # Usar . en lugar de source para compatibilidad con sh
                         set -a
-                        source ${deployPath}/.env
+                        . ${deployPath}/.env
                         set +a
                         
                         # Asegurar que NODE_ENV esté en producción para el build
@@ -543,8 +544,9 @@ def deployApp(String appName, String port) {
                 echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
                 if grep -q '"build"' package.json; then
                     # Cargar variables de entorno del .env antes del build
+                    # Usar . en lugar de source para compatibilidad con sh
                     set -a
-                    source ${deployPath}/.env
+                    . ${deployPath}/.env
                     set +a
                     
                     # Asegurar que NODE_ENV esté en producción para el build
