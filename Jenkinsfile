@@ -263,11 +263,16 @@ def deployApp(String appName, String port) {
             node --version || echo "⚠️  Node no encontrado, continuando..."
             npm --version || echo "⚠️  NPM no encontrado, continuando..."
             
-            # Limpiar node_modules y package-lock si existe
-            rm -rf node_modules package-lock.json
+            # Limpiar node_modules (pero mantener package-lock.json si existe)
+            rm -rf node_modules
             
             # Instalar dependencias (incluyendo devDependencies para build)
-            npm ci --production=false || npm install
+            # Si existe package-lock.json, usar npm ci, sino npm install
+            if [ -f package-lock.json ]; then
+                npm ci --production=false
+            else
+                npm install
+            fi
         """
     }
     
@@ -296,13 +301,13 @@ def deployApp(String appName, String port) {
         # Excluir node_modules del deploy (se instalarán en el servidor)
         rm -rf \${TEMP_DIR}/node_modules
         
-        # Excluir archivos de desarrollo y temporales
+        # Excluir archivos de desarrollo y temporales (pero NO dist, que es necesario para backend)
         find \${TEMP_DIR} -name '.env*' -not -name '.env.example' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '*.log' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
         find \${TEMP_DIR} -name '.next' -type d -exec rm -rf {} + 2>/dev/null || true
-        find \${TEMP_DIR} -name 'dist' -type d -exec rm -rf {} + 2>/dev/null || true
         find \${TEMP_DIR} -name '.cache' -type d -exec rm -rf {} + 2>/dev/null || true
+        # NO eliminar dist - es necesario para backend compilado
         
         # Crear archivo tar para transferencia más eficiente
         cd \${TEMP_DIR}
@@ -312,14 +317,21 @@ def deployApp(String appName, String port) {
     """
     
     echo "📤 Copiando archivos al servidor..."
-    // Nota: Ajusta 'tu-ssh-credential-id' con el ID de tu credencial SSH en Jenkins
-    sshagent(credentials: ['tu-ssh-credential-id']) {
+    // Usar withCredentials con sshUserPrivateKey en lugar de sshagent
+    withCredentials([sshUserPrivateKey(
+        credentialsId: 'tu-ssh-credential-id',
+        keyFileVariable: 'SSH_KEY',
+        usernameVariable: 'SSH_USERNAME'
+    )]) {
         sh """
+            # Configurar permisos de la clave SSH
+            chmod 600 \${SSH_KEY}
+            
             # Copiar archivo tar al servidor
-            scp -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz ${params.SSH_USER}@${params.SSH_HOST}:/tmp/
+            scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${params.SSH_HOST}:/tmp/
             
             # Ejecutar deploy en el servidor
-            ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.SSH_HOST} << 'ENDSSH'
+            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${params.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
@@ -359,7 +371,12 @@ def deployApp(String appName, String port) {
                 # Instalar dependencias de producción en el servidor
                 echo "📦 Instalando dependencias en servidor..."
                 cd ${deployPath}
-                sudo -u jenkins npm ci --production=true || sudo -u jenkins npm install --production=true
+                # Si existe package-lock.json, usar npm ci, sino npm install
+                if [ -f package-lock.json ]; then
+                    sudo -u jenkins npm ci --production=true || sudo -u jenkins npm install --production=true
+                else
+                    sudo -u jenkins npm install --production=true
+                fi
                 
                 # Verificar que node_modules existe
                 if [ ! -d ${deployPath}/node_modules ]; then
@@ -379,9 +396,16 @@ def deployApp(String appName, String port) {
     }
     
     echo "🔄 Reiniciando servicio systemd..."
-    sshagent(credentials: ['tu-ssh-credential-id']) {
+    withCredentials([sshUserPrivateKey(
+        credentialsId: 'tu-ssh-credential-id',
+        keyFileVariable: 'SSH_KEY',
+        usernameVariable: 'SSH_USERNAME'
+    )]) {
         sh """
-            ssh -o StrictHostKeyChecking=no ${params.SSH_USER}@${params.SSH_HOST} << 'ENDSSH'
+            # Configurar permisos de la clave SSH
+            chmod 600 \${SSH_KEY}
+            
+            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${params.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 # Verificar que el servicio existe
