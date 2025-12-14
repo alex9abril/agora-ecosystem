@@ -12,22 +12,19 @@ pipeline {
             choices: ['auto', 'force'],
             description: 'auto = solo si hay cambios, force = siempre desplegar'
         )
-        string(
-            name: 'SSH_HOST',
-            defaultValue: 'tu-servidor-prod.com',
-            description: 'Host del servidor de producción'
-        )
-        string(
-            name: 'SSH_USER',
-            defaultValue: 'jenkins',
-            description: 'Usuario SSH para conexión'
-        )
     }
     
     environment {
         // Rutas en el servidor
         DEPLOY_BASE = '/var/www/agora/prod'
         ENV_BASE = '/etc/agora'
+        
+        // Configuración SSH (configurar como variables de entorno en Jenkins)
+        // Puedes configurarlas en: Manage Jenkins > Configure System > Global properties > Environment variables
+        // O en la configuración del job: Build Environment > Use secret text(s) or file(s)
+        SSH_HOST = "${env.SSH_HOST ?: 'localhost'}"
+        SSH_USER = "${env.SSH_USER ?: 'jenkins'}"
+        SSH_CREDENTIAL_ID = "${env.SSH_CREDENTIAL_ID ?: 'ssh-prod-agora'}"
         
         // Rutas locales en el workspace
         WORKSPACE_BASE = "${WORKSPACE}"
@@ -317,9 +314,9 @@ def deployApp(String appName, String port) {
     """
     
     echo "📤 Copiando archivos al servidor..."
-    // Usar withCredentials con sshUserPrivateKey en lugar de sshagent
+    // Usar withCredentials con sshUserPrivateKey
     withCredentials([sshUserPrivateKey(
-        credentialsId: 'tu-ssh-credential-id',
+        credentialsId: env.SSH_CREDENTIAL_ID,
         keyFileVariable: 'SSH_KEY',
         usernameVariable: 'SSH_USERNAME'
     )]) {
@@ -328,10 +325,10 @@ def deployApp(String appName, String port) {
             chmod 600 \${SSH_KEY}
             
             # Copiar archivo tar al servidor
-            scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${params.SSH_HOST}:/tmp/
+            scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
             
             # Ejecutar deploy en el servidor
-            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${params.SSH_HOST} << 'ENDSSH'
+            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
@@ -397,7 +394,7 @@ def deployApp(String appName, String port) {
     
     echo "🔄 Reiniciando servicio systemd..."
     withCredentials([sshUserPrivateKey(
-        credentialsId: 'tu-ssh-credential-id',
+        credentialsId: env.SSH_CREDENTIAL_ID,
         keyFileVariable: 'SSH_KEY',
         usernameVariable: 'SSH_USERNAME'
     )]) {
@@ -405,7 +402,7 @@ def deployApp(String appName, String port) {
             # Configurar permisos de la clave SSH
             chmod 600 \${SSH_KEY}
             
-            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${params.SSH_HOST} << 'ENDSSH'
+            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 # Verificar que el servicio existe

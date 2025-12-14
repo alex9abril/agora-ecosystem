@@ -43,7 +43,24 @@ Este documento explica cómo configurar y usar el pipeline de Jenkins para despl
    - **Username**: `jenkins`
    - **Private Key**: Agregar la clave privada SSH
 
-### 3. Configurar Parámetros del Pipeline
+### 3. Configurar Variables de Entorno en Jenkins
+
+El pipeline usa variables de entorno para la configuración SSH. Configúralas en:
+
+**Opción 1: Variables globales (recomendado)**
+1. Ir a **Manage Jenkins > System Configuration > Global properties**
+2. Marcar **Environment variables**
+3. Agregar:
+   - `SSH_HOST`: Host del servidor de producción (ej: `192.168.1.100` o `servidor-prod.com`)
+   - `SSH_USER`: Usuario SSH (default: `jenkins`)
+   - `SSH_CREDENTIAL_ID`: ID de la credencial SSH en Jenkins (ej: `ssh-prod-agora`)
+
+**Opción 2: Variables del Job**
+1. En la configuración del job, ir a **Build Environment**
+2. Marcar **Use secret text(s) or file(s)**
+3. Agregar las variables necesarias
+
+### 4. Parámetros del Pipeline
 
 El pipeline tiene los siguientes parámetros (configurables al ejecutar):
 
@@ -54,9 +71,6 @@ El pipeline tiene los siguientes parámetros (configurables al ejecutar):
 - **DEPLOY_MODE**:
   - `auto`: Solo desplegar si hay cambios detectados
   - `force`: Siempre desplegar (ignora detección de cambios)
-  
-- **SSH_HOST**: Host del servidor de producción
-- **SSH_USER**: Usuario SSH (default: `jenkins`)
 
 ## Proceso de Deploy
 
