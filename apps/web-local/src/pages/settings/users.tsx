@@ -576,14 +576,14 @@ export default function UsersSettingsPage() {
                                 </p>
                                 <p className="text-sm text-gray-500">{user.email}</p>
                               </div>
-                              {user.is_already_assigned && (
+                              {(user as any).is_already_assigned && (
                                 <div className="text-xs text-gray-500 mt-1">
                                   <div>Ya asignado</div>
-                                  {user.assigned_businesses && user.assigned_businesses.length > 0 && (
+                                  {(user as any).assigned_businesses && (user as any).assigned_businesses.length > 0 && (
                                     <div className="mt-1">
-                                      {user.assigned_businesses.map((business, idx) => (
+                                      {(user as any).assigned_businesses.map((business: string, idx: number) => (
                                         <span key={idx} className="inline-block mr-2">
-                                          {business} ({getRoleLabel(user.assigned_roles?.[idx] || 'operations_staff')})
+                                          {business} ({getRoleLabel((user as any).assigned_roles?.[idx] || 'operations_staff')})
                                         </span>
                                       ))}
                                     </div>
