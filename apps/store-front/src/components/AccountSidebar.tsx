@@ -10,6 +10,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import HomeIcon from '@mui/icons-material/Home';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 
 interface AccountSidebarProps {
   activeTab?: string;
@@ -30,6 +31,12 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
       label: 'Mis direcciones',
       icon: HomeIcon,
       href: '/profile?tab=addresses',
+    },
+    {
+      id: 'vehicles',
+      label: 'Mis vehículos',
+      icon: DirectionsCarIcon,
+      href: '/profile?tab=vehicles',
     },
     {
       id: 'payment',
@@ -58,6 +65,7 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
               const Icon = item.icon;
               const isActive = activeTab === item.id || 
                 (item.id === 'addresses' && router.query.tab === 'addresses') ||
+                (item.id === 'vehicles' && router.query.tab === 'vehicles') ||
                 (item.id === 'payment' && router.query.tab === 'payment') ||
                 (item.id === 'orders' && (router.pathname === '/orders' || router.pathname.includes('/orders'))) ||
                 (item.id === 'profile' && (router.pathname === '/profile' || router.pathname.includes('/profile')) && !router.query.tab);

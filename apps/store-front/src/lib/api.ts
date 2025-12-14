@@ -150,6 +150,7 @@ function requiresAuthentication(endpoint: string): boolean {
   // Endpoints públicos que NO requieren autenticación
   const publicEndpoints = [
     '/catalog/products',
+    '/catalog/vehicles', // Todos los endpoints de catálogo de vehículos son públicos
     '/businesses/branches',
     '/businesses/groups',
   ];
@@ -159,6 +160,7 @@ function requiresAuthentication(endpoint: string): boolean {
     '/cart',
     '/orders',
     '/addresses',
+    '/user-vehicles',
     '/auth/me',
     '/auth/refresh',
   ];

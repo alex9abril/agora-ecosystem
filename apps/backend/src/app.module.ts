@@ -23,6 +23,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { VehiclesModule } from './modules/catalog/vehicles/vehicles.module';
+import { UserVehiclesModule } from './modules/user-vehicles/user-vehicles.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
@@ -46,6 +47,7 @@ import { LogisticsModule } from './modules/logistics/logistics.module';
     AddressesModule,
     OrdersModule,
     VehiclesModule,
+    UserVehiclesModule,
     SettingsModule,
     WalletModule,
     KarlopayModule,

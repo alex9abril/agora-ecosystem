@@ -17,6 +17,11 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import VehicleSelectorDialog from '@/components/VehicleSelectorDialog';
+import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
+import { getStoredVehicle } from '@/lib/vehicle-storage';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -32,6 +37,10 @@ export default function ProfilePage() {
     phone: '',
   });
   const [savingProfile, setSavingProfile] = useState(false);
+  const [userVehicles, setUserVehicles] = useState<UserVehicle[]>([]);
+  const [storedVehicle, setStoredVehicle] = useState<any | null>(null);
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
+  const [loadingVehicles, setLoadingVehicles] = useState(false);
   
   // Determinar la pestaña activa desde la query
   const activeTab = router.query.tab as string || 'profile';
@@ -54,8 +63,10 @@ export default function ProfilePage() {
       // Cargar direcciones solo si estamos en la pestaña de direcciones
       if (activeTab === 'addresses') {
         loadAddresses();
+      } else if (activeTab === 'vehicles') {
+        loadVehicles();
       } else {
-        // Si no estamos en direcciones, asegurarnos de que loading sea false
+        // Si no estamos en direcciones o vehículos, asegurarnos de que loading sea false
         setLoading(false);
       }
     }
@@ -95,6 +106,64 @@ export default function ProfilePage() {
     } catch (error: any) {
       alert(error.message || 'Error al actualizar dirección');
     }
+  };
+
+  const loadVehicles = async () => {
+    try {
+      setLoadingVehicles(true);
+      if (isAuthenticated) {
+        const vehicles = await userVehiclesService.getUserVehicles();
+        setUserVehicles(vehicles);
+      } else {
+        const stored = getStoredVehicle();
+        setStoredVehicle(stored);
+      }
+    } catch (error) {
+      console.error('Error cargando vehículos:', error);
+    } finally {
+      setLoadingVehicles(false);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar este vehículo?')) {
+      return;
+    }
+
+    try {
+      await userVehiclesService.deleteUserVehicle(vehicleId);
+      await loadVehicles();
+    } catch (error: any) {
+      alert(error.message || 'Error al eliminar vehículo');
+    }
+  };
+
+  const handleSetDefaultVehicle = async (vehicleId: string) => {
+    try {
+      await userVehiclesService.setDefaultVehicle(vehicleId);
+      await loadVehicles();
+    } catch (error: any) {
+      alert(error.message || 'Error al establecer vehículo predeterminado');
+    }
+  };
+
+  const getVehicleDisplayName = (vehicle: UserVehicle | any): string => {
+    if (vehicle.nickname) {
+      return vehicle.nickname;
+    }
+    
+    const parts: string[] = [];
+    if (vehicle.brand_name) parts.push(vehicle.brand_name);
+    if (vehicle.model_name) parts.push(vehicle.model_name);
+    if (vehicle.year_start) {
+      if (vehicle.year_end) {
+        parts.push(`${vehicle.year_start}-${vehicle.year_end}`);
+      } else {
+        parts.push(`${vehicle.year_start}+`);
+      }
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : 'Vehículo sin nombre';
   };
 
   const handleDeleteAddress = async (addressId: string) => {
@@ -381,6 +450,115 @@ export default function ProfilePage() {
               </>
             )}
 
+            {activeTab === 'vehicles' && (
+              <>
+                <div className="flex items-center justify-between mb-8">
+                  <h1 className="text-3xl font-bold text-gray-900">Mis Vehículos</h1>
+                  <button
+                    onClick={() => setShowVehicleSelector(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors"
+                  >
+                    <AddIcon className="w-5 h-5" />
+                    Agregar Vehículo
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm p-6">
+                  {loadingVehicles ? (
+                    <p className="text-gray-500 text-center py-8">Cargando...</p>
+                  ) : (
+                    <>
+                      {isAuthenticated && userVehicles.length > 0 && (
+                        <div className="space-y-4">
+                          {userVehicles.map((vehicle) => (
+                            <div
+                              key={vehicle.id}
+                              className={`p-4 border-2 rounded-lg ${
+                                vehicle.is_default
+                                  ? 'border-toyota-red bg-red-50'
+                                  : 'border-gray-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <DirectionsCarIcon className="w-5 h-5 text-gray-600" />
+                                    <span className="font-semibold text-gray-900 uppercase">
+                                      {getVehicleDisplayName(vehicle)}
+                                    </span>
+                                    {vehicle.is_default && (
+                                      <span className="px-2 py-1 bg-toyota-red text-white text-xs font-medium rounded">
+                                        Predeterminado
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600">
+                                    {vehicle.brand_name}
+                                    {vehicle.model_name && ` ${vehicle.model_name}`}
+                                    {vehicle.year_start && ` ${vehicle.year_start}`}
+                                    {vehicle.year_end && `-${vehicle.year_end}`}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {!vehicle.is_default && (
+                                    <button
+                                      onClick={() => handleSetDefaultVehicle(vehicle.id)}
+                                      className="text-sm text-gray-600 hover:text-toyota-red"
+                                    >
+                                      Establecer como predeterminado
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteVehicle(vehicle.id)}
+                                    className="p-2 text-red-500 hover:text-red-700"
+                                  >
+                                    <DeleteIcon className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {!isAuthenticated && storedVehicle && (
+                        <div className="p-4 border-2 border-toyota-red bg-red-50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <DirectionsCarIcon className="w-5 h-5 text-gray-600" />
+                                <span className="font-semibold text-gray-900 uppercase">
+                                  {getVehicleDisplayName(storedVehicle)}
+                                </span>
+                                <span className="px-2 py-1 bg-toyota-red text-white text-xs font-medium rounded">
+                                  Vehículo Actual
+                                </span>
+                              </div>
+                              <div className="mt-1 text-sm text-gray-600">
+                                {storedVehicle.brand_name}
+                                {storedVehicle.model_name && ` ${storedVehicle.model_name}`}
+                                {storedVehicle.year_start && ` ${storedVehicle.year_start}`}
+                                {storedVehicle.year_end && `-${storedVehicle.year_end}`}
+                              </div>
+                            </div>
+                            <CheckCircleIcon className="w-5 h-5 text-toyota-red" />
+                          </div>
+                        </div>
+                      )}
+
+                      {isAuthenticated && userVehicles.length === 0 && !storedVehicle && (
+                        <div className="text-center py-8">
+                          <DirectionsCarIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                          <p className="text-gray-500">No tienes vehículos agregados</p>
+                          <p className="text-sm text-gray-400 mt-2">Agrega uno para ver productos compatibles</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
             {activeTab === 'payment' && (
               <>
                 <h1 className="text-3xl font-bold text-gray-900 mb-8">Mis Métodos de Pago</h1>
@@ -396,6 +574,22 @@ export default function ProfilePage() {
           </div>
         </div>
       </StoreLayout>
+
+      {/* Selector de vehículos */}
+      <VehicleSelectorDialog
+        open={showVehicleSelector}
+        onClose={() => {
+          setShowVehicleSelector(false);
+          if (activeTab === 'vehicles') {
+            loadVehicles();
+          }
+        }}
+        onVehicleSelected={() => {
+          if (activeTab === 'vehicles') {
+            loadVehicles();
+          }
+        }}
+      />
     </>
   );
 }

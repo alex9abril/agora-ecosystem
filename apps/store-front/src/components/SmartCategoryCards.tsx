@@ -12,7 +12,7 @@ import { useStoreContext } from '@/contexts/StoreContext';
 
 // Importar iconos personalizados
 import trendingTopicIcon from '@/images/iconos/trending-topic.png';
-import carPartsIcon from '@/images/iconos/car-parts.png';
+import carPartsIcon from '@/images/iconos/autos.png';
 import mantenimientoIcon from '@/images/iconos/mantenimiento.png';
 import ahorrosIcon from '@/images/iconos/ahorros.png';
 import botConversacionalIcon from '@/images/iconos/bot-conversacional.png';

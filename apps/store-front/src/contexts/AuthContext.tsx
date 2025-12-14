@@ -15,6 +15,8 @@ import {
   getUser, 
   clearAuth,
 } from '@/lib/storage';
+import { userVehiclesService } from '@/lib/user-vehicles';
+import { getStoredVehicle, setStoredVehicle } from '@/lib/vehicle-storage';
 
 interface AuthContextType {
   user: any | null;
@@ -120,6 +122,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRefreshToken(response.refreshToken);
       setUserInStorage(response.user);
       
+      // Sincronizar vehículo de localStorage a la base de datos si existe
+      try {
+        const storedVehicle = getStoredVehicle();
+        if (storedVehicle && storedVehicle.vehicle_brand_id) {
+          // Intentar crear el vehículo en la base de datos
+          await userVehiclesService.createUserVehicle({
+            vehicle_brand_id: storedVehicle.vehicle_brand_id,
+            vehicle_model_id: storedVehicle.vehicle_model_id || undefined,
+            vehicle_year_id: storedVehicle.vehicle_year_id || undefined,
+            vehicle_spec_id: storedVehicle.vehicle_spec_id || undefined,
+            nickname: storedVehicle.nickname || undefined,
+            is_default: true, // El vehículo guardado localmente se convierte en predeterminado
+          });
+          // Limpiar localStorage después de sincronizar
+          setStoredVehicle(null);
+          console.log('[Auth] Vehículo sincronizado desde localStorage');
+        }
+      } catch (vehicleError: any) {
+        // Si falla la sincronización, no interrumpir el login
+        console.warn('[Auth] Error sincronizando vehículo:', vehicleError);
+      }
+      
       // No redirigir automáticamente - dejar que el componente que llama maneje la redirección
       // Esto permite que el login page use el parámetro redirect si existe
     } catch (error: any) {
@@ -140,6 +164,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRefreshToken(response.refreshToken);
       }
       setUserInStorage(response.user);
+      
+      // Sincronizar vehículo de localStorage a la base de datos si existe
+      try {
+        const storedVehicle = getStoredVehicle();
+        if (storedVehicle && storedVehicle.vehicle_brand_id) {
+          // Intentar crear el vehículo en la base de datos
+          await userVehiclesService.createUserVehicle({
+            vehicle_brand_id: storedVehicle.vehicle_brand_id,
+            vehicle_model_id: storedVehicle.vehicle_model_id || undefined,
+            vehicle_year_id: storedVehicle.vehicle_year_id || undefined,
+            vehicle_spec_id: storedVehicle.vehicle_spec_id || undefined,
+            nickname: storedVehicle.nickname || undefined,
+            is_default: true, // El vehículo guardado localmente se convierte en predeterminado
+          });
+          // Limpiar localStorage después de sincronizar
+          setStoredVehicle(null);
+          console.log('[Auth] Vehículo sincronizado desde localStorage');
+        }
+      } catch (vehicleError: any) {
+        // Si falla la sincronización, no interrumpir el registro
+        console.warn('[Auth] Error sincronizando vehículo:', vehicleError);
+      }
       
       // No redirigir automáticamente - dejar que el componente que llama maneje la redirección
       // Esto permite que el checkout o register page manejen la redirección según el contexto

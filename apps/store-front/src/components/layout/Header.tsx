@@ -32,6 +32,9 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import StoreSelectorDialog from '../StoreSelectorDialog';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
+import VehicleSelectorDialog from '../VehicleSelectorDialog';
+import { getStoredVehicle, getSelectedVehicle, setSelectedVehicle } from '@/lib/vehicle-storage';
+import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
 
 export default function Header() {
   const router = useRouter();
@@ -51,11 +54,14 @@ export default function Header() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showCategoriesMenu, setShowCategoriesMenu] = useState(false);
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
   const [storeInfo, setStoreInfo] = useState<{ name: string; address: string; isOpen: boolean; nextOpenTime: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [showCartPreview, setShowCartPreview] = useState(false);
   const [branding, setBranding] = useState<Branding | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
+  const [currentVehicle, setCurrentVehicle] = useState<UserVehicle | any | null>(null);
+  const [isVehicleLoaded, setIsVehicleLoaded] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
 
   // Solo cargar información de localStorage en el cliente para evitar problemas de hidratación
@@ -93,6 +99,84 @@ export default function Header() {
     
     setStoreInfo(info);
   }, [contextType, branchData]);
+
+  // Cargar vehículo actual
+  useEffect(() => {
+    const loadCurrentVehicle = async () => {
+      // Primero verificar si hay un vehículo seleccionado explícitamente
+      const selected = getSelectedVehicle();
+      
+      // Verificar si fue deseleccionado intencionalmente
+      const isDeselected = typeof window !== 'undefined' && 
+        localStorage.getItem('user_vehicle_selected') === '__deselected__';
+      
+      if (selected) {
+        // Si hay un vehículo seleccionado, usarlo (respeta la decisión del usuario)
+        setCurrentVehicle(selected);
+        setIsVehicleLoaded(true);
+        return;
+      }
+      
+      // Si fue deseleccionado intencionalmente, NO restaurar el predeterminado
+      if (isDeselected) {
+        setCurrentVehicle(null);
+        setIsVehicleLoaded(true);
+        return;
+      }
+      
+      // Solo si la clave NO existe (primera vez), entonces cargar el predeterminado
+      const hasSelectedKey = typeof window !== 'undefined' && 
+        localStorage.getItem('user_vehicle_selected') !== null;
+      
+      if (isAuthenticated && !hasSelectedKey) {
+        try {
+          const defaultVehicle = await userVehiclesService.getDefaultVehicle();
+          if (defaultVehicle) {
+            setCurrentVehicle(defaultVehicle);
+            // Establecer como seleccionado solo si es la primera vez
+            setSelectedVehicle(defaultVehicle);
+          } else {
+            setCurrentVehicle(null);
+          }
+        } catch (error) {
+          console.error('Error cargando vehículo predeterminado:', error);
+          setCurrentVehicle(null);
+        }
+      } else {
+        // Si no está autenticado o ya se estableció antes, usar el seleccionado
+        setCurrentVehicle(selected);
+      }
+      
+      setIsVehicleLoaded(true);
+    };
+
+    if (isClient) {
+      loadCurrentVehicle();
+    }
+
+    // Escuchar cambios en localStorage para vehículos seleccionados
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user_vehicle_selected') {
+        if (e.newValue && e.newValue !== '__deselected__') {
+          try {
+            const vehicle = JSON.parse(e.newValue);
+            setCurrentVehicle(vehicle);
+          } catch (error) {
+            console.error('Error parseando vehículo seleccionado desde storage event:', error);
+          }
+        } else {
+          // Si se limpia la selección o se marca como deseleccionado, limpiar el vehículo actual
+          setCurrentVehicle(null);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [isClient, isAuthenticated]);
 
   // Cargar branding cuando hay grupo o sucursal
   useEffect(() => {
@@ -644,16 +728,43 @@ export default function Header() {
                   </div>
                 )}
 
-                <button 
-                  className="hidden md:flex items-center gap-2 transition-colors"
-                  style={{ color: textColor }}
-                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                >
-                  <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
-                  <span className="text-sm font-medium">Agregar Vehículo</span>
-                  <span style={{ color: textColorOpacity80 }}>→</span>
-                </button>
+                {isClient && isVehicleLoaded && currentVehicle ? (
+                  <button 
+                    onClick={() => setShowVehicleSelector(true)}
+                    className="hidden md:flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[200px] max-w-[280px]"
+                    style={{ color: textColor }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <span className="flex-shrink-0">
+                      <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
+                    </span>
+                    <span className="flex-1 min-w-0 inline-block">
+                      <span className="block text-xs font-semibold truncate leading-tight mb-0.5 uppercase" style={{ color: textColor }}>
+                        {currentVehicle.nickname || `${currentVehicle.brand_name || ''} ${currentVehicle.model_name || ''}`.trim() || 'Mi Vehículo'}
+                      </span>
+                      <span className="block text-xs truncate leading-tight" style={{ color: textColorOpacity80 }}>
+                        {currentVehicle.brand_name}
+                        {currentVehicle.model_name && ` ${currentVehicle.model_name}`}
+                        {currentVehicle.year_start && ` ${currentVehicle.year_start}`}
+                        {currentVehicle.year_end && `-${currentVehicle.year_end}`}
+                      </span>
+                    </span>
+                    <span className="flex-shrink-0 text-lg" style={{ color: textColorOpacity80 }}>→</span>
+                  </button>
+                ) : isClient && isVehicleLoaded ? (
+                  <button 
+                    onClick={() => setShowVehicleSelector(true)}
+                    className="hidden md:flex items-center gap-2 transition-colors"
+                    style={{ color: textColor }}
+                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                  >
+                    <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
+                    <span className="text-sm font-medium">Agregar Vehículo</span>
+                    <span style={{ color: textColorOpacity80 }}>→</span>
+                  </button>
+                ) : null}
               </div>
 
               {/* Barra de búsqueda - Ocupa todo el espacio disponible */}
@@ -790,6 +901,43 @@ export default function Header() {
       <NavigationDialog
         open={showNavigationDialog}
         onClose={() => setShowNavigationDialog(false)}
+      />
+      
+      {/* Selector de vehículos */}
+      <VehicleSelectorDialog
+        open={showVehicleSelector}
+        onClose={() => {
+          setShowVehicleSelector(false);
+          // Solo recargar vehículo desde localStorage, no hacer peticiones al backend
+          // El vehículo seleccionado ya se actualizó a través de onVehicleSelected
+          const selected = getSelectedVehicle();
+          setCurrentVehicle(selected);
+        }}
+        onVehicleSelected={async (vehicle) => {
+          if (vehicle === null) {
+            // Si se deseleccionó el vehículo, solo limpiar la selección local sin hacer peticiones
+            setCurrentVehicle(null);
+            setSelectedVehicle(null);
+            return;
+          }
+          
+          setCurrentVehicle(vehicle);
+          // Si está autenticado, recargar el vehículo predeterminado
+          if (isAuthenticated && vehicle) {
+            try {
+              const defaultVehicle = await userVehiclesService.getDefaultVehicle();
+              setCurrentVehicle(defaultVehicle);
+              if (defaultVehicle) {
+                setSelectedVehicle(defaultVehicle);
+              }
+            } catch (error) {
+              console.error('Error recargando vehículo:', error);
+            }
+          } else if (vehicle) {
+            // Para usuarios no autenticados, establecer como seleccionado
+            setSelectedVehicle(vehicle);
+          }
+        }}
       />
     </>
   );

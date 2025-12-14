@@ -39,6 +39,7 @@ export class VehiclesController {
   }
 
   @Get('brands/:brandId/models')
+  @Public()
   @ApiOperation({ summary: 'Obtener modelos por marca' })
   @ApiParam({ name: 'brandId', description: 'ID de la marca' })
   @ApiResponse({ status: 200, description: 'Modelos obtenidos exitosamente' })
@@ -49,6 +50,7 @@ export class VehiclesController {
   }
 
   @Get('models/:modelId/years')
+  @Public()
   @ApiOperation({ summary: 'Obtener años/generaciones por modelo' })
   @ApiParam({ name: 'modelId', description: 'ID del modelo' })
   @ApiResponse({ status: 200, description: 'Años obtenidos exitosamente' })
@@ -59,6 +61,7 @@ export class VehiclesController {
   }
 
   @Get('years/:yearId/specs')
+  @Public()
   @ApiOperation({ summary: 'Obtener especificaciones técnicas por año' })
   @ApiParam({ name: 'yearId', description: 'ID del año/generación' })
   @ApiResponse({ status: 200, description: 'Especificaciones obtenidas exitosamente' })
@@ -69,6 +72,7 @@ export class VehiclesController {
   }
 
   @Get('products/:productId/compatibility')
+  @Public()
   @ApiOperation({ summary: 'Verificar compatibilidad de un producto con un vehículo' })
   @ApiParam({ name: 'productId', description: 'ID del producto' })
   @ApiQuery({ name: 'brandId', required: false, description: 'ID de la marca' })
@@ -96,6 +100,7 @@ export class VehiclesController {
   }
 
   @Get('products/:productId/compatibilities')
+  @Public()
   @ApiOperation({ summary: 'Obtener todas las compatibilidades de un producto' })
   @ApiParam({ name: 'productId', description: 'ID del producto' })
   @ApiResponse({ status: 200, description: 'Compatibilidades obtenidas exitosamente' })
