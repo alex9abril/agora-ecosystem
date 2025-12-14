@@ -849,7 +849,7 @@ export default function OrderDetailPage() {
               </div>
 
               {/* Guía de envío - Solo mostrar si la orden está en estado completed o superior */}
-              {(order.status === 'completed' || order.status === 'in_transit' || order.status === 'delivered') && (
+              {((order as any).status === 'completed' || order.status === 'in_transit' || order.status === 'delivered') && (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Guía de Envío</h2>
