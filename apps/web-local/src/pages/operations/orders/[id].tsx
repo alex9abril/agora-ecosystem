@@ -522,7 +522,7 @@ export default function OperationsOrderDetailPage() {
                   <div className="flex justify-between pt-2 border-t border-gray-200">
                     <span className="font-semibold text-gray-900">Total</span>
                     <span className="font-semibold text-gray-900 text-lg">
-                      ${parseFloat(String(order.total_amount || order.total || 0)).toFixed(2)}
+                      ${parseFloat(String(order.total_amount || 0)).toFixed(2)}
                     </span>
                   </div>
                 </div>
