@@ -105,7 +105,7 @@ export default function OrderCard({ order, onClick, onStatusChange }: OrderCardP
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-gray-600">Total</span>
         <span className="font-semibold text-gray-900">
-          ${parseFloat(String(order.total_amount || order.total || 0)).toFixed(2)}
+          ${parseFloat(String(order.total_amount || 0)).toFixed(2)}
         </span>
       </div>
 
