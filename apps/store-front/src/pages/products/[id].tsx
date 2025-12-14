@@ -823,7 +823,7 @@ export default function ProductDetailPage() {
                       disabled={
                         product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
                         addingToCart ||
-                        (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
+                        !!(selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
                       }
                     >
                       {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
