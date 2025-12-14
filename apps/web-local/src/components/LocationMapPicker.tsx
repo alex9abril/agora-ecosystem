@@ -33,7 +33,9 @@ export default function LocationMapPicker({
   onLocationChange,
   onValidationChange,
 }: LocationMapPickerProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
+  // Usar una variable mutable para el ref
+  const mapRefContainer = useRef<{ current: HTMLDivElement | null }>({ current: null });
+  const mapRef = mapRefContainer.current;
   const [map, setMap] = useState<any>(null);
   const [marker, setMarker] = useState<any>(null);
   const [region, setRegion] = useState<ServiceRegion | null>(null);
