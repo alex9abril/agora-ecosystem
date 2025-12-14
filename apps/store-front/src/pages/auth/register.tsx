@@ -10,6 +10,7 @@ import StoreLayout from '@/components/layout/StoreLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import ContextualLink from '@/components/ContextualLink';
 import { apiRequest } from '@/lib/api';
+import { getAuthToken } from '@/lib/storage';
 
 interface BusinessGroupData {
   name: string;
@@ -21,7 +22,7 @@ interface BusinessGroupData {
 }
 
 export default function RegisterPage() {
-  const { signUp, isAuthenticated, loading: authLoading } = useAuth();
+  const { signUp, isAuthenticated, loading: authLoading, token } = useAuth();
   const router = useRouter();
   
   // Estados del formulario
@@ -114,7 +115,7 @@ export default function RegisterPage() {
 
     try {
       // 1. Registrar usuario
-      const authResponse = await signUp({
+      await signUp({
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName || undefined,
@@ -123,8 +124,9 @@ export default function RegisterPage() {
         role: 'local', // Cambiar a 'local' para permitir crear business groups
       });
 
-      // 2. Crear business group si hay token
-      if (authResponse.accessToken && formData.businessName) {
+      // 2. Crear business group si hay token (obtener del contexto después del signUp)
+      const currentToken = token || getAuthToken();
+      if (currentToken && formData.businessName) {
         setCreatingBusinessGroup(true);
         
         const businessGroupData: BusinessGroupData = {
@@ -141,7 +143,7 @@ export default function RegisterPage() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${authResponse.accessToken}`,
+              Authorization: `Bearer ${currentToken}`,
             },
             body: JSON.stringify(businessGroupData),
           });
