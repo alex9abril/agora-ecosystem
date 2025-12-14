@@ -140,7 +140,7 @@ export default function OrdersPage() {
           const newStats = {
             total: allOrders.length,
             pending: allOrders.filter(o => o.status === 'pending').length,
-            completed: allOrders.filter(o => o.status === 'completed').length,
+            completed: allOrders.filter(o => (o as any).status === 'completed').length,
             in_transit: allOrders.filter(o => o.status === 'in_transit').length,
             delivered: allOrders.filter(o => o.status === 'delivered').length,
             totalRevenue: allOrders
@@ -186,7 +186,7 @@ export default function OrdersPage() {
       const newStats = {
         total: ordersData.length,
         pending: ordersData.filter(o => o.status === 'pending').length,
-        completed: ordersData.filter(o => o.status === 'completed').length,
+        completed: ordersData.filter(o => (o as any).status === 'completed').length,
         in_transit: ordersData.filter(o => o.status === 'in_transit').length,
         delivered: ordersData.filter(o => o.status === 'delivered').length,
         totalRevenue: ordersData
