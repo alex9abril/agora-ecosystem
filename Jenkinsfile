@@ -298,13 +298,13 @@ def deployApp(String appName, String port) {
         # Excluir node_modules del deploy (se instalarán en el servidor)
         rm -rf \${TEMP_DIR}/node_modules
         
-        # Excluir archivos de desarrollo y temporales (pero NO dist, que es necesario para backend)
+        # Excluir archivos de desarrollo y temporales (pero NO dist ni .next, que son necesarios)
         find \${TEMP_DIR} -name '.env*' -not -name '.env.example' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '*.log' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
-        find \${TEMP_DIR} -name '.next' -type d -exec rm -rf {} + 2>/dev/null || true
         find \${TEMP_DIR} -name '.cache' -type d -exec rm -rf {} + 2>/dev/null || true
         # NO eliminar dist - es necesario para backend compilado
+        # NO eliminar .next - es necesario para Next.js (contiene BUILD_ID)
         
         # Crear archivo tar para transferencia más eficiente
         cd \${TEMP_DIR}
@@ -343,10 +343,21 @@ def deployApp(String appName, String port) {
                 cd ${deployPath}
                 find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
                 
+                # Configurar umask para permisos correctos (027 = grupo rwx, otros sin acceso)
+                umask 027
+                
                 # Extraer archivos nuevos
                 echo "📂 Extrayendo archivos nuevos..."
                 tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
                 rm -f /tmp/${appName}-deploy.tar.gz
+                
+                # Aplicar permisos correctos: directorios 2750 (setgid + grupo rwx), archivos 640
+                echo "🔐 Aplicando permisos correctos..."
+                chgrp -R jenkins ${deployPath}
+                find ${deployPath} -type d -exec chmod 2750 {} +
+                find ${deployPath} -type f -exec chmod 640 {} +
+                # Asegurar que el directorio base tenga permisos de ejecución
+                chmod 2750 ${deployPath}
                 
                 # Verificar package.json
                 if [ ! -f ${deployPath}/package.json ]; then
@@ -363,6 +374,8 @@ def deployApp(String appName, String port) {
                 # Copiar archivo de entorno al directorio de deploy como .env
                 echo "📋 Copiando archivo de entorno..."
                 cp ${envFile} ${deployPath}/.env
+                chgrp jenkins ${deployPath}/.env
+                chmod 640 ${deployPath}/.env
                 echo "✅ Archivo .env copiado desde ${envFile}"
                 
                 # Instalar dependencias de producción en el servidor
@@ -398,10 +411,21 @@ def deployApp(String appName, String port) {
             cd ${deployPath}
             find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
             
+            # Configurar umask para permisos correctos (027 = grupo rwx, otros sin acceso)
+            umask 027
+            
             # Extraer archivos nuevos
             echo "📂 Extrayendo archivos nuevos..."
             tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
             rm -f /tmp/${appName}-deploy.tar.gz
+            
+            # Aplicar permisos correctos: directorios 2750 (setgid + grupo rwx), archivos 640
+            echo "🔐 Aplicando permisos correctos..."
+            chgrp -R jenkins ${deployPath}
+            find ${deployPath} -type d -exec chmod 2750 {} +
+            find ${deployPath} -type f -exec chmod 640 {} +
+            # Asegurar que el directorio base tenga permisos de ejecución
+            chmod 2750 ${deployPath}
             
             # Verificar package.json
             if [ ! -f ${deployPath}/package.json ]; then
@@ -418,6 +442,8 @@ def deployApp(String appName, String port) {
             # Copiar archivo de entorno al directorio de deploy como .env
             echo "📋 Copiando archivo de entorno..."
             cp ${envFile} ${deployPath}/.env
+            chgrp jenkins ${deployPath}/.env
+            chmod 640 ${deployPath}/.env
             echo "✅ Archivo .env copiado desde ${envFile}"
             
             # Instalar dependencias de producción
