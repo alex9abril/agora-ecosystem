@@ -251,6 +251,9 @@ export const businessService = {
     email?: string;
     website_url?: string;
     tags?: string[];
+    slug?: string;
+    accepts_pickup?: boolean;
+    is_active?: boolean;
   }): Promise<Business> {
     return apiRequest<Business>(`/businesses/${businessId}`, {
       method: 'PATCH',
