@@ -338,10 +338,10 @@ def deployApp(String appName, String port) {
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
                 
-                # Limpiar directorio destino (mantener node_modules si existe)
+                # Limpiar directorio destino (mantener node_modules y .env si existen)
                 echo "🧹 Limpiando directorio destino..."
                 cd ${deployPath}
-                find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
+                find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
                 
                 # Extraer archivos nuevos
                 echo "📂 Extrayendo archivos nuevos..."
@@ -359,6 +359,11 @@ def deployApp(String appName, String port) {
                     echo "❌ Error: No se encontró ${envFile}"
                     exit 1
                 fi
+                
+                # Copiar archivo de entorno al directorio de deploy como .env
+                echo "📋 Copiando archivo de entorno..."
+                cp ${envFile} ${deployPath}/.env
+                echo "✅ Archivo .env copiado desde ${envFile}"
                 
                 # Instalar dependencias de producción en el servidor
                 echo "📦 Instalando dependencias en servidor..."
@@ -388,10 +393,10 @@ def deployApp(String appName, String port) {
             
             echo "📦 Extrayendo archivos en ${deployPath}..."
             
-            # Limpiar directorio destino (mantener node_modules si existe)
+            # Limpiar directorio destino (mantener node_modules y .env si existen)
             echo "🧹 Limpiando directorio destino..."
             cd ${deployPath}
-            find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
+            find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
             
             # Extraer archivos nuevos
             echo "📂 Extrayendo archivos nuevos..."
@@ -409,6 +414,11 @@ def deployApp(String appName, String port) {
                 echo "❌ Error: No se encontró ${envFile}"
                 exit 1
             fi
+            
+            # Copiar archivo de entorno al directorio de deploy como .env
+            echo "📋 Copiando archivo de entorno..."
+            cp ${envFile} ${deployPath}/.env
+            echo "✅ Archivo .env copiado desde ${envFile}"
             
             # Instalar dependencias de producción
             echo "📦 Instalando dependencias..."
