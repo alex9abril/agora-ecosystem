@@ -6,6 +6,7 @@ import { apiRequest } from './api';
 
 export interface Order {
   id: string;
+  order_number?: string; // Número de orden legible (opcional, puede venir del backend)
   client_id: string;
   business_id: string;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled' | 'refunded';
