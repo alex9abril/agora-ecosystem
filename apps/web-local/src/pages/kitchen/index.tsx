@@ -687,7 +687,7 @@ export default function KitchenPage() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          {selectedOrder.items.map((item, itemIndex) => {
+                          {selectedOrder.items?.map((item, itemIndex) => {
                             // variant_selection ya está parseado por normalizeOrderItems
                             const variantSelection = item.variant_selection;
 
@@ -695,7 +695,7 @@ export default function KitchenPage() {
                               <div 
                                 key={item.id} 
                                 className={`bg-white rounded-lg border border-gray-300 p-4 ${
-                                  itemIndex < selectedOrder.items.length - 1 ? 'mb-4' : ''
+                                  itemIndex < (selectedOrder.items?.length ?? 0) - 1 ? 'mb-4' : ''
                                 }`}
                               >
                                 {/* Nombre y cantidad del item */}
