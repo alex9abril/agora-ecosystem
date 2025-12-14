@@ -35,7 +35,7 @@ export default function CartPage() {
   useEffect(() => {
     if (cart && cart.items && cart.items.length > 0) {
       const loadProducts = async () => {
-        const productIds = [...new Set(cart.items.map(item => item.product_id))];
+        const productIds = Array.from(new Set(cart.items.map(item => item.product_id)));
         const productsMap: Record<string, Product> = {};
         
         await Promise.all(
