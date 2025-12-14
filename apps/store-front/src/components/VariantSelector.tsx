@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { Product, ProductVariantGroup, ProductVariant } from '@/lib/products';
+import { formatPrice } from '@/lib/format';
 
 interface VariantSelectorProps {
   product: Product;
