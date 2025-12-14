@@ -63,8 +63,8 @@ export default function OperationsOrderDetailPage() {
 
     const loadProducts = async () => {
       try {
-        const productsData = await productsService.getProducts(selectedBusiness.business_id);
-        setProducts(productsData);
+        const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+        setProducts(productsResponse.data);
       } catch (err: any) {
         console.error('Error cargando productos:', err);
         // No bloquear la UI si falla la carga de productos
