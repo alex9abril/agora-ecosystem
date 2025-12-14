@@ -167,7 +167,7 @@ export default function RepartidoresPage() {
     try {
       await apiRequest(`/repartidores/${id}/status`, {
         method: 'PATCH',
-        data: { isActive: !currentStatus },
+        body: JSON.stringify({ isActive: !currentStatus }),
       });
       
       // Recargar ambas listas
