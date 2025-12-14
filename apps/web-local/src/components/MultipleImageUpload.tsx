@@ -84,8 +84,9 @@ export default function MultipleImageUpload({
           public_url: preview, // Usar preview temporalmente
         };
         
-        // Agregar a la lista inmediatamente con preview usando función de actualización
-        onImagesChange((prevImages) => [...prevImages, newImage]);
+        // Agregar a la lista inmediatamente con preview
+        const imagesWithNew = [...images, newImage];
+        onImagesChange(imagesWithNew);
         setUploading(tempId);
 
         // Subir al servidor
@@ -96,31 +97,29 @@ export default function MultipleImageUpload({
             console.log('🔍 uploadedImage.id:', uploadedImage?.id);
             console.log('🔍 uploadedImage.public_url:', uploadedImage?.public_url);
             
-            // Reemplazar la imagen temporal con la real usando función de actualización
-            onImagesChange((prevImages) => {
-              const updated = prevImages.map(img => {
-                if (img.id === tempId) {
-                  const newImg: ProductImage = {
-                    id: uploadedImage.id,
-                    public_url: uploadedImage.public_url,
-                    alt_text: uploadedImage.alt_text || null,
-                    is_primary: uploadedImage.is_primary || false,
-                    display_order: uploadedImage.display_order || 0,
-                  };
-                  console.log('🔄 Reemplazando imagen temporal con:', newImg);
-                  return newImg;
-                }
-                return img;
-              });
-              console.log('📸 Imágenes actualizadas:', updated);
-              return updated;
+            // Reemplazar la imagen temporal con la real
+            const updated = imagesWithNew.map(img => {
+              if (img.id === tempId) {
+                const newImg: ProductImage = {
+                  id: uploadedImage.id,
+                  public_url: uploadedImage.public_url,
+                  alt_text: uploadedImage.alt_text || null,
+                  is_primary: uploadedImage.is_primary || false,
+                  display_order: uploadedImage.display_order || 0,
+                };
+                console.log('🔄 Reemplazando imagen temporal con:', newImg);
+                return newImg;
+              }
+              return img;
             });
+            console.log('📸 Imágenes actualizadas:', updated);
+            onImagesChange(updated);
             setUploading(null);
           })
           .catch((err) => {
             console.error('❌ Error subiendo imagen:', err);
-            // Remover la imagen temporal en caso de error usando función de actualización
-            onImagesChange((prevImages) => prevImages.filter(img => img.id !== tempId));
+            // Remover la imagen temporal en caso de error
+            onImagesChange(imagesWithNew.filter(img => img.id !== tempId));
             setUploading(null);
             setError(`Error al subir imagen: ${err.message || 'Error desconocido'}`);
           });
@@ -131,7 +130,7 @@ export default function MultipleImageUpload({
           preview,
           public_url: preview,
         };
-        onImagesChange((prevImages) => [...prevImages, newImage]);
+        onImagesChange([...images, newImage]);
       }
     };
     reader.readAsDataURL(file);
@@ -188,9 +187,9 @@ export default function MultipleImageUpload({
     if (onSetPrimary) {
       try {
         await onSetPrimary(image.id);
-        // Actualizar el estado local usando función de actualización
-        onImagesChange((prevImages) => 
-          prevImages.map(img => ({
+        // Actualizar el estado local
+        onImagesChange(
+          images.map(img => ({
             ...img,
             is_primary: img.id === image.id,
           }))
@@ -200,9 +199,9 @@ export default function MultipleImageUpload({
         setError(`Error al marcar imagen como principal: ${err.message || 'Error desconocido'}`);
       }
     } else {
-      // Si no hay función, solo actualizar localmente usando función de actualización
-      onImagesChange((prevImages) => 
-        prevImages.map(img => ({
+      // Si no hay función, solo actualizar localmente
+      onImagesChange(
+        images.map(img => ({
           ...img,
           is_primary: img.id === image.id,
         }))
