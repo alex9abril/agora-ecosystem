@@ -19,12 +19,12 @@ pipeline {
         DEPLOY_BASE = '/var/www/agora/prod'
         ENV_BASE = '/etc/agora'
         
-        // Configuración SSH (configurar como variables de entorno en Jenkins)
-        // Puedes configurarlas en: Manage Jenkins > Configure System > Global properties > Environment variables
-        // O en la configuración del job: Build Environment > Use secret text(s) or file(s)
-        SSH_HOST = "${env.SSH_HOST ?: 'localhost'}"
+        // Configuración SSH (solo necesario si Jenkins está en otro servidor)
+        // Si Jenkins está en el mismo servidor, dejar SSH_HOST vacío para ejecutar localmente
+        // Si Jenkins está en otro servidor, configurar SSH_HOST y SSH_CREDENTIAL_ID como variables de entorno
+        SSH_HOST = "${env.SSH_HOST ?: ''}"
         SSH_USER = "${env.SSH_USER ?: 'jenkins'}"
-        SSH_CREDENTIAL_ID = "${env.SSH_CREDENTIAL_ID ?: 'ssh-prod-agora'}"
+        SSH_CREDENTIAL_ID = "${env.SSH_CREDENTIAL_ID ?: ''}"
         
         // Rutas locales en el workspace
         WORKSPACE_BASE = "${WORKSPACE}"
@@ -314,21 +314,26 @@ def deployApp(String appName, String port) {
     """
     
     echo "📤 Copiando archivos al servidor..."
-    // Usar withCredentials con sshUserPrivateKey
-    withCredentials([sshUserPrivateKey(
-        credentialsId: env.SSH_CREDENTIAL_ID,
-        keyFileVariable: 'SSH_KEY',
-        usernameVariable: 'SSH_USERNAME'
-    )]) {
-        sh """
-            # Configurar permisos de la clave SSH
-            chmod 600 \${SSH_KEY}
-            
-            # Copiar archivo tar al servidor
-            scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
-            
-            # Ejecutar deploy en el servidor
-            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
+    
+    // Determinar si usar SSH o ejecutar localmente
+    def useSSH = env.SSH_HOST && env.SSH_HOST != '' && env.SSH_HOST != 'localhost'
+    
+    if (useSSH && env.SSH_CREDENTIAL_ID) {
+        // Usar SSH si está configurado
+        withCredentials([sshUserPrivateKey(
+            credentialsId: env.SSH_CREDENTIAL_ID,
+            keyFileVariable: 'SSH_KEY',
+            usernameVariable: 'SSH_USERNAME'
+        )]) {
+            sh """
+                # Configurar permisos de la clave SSH
+                chmod 600 \${SSH_KEY}
+                
+                # Copiar archivo tar al servidor
+                scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
+                
+                # Ejecutar deploy en el servidor
+                ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
@@ -389,20 +394,87 @@ def deployApp(String appName, String port) {
                 
                 echo "✅ Configuración completada en servidor"
             ENDSSH
+            """
+        }
+    } else {
+        // Ejecutar localmente (Jenkins está en el mismo servidor)
+        echo "🖥️  Ejecutando deploy localmente (sin SSH)..."
+        sh """
+            set -e
+            
+            echo "📦 Extrayendo archivos en ${deployPath}..."
+            
+            # Crear directorio si no existe
+            sudo mkdir -p ${deployPath}
+            
+            # Backup del directorio actual (opcional)
+            if [ -d ${deployPath} ] && [ "\$(ls -A ${deployPath})" ]; then
+                BACKUP_DIR="/tmp/agora-backup-${appName}-\$(date +%Y%m%d-%H%M%S)"
+                echo "💾 Creando backup en \${BACKUP_DIR}..."
+                sudo cp -r ${deployPath} \${BACKUP_DIR} || true
+            fi
+            
+            # Limpiar directorio destino
+            echo "🧹 Limpiando directorio destino..."
+            cd ${deployPath}
+            sudo find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
+            
+            # Extraer archivos nuevos
+            echo "📂 Extrayendo archivos nuevos..."
+            sudo tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
+            rm -f /tmp/${appName}-deploy.tar.gz
+            
+            # Verificar package.json
+            if [ ! -f ${deployPath}/package.json ]; then
+                echo "❌ Error: No se encontró package.json en ${deployPath}"
+                exit 1
+            fi
+            
+            # Verificar que el .env existe
+            if [ ! -f ${envFile} ]; then
+                echo "❌ Error: No se encontró ${envFile}"
+                exit 1
+            fi
+            
+            # Instalar dependencias de producción
+            echo "📦 Instalando dependencias..."
+            cd ${deployPath}
+            if [ -f package-lock.json ]; then
+                sudo -u jenkins npm ci --production=true || sudo -u jenkins npm install --production=true
+            else
+                sudo -u jenkins npm install --production=true
+            fi
+            
+            # Verificar que node_modules existe
+            if [ ! -d ${deployPath}/node_modules ]; then
+                echo "❌ Error: node_modules no se creó correctamente"
+                exit 1
+            fi
+            
+            # Asegurar permisos correctos
+            echo "🔐 Ajustando permisos..."
+            sudo chown -R jenkins:jenkins ${deployPath}
+            sudo chmod -R 755 ${deployPath}
+            sudo chmod 644 ${deployPath}/package.json ${deployPath}/package-lock.json 2>/dev/null || true
+            
+            echo "✅ Configuración completada localmente"
         """
     }
     
     echo "🔄 Reiniciando servicio systemd..."
-    withCredentials([sshUserPrivateKey(
-        credentialsId: env.SSH_CREDENTIAL_ID,
-        keyFileVariable: 'SSH_KEY',
-        usernameVariable: 'SSH_USERNAME'
-    )]) {
-        sh """
-            # Configurar permisos de la clave SSH
-            chmod 600 \${SSH_KEY}
-            
-            ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
+    
+    if (useSSH && env.SSH_CREDENTIAL_ID) {
+        // Usar SSH para reiniciar servicio
+        withCredentials([sshUserPrivateKey(
+            credentialsId: env.SSH_CREDENTIAL_ID,
+            keyFileVariable: 'SSH_KEY',
+            usernameVariable: 'SSH_USERNAME'
+        )]) {
+            sh """
+                # Configurar permisos de la clave SSH
+                chmod 600 \${SSH_KEY}
+                
+                ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
                 set -e
                 
                 # Verificar que el servicio existe
@@ -446,6 +518,54 @@ def deployApp(String appName, String port) {
                     echo "⚠️  Advertencia: Puerto ${port} no parece estar escuchando"
                 fi
             ENDSSH
+            """
+        }
+    } else {
+        // Reiniciar servicio localmente
+        echo "🔄 Reiniciando servicio localmente..."
+        sh """
+            set -e
+            
+            # Verificar que el servicio existe
+            if ! sudo systemctl list-unit-files | grep -q "${serviceName}"; then
+                echo "❌ Error: El servicio ${serviceName} no existe"
+                exit 1
+            fi
+            
+            # Verificar estado actual del servicio
+            echo "📊 Estado actual del servicio:"
+            sudo systemctl status ${serviceName} --no-pager -l || true
+            
+            # Reiniciar el servicio
+            echo "🔄 Reiniciando ${serviceName}..."
+            sudo systemctl restart ${serviceName}
+            
+            # Esperar un momento para que el servicio inicie
+            sleep 3
+            
+            # Verificar que el servicio está activo
+            if sudo systemctl is-active --quiet ${serviceName}; then
+                echo "✅ Servicio ${serviceName} está activo"
+            else
+                echo "❌ Error: El servicio ${serviceName} no está activo después del reinicio"
+                echo "📋 Estado del servicio:"
+                sudo systemctl status ${serviceName} --no-pager -l || true
+                echo "📋 Últimas líneas del log:"
+                sudo journalctl -u ${serviceName} -n 50 --no-pager || true
+                exit 1
+            fi
+            
+            # Mostrar logs recientes
+            echo "📋 Últimas líneas del log (últimos 20):"
+            sudo journalctl -u ${serviceName} -n 20 --no-pager || true
+            
+            # Verificar que el puerto está escuchando
+            echo "🔍 Verificando puerto ${port}..."
+            if sudo netstat -tlnp | grep -q ":${port} " || sudo ss -tlnp | grep -q ":${port} "; then
+                echo "✅ Puerto ${port} está escuchando"
+            else
+                echo "⚠️  Advertencia: Puerto ${port} no parece estar escuchando"
+            fi
         """
     }
     
