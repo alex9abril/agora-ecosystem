@@ -248,41 +248,53 @@ def deployApp(String appName, String port) {
     def envFile = "${env.ENV_BASE}/${appName}.env"
     def serviceName = "agora-${appName}.service"
     
+    // Detectar si es una aplicación frontend (Next.js)
+    def isFrontend = appName in ['store-front', 'web-admin', 'web-local']
+    
+    // Pasar esta información como variable de entorno para usar en scripts shell
+    env.IS_FRONTEND = isFrontend ? 'true' : 'false'
+    
     // Validar que existe package.json
     if (!fileExists("${appPath}/package.json")) {
         error("❌ No se encontró package.json en ${appPath}")
     }
     
-    echo "📦 Instalando dependencias localmente..."
-    dir(appPath) {
-        sh """
-            # Verificar Node version
-            node --version || echo "⚠️  Node no encontrado, continuando..."
-            npm --version || echo "⚠️  NPM no encontrado, continuando..."
-            
-            # Limpiar node_modules (pero mantener package-lock.json si existe)
-            rm -rf node_modules
-            
-            # Instalar dependencias (incluyendo devDependencies para build)
-            # Si existe package-lock.json, usar npm ci, sino npm install
-            if [ -f package-lock.json ]; then
-                npm ci --production=false
-            else
-                npm install
-            fi
-        """
-    }
-    
-    echo "🏗️  Compilando aplicación..."
-    dir(appPath) {
-        sh """
-            # Verificar que existe script de build
-            if grep -q '"build"' package.json; then
-                npm run build
-            else
-                echo "⚠️  No se encontró script 'build' en package.json, saltando build"
-            fi
-        """
+    if (isFrontend) {
+        // Para frontend: NO hacer build local, se hará en el servidor con el .env correcto
+        echo "📦 Frontend detectado: el build se hará en el servidor con el .env correcto"
+    } else {
+        // Para backend: hacer build local como antes
+        echo "📦 Instalando dependencias localmente..."
+        dir(appPath) {
+            sh """
+                # Verificar Node version
+                node --version || echo "⚠️  Node no encontrado, continuando..."
+                npm --version || echo "⚠️  NPM no encontrado, continuando..."
+                
+                # Limpiar node_modules (pero mantener package-lock.json si existe)
+                rm -rf node_modules
+                
+                # Instalar dependencias (incluyendo devDependencies para build)
+                # Si existe package-lock.json, usar npm ci, sino npm install
+                if [ -f package-lock.json ]; then
+                    npm ci --production=false
+                else
+                    npm install
+                fi
+            """
+        }
+        
+        echo "🏗️  Compilando aplicación..."
+        dir(appPath) {
+            sh """
+                # Verificar que existe script de build
+                if grep -q '"build"' package.json; then
+                    npm run build
+                else
+                    echo "⚠️  No se encontró script 'build' en package.json, saltando build"
+                fi
+            """
+        }
     }
     
     echo "📤 Preparando archivos para deploy..."
@@ -333,7 +345,8 @@ def deployApp(String appName, String port) {
                 scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
                 
                 # Ejecutar deploy en el servidor
-                ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} << 'ENDSSH'
+                # Pasar IS_FRONTEND como variable de entorno en el comando SSH
+                ssh -i \${SSH_KEY} -o StrictHostKeyChecking=no \${SSH_USERNAME}@${env.SSH_HOST} IS_FRONTEND=${isFrontend} bash << 'ENDSSH'
                 set -e
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
@@ -378,20 +391,42 @@ def deployApp(String appName, String port) {
                 chmod 640 ${deployPath}/.env
                 echo "✅ Archivo .env copiado desde ${envFile}"
                 
-                # Instalar dependencias de producción en el servidor
+                # Para frontend: instalar dependencias (con devDependencies para build) y hacer build
+                # Para backend: solo instalar dependencias de producción
                 echo "📦 Instalando dependencias en servidor..."
                 cd ${deployPath}
-                # Si existe package-lock.json, usar npm ci, sino npm install
+                
                 if [ -f package-lock.json ]; then
-                    npm ci --production=true || npm install --production=true
+                    if [ "${IS_FRONTEND}" = "true" ]; then
+                        # Frontend: necesita devDependencies para build
+                        npm ci --production=false || npm install --production=false
+                    else
+                        # Backend: solo producción
+                        npm ci --production=true || npm install --production=true
+                    fi
                 else
-                    npm install --production=true
+                    if [ "${IS_FRONTEND}" = "true" ]; then
+                        npm install --production=false
+                    else
+                        npm install --production=true
+                    fi
                 fi
                 
                 # Verificar que node_modules existe
                 if [ ! -d ${deployPath}/node_modules ]; then
                     echo "❌ Error: node_modules no se creó correctamente"
                     exit 1
+                fi
+                
+                # Para frontend: hacer build en el servidor con el .env correcto
+                if [ "${IS_FRONTEND}" = "true" ]; then
+                    echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
+                    if grep -q '"build"' package.json; then
+                        npm run build
+                        echo "✅ Build completado en servidor"
+                    else
+                        echo "⚠️  No se encontró script 'build' en package.json"
+                    fi
                 fi
                 
                 echo "✅ Configuración completada en servidor"
@@ -446,19 +481,42 @@ def deployApp(String appName, String port) {
             chmod 640 ${deployPath}/.env
             echo "✅ Archivo .env copiado desde ${envFile}"
             
-            # Instalar dependencias de producción
+            # Para frontend: instalar dependencias (con devDependencies para build) y hacer build
+            # Para backend: solo instalar dependencias de producción
             echo "📦 Instalando dependencias..."
             cd ${deployPath}
+            
             if [ -f package-lock.json ]; then
-                npm ci --production=true || npm install --production=true
+                if [ "${env.IS_FRONTEND}" = "true" ]; then
+                    # Frontend: necesita devDependencies para build
+                    npm ci --production=false || npm install --production=false
+                else
+                    # Backend: solo producción
+                    npm ci --production=true || npm install --production=true
+                fi
             else
-                npm install --production=true
+                if [ "${env.IS_FRONTEND}" = "true" ]; then
+                    npm install --production=false
+                else
+                    npm install --production=true
+                fi
             fi
             
             # Verificar que node_modules existe
             if [ ! -d ${deployPath}/node_modules ]; then
                 echo "❌ Error: node_modules no se creó correctamente"
                 exit 1
+            fi
+            
+            # Para frontend: hacer build en el servidor con el .env correcto
+            if [ "${env.IS_FRONTEND}" = "true" ]; then
+                echo "🏗️  Compilando aplicación frontend en servidor con .env correcto..."
+                if grep -q '"build"' package.json; then
+                    npm run build
+                    echo "✅ Build completado en servidor"
+                else
+                    echo "⚠️  No se encontró script 'build' en package.json"
+                fi
             fi
             
             echo "✅ Configuración completada localmente"
