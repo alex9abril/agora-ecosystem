@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { useRouteGuard } from '@/lib/role-guards';
 import { ordersService, Order } from '@/lib/orders';
-import { productsService, Product } from '@/lib/products';
+import { productsService, Product, ProductVariant } from '@/lib/products';
 import OperationsLayout from '@/components/operations/OperationsLayout';
 
 export default function OperationsOrderDetailPage() {
@@ -175,7 +175,7 @@ export default function OperationsOrderDetailPage() {
         }
         
         const variant = variantGroup.variants.find(
-          v => 
+          (v: ProductVariant) => 
             v.id === id || 
             (v as any).variant_id === id ||
             v.name === id || 
