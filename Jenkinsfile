@@ -338,25 +338,15 @@ def deployApp(String appName, String port) {
                 
                 echo "📦 Extrayendo archivos en ${deployPath}..."
                 
-                # Crear directorio si no existe
-                sudo mkdir -p ${deployPath}
-                
-                # Backup del directorio actual (opcional, comentar si no se necesita)
-                if [ -d ${deployPath} ] && [ "\$(ls -A ${deployPath})" ]; then
-                    BACKUP_DIR="/tmp/agora-backup-${appName}-\$(date +%Y%m%d-%H%M%S)"
-                    echo "💾 Creando backup en \${BACKUP_DIR}..."
-                    sudo cp -r ${deployPath} \${BACKUP_DIR} || true
-                fi
-                
-                # Limpiar directorio destino (mantener node_modules si existe para instalación más rápida)
+                # Limpiar directorio destino (mantener node_modules si existe)
                 echo "🧹 Limpiando directorio destino..."
                 cd ${deployPath}
-                sudo find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
+                find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
                 
                 # Extraer archivos nuevos
                 echo "📂 Extrayendo archivos nuevos..."
-                sudo tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
-                sudo rm -f /tmp/${appName}-deploy.tar.gz
+                tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
+                rm -f /tmp/${appName}-deploy.tar.gz
                 
                 # Verificar package.json
                 if [ ! -f ${deployPath}/package.json ]; then
@@ -375,9 +365,9 @@ def deployApp(String appName, String port) {
                 cd ${deployPath}
                 # Si existe package-lock.json, usar npm ci, sino npm install
                 if [ -f package-lock.json ]; then
-                    sudo -u jenkins npm ci --production=true || sudo -u jenkins npm install --production=true
+                    npm ci --production=true || npm install --production=true
                 else
-                    sudo -u jenkins npm install --production=true
+                    npm install --production=true
                 fi
                 
                 # Verificar que node_modules existe
@@ -385,12 +375,6 @@ def deployApp(String appName, String port) {
                     echo "❌ Error: node_modules no se creó correctamente"
                     exit 1
                 fi
-                
-                # Asegurar permisos correctos
-                echo "🔐 Ajustando permisos..."
-                sudo chown -R jenkins:jenkins ${deployPath}
-                sudo chmod -R 755 ${deployPath}
-                sudo chmod 644 ${deployPath}/package.json ${deployPath}/package-lock.json 2>/dev/null || true
                 
                 echo "✅ Configuración completada en servidor"
             ENDSSH
@@ -404,24 +388,14 @@ def deployApp(String appName, String port) {
             
             echo "📦 Extrayendo archivos en ${deployPath}..."
             
-            # Crear directorio si no existe
-            sudo mkdir -p ${deployPath}
-            
-            # Backup del directorio actual (opcional)
-            if [ -d ${deployPath} ] && [ "\$(ls -A ${deployPath})" ]; then
-                BACKUP_DIR="/tmp/agora-backup-${appName}-\$(date +%Y%m%d-%H%M%S)"
-                echo "💾 Creando backup en \${BACKUP_DIR}..."
-                sudo cp -r ${deployPath} \${BACKUP_DIR} || true
-            fi
-            
-            # Limpiar directorio destino
+            # Limpiar directorio destino (mantener node_modules si existe)
             echo "🧹 Limpiando directorio destino..."
             cd ${deployPath}
-            sudo find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
+            find . -mindepth 1 ! -name 'node_modules' -exec rm -rf {} + 2>/dev/null || true
             
             # Extraer archivos nuevos
             echo "📂 Extrayendo archivos nuevos..."
-            sudo tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
+            tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
             rm -f /tmp/${appName}-deploy.tar.gz
             
             # Verificar package.json
@@ -440,9 +414,9 @@ def deployApp(String appName, String port) {
             echo "📦 Instalando dependencias..."
             cd ${deployPath}
             if [ -f package-lock.json ]; then
-                sudo -u jenkins npm ci --production=true || sudo -u jenkins npm install --production=true
+                npm ci --production=true || npm install --production=true
             else
-                sudo -u jenkins npm install --production=true
+                npm install --production=true
             fi
             
             # Verificar que node_modules existe
@@ -450,12 +424,6 @@ def deployApp(String appName, String port) {
                 echo "❌ Error: node_modules no se creó correctamente"
                 exit 1
             fi
-            
-            # Asegurar permisos correctos
-            echo "🔐 Ajustando permisos..."
-            sudo chown -R jenkins:jenkins ${deployPath}
-            sudo chmod -R 755 ${deployPath}
-            sudo chmod 644 ${deployPath}/package.json ${deployPath}/package-lock.json 2>/dev/null || true
             
             echo "✅ Configuración completada localmente"
         """
@@ -478,41 +446,37 @@ def deployApp(String appName, String port) {
                 set -e
                 
                 # Verificar que el servicio existe
-                if ! sudo systemctl list-unit-files | grep -q "${serviceName}"; then
+                if ! systemctl list-unit-files | grep -q "${serviceName}"; then
                     echo "❌ Error: El servicio ${serviceName} no existe"
                     exit 1
                 fi
                 
-                # Verificar estado actual del servicio
-                echo "📊 Estado actual del servicio:"
-                sudo systemctl status ${serviceName} --no-pager -l || true
-                
                 # Reiniciar el servicio
                 echo "🔄 Reiniciando ${serviceName}..."
-                sudo systemctl restart ${serviceName}
+                systemctl restart ${serviceName}
                 
                 # Esperar un momento para que el servicio inicie
                 sleep 3
                 
                 # Verificar que el servicio está activo
-                if sudo systemctl is-active --quiet ${serviceName}; then
+                if systemctl is-active --quiet ${serviceName}; then
                     echo "✅ Servicio ${serviceName} está activo"
                 else
                     echo "❌ Error: El servicio ${serviceName} no está activo después del reinicio"
                     echo "📋 Estado del servicio:"
-                    sudo systemctl status ${serviceName} --no-pager -l || true
+                    systemctl status ${serviceName} --no-pager -l || true
                     echo "📋 Últimas líneas del log:"
-                    sudo journalctl -u ${serviceName} -n 50 --no-pager || true
+                    journalctl -u ${serviceName} -n 50 --no-pager || true
                     exit 1
                 fi
                 
                 # Mostrar logs recientes
                 echo "📋 Últimas líneas del log (últimos 20):"
-                sudo journalctl -u ${serviceName} -n 20 --no-pager || true
+                journalctl -u ${serviceName} -n 20 --no-pager || true
                 
                 # Verificar que el puerto está escuchando
                 echo "🔍 Verificando puerto ${port}..."
-                if sudo netstat -tlnp | grep -q ":${port} " || sudo ss -tlnp | grep -q ":${port} "; then
+                if netstat -tlnp 2>/dev/null | grep -q ":${port} " || ss -tlnp 2>/dev/null | grep -q ":${port} "; then
                     echo "✅ Puerto ${port} está escuchando"
                 else
                     echo "⚠️  Advertencia: Puerto ${port} no parece estar escuchando"
@@ -527,41 +491,37 @@ def deployApp(String appName, String port) {
             set -e
             
             # Verificar que el servicio existe
-            if ! sudo systemctl list-unit-files | grep -q "${serviceName}"; then
+            if ! systemctl list-unit-files | grep -q "${serviceName}"; then
                 echo "❌ Error: El servicio ${serviceName} no existe"
                 exit 1
             fi
             
-            # Verificar estado actual del servicio
-            echo "📊 Estado actual del servicio:"
-            sudo systemctl status ${serviceName} --no-pager -l || true
-            
             # Reiniciar el servicio
             echo "🔄 Reiniciando ${serviceName}..."
-            sudo systemctl restart ${serviceName}
+            systemctl restart ${serviceName}
             
             # Esperar un momento para que el servicio inicie
             sleep 3
             
             # Verificar que el servicio está activo
-            if sudo systemctl is-active --quiet ${serviceName}; then
+            if systemctl is-active --quiet ${serviceName}; then
                 echo "✅ Servicio ${serviceName} está activo"
             else
                 echo "❌ Error: El servicio ${serviceName} no está activo después del reinicio"
                 echo "📋 Estado del servicio:"
-                sudo systemctl status ${serviceName} --no-pager -l || true
+                systemctl status ${serviceName} --no-pager -l || true
                 echo "📋 Últimas líneas del log:"
-                sudo journalctl -u ${serviceName} -n 50 --no-pager || true
+                journalctl -u ${serviceName} -n 50 --no-pager || true
                 exit 1
             fi
             
             # Mostrar logs recientes
             echo "📋 Últimas líneas del log (últimos 20):"
-            sudo journalctl -u ${serviceName} -n 20 --no-pager || true
+            journalctl -u ${serviceName} -n 20 --no-pager || true
             
             # Verificar que el puerto está escuchando
             echo "🔍 Verificando puerto ${port}..."
-            if sudo netstat -tlnp | grep -q ":${port} " || sudo ss -tlnp | grep -q ":${port} "; then
+            if netstat -tlnp 2>/dev/null | grep -q ":${port} " || ss -tlnp 2>/dev/null | grep -q ":${port} "; then
                 echo "✅ Puerto ${port} está escuchando"
             else
                 echo "⚠️  Advertencia: Puerto ${port} no parece estar escuchando"
