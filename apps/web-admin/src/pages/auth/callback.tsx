@@ -36,7 +36,7 @@ export default function AuthCallbackPage() {
 
     if (accessToken && refreshToken) {
       // Importar funciones de storage
-      const storage = await import('@/lib/storage');
+      const storage = require('@/lib/storage');
       
       // Guardar tokens en sessionStorage
       storage.setAuthToken(accessToken);
