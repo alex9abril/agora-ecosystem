@@ -461,7 +461,7 @@ export default function KitchenPage() {
     // Buscar por ID o nombre real
     // El backend puede devolver variant_id en lugar de id
     const variant = variantGroup.variants.find(
-      v => 
+      (v: ProductVariant) => 
         v.id === variantId || 
         (v as any).variant_id === variantId ||
         v.name === variantId || 
