@@ -203,7 +203,7 @@ export default function OperationsOrderDetailPage() {
     }
     
     const variant = variantGroup.variants.find(
-      v => 
+      (v: ProductVariant) => 
         v.id === variantId || 
         (v as any).variant_id === variantId ||
         v.name === variantId || 
