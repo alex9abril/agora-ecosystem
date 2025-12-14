@@ -711,7 +711,7 @@ export default function ProductDetailPage() {
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
                         globalPrice={product.price}
-                        selectedBranchId={contextType === 'sucursal' ? branchId : selectedBranchId}
+                        selectedBranchId={selectedBranchId}
                         onBranchSelect={setSelectedBranchId}
                         storedBranchId={storedBranch?.id}
                       />
