@@ -215,8 +215,8 @@ export default function ProductDetailPage() {
       // - Global: sin filtros (groupId y brandId undefined)
       // - Grupo: filtrar por groupId (ya validado que existe)
       // - Brand: filtrar por brandId (ya validado que existe)
-      const filterGroupId = contextType === 'grupo' ? groupId : undefined;
-      const filterBrandId = contextType === 'brand' ? brandId : undefined;
+      const filterGroupId = contextType === 'grupo' ? (groupId || undefined) : undefined;
+      const filterBrandId = contextType === 'brand' ? (brandId || undefined) : undefined;
       
       console.log('🔍 [loadBranchAvailabilities] Filters applied:', { 
         contextType, 
