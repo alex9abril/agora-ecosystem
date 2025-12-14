@@ -530,6 +530,7 @@ export default function OrderDetailPage() {
       isPrimary: boolean;
       requiresConfirmation?: boolean;
       isPaymentAction?: boolean; // Indica si es una acción de pago
+      isNavigationAction?: boolean; // Indica que debe navegar en lugar de cambiar estado
     }> = [];
 
     // Definir acciones según el estado actual
