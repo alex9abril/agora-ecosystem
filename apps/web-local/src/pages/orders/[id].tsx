@@ -1386,7 +1386,7 @@ export default function OrderDetailPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Canal de ventas</h2>
                   <a href="#" className="text-sm text-blue-600 hover:text-blue-800">
-                    {selectedBusiness?.name || 'Tienda Web'}
+                    {selectedBusiness?.business_name || 'Tienda Web'}
                   </a>
                 </div>
 
