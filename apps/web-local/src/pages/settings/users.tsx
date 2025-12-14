@@ -103,6 +103,8 @@ export default function UsersSettingsPage() {
               is_active: u.is_active,
               created_at: u.created_at,
               business_id: u.business_id,
+              permissions: u.permissions || {},
+              updated_at: u.updated_at || u.created_at,
               businesses: [],
             });
           }
