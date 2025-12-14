@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { branchesService } from '@/lib/branches';
+import { branchesService, BusinessResponse } from '@/lib/branches';
 import { useStoreContext, Business } from '@/contexts/StoreContext';
 import { useRouter } from 'next/router';
 import CloseIcon from '@mui/icons-material/Close';
