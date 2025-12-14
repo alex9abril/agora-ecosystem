@@ -103,7 +103,7 @@ export default function MultipleImageUpload({
                 const newImg: ProductImage = {
                   id: uploadedImage.id,
                   public_url: uploadedImage.public_url,
-                  alt_text: uploadedImage.alt_text || null,
+                  alt_text: uploadedImage.alt_text || undefined,
                   is_primary: uploadedImage.is_primary || false,
                   display_order: uploadedImage.display_order || 0,
                 };
