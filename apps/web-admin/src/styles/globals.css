@@ -25,3 +25,37 @@ a {
   box-sizing: border-box;
 }
 
+/* Estilos para react-color SketchPicker */
+.flexbox-fix {
+  display: flex !important;
+}
+
+.sketch-picker {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+  background: white !important;
+}
+
+.saturation-white,
+.saturation-black {
+  border-radius: 4px 4px 0 0 !important;
+}
+
+.hue-horizontal,
+.alpha-horizontal {
+  border-radius: 0 0 4px 4px !important;
+}
+
+.flexbox-fix > div {
+  flex: 1 !important;
+}
+
+input[type="text"].input__input {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  border: 1px solid #ddd !important;
+  border-radius: 4px !important;
+  width: 100% !important;
+}
+

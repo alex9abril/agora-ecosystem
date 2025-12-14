@@ -57,6 +57,17 @@ Documentación del sistema completo de personalización y branding para grupos y
 - Herencia de branding (grupo → sucursal)
 - Implementación técnica (backend y frontend)
 
+### 6. [Sistema de Roles y Permisos para Sucursales](./06-sistema-roles-sucursales.md)
+Documentación del sistema de roles y permisos para gestionar sucursales.
+
+**Contenido:**
+- Asignación automática de roles al crear sucursales
+- Roles disponibles (superadmin, admin, operations_staff, kitchen_staff)
+- Verificación de permisos para actualizar branding, productos, etc.
+- Scripts de mantenimiento y corrección
+- Troubleshooting de problemas comunes
+- Consultas de verificación
+
 ## 🗂️ Organización
 
 ### Documentación
@@ -69,6 +80,9 @@ Documentación del sistema completo de personalización y branding para grupos y
   - `migration_site_settings.sql` - Sistema de configuraciones del sitio
   - `migration_business_branding.sql` - Sistema de personalización y branding
   - `seed_refacciones_catalog.sql` - Catálogo de categorías
+  - `trigger_auto_assign_business_owner_role.sql` - Trigger para asignar roles automáticamente
+  - `fix_missing_business_users_roles.sql` - Script para corregir sucursales sin roles
+  - `assign_user_role_to_business.sql` - Script para asignar roles manualmente
   - `README.md` - Documentación de scripts SQL
 
 ## 🚀 Inicio Rápido
@@ -78,8 +92,9 @@ Documentación del sistema completo de personalización y branding para grupos y
 3. Revisar [Sistema de Compatibilidad de Vehículos](./03-sistema-compatibilidad-vehiculos.md)
 4. Revisar [Sistema de Configuraciones e Impuestos](./04-sistema-configuraciones-impuestos.md)
 5. Revisar [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
-6. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
-7. Adaptar formularios y frontend según sea necesario
+6. Revisar [Sistema de Roles y Permisos para Sucursales](./04-sistema-roles-sucursales.md)
+7. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
+8. Adaptar formularios y frontend según sea necesario
 
 ## 📝 Notas
 

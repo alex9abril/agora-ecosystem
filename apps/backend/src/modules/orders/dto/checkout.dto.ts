@@ -52,6 +52,12 @@ export class CheckoutDto {
   @Min(0)
   tipAmount?: number = 0;
 
+  @ApiPropertyOptional({ description: 'Costo de envío calculado', example: 48.00, default: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  deliveryFee?: number = 0;
+
   @ApiPropertyOptional({ description: 'Información de pago (método, wallet, distribución)', type: PaymentInfoDto })
   @IsOptional()
   @ValidateNested()

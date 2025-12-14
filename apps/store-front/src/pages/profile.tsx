@@ -160,12 +160,13 @@ export default function ProfilePage() {
         <title>Mi Perfil - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="flex gap-6">
-          {/* Sidebar de navegación */}
-          <AccountSidebar activeTab={activeTab} />
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex gap-6">
+            {/* Sidebar de navegación */}
+            <AccountSidebar activeTab={activeTab} />
 
-          {/* Contenido principal */}
-          <div className="flex-1 min-w-0">
+            {/* Contenido principal */}
+            <div className="flex-1 min-w-0" style={{ minHeight: '600px' }}>
             {activeTab === 'profile' && (
               <>
                 <div className="flex items-center justify-between mb-8">
@@ -391,6 +392,7 @@ export default function ProfilePage() {
                 </div>
               </>
             )}
+            </div>
           </div>
         </div>
       </StoreLayout>

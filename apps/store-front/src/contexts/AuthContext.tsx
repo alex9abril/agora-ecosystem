@@ -141,15 +141,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUserInStorage(response.user);
       
-      // Mantener el contexto de tienda si existe en la URL actual
-      const currentPath = router.asPath.split('?')[0]; // Obtener path sin query params
-      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
-      if (contextMatch) {
-        // Mantener el contexto: redirigir a la home del contexto
-        router.push(`/${contextMatch[1]}/${contextMatch[2]}`);
-      } else {
-        router.push('/');
-      }
+      // No redirigir automáticamente - dejar que el componente que llama maneje la redirección
+      // Esto permite que el checkout o register page manejen la redirección según el contexto
     } catch (error: any) {
       throw error;
     }
@@ -168,8 +161,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearAuth();
       
       // Mantener el contexto de tienda si existe en la URL actual
+      // Verificar tanto router.asPath como window.location.pathname para capturar el contexto completo
       const currentPath = router.asPath.split('?')[0]; // Obtener path sin query params
-      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      const windowPath = typeof window !== 'undefined' ? window.location.pathname.split('?')[0] : '';
+      
+      // Buscar contexto en ambas rutas
+      const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/) || 
+                          windowPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+      
       if (contextMatch) {
         // Mantener el contexto: redirigir a la home del contexto
         router.push(`/${contextMatch[1]}/${contextMatch[2]}`);

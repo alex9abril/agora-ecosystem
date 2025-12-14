@@ -11,8 +11,10 @@
   "dependencies": {
     "@headlessui/react": "^2.2.9",
     "@supabase/supabase-js": "^2.38.0",
+    "@types/react-color": "^3.0.13",
     "next": "14.0.0",
     "react": "^18.2.0",
+    "react-color": "^2.19.3",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {

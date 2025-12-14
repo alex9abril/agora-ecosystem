@@ -129,7 +129,7 @@ export class OrdersService {
 
       // 7. Calcular montos globales (delivery_fee y tip se distribuirán proporcionalmente)
       const globalSubtotal = itemsResult.rows.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
-      const deliveryFee = 0; // Por ahora gratis, se puede calcular después
+      const deliveryFee = checkoutDto.deliveryFee || 0; // Usar el costo de envío enviado desde el frontend
       const discountAmount = 0; // Por ahora sin descuentos
       const tipAmount = checkoutDto.tipAmount || 0;
 
@@ -160,6 +160,7 @@ export class OrdersService {
 
       // 10. Procesar pago con wallet si se especifica
       let walletAmountUsed = 0;
+      let walletTransaction: any = null; // Transacción del wallet si se usa
       let paymentMethod = 'cash'; // Por defecto
       let paymentStatus = 'pending'; // Por defecto
 
@@ -183,7 +184,7 @@ export class OrdersService {
           }
 
           // Debitar del wallet (el order_id se actualizará después de crear las órdenes)
-          await this.walletService.debitWallet(
+          const walletTransaction = await this.walletService.debitWallet(
             userId,
             {
               amount: walletAmount,
@@ -196,6 +197,8 @@ export class OrdersService {
           );
 
           walletAmountUsed = walletAmount;
+          // Guardar referencia de la transacción del wallet para actualizarla después
+          // (se guardará en payment_transactions después de crear las órdenes)
 
           // Si el wallet cubre todo el monto, el pago está completo
           if (walletAmount >= totalAmount) {
@@ -318,16 +321,20 @@ export class OrdersService {
         // Actualizar la última transacción de débito con el order_id del primer pedido
         // (en el futuro se podría distribuir proporcionalmente entre múltiples órdenes)
         const primaryOrderId = createdOrders[0].id;
+        // Usar subconsulta para obtener el ID de la transacción más reciente y luego actualizarla
         await client.query(
           `UPDATE commerce.wallet_transactions
            SET order_id = $1, updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2 
-             AND transaction_type = 'debit'
-             AND order_id IS NULL
-             AND amount = $3
-             AND created_at > NOW() - INTERVAL '1 minute'
-           ORDER BY created_at DESC
-           LIMIT 1`,
+           WHERE id = (
+             SELECT id FROM commerce.wallet_transactions
+             WHERE user_id = $2 
+               AND transaction_type = 'debit'
+               AND order_id IS NULL
+               AND amount = $3
+               AND created_at > NOW() - INTERVAL '1 minute'
+             ORDER BY created_at DESC
+             LIMIT 1
+           )`,
           [primaryOrderId, userId, walletAmountUsed.toFixed(2)]
         );
       }
@@ -344,9 +351,67 @@ export class OrdersService {
 
       await client.query('COMMIT');
 
-      // 14. Crear orden en Karlopay si el método de pago es karlopay (después del COMMIT)
+      // 13.5. Guardar transacciones de pago del wallet en payment_transactions
+      if (walletAmountUsed > 0 && walletTransaction && createdOrders.length > 0) {
+        // Distribuir el monto del wallet proporcionalmente entre las órdenes creadas
+        const totalOrderAmount = createdOrders.reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
+        
+        for (const order of createdOrders) {
+          const orderRatio = parseFloat(order.total_amount) / totalOrderAmount;
+          const walletAmountForOrder = Math.round(walletAmountUsed * orderRatio * 100) / 100;
+          
+          // Guardar transacción del wallet en payment_transactions
+          await dbPool.query(
+            `INSERT INTO orders.payment_transactions (
+              order_id,
+              payment_method,
+              transaction_id,
+              amount,
+              status,
+              payment_data,
+              completed_at
+            ) VALUES ($1, 'wallet', $2, $3, 'completed', $4, CURRENT_TIMESTAMP)`,
+            [
+              order.id,
+              walletTransaction.id,
+              walletAmountForOrder,
+              JSON.stringify({
+                wallet_transaction_id: walletTransaction.id,
+                balance_before: walletTransaction.balance_before,
+                balance_after: walletTransaction.balance_after,
+                description: walletTransaction.description,
+                reason: walletTransaction.reason,
+              }),
+            ]
+          );
+        }
+        console.log(`✅ Transacciones de wallet guardadas en payment_transactions para ${createdOrders.length} órdenes`);
+      }
+
+      // 13.6. Si todas las transacciones están completadas (solo wallet, sin KarloPay pendiente), actualizar payment_status a 'paid'
+      // Esto solo aplica si NO hay método secundario o si el método secundario no es KarloPay
+      if (walletAmountUsed > 0 && walletTransaction && createdOrders.length > 0) {
+        const hasSecondaryKarlopay = checkoutDto.payment?.secondary_method === 'karlopay';
+        
+        // Si no hay KarloPay pendiente, todas las transacciones están completadas
+        if (!hasSecondaryKarlopay && paymentMethod !== 'karlopay') {
+          for (const order of createdOrders) {
+            await dbPool.query(
+              `UPDATE orders.orders 
+               SET payment_status = 'paid', 
+                   updated_at = CURRENT_TIMESTAMP 
+               WHERE id = $1`,
+              [order.id]
+            );
+          }
+          console.log(`✅ Payment status actualizado a 'paid' para ${createdOrders.length} órdenes (todas las transacciones completadas)`);
+        }
+      }
+
+      // 14. Crear orden en Karlopay si el método de pago es karlopay o si hay método secundario karlopay (después del COMMIT)
       let karlopayPaymentUrl: string | null = null;
-      if (paymentMethod === 'karlopay' && createdOrders.length > 0) {
+      const needsKarlopay = paymentMethod === 'karlopay' || checkoutDto.payment?.secondary_method === 'karlopay';
+      if (needsKarlopay && createdOrders.length > 0) {
         try {
           // Obtener información del usuario desde user_profiles y auth.users
           const userProfileResult = await dbPool.query(
@@ -402,12 +467,18 @@ export class OrdersService {
           console.log(`🔗 Redirect URL para Karlopay: ${redirectUrl}`);
           console.log(`📦 Contexto de tienda: ${storeContext || '(global)'}`);
 
+          // Determinar el monto a cobrar en Karlopay
+          // Si hay método secundario, usar el monto secundario; si no, usar el total
+          const karlopayAmount = checkoutDto.payment?.secondary_method === 'karlopay' && checkoutDto.payment?.secondary_amount
+            ? checkoutDto.payment.secondary_amount
+            : totalAmount;
+
           // Crear orden en Karlopay
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
             businessArea: 'ventas',
             numberOfOrder,
             status: 'R', // Remission
-            total: totalAmount,
+            total: karlopayAmount,
             customer: {
               foreignId: userId,
               fullName: receiverName,
@@ -425,16 +496,121 @@ export class OrdersService {
           });
 
           karlopayPaymentUrl = karlopayOrder.urlPayment;
+          
+          // Obtener el numberOfOrder que devuelve Karlopay (puede ser diferente al que enviamos)
+          const karlopayNumberOfOrder = karlopayOrder.numberOfOrder || numberOfOrder;
+          
+          console.log(`💰 [CHECKOUT] Karlopay devolvió numberOfOrder:`, {
+            sent: numberOfOrder,
+            received: karlopayNumberOfOrder,
+            match: numberOfOrder === karlopayNumberOfOrder,
+          });
 
           // Guardar la URL de pago y número de orden de Karlopay en la primera orden
+          // Guardar tanto el que enviamos como el que recibimos
           await dbPool.query(
             `UPDATE orders.orders
-             SET delivery_notes = COALESCE(delivery_notes, '') || E'\nKarlopay Order: ' || $1 || E'\nKarlopay Payment URL: ' || $2
-             WHERE id = $3`,
-            [numberOfOrder, karlopayPaymentUrl, createdOrders[0].id]
+             SET delivery_notes = COALESCE(delivery_notes, '') || E'\nKarlopay Order (sent): ' || $1 || E'\nKarlopay Order (received): ' || $2 || E'\nKarlopay Payment URL: ' || $3
+             WHERE id = $4`,
+            [numberOfOrder, karlopayNumberOfOrder, karlopayPaymentUrl, createdOrders[0].id]
           );
 
-          console.log(`✅ Orden creada en Karlopay: ${numberOfOrder}, URL de pago: ${karlopayPaymentUrl}`);
+          // Guardar transacción de KarloPay en payment_transactions para todas las órdenes del grupo
+          // Distribuir el monto de KarloPay proporcionalmente entre las órdenes
+          console.log(`💰 [CHECKOUT] Guardando transacciones de KarloPay:`, {
+            numberOfOrderSent: numberOfOrder,
+            numberOfOrderReceived: karlopayNumberOfOrder,
+            karlopayAmount,
+            ordersCount: createdOrders.length,
+          });
+          
+          const totalOrderAmount = createdOrders.reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
+          
+          for (const order of createdOrders) {
+            const orderRatio = parseFloat(order.total_amount) / totalOrderAmount;
+            const karlopayAmountForOrder = Math.round(karlopayAmount * orderRatio * 100) / 100;
+            
+            console.log(`💰 [CHECKOUT] Guardando transacción KarloPay para orden ${order.id}:`, {
+              orderId: order.id,
+              amount: karlopayAmountForOrder,
+              numberOfOrderSent: numberOfOrder,
+              numberOfOrderReceived: karlopayNumberOfOrder,
+            });
+            
+            // Para pagos con tarjeta (pasarela automática), el pago se procesa inmediatamente
+            // Por lo tanto, marcamos la transacción como 'completed' desde el inicio
+            // El webhook solo actualizará información adicional (últimos 4 dígitos, etc.)
+            const karlopayTransactionStatus = 'completed';
+            const karlopayCompletedAt = new Date();
+            
+            const insertResult = await dbPool.query(
+              `INSERT INTO orders.payment_transactions (
+                order_id,
+                payment_method,
+                transaction_id,
+                external_reference,
+                amount,
+                status,
+                payment_data,
+                completed_at
+              ) VALUES ($1, 'karlopay', $2, $3, $4, $5, $6, $7)
+              RETURNING id`,
+              [
+                order.id,
+                karlopayNumberOfOrder, // Usar el numberOfOrder que devuelve Karlopay como transaction_id
+                karlopayNumberOfOrder, // Usar el numberOfOrder que devuelve Karlopay como external_reference (este es el que vendrá en el webhook)
+                karlopayAmountForOrder,
+                karlopayTransactionStatus, // 'completed' porque el pago con tarjeta se procesa automáticamente
+                JSON.stringify({
+                  karlopay_order_id: karlopayOrder.id,
+                  karlopay_number_of_order: karlopayNumberOfOrder,
+                  karlopay_number_of_order_sent: numberOfOrder, // Guardar también el que enviamos por si acaso
+                  karlopay_payment_url: karlopayPaymentUrl,
+                  order_group_id: orderGroupId,
+                  auto_completed: true, // Indicar que se completó automáticamente al crear
+                }),
+                karlopayCompletedAt,
+              ]
+            );
+            
+            console.log(`✅ [CHECKOUT] Transacción KarloPay guardada como 'completed':`, insertResult.rows[0].id);
+          }
+          
+          // Verificar si todas las transacciones están completadas y actualizar payment_status
+          // Esto aplica tanto para pagos solo con Karlopay como para wallet + Karlopay
+          for (const order of createdOrders) {
+            const allTransactionsResult = await dbPool.query(
+              `SELECT COUNT(*) as total, 
+                      COUNT(*) FILTER (WHERE status = 'completed') as completed,
+                      SUM(amount) FILTER (WHERE status = 'completed') as total_completed_amount
+               FROM orders.payment_transactions
+               WHERE order_id = $1`,
+              [order.id]
+            );
+
+            const { total, completed, total_completed_amount } = allTransactionsResult.rows[0];
+            const totalCompleted = parseFloat(total_completed_amount || '0');
+            const orderTotal = parseFloat(order.total_amount || '0');
+            
+            // Si todas las transacciones están completadas Y el monto coincide, marcar la orden como pagada
+            if (parseInt(total) > 0 && parseInt(completed) === parseInt(total)) {
+              if (totalCompleted >= orderTotal - 0.01) { // Tolerancia de centavos
+                await dbPool.query(
+                  `UPDATE orders.orders
+                   SET payment_status = 'paid',
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $1`,
+                  [order.id]
+                );
+                console.log(`✅ [CHECKOUT] Orden ${order.id} marcada como 'paid' (todas las transacciones completadas)`);
+              } else {
+                console.warn(`⚠️ [CHECKOUT] Orden ${order.id} no marcada como 'paid': monto completado (${totalCompleted}) < total orden (${orderTotal})`);
+              }
+            }
+          }
+
+          console.log(`✅ Orden creada en KarloPay: ${numberOfOrder}, URL de pago: ${karlopayPaymentUrl}`);
+          console.log(`✅ Transacciones de KarloPay guardadas en payment_transactions para ${createdOrders.length} órdenes`);
         } catch (karlopayError: any) {
           console.error('❌ Error creando orden en Karlopay:', karlopayError);
           // No fallar el checkout si hay error con Karlopay, solo loguear
@@ -470,6 +646,107 @@ export class OrdersService {
       throw new ServiceUnavailableException(`Error al procesar checkout: ${error.message}`);
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Listar pedidos de un cliente (para admin)
+   */
+  async findAllByClient(clientId: string, businessId?: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    try {
+      let businessIds: string[] = [];
+      
+      // Si se proporciona businessId, obtener todas las sucursales del grupo
+      if (businessId) {
+        try {
+          // Obtener el grupo de la sucursal
+          const businessResult = await dbPool.query(
+            `SELECT group_id FROM core.businesses WHERE id = $1`,
+            [businessId]
+          );
+          
+          if (businessResult.rows.length > 0 && businessResult.rows[0].group_id) {
+            const groupId = businessResult.rows[0].group_id;
+            // Obtener todas las sucursales del grupo
+            const groupBusinessesResult = await dbPool.query(
+              `SELECT id FROM core.businesses WHERE group_id = $1`,
+              [groupId]
+            );
+            businessIds = groupBusinessesResult.rows.map(row => row.id);
+          } else {
+            // Si no tiene grupo, solo usar el business_id proporcionado
+            businessIds = [businessId];
+          }
+        } catch (error) {
+          console.warn('Error obteniendo grupo de sucursal, usando solo business_id:', error);
+          businessIds = [businessId];
+        }
+      }
+
+      // Construir la consulta con filtro opcional
+      let query = `SELECT 
+          o.id,
+          o.client_id,
+          o.business_id,
+          o.status,
+          o.delivery_address_text,
+          o.subtotal,
+          o.tax_amount,
+          o.delivery_fee,
+          o.discount_amount,
+          o.tip_amount,
+          o.total_amount,
+          o.payment_method,
+          o.payment_status,
+          o.estimated_delivery_time,
+          o.delivery_notes,
+          o.created_at,
+          o.updated_at,
+          o.confirmed_at,
+          o.delivered_at,
+          o.cancelled_at,
+          b.name as business_name,
+          b.logo_url as business_logo_url,
+          up.first_name as client_first_name,
+          up.last_name as client_last_name,
+          up.phone as client_phone,
+          au.email as client_email,
+          (
+            SELECT COUNT(*)::integer
+            FROM orders.order_items
+            WHERE order_id = o.id
+          ) as item_count,
+          (
+            SELECT SUM(quantity)::integer
+            FROM orders.order_items
+            WHERE order_id = o.id
+          ) as total_quantity
+        FROM orders.orders o
+        INNER JOIN core.businesses b ON o.business_id = b.id
+        LEFT JOIN core.user_profiles up ON o.client_id = up.id
+        LEFT JOIN auth.users au ON up.id = au.id
+        WHERE o.client_id = $1`;
+      
+      const params: any[] = [clientId];
+      
+      // Si hay businessIds, agregar filtro
+      if (businessIds.length > 0) {
+        query += ` AND o.business_id = ANY($2)`;
+        params.push(businessIds);
+      }
+      
+      query += ` ORDER BY o.created_at DESC`;
+      
+      const result = await dbPool.query(query, params);
+
+      return result.rows;
+    } catch (error: any) {
+      console.error('❌ Error obteniendo pedidos del cliente:', error);
+      throw new ServiceUnavailableException(`Error al obtener pedidos del cliente: ${error.message}`);
     }
   }
 
@@ -629,9 +906,52 @@ export class OrdersService {
         };
       });
 
+      // Obtener transacciones de pago para esta orden
+      const paymentTransactionsResult = await dbPool.query(
+        `SELECT 
+          pt.*,
+          pt.payment_data->>'cardType' as card_type,
+          pt.payment_data->>'lastFour' as last_four,
+          pt.payment_data->>'referenceNumber' as reference_number
+        FROM orders.payment_transactions pt
+        WHERE pt.order_id = $1
+        ORDER BY pt.created_at ASC`,
+        [orderId]
+      );
+
+      // Parsear payment_data si viene como string (JSONB de PostgreSQL)
+      const paymentTransactions = paymentTransactionsResult.rows.map(transaction => ({
+        ...transaction,
+        payment_data: typeof transaction.payment_data === 'string' 
+          ? JSON.parse(transaction.payment_data) 
+          : transaction.payment_data,
+      }));
+
+      // Obtener guía de envío (shipping label) si existe
+      let shippingLabel = null;
+      try {
+        const shippingLabelResult = await dbPool.query(
+          `SELECT tracking_number, carrier_name, status, generated_at, picked_up_at, in_transit_at, delivered_at
+           FROM orders.shipping_labels
+           WHERE order_id = $1
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [orderId]
+        );
+        
+        if (shippingLabelResult.rows.length > 0) {
+          shippingLabel = shippingLabelResult.rows[0];
+        }
+      } catch (shippingError: any) {
+        // Si la tabla no existe o hay error, simplemente no incluir shipping_label
+        console.warn('No se pudo obtener shipping label:', shippingError.message || shippingError);
+      }
+
       return {
         ...order,
         items,
+        payment_transactions: paymentTransactions,
+        shipping_label: shippingLabel, // Guía de envío si existe
       };
     } catch (error: any) {
       if (error instanceof NotFoundException) {
@@ -1222,14 +1542,34 @@ export class OrdersService {
                              !history.changed_by_user_id,
               };
             }
-          } catch (historyError) {
-            console.warn(`No se pudo obtener historial de payment_status para orden ${order.id}:`, historyError);
+          } catch (historyError: any) {
+            // La tabla order_status_history puede no existir, solo loguear si es otro error
+            if (historyError?.code === '42P01') {
+              // Tabla no existe, ignorar silenciosamente
+              // console.warn(`Tabla order_status_history no existe, ignorando historial para orden ${order.id}`);
+            } else {
+              console.warn(`No se pudo obtener historial de payment_status para orden ${order.id}:`, historyError.message || historyError);
+            }
           }
+
+          // Obtener transacciones de pago para esta orden
+          const paymentTransactionsResult = await dbPool.query(
+            `SELECT 
+              pt.*,
+              pt.payment_data->>'cardType' as card_type,
+              pt.payment_data->>'lastFour' as last_four,
+              pt.payment_data->>'referenceNumber' as reference_number
+            FROM orders.payment_transactions pt
+            WHERE pt.order_id = $1
+            ORDER BY pt.created_at ASC`,
+            [order.id]
+          );
 
           return {
             ...order,
             items,
             payment_status_change_info: paymentStatusChangeInfo,
+            payment_transactions: paymentTransactionsResult.rows,
           };
         })
       );
@@ -1390,8 +1730,65 @@ export class OrdersService {
                          !history.changed_by_user_id,
           };
         }
-      } catch (historyError) {
-        console.warn('No se pudo obtener historial de payment_status:', historyError);
+      } catch (historyError: any) {
+        // La tabla order_status_history puede no existir, solo loguear si es otro error
+        if (historyError?.code === '42P01') {
+          // Tabla no existe, ignorar silenciosamente
+          // console.warn('Tabla order_status_history no existe, ignorando historial');
+        } else {
+          console.warn('No se pudo obtener historial de payment_status:', historyError.message || historyError);
+        }
+      }
+
+      // Obtener transacciones de pago para esta orden
+      const paymentTransactionsResult = await dbPool.query(
+        `SELECT 
+          pt.*,
+          pt.payment_data->>'cardType' as card_type,
+          pt.payment_data->>'lastFour' as last_four,
+          pt.payment_data->>'referenceNumber' as reference_number
+        FROM orders.payment_transactions pt
+        WHERE pt.order_id = $1
+        ORDER BY pt.created_at ASC`,
+        [order.id]
+      );
+
+      console.log(`💰 [FIND ONE BY BUSINESS] Transacciones encontradas para orden ${order.id}:`, paymentTransactionsResult.rows.length);
+      if (paymentTransactionsResult.rows.length > 0) {
+        console.log(`💰 [FIND ONE BY BUSINESS] Detalles de transacciones:`, paymentTransactionsResult.rows.map(tx => ({
+          id: tx.id,
+          payment_method: tx.payment_method,
+          amount: tx.amount,
+          status: tx.status,
+        })));
+      }
+
+      // Parsear payment_data si viene como string (JSONB de PostgreSQL)
+      const paymentTransactions = paymentTransactionsResult.rows.map(transaction => ({
+        ...transaction,
+        payment_data: typeof transaction.payment_data === 'string' 
+          ? JSON.parse(transaction.payment_data) 
+          : transaction.payment_data,
+      }));
+
+      // Obtener guía de envío (shipping label) si existe
+      let shippingLabel = null;
+      try {
+        const shippingLabelResult = await dbPool.query(
+          `SELECT tracking_number, carrier_name, status, generated_at, picked_up_at, in_transit_at, delivered_at
+           FROM orders.shipping_labels
+           WHERE order_id = $1
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [orderId]
+        );
+        
+        if (shippingLabelResult.rows.length > 0) {
+          shippingLabel = shippingLabelResult.rows[0];
+        }
+      } catch (shippingError: any) {
+        // Si la tabla no existe o hay error, simplemente no incluir shipping_label
+        console.warn('No se pudo obtener shipping label:', shippingError.message || shippingError);
       }
 
       return {
@@ -1399,6 +1796,8 @@ export class OrdersService {
         items: itemsResult.rows,
         delivery,
         payment_status_change_info: paymentStatusChangeInfo,
+        payment_transactions: paymentTransactions,
+        shipping_label: shippingLabel, // Guía de envío si existe
       };
     } catch (error: any) {
       if (error instanceof NotFoundException) {

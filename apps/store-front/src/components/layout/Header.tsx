@@ -3,15 +3,16 @@
  * Diseño inspirado en Toyota con paleta de colores oficial
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
-import agoraLogo from '@/images/agora_logo.png';
+import agoraLogo from '@/images/agora_logo_white.png';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import ContextualLink from '../ContextualLink';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
+import { brandingService, Branding } from '@/lib/branding';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PersonIcon from '@mui/icons-material/Person';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -37,6 +38,8 @@ export default function Header() {
   const { 
     contextType, 
     branchData,
+    groupId,
+    branchId,
     getStoreName,
   } = useStoreContext();
   const { isAuthenticated, user, signOut } = useAuth();
@@ -51,6 +54,9 @@ export default function Header() {
   const [storeInfo, setStoreInfo] = useState<{ name: string; address: string; isOpen: boolean; nextOpenTime: string } | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [showCartPreview, setShowCartPreview] = useState(false);
+  const [branding, setBranding] = useState<Branding | null>(null);
+  const [isBrandingLoading, setIsBrandingLoading] = useState(true);
+  const headerRef = useRef<HTMLElement>(null);
 
   // Solo cargar información de localStorage en el cliente para evitar problemas de hidratación
   useEffect(() => {
@@ -88,6 +94,186 @@ export default function Header() {
     setStoreInfo(info);
   }, [contextType, branchData]);
 
+  // Cargar branding cuando hay grupo o sucursal
+  useEffect(() => {
+    let isMounted = true; // Flag para evitar actualizaciones si el componente se desmonta
+    
+    const loadBranding = async () => {
+      setIsBrandingLoading(true);
+      
+      // Si hay grupo, cargar branding del grupo (solo una petición)
+      if (contextType === 'grupo' && groupId) {
+        try {
+          const brandingData = await brandingService.getGroupBranding(groupId);
+          console.log('🎨 [Header] Branding del grupo cargado:', brandingData);
+          if (isMounted) {
+            setBranding(brandingData);
+          }
+        } catch (error) {
+          console.error('Error cargando branding del grupo:', error);
+          if (isMounted) {
+            setBranding(null);
+          }
+        } finally {
+          if (isMounted) {
+            setIsBrandingLoading(false);
+          }
+        }
+      }
+      // Si hay sucursal, intentar cargar branding de la sucursal primero, sino del grupo
+      else if (contextType === 'sucursal' && branchId) {
+        try {
+          // Intentar primero el branding de la sucursal
+          const brandingData = await brandingService.getBusinessBranding(branchId);
+          console.log('🎨 [Header] Branding de la sucursal cargado:', brandingData);
+          
+          // Si hay branding de sucursal, usarlo (aunque no tenga logo_url)
+          if (brandingData) {
+            // Si no tiene colores pero tiene grupo, intentar obtener colores del grupo
+            if (!brandingData.colors?.primary && groupId) {
+              try {
+                const groupBranding = await brandingService.getGroupBranding(groupId);
+                console.log('🎨 [Header] Branding del grupo (para colores):', groupBranding);
+                // Combinar: logo de sucursal, colores del grupo si no hay en sucursal
+                setBranding({
+                  ...brandingData,
+                  colors: brandingData.colors || groupBranding?.colors || undefined,
+                });
+              } catch (groupError) {
+                console.error('Error cargando branding del grupo para colores:', groupError);
+                setBranding(brandingData);
+              }
+            } else {
+              setBranding(brandingData);
+            }
+            setIsBrandingLoading(false);
+          } else if (groupId) {
+            // Si no hay branding de sucursal, intentar del grupo
+            const groupBranding = await brandingService.getGroupBranding(groupId);
+            console.log('🎨 [Header] Branding del grupo (fallback):', groupBranding);
+            setBranding(groupBranding);
+            setIsBrandingLoading(false);
+          } else {
+            setBranding(null);
+            setIsBrandingLoading(false);
+          }
+        } catch (error) {
+          console.error('Error cargando branding de la sucursal:', error);
+          // Si falla, intentar del grupo si existe
+          if (groupId) {
+            try {
+              const groupBranding = await brandingService.getGroupBranding(groupId);
+              console.log('🎨 [Header] Branding del grupo (error fallback):', groupBranding);
+              setBranding(groupBranding);
+            } catch (groupError) {
+              console.error('Error cargando branding del grupo:', groupError);
+              setBranding(null);
+            }
+          } else {
+            setBranding(null);
+          }
+          setIsBrandingLoading(false);
+        }
+      }
+      // Si no hay contexto de tienda, no cargar branding (mostrar logo de Agora)
+      else {
+        setBranding(null);
+        setIsBrandingLoading(false);
+      }
+    };
+
+    loadBranding();
+    
+    // Cleanup: marcar como desmontado si el componente se desmonta
+    return () => {
+      isMounted = false;
+    };
+  }, [contextType, groupId, branchId]);
+
+  // Determinar qué logo usar
+  // Solo mostrar logo cuando el branding haya terminado de cargar (o si es contexto global)
+  const shouldShowLogo = !isBrandingLoading || contextType === 'global';
+  const logoUrl = branding?.logo_url || agoraLogo;
+  const logoAlt = branding?.logo_url ? getStoreName() || 'AGORA PARTS' : 'AGORA PARTS';
+  
+  // Función para calcular la luminosidad de un color hexadecimal
+  const getLuminance = (hex: string): number => {
+    // Remover el # si existe
+    const color = hex.replace('#', '');
+    
+    // Convertir a RGB
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    
+    // Calcular luminosidad relativa usando la fórmula estándar
+    // https://www.w3.org/WAI/GL/wiki/Relative_luminance
+    const [rNorm, gNorm, bNorm] = [r, g, b].map(val => {
+      val = val / 255;
+      return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+    });
+    
+    return 0.2126 * rNorm + 0.7152 * gNorm + 0.0722 * bNorm;
+  };
+  
+  // Función para determinar si un color es claro u oscuro
+  const isLightColor = (hex: string): boolean => {
+    const luminance = getLuminance(hex);
+    // Si la luminosidad es mayor a 0.5, es un color claro
+    return luminance > 0.5;
+  };
+  
+  // Función para oscurecer un color hexadecimal
+  const darkenColor = (hex: string, percent: number = 20): string => {
+    // Remover el # si existe
+    const color = hex.replace('#', '');
+    
+    // Convertir a RGB
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    
+    // Oscurecer cada componente
+    const darken = (value: number) => {
+      const darkened = Math.max(0, Math.floor(value * (1 - percent / 100)));
+      return darkened.toString(16).padStart(2, '0');
+    };
+    
+    return `#${darken(r)}${darken(g)}${darken(b)}`;
+  };
+  
+  // Obtener color primario del branding, o usar color por defecto
+  // Solo usar color personalizado si no estamos en contexto global y el branding está cargado
+  const shouldUseBrandingColor = !isBrandingLoading && (contextType === 'grupo' || contextType === 'sucursal');
+  const primaryColor = shouldUseBrandingColor && branding?.colors?.primary 
+    ? branding.colors.primary 
+    : '#254639'; // Verde oliva complementario al logo (#433835) por defecto
+  
+  // Calcular color del borde (un tono más oscuro del color de fondo)
+  const borderColor = darkenColor(primaryColor, 20);
+  
+  // Calcular color del texto basándose en el color de fondo
+  const textColor = isLightColor(primaryColor) ? '#000000' : '#FFFFFF';
+  const textColorOpacity90 = isLightColor(primaryColor) ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+  const textColorOpacity80 = isLightColor(primaryColor) ? 'rgba(0, 0, 0, 0.8)' : 'rgba(255, 255, 255, 0.8)';
+  const separatorColor = isLightColor(primaryColor) ? 'rgba(0, 0, 0, 0.3)' : 'rgba(255, 255, 255, 0.3)';
+  const hoverBgColor = isLightColor(primaryColor) ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.2)';
+  
+  // Debug: Log del color primario
+  useEffect(() => {
+    if (branding) {
+      console.log('🎨 [Header] Color primario detectado:', {
+        primary: branding.colors?.primary,
+        shouldUseBrandingColor,
+        isBrandingLoading,
+        contextType,
+        groupId,
+        branchId,
+        finalColor: primaryColor,
+      });
+    }
+  }, [branding, contextType, groupId, branchId, primaryColor, shouldUseBrandingColor, isBrandingLoading]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -106,26 +292,54 @@ export default function Header() {
   return (
     <>
       {/* Header Principal */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <header 
+        ref={headerRef}
+        className="sticky top-0 z-50" 
+        style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}
+      >
         {/* Primera fila: Logo, promoción y acciones de usuario */}
-        <div className="bg-white">
+        <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
           <div className="w-full px-4 py-3">
             <div className="flex items-center justify-between">
               {/* Logo y branding */}
               <div className="flex items-center gap-4">
                 <ContextualLink href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                  <div className="relative">
-                    <Image
-                      src={agoraLogo}
-                      alt="AGORA PARTS"
-                      width={200}
-                      height={60}
-                      className="object-contain"
-                      priority
-                    />
-                    <span className="absolute text-[9px] text-gray-600 uppercase tracking-wide whitespace-nowrap" style={{ left: '75px', top: '53px', fontWeight: 600 }}>
-                      EL CENTRO DE TUS REFACCIONES.
-                    </span>
+                  <div className="relative" style={{ width: '128px', height: '38px' }}>
+                    {shouldShowLogo ? (
+                      <>
+                        {branding?.logo_url ? (
+                          <img
+                            src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
+                            alt={logoAlt}
+                            width={128}
+                            height={38}
+                            className="object-contain"
+                            style={{ maxWidth: '128px', maxHeight: '38px' }}
+                          />
+                        ) : (
+                          <Image
+                            src={agoraLogo}
+                            alt="AGORA PARTS"
+                            width={128}
+                            height={38}
+                            className="object-contain"
+                            priority
+                          />
+                        )}
+                        {!branding?.logo_url && (
+                          <span className="absolute text-[6px] text-white uppercase tracking-wide whitespace-nowrap" style={{ left: '48px', top: '33px', fontWeight: 600 }}>
+                            EL CENTRO DE TUS REFACCIONES.
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      // Placeholder mientras carga el branding (mismo tamaño para evitar layout shift)
+                      <div 
+                        className="bg-transparent"
+                        style={{ width: '128px', height: '38px' }}
+                        aria-hidden="true"
+                      />
+                    )}
                   </div>
                 </ContextualLink>
               </div>
@@ -133,14 +347,17 @@ export default function Header() {
               {/* Acciones de usuario */}
               <div className="flex items-center gap-1">
                 {/* Separador visual */}
-                <div className="h-6 w-px bg-gray-300 mx-2" />
+                <div className="h-6 w-px mx-2" style={{ backgroundColor: separatorColor }} />
                 
                 {/* Botón Navegar */}
                 <button
                   onClick={() => setShowNavigationDialog(true)}
-                  className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                  className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                  style={{ color: textColor }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
-                  <BusinessIcon className="w-5 h-5" />
+                  <BusinessIcon className="w-5 h-5" style={{ color: textColor }} />
                   <span className="hidden sm:inline">Navegar</span>
                 </button>
 
@@ -148,30 +365,40 @@ export default function Header() {
                 {!isAuthenticated ? (
                   <ContextualLink 
                     href="/auth/login" 
-                    className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                    className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                    style={{ color: textColor }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
-                    <PersonIcon className="w-5 h-5" />
+                    <PersonIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="hidden sm:inline">Ingresar</span>
                   </ContextualLink>
                 ) : (
                   <div className="relative">
                     <button
                       onClick={() => setShowUserMenu(!showUserMenu)}
-                      onMouseEnter={() => setShowUserMenu(true)}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 group"
+                      onMouseEnter={(e) => {
+                        setShowUserMenu(true);
+                        e.currentTarget.style.backgroundColor = hoverBgColor;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                      className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 group"
+                      style={{ color: textColor }}
                     >
                       <div className="flex items-center gap-2">
-                        <AccountCircleIcon className="w-5 h-5 text-gray-500 group-hover:text-toyota-red transition-colors" />
+                        <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
                         <div className="hidden sm:flex flex-col items-start leading-tight">
-                          <span className="text-xs text-gray-500 group-hover:text-gray-600">
+                          <span style={{ color: textColorOpacity80 }}>
                             Hola,
                           </span>
-                          <span className="text-sm font-semibold text-gray-900 group-hover:text-toyota-red">
+                          <span className="text-sm font-semibold" style={{ color: textColor }}>
                             {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
                           </span>
                         </div>
                       </div>
-                      <ArrowDropDownIcon className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                      <ArrowDropDownIcon className="w-4 h-4 transition-transform" style={{ color: textColorOpacity80 }} />
                     </button>
                     
                     {showUserMenu && (
@@ -187,15 +414,15 @@ export default function Header() {
                           onMouseLeave={() => setShowUserMenu(false)}
                         >
                           {/* Header del menú */}
-                          <div className="bg-gradient-to-r from-toyota-red to-toyota-red-dark px-5 py-4">
-                            <p className="text-xs text-white/90 font-medium uppercase tracking-wide mb-1">
+                          <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}>
+                            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: textColorOpacity90 }}>
                               Bienvenido
                             </p>
-                            <p className="text-base font-bold text-white truncate">
+                            <p className="text-base font-bold truncate" style={{ color: textColor }}>
                               {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
                             </p>
                             {user?.email && (
-                              <p className="text-xs text-white/80 truncate mt-1">
+                              <p className="text-xs truncate mt-1" style={{ color: textColorOpacity80 }}>
                                 {user.email}
                               </p>
                             )}
@@ -263,7 +490,7 @@ export default function Header() {
                 )}
                 
                 {/* Separador visual */}
-                <div className="h-6 w-px bg-gray-300 mx-2" />
+                <div className="h-6 w-px mx-2" style={{ backgroundColor: separatorColor }} />
                 
                 {/* Carrito con preview */}
                 <div 
@@ -273,22 +500,31 @@ export default function Header() {
                 >
                   <ContextualLink 
                     href={getCartUrl()} 
-                    className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:text-toyota-red hover:bg-gray-50 rounded-md transition-all whitespace-nowrap group"
+                    className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap group"
+                    style={{ color: textColor }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <div className="relative">
-                      <ShoppingCartIcon className="w-6 h-6 text-gray-600 group-hover:text-toyota-red transition-colors" />
+                      <ShoppingCartIcon className="w-6 h-6 transition-colors" style={{ color: textColor }} />
                       {itemCount > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-toyota-red text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md">
+                        <span 
+                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md"
+                          style={{ 
+                            backgroundColor: textColor, 
+                            color: primaryColor 
+                          }}
+                        >
                           {itemCount > 99 ? '99+' : itemCount}
                         </span>
                       )}
                     </div>
                     <div className="hidden sm:flex flex-col items-start leading-tight">
-                      <span className="text-xs text-gray-500 group-hover:text-gray-600">
+                      <span className="text-xs" style={{ color: textColorOpacity80 }}>
                         Carrito
                       </span>
                       {cart?.subtotal && (
-                        <span className="text-sm font-semibold text-gray-900 group-hover:text-toyota-red">
+                        <span className="text-sm font-semibold" style={{ color: textColor }}>
                           ${parseFloat(cart.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       )}
@@ -298,9 +534,9 @@ export default function Header() {
                   {/* Preview del carrito */}
                   {showCartPreview && itemCount > 0 && cart && (
                     <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
-                      <div className="bg-gradient-to-r from-toyota-red to-toyota-red-dark px-5 py-4">
+                      <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}>
                         <div className="flex items-center justify-between">
-                          <h3 className="text-base font-bold text-white">
+                          <h3 className="text-base font-bold" style={{ color: textColor }}>
                             Tu carrito ({itemCount} {itemCount === 1 ? 'artículo' : 'artículos'})
                           </h3>
                         </div>
@@ -356,7 +592,8 @@ export default function Header() {
                             <ContextualLink
                               href={getCartUrl()}
                               onClick={() => setShowCartPreview(false)}
-                              className="block w-full bg-toyota-red text-white text-center py-2.5 rounded-md font-semibold hover:bg-toyota-red-dark transition-colors"
+                              className="block w-full text-center py-2.5 rounded-md font-semibold hover:opacity-90 transition-opacity"
+                              style={{ backgroundColor: primaryColor, color: textColor }}
                             >
                               Ver carrito completo
                             </ContextualLink>
@@ -372,7 +609,7 @@ export default function Header() {
         </div>
 
         {/* Segunda fila: Menú, búsqueda y selector de tienda */}
-        <div className="bg-white border-t border-toyota-gray-light">
+        <div style={{ backgroundColor: primaryColor, borderTop: `1px solid ${borderColor}` }}>
           <div className="w-full px-4 py-3">
             <div className="flex items-center gap-4">
               {/* Grupo izquierdo: Menú y selector de vehículo */}
@@ -383,26 +620,39 @@ export default function Header() {
                     setShowMobileMenu(false);
                   }}
                   onMouseEnter={() => setShowCategoriesMenu(true)}
-                  className="flex items-center gap-2 text-toyota-gray hover:text-black transition-colors relative"
+                  className="flex items-center gap-2 transition-colors relative"
+                  style={{ color: textColor }}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                 >
-                  <MenuIcon className="w-6 h-6" />
+                  <MenuIcon className="w-6 h-6" style={{ color: textColor }} />
                   <span className="hidden sm:inline text-sm font-medium">Menú</span>
                 </button>
                 
-                {/* Menú de categorías flotante */}
-                {showCategoriesMenu && (
+                {/* Menú de categorías flotante - Estilo AliExpress */}
+                {showCategoriesMenu && headerRef.current && (
                   <div
-                    className="absolute top-full left-0 mt-2 z-50 w-[1200px] shadow-2xl"
+                    className="fixed left-0 right-0 z-50"
+                    style={{ 
+                      top: `${headerRef.current.offsetHeight + headerRef.current.offsetTop + 8}px`,
+                    }}
                     onMouseLeave={() => setShowCategoriesMenu(false)}
                   >
-                    <CategoriesMenu onCategoryClick={() => setShowCategoriesMenu(false)} />
+                    <div className="w-full px-4">
+                      <CategoriesMenu onCategoryClick={() => setShowCategoriesMenu(false)} />
+                    </div>
                   </div>
                 )}
 
-                <button className="hidden md:flex items-center gap-2 text-toyota-gray hover:text-black transition-colors">
-                  <DirectionsCarIcon className="w-5 h-5" />
+                <button 
+                  className="hidden md:flex items-center gap-2 transition-colors"
+                  style={{ color: textColor }}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                >
+                  <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
                   <span className="text-sm font-medium">Agregar Vehículo</span>
-                  <span className="text-toyota-gray-light">→</span>
+                  <span style={{ color: textColorOpacity80 }}>→</span>
                 </button>
               </div>
 
@@ -440,9 +690,10 @@ export default function Header() {
                 {/* Botón de búsqueda */}
                 <button
                   type="submit"
-                  className="flex items-center justify-center px-4 bg-toyota-red text-white rounded-r-lg hover:bg-toyota-red-dark transition-colors flex-shrink-0"
+                  className="flex items-center justify-center px-4 rounded-r-lg hover:opacity-90 transition-opacity flex-shrink-0"
+                  style={{ backgroundColor: primaryColor, color: textColor }}
                 >
-                  <SearchIcon className="h-5 w-5" />
+                  <SearchIcon className="h-5 w-5" style={{ color: textColor }} />
                 </button>
               </form>
 
@@ -451,34 +702,40 @@ export default function Header() {
                 {isClient && storeInfo ? (
                   <button
                     onClick={() => setShowStoreSelector(true)}
-                    className="hidden lg:flex items-start gap-2 text-left hover:bg-gray-100 rounded-lg px-3 py-2 transition-colors min-w-[240px] max-w-[320px]"
+                    className="hidden lg:flex items-start gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[240px] max-w-[320px]"
+                    style={{ color: textColor }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <span className="flex-shrink-0 mt-0.5">
-                      <CheckCircleIcon className="w-5 h-5 text-toyota-red" />
+                      <CheckCircleIcon className="w-5 h-5" style={{ color: textColor }} />
                     </span>
                     <span className="flex-1 min-w-0 inline-block">
-                      <span className="block text-xs font-semibold text-black truncate leading-tight mb-0.5">
+                      <span className="block text-xs font-semibold truncate leading-tight mb-0.5" style={{ color: textColor }}>
                         {storeInfo.name}
                       </span>
                       {storeInfo.address && (
-                        <span className="block text-xs text-toyota-gray truncate leading-tight">
+                        <span className="block text-xs truncate leading-tight" style={{ color: textColorOpacity80 }}>
                           {storeInfo.address}
                         </span>
                       )}
-                      <span className={`block text-xs font-semibold leading-tight mt-1 ${storeInfo.isOpen ? 'text-toyota-red' : 'text-toyota-gray'}`}>
+                      <span className="block text-xs font-semibold leading-tight mt-1" style={{ color: storeInfo.isOpen ? textColor : textColorOpacity80 }}>
                         {storeInfo.isOpen ? 'ABIERTO' : `CERRADO Hasta ${storeInfo.nextOpenTime}`}
                       </span>
                     </span>
-                    <span className="text-gray-400 flex-shrink-0 text-lg">→</span>
+                    <span className="flex-shrink-0 text-lg" style={{ color: textColorOpacity80 }}>→</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => setShowStoreSelector(true)}
-                    className="hidden lg:flex items-center gap-2 text-toyota-gray hover:text-black transition-colors whitespace-nowrap"
+                    className="hidden lg:flex items-center gap-2 transition-colors whitespace-nowrap"
+                    style={{ color: textColor }}
+                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                   >
-                    <LocationOnIcon className="w-5 h-5" />
+                    <LocationOnIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="text-sm font-medium">Seleccionar Tienda</span>
-                    <span className="text-toyota-gray-light text-lg">→</span>
+                    <span className="text-lg" style={{ color: textColorOpacity80 }}>→</span>
                   </button>
                 )}
               </div>

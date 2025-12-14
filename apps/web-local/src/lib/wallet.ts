@@ -20,6 +20,7 @@ export interface WalletTransaction {
   balance_after: number;
   order_id?: string;
   order_item_id?: string;
+  business_id?: string; // business_id del pedido relacionado
   description?: string;
   reason?: string;
   created_by_user_id?: string;
@@ -110,6 +111,39 @@ export const walletService = {
    */
   async canUseWallet(amount: number): Promise<{ can_use: boolean; balance: number; required_amount: number; sufficient: boolean }> {
     return apiRequest(`/wallet/can-use?amount=${amount}`);
+  },
+
+  /**
+   * Obtener saldo del wallet de un usuario específico (para admin)
+   */
+  async getBalanceByUserId(userId: string): Promise<Wallet> {
+    return apiRequest<Wallet>(`/wallet/user/${userId}/balance`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Obtener transacciones del wallet de un usuario específico (para admin)
+   */
+  async getTransactionsByUserId(
+    userId: string,
+    filters?: {
+      page?: number;
+      limit?: number;
+      type?: string;
+      status?: string;
+    }
+  ): Promise<TransactionsResponse> {
+    const params = new URLSearchParams();
+    if (filters?.page) params.append('page', filters.page.toString());
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.type) params.append('type', filters.type);
+    if (filters?.status) params.append('status', filters.status);
+
+    const queryString = params.toString();
+    return apiRequest<TransactionsResponse>(`/wallet/user/${userId}/transactions${queryString ? `?${queryString}` : ''}`, {
+      method: 'GET',
+    });
   },
 };
 

@@ -39,7 +39,7 @@ export default function KitchenOrderCard({ order, onClick, onStatusChange }: Kit
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="text-3xl font-bold text-gray-900 mb-1">
-            #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+            #{order.order_number || order.id.slice(-8).toUpperCase()}
           </div>
           <div className="text-sm text-gray-600">
             {formatTime(order.created_at)}

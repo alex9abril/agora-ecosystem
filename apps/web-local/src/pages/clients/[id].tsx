@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect, useMemo } from 'react';
+import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { clientsService, Client } from '@/lib/clients';
 import { ordersService, Order } from '@/lib/orders';
 import { walletService, Wallet, WalletTransaction } from '@/lib/wallet';
@@ -11,6 +12,7 @@ export default function ClientDetailPage() {
   const router = useRouter();
   const { id } = router.query;
   const clientId = id as string;
+  const { selectedBusiness } = useSelectedBusiness();
 
   const [loading, setLoading] = useState(true);
   const [client, setClient] = useState<Client | null>(null);
@@ -19,6 +21,7 @@ export default function ClientDetailPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
   const [loadingWallet, setLoadingWallet] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'wallet'>('overview');
 
@@ -28,13 +31,38 @@ export default function ClientDetailPage() {
       loadOrders();
       loadWallet();
     }
-  }, [clientId]);
+  }, [clientId, selectedBusiness?.business_id]);
+
+  // Manejar parámetros de URL para tab y transaction
+  useEffect(() => {
+    if (router.isReady) {
+      const { tab, transaction } = router.query;
+      if (tab === 'wallet' || tab === 'orders' || tab === 'overview') {
+        setActiveTab(tab as 'overview' | 'orders' | 'wallet');
+      }
+      // Si hay un transaction ID, hacer scroll a esa transacción después de cargar
+      if (transaction && activeTab === 'wallet') {
+        setTimeout(() => {
+          const element = document.getElementById(`transaction-${transaction}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+            setTimeout(() => {
+              element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+            }, 3000);
+          }
+        }, 500);
+      }
+    }
+  }, [router.isReady, router.query, activeTab]);
 
   const loadClient = async () => {
     try {
       setLoading(true);
       setError(null);
-      const clientData = await clientsService.getClient(clientId);
+      // Pasar el business_id actual para filtrar estadísticas por sucursal/grupo
+      const businessId = selectedBusiness?.business_id;
+      const clientData = await clientsService.getClient(clientId, businessId);
       setClient(clientData);
     } catch (err: any) {
       console.error('Error cargando cliente:', err);
@@ -47,23 +75,13 @@ export default function ClientDetailPage() {
   const loadOrders = async () => {
     try {
       setLoadingOrders(true);
-      // Obtener pedidos del cliente desde todas las sucursales
-      // Nota: El endpoint actual puede requerir businessId, pero para admin podemos obtener todos
-      const allOrders: Order[] = [];
-      
-      // Por ahora, intentamos obtener pedidos directamente
-      // Si el endpoint requiere businessId, necesitaremos ajustarlo
-      try {
-        // Intentar obtener pedidos del cliente
-        // Esto puede requerir un endpoint específico o modificar el existente
-        const ordersData = await ordersService.getOrders('', { search: clientId });
-        setOrders(ordersData.filter(order => order.client_id === clientId));
-      } catch (err) {
-        console.warn('No se pudieron cargar pedidos del cliente:', err);
-        setOrders([]);
-      }
+      // Pasar el business_id actual para filtrar por sucursal/grupo
+      const businessId = selectedBusiness?.business_id;
+      const ordersData = await clientsService.getClientOrders(clientId, businessId);
+      setOrders(ordersData);
     } catch (err: any) {
       console.error('Error cargando pedidos:', err);
+      setOrders([]);
     } finally {
       setLoadingOrders(false);
     }
@@ -72,25 +90,39 @@ export default function ClientDetailPage() {
   const loadWallet = async () => {
     try {
       setLoadingWallet(true);
-      // Obtener wallet del cliente
-      // Nota: El endpoint actual obtiene el wallet del usuario autenticado
-      // Necesitaremos un endpoint para obtener el wallet de otro usuario (admin)
+      setWalletError(null);
+      console.log('💰 [CLIENT WALLET] Cargando wallet para cliente:', clientId);
+      
       try {
-        const walletData = await walletService.getBalance();
-        // Verificar que el wallet pertenece al cliente
-        if (walletData.user_id === clientId) {
-          setWallet(walletData);
-          
-          // Cargar transacciones
-          const transactionsResponse = await walletService.getTransactions({ page: 1, limit: 10 });
-          setWalletTransactions(transactionsResponse.data);
-        }
-      } catch (err) {
-        console.warn('No se pudo cargar el wallet del cliente:', err);
-        // El wallet puede no existir aún o no tener permisos
+        const walletData = await walletService.getBalanceByUserId(clientId);
+        console.log('💰 [CLIENT WALLET] Wallet cargado:', walletData);
+        setWallet(walletData);
+        
+        // Cargar transacciones
+        console.log('💰 [CLIENT WALLET] Cargando transacciones...');
+        const transactionsResponse = await walletService.getTransactionsByUserId(clientId, { 
+          page: 1, 
+          limit: 50 
+        });
+        console.log('💰 [CLIENT WALLET] Transacciones cargadas:', transactionsResponse.data.length, transactionsResponse);
+        setWalletTransactions(transactionsResponse.data || []);
+      } catch (err: any) {
+        console.error('❌ [CLIENT WALLET] Error cargando wallet del cliente:', err);
+        console.error('❌ [CLIENT WALLET] Error completo:', err);
+        console.error('❌ [CLIENT WALLET] Error message:', err?.message);
+        console.error('❌ [CLIENT WALLET] Error statusCode:', err?.statusCode);
+        console.error('❌ [CLIENT WALLET] Error data:', err?.data);
+        
+        const errorMessage = err?.message || err?.data?.message || 'Error desconocido al cargar el wallet';
+        setWalletError(errorMessage);
+        setWallet(null);
+        setWalletTransactions([]);
       }
     } catch (err: any) {
-      console.error('Error cargando wallet:', err);
+      console.error('❌ [CLIENT WALLET] Error general cargando wallet:', err);
+      setWalletError(err?.message || 'Error al cargar el wallet');
+      setWallet(null);
+      setWalletTransactions([]);
     } finally {
       setLoadingWallet(false);
     }
@@ -410,10 +442,15 @@ export default function ClientDetailPage() {
               ) : orders.length > 0 ? (
                 <div className="space-y-4">
                   {orders.slice(0, 5).map((order) => (
-                    <Link
+                    <div
                       key={order.id}
-                      href={`/orders/${order.id}`}
-                      className="block border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        if (order.business_id) {
+                          sessionStorage.setItem('temp_order_business_id', order.business_id);
+                          router.push(`/orders/${order.id}`);
+                        }
+                      }}
+                      className="block border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -432,7 +469,7 @@ export default function ClientDetailPage() {
                           </div>
                         </div>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -454,10 +491,15 @@ export default function ClientDetailPage() {
             ) : orders.length > 0 ? (
               <div className="divide-y divide-gray-200">
                 {orders.map((order) => (
-                  <Link
+                  <div
                     key={order.id}
-                    href={`/orders/${order.id}`}
-                    className="block p-6 hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      if (order.business_id) {
+                        sessionStorage.setItem('temp_order_business_id', order.business_id);
+                        router.push(`/orders/${order.id}`);
+                      }
+                    }}
+                    className="block p-6 hover:bg-gray-50 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -480,7 +522,7 @@ export default function ClientDetailPage() {
                         )}
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -493,7 +535,7 @@ export default function ClientDetailPage() {
 
         {activeTab === 'wallet' && (
           <div className="space-y-6">
-            {/* Saldo del wallet */}
+            {/* Saldo del wallet - Tarjeta financiera */}
             {loadingWallet ? (
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-center py-8">
@@ -501,93 +543,197 @@ export default function ClientDetailPage() {
                 </div>
               </div>
             ) : wallet ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Saldo del Monedero</h2>
-                <div className="flex items-center justify-between">
+              <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl shadow-lg p-8 text-white">
+                <div className="flex items-center justify-between mb-6">
                   <div>
-                    <p className="text-sm font-medium text-gray-500">Saldo disponible</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{formatCurrency(wallet.balance)}</p>
+                    <p className="text-sm font-medium text-indigo-200 mb-1">Saldo Disponible</p>
+                    <p className="text-4xl font-bold">{formatCurrency(wallet.balance)}</p>
                   </div>
-                  <div className={`h-16 w-16 rounded-full flex items-center justify-center ${
-                    wallet.is_blocked ? 'bg-red-100' : wallet.is_active ? 'bg-green-100' : 'bg-gray-100'
-                  }`}>
-                    <svg className="h-8 w-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                    <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
                     </svg>
                   </div>
                 </div>
-                {wallet.is_blocked && (
-                  <p className="text-sm text-red-600 mt-4">⚠️ El monedero está bloqueado</p>
-                )}
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <p className="text-sm text-gray-500 text-center py-4">
-                  El cliente aún no tiene un monedero electrónico
-                </p>
-              </div>
-            )}
-
-            {/* Transacciones */}
-            {wallet && (
-              <div className="bg-white rounded-lg border border-gray-200">
-                <div className="p-6 border-b border-gray-200">
-                  <h2 className="text-lg font-semibold text-gray-900">Historial de Transacciones</h2>
+                <div className="flex items-center gap-4 pt-4 border-t border-indigo-400/30">
+                  <div className="flex-1">
+                    <p className="text-xs text-indigo-200">Estado del Monedero</p>
+                    <p className="text-sm font-semibold">
+                      {wallet.is_blocked ? '🔒 Bloqueado' : wallet.is_active ? '✓ Activo' : '⚠ Inactivo'}
+                    </p>
+                  </div>
+                  {wallet.last_transaction_at && (
+                    <div className="flex-1 text-right">
+                      <p className="text-xs text-indigo-200">Última Transacción</p>
+                      <p className="text-sm font-semibold">{formatDate(wallet.last_transaction_at)}</p>
+                    </div>
+                  )}
                 </div>
-                {walletTransactions.length > 0 ? (
-                  <div className="divide-y divide-gray-200">
-                    {walletTransactions.map((transaction) => (
-                      <div key={transaction.id} className="p-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3">
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                                {getTransactionTypeLabel(transaction.transaction_type)}
-                              </span>
-                              {transaction.status === 'completed' ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                  Completada
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                  {transaction.status}
-                                </span>
-                              )}
+              </div>
+            ) : !loadingWallet ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="text-center py-4">
+                  <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm font-medium text-gray-900 mb-1">No se pudo cargar el monedero</p>
+                  {walletError ? (
+                    <div className="mt-2">
+                      <p className="text-xs text-red-600 font-medium mb-1">Error:</p>
+                      <p className="text-xs text-red-500">{walletError}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      El cliente puede no tener un monedero electrónico aún, o puede haber un error al cargar los datos.
+                    </p>
+                  )}
+                  <button
+                    onClick={loadWallet}
+                    className="mt-4 px-4 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Transacciones - Interfaz financiera - Solo mostrar si hay wallet */}
+            {wallet && (
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h2 className="text-base font-semibold text-gray-900">Movimientos del Monedero</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Historial completo de ingresos y egresos vinculados a pedidos
+                  </p>
+                </div>
+                {loadingWallet ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                  </div>
+                ) : walletTransactions.length > 0 ? (
+                  <div className="divide-y divide-gray-100">
+                    {walletTransactions.map((transaction) => {
+                      const isCredit = transaction.transaction_type === 'credit';
+                      const isRefund = transaction.transaction_type === 'refund';
+                      const isPayment = transaction.transaction_type === 'payment' || transaction.transaction_type === 'debit';
+                      
+                      return (
+                        <div 
+                          key={transaction.id}
+                          id={`transaction-${transaction.id}`}
+                          className="p-6 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start gap-4 flex-1">
+                              {/* Icono de transacción */}
+                              <div className={`h-12 w-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                isCredit || isRefund 
+                                  ? 'bg-green-100' 
+                                  : 'bg-red-100'
+                              }`}>
+                                {isCredit || isRefund ? (
+                                  <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                ) : (
+                                  <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                                  </svg>
+                                )}
+                              </div>
+
+                              {/* Información de la transacción */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-semibold text-gray-900">
+                                    {isCredit ? 'Ingreso' : isRefund ? 'Reembolso' : 'Egreso'}
+                                  </span>
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    transaction.status === 'completed' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : transaction.status === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {transaction.status === 'completed' ? 'Completada' : 
+                                     transaction.status === 'pending' ? 'Pendiente' : 
+                                     transaction.status === 'failed' ? 'Fallida' : 'Cancelada'}
+                                  </span>
+                                </div>
+                                
+                                {transaction.reason && (
+                                  <p className="text-sm text-gray-700 mb-1">{transaction.reason}</p>
+                                )}
+                                
+                                {transaction.description && (
+                                  <p className="text-xs text-gray-500 mb-2">{transaction.description}</p>
+                                )}
+
+                                <div className="flex items-center gap-4 mt-2">
+                                  <p className="text-xs text-gray-500">
+                                    {formatDate(transaction.created_at)}
+                                  </p>
+                                  {transaction.order_id && (
+                                    <button
+                                      onClick={() => {
+                                        // Usar business_id de la transacción o buscar en orders
+                                        const businessId = transaction.business_id || orders.find(o => o.id === transaction.order_id)?.business_id;
+                                        if (businessId) {
+                                          sessionStorage.setItem('temp_order_business_id', businessId);
+                                          router.push(`/orders/${transaction.order_id}`);
+                                        }
+                                      }}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                                    >
+                                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                      </svg>
+                                      Ver Pedido #{transaction.order_id.slice(-8).toUpperCase()}
+                                    </button>
+                                  )}
+                                  {!transaction.order_id && transaction.transaction_type === 'refund' && (
+                                    <span className="text-xs text-gray-500">
+                                      Devolución de dinero
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                            {transaction.reason && (
-                              <p className="text-sm text-gray-600 mt-2">{transaction.reason}</p>
-                            )}
-                            {transaction.description && (
-                              <p className="text-xs text-gray-500 mt-1">{transaction.description}</p>
-                            )}
-                            <p className="text-xs text-gray-500 mt-2">{formatDate(transaction.created_at)}</p>
-                            {transaction.order_id && (
-                              <Link
-                                href={`/orders/${transaction.order_id}`}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 mt-2 inline-block"
-                              >
-                                Ver pedido relacionado →
-                              </Link>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-lg font-semibold ${
-                              transaction.transaction_type === 'credit' ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {transaction.transaction_type === 'credit' ? '+' : '-'}
-                              {formatCurrency(transaction.amount)}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Saldo: {formatCurrency(transaction.balance_after)}
-                            </p>
+
+                            {/* Monto y saldo */}
+                            <div className="text-right flex-shrink-0">
+                              <p className={`text-xl font-bold ${
+                                isCredit || isRefund ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {isCredit || isRefund ? '+' : '-'}
+                                {formatCurrency(transaction.amount)}
+                              </p>
+                              <div className="mt-1 text-xs text-gray-500">
+                                <p>Saldo anterior: {formatCurrency(transaction.balance_before)}</p>
+                                <p className="font-medium text-gray-700">
+                                  Saldo después: {formatCurrency(transaction.balance_after)}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <p className="text-sm text-gray-500">No hay transacciones registradas</p>
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-sm font-medium text-gray-900 mb-1">No hay transacciones registradas</p>
+                    <p className="text-xs text-gray-500">
+                      Las transacciones aparecerán aquí cuando se generen ingresos o egresos
+                    </p>
                   </div>
                 )}
               </div>

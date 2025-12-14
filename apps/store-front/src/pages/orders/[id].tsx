@@ -112,6 +112,7 @@ export default function OrderDetailPage() {
     return labels[status.toLowerCase()] || status;
   };
 
+
   if (loading) {
     return (
       <StoreLayout>
@@ -143,18 +144,19 @@ export default function OrderDetailPage() {
   return (
     <>
       <Head>
-        <title>Pedido #{order.id.slice(0, 8)} - Agora</title>
+        <title>Pedido #{order.id.slice(-8).toUpperCase()} - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="flex gap-6">
-          {/* Sidebar de navegación */}
-          <AccountSidebar activeTab="orders" />
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex gap-6">
+            {/* Sidebar de navegación */}
+            <AccountSidebar activeTab="orders" />
 
           {/* Contenido principal */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" style={{ minHeight: '600px' }}>
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Pedido #{order.id.slice(0, 8)}
+              Pedido #{order.id.slice(-8).toUpperCase()}
             </h1>
             <div className="flex items-center gap-3">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
@@ -270,6 +272,63 @@ export default function OrderDetailPage() {
             </div>
           )}
 
+          {/* Folio de seguimiento (Guía de envío) */}
+          {order.shipping_label && order.shipping_label.tracking_number && (
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-blue-500">
+              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <LocalShippingIcon className="w-5 h-5 text-blue-500" />
+                Folio de Seguimiento
+              </h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Número de guía:</p>
+                  <p className="text-lg font-mono font-semibold text-gray-900">
+                    {order.shipping_label.tracking_number}
+                  </p>
+                </div>
+                {order.shipping_label.carrier_name && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Transportista:</p>
+                    <p className="text-gray-900">{order.shipping_label.carrier_name}</p>
+                  </div>
+                )}
+                {order.shipping_label.status && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Estado:</p>
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                      order.shipping_label.status === 'delivered' 
+                        ? 'bg-green-100 text-green-800'
+                        : order.shipping_label.status === 'in_transit'
+                        ? 'bg-blue-100 text-blue-800'
+                        : order.shipping_label.status === 'picked_up'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {order.shipping_label.status === 'generated' && 'Generada'}
+                      {order.shipping_label.status === 'picked_up' && 'Recolectada'}
+                      {order.shipping_label.status === 'in_transit' && 'En tránsito'}
+                      {order.shipping_label.status === 'delivered' && 'Entregada'}
+                    </span>
+                  </div>
+                )}
+                {order.shipping_label.generated_at && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Fecha de generación:</p>
+                    <p className="text-gray-900">
+                      {new Date(order.shipping_label.generated_at).toLocaleDateString('es-MX', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Resumen de pago */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -307,18 +366,105 @@ export default function OrderDetailPage() {
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Método de pago:</span>
-                <span className="font-medium">{order.payment_method || 'No especificado'}</span>
-              </div>
-              <div className="flex justify-between text-sm mt-2">
-                <span className="text-gray-600">Estado de pago:</span>
-                <span className={`font-medium ${
-                  order.payment_status === 'paid' ? 'text-green-600' : 'text-yellow-600'
-                }`}>
-                  {order.payment_status === 'paid' ? 'Pagado' : 'Pendiente'}
-                </span>
-              </div>
+              {/* Mostrar desglose de pagos si hay múltiples transacciones */}
+              {order.payment_transactions && order.payment_transactions.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-medium text-gray-700 mb-2">
+                    Método de pago: <span className="font-normal">Pago diferido en {order.payment_transactions.length} método{order.payment_transactions.length > 1 ? 's' : ''}</span>
+                  </div>
+                  {order.payment_transactions.map((transaction, index) => {
+                    const getPaymentMethodLabel = (method: string) => {
+                      const labels: Record<string, string> = {
+                        wallet: 'Monedero electrónico',
+                        karlopay: 'Tarjeta de crédito/débito',
+                        card: 'Tarjeta de crédito/débito',
+                        cash: 'Efectivo',
+                        transfer: 'Transferencia bancaria',
+                      };
+                      return labels[method] || method;
+                    };
+
+                    const getStatusLabel = (status: string) => {
+                      const labels: Record<string, string> = {
+                        completed: 'Completado',
+                        pending: 'Pendiente',
+                        failed: 'Fallido',
+                        cancelled: 'Cancelado',
+                        refunded: 'Reembolsado',
+                      };
+                      return labels[status] || status;
+                    };
+
+                    const getStatusColor = (status: string) => {
+                      switch (status) {
+                        case 'completed':
+                          return 'text-green-600';
+                        case 'pending':
+                          return 'text-yellow-600';
+                        case 'failed':
+                          return 'text-red-600';
+                        case 'cancelled':
+                          return 'text-gray-600';
+                        case 'refunded':
+                          return 'text-purple-600';
+                        default:
+                          return 'text-gray-600';
+                      }
+                    };
+
+                    return (
+                      <div key={transaction.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-sm font-medium text-gray-700">
+                            {getPaymentMethodLabel(transaction.payment_method)}
+                          </span>
+                          <span className="text-sm font-bold text-gray-900">
+                            {formatPrice(parseFloat(String(transaction.amount || 0)))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-xs text-gray-500">
+                            Estado: <span className={`font-medium ${getStatusColor(transaction.status)}`}>
+                              {getStatusLabel(transaction.status)}
+                            </span>
+                          </span>
+                          {transaction.last_four && (
+                            <span className="text-xs text-gray-500">
+                              Terminada en {transaction.last_four}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex justify-between text-sm pt-2 border-t border-gray-200 mt-2">
+                    <span className="font-semibold text-gray-700">Total pagado:</span>
+                    <span className="font-bold text-gray-900">
+                      {formatPrice(
+                        order.payment_transactions!.reduce(
+                          (sum, t) => sum + parseFloat(String(t.amount || 0)),
+                          0
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Método de pago:</span>
+                    <span className="font-medium">{order.payment_method || 'No especificado'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mt-2">
+                    <span className="text-gray-600">Estado de pago:</span>
+                    <span className={`font-medium ${
+                      order.payment_status === 'paid' ? 'text-green-600' : 'text-yellow-600'
+                    }`}>
+                      {order.payment_status === 'paid' ? 'Pagado' : 'Pendiente'}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -331,6 +477,7 @@ export default function OrderDetailPage() {
               Volver a Mis Pedidos
             </ContextualLink>
           </div>
+            </div>
           </div>
         </div>
       </StoreLayout>

@@ -67,41 +67,43 @@ export default function ProductsPage() {
         <meta name="description" content="Catálogo de productos" />
       </Head>
       <StoreLayout>
-        <div className="mb-8">
-          {/* Breadcrumbs de categoría */}
-          {categoryFilter && (
-            <CategoryBreadcrumbs categoryId={categoryFilter} />
-          )}
-
-          {/* Título con nombre y descripción de categoría */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {categoryName || (categoryFilter ? 'Productos' : contextType === 'global' ? 'Todos los Productos' : contextType === 'grupo' ? 'Productos del Grupo' : contextType === 'sucursal' ? 'Productos de la Sucursal' : 'Productos')}
-            </h1>
-            {categoryDescription && (
-              <p className="text-gray-600 text-base">{categoryDescription}</p>
-            )}
-          </div>
-
-          {/* Layout: Panel lateral izquierdo + Productos en el centro */}
-          <div className="flex gap-6">
-            {/* Panel lateral izquierdo - Información de categoría */}
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="mb-8">
+            {/* Breadcrumbs de categoría */}
             {categoryFilter && (
-              <aside className="w-64 flex-shrink-0">
-                <CategoryInfo 
-                  categoryId={categoryFilter} 
-                  onCategoryLoaded={(name, description) => {
-                    setCategoryName(name);
-                    setCategoryDescription(description || '');
-                  }}
-                />
-              </aside>
+              <CategoryBreadcrumbs categoryId={categoryFilter} />
             )}
 
-            {/* Contenido principal - Productos */}
-            <div className="flex-1 min-w-0">
-              {/* Grid de productos */}
-              <ProductGrid filters={filters} />
+            {/* Título con nombre y descripción de categoría */}
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                {categoryName || (categoryFilter ? 'Productos' : contextType === 'global' ? 'Todos los Productos' : contextType === 'grupo' ? 'Productos del Grupo' : contextType === 'sucursal' ? 'Productos de la Sucursal' : 'Productos')}
+              </h1>
+              {categoryDescription && (
+                <p className="text-gray-600 text-base">{categoryDescription}</p>
+              )}
+            </div>
+
+            {/* Layout: Panel lateral izquierdo + Productos en el centro */}
+            <div className="flex gap-6">
+              {/* Panel lateral izquierdo - Información de categoría */}
+              {categoryFilter && (
+                <aside className="w-64 flex-shrink-0">
+                  <CategoryInfo 
+                    categoryId={categoryFilter} 
+                    onCategoryLoaded={(name, description) => {
+                      setCategoryName(name);
+                      setCategoryDescription(description || '');
+                    }}
+                  />
+                </aside>
+              )}
+
+              {/* Contenido principal - Productos */}
+              <div className="flex-1 min-w-0">
+                {/* Grid de productos */}
+                <ProductGrid filters={filters} />
+              </div>
             </div>
           </div>
         </div>

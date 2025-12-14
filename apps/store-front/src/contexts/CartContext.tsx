@@ -36,6 +36,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       const cartData = await cartService.getCart();
       console.log('🛒 Carrito cargado desde backend:', cartData);
+      if (cartData && cartData.items) {
+        // Log para debugging de imágenes
+        console.log('🖼️ [loadCart] Carrito cargado con imágenes:', {
+          itemsCount: cartData.items.length,
+          itemsWithImages: cartData.items.filter(item => item.product_image_url).length,
+          items: cartData.items.map(item => ({
+            id: item.id,
+            product_name: item.product_name,
+            product_image_url: item.product_image_url,
+            hasImage: !!item.product_image_url,
+          })),
+        });
+      }
       setCart(cartData);
     } catch (error: any) {
       console.error('Error cargando carrito:', error);

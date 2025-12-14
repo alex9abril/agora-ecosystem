@@ -103,6 +103,20 @@ export class OrdersController {
     });
   }
 
+  @Get('client/:clientId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar pedidos de un cliente (para admin)' })
+  @ApiParam({ name: 'clientId', description: 'ID del cliente', type: String })
+  @ApiQuery({ name: 'businessId', required: false, description: 'Filtrar por ID de negocio o grupo' })
+  @ApiResponse({ status: 200, description: 'Lista de pedidos obtenida exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async findAllByClient(
+    @Param('clientId') clientId: string,
+    @Query('businessId') businessId?: string,
+  ) {
+    return this.ordersService.findAllByClient(clientId, businessId);
+  }
+
   @Get('business/:businessId/:id')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener detalle de pedido para negocio' })

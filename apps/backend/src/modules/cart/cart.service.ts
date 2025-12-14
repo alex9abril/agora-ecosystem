@@ -104,7 +104,7 @@ export class CartService {
           FROM catalog.product_images pi_lat
           WHERE pi_lat.product_id = p.id
           AND pi_lat.is_active = TRUE
-          ORDER BY pi_lat.is_primary DESC, pi_lat.display_order ASC
+          ORDER BY pi_lat.is_primary DESC, pi_lat.display_order ASC, pi_lat.created_at ASC
           LIMIT 1
         ) pi_main ON TRUE
         WHERE sci.cart_id = $1
@@ -113,22 +113,53 @@ export class CartService {
       );
 
       // Procesar items para agregar URLs de imágenes
+      // Usar la misma lógica que products.service.ts para generar primary_image_url
       const processedItems = itemsResult.rows.map((item) => {
-        let productImageUrl = item.product_image_url_fallback;
+        let productImageUrl = item.product_image_url_fallback || null;
         
         // Si hay una imagen principal de product_images, generar su URL pública
+        // Usar la misma lógica que products.service.ts
         if (item.primary_image_path && supabaseAdmin) {
           try {
-            const normalizedPath = normalizeStoragePath(item.primary_image_path);
-            if (normalizedPath) {
-              const { data: urlData } = supabaseAdmin.storage
-                .from(this.BUCKET_NAME)
-                .getPublicUrl(normalizedPath);
-              productImageUrl = urlData.publicUrl;
+            const originalPath = item.primary_image_path;
+            let finalPath: string | null = null;
+            
+            // Si ya es un path relativo (no empieza con http), usarlo directamente
+            if (!originalPath.startsWith('http')) {
+              finalPath = originalPath;
+            } else {
+              // Si es una URL completa, extraer directamente el patrón UUID/filename
+              // PRIORIDAD 1: Buscar el patrón UUID/filename con extensión
+              const uuidMatch = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
+              if (uuidMatch && uuidMatch[1]) {
+                finalPath = uuidMatch[1];
+              } else {
+                // PRIORIDAD 2: Buscar sin extensión
+                const uuidMatchNoExt = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
+                if (uuidMatchNoExt && uuidMatchNoExt[1]) {
+                  finalPath = uuidMatchNoExt[1];
+                } else {
+                  // Usar normalizeStoragePath como fallback
+                  finalPath = normalizeStoragePath(originalPath);
+                }
+              }
+            }
+            
+            // Solo generar URL si tenemos un path relativo válido (no empieza con http)
+            if (finalPath && !finalPath.startsWith('http') && !finalPath.startsWith('https') && finalPath.includes('/')) {
+              // Verificar que finalPath tenga el formato correcto (UUID/filename)
+              if (finalPath.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i)) {
+                // Asegurarse de que finalPath no contenga caracteres de URL
+                if (!finalPath.includes('://') && !finalPath.includes('.supabase.co') && !finalPath.includes('.storage.supabase.co')) {
+                  const { data: urlData } = supabaseAdmin.storage
+                    .from(this.BUCKET_NAME)
+                    .getPublicUrl(finalPath);
+                  productImageUrl = urlData.publicUrl;
+                }
+              }
             }
           } catch (error) {
-            console.error('Error generando URL de imagen principal en carrito:', error);
-            // Mantener el fallback si hay error
+            console.error(`Error generando URL de imagen para producto ${item.product_id}:`, error);
           }
         }
 

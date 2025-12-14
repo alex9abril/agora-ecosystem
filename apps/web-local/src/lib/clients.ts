@@ -3,6 +3,7 @@
  */
 
 import { apiRequest } from './api';
+import { Order } from './orders';
 
 export interface Client {
   id: string;
@@ -65,9 +66,30 @@ export const clientsService = {
 
   /**
    * Obtener detalle de un cliente
+   * @param clientId ID del cliente
+   * @param businessId ID de la sucursal/grupo para filtrar estadísticas (opcional)
    */
-  async getClient(clientId: string): Promise<Client> {
-    return apiRequest<Client>(`/clients/${clientId}`);
+  async getClient(clientId: string, businessId?: string): Promise<Client> {
+    const params = new URLSearchParams();
+    if (businessId) {
+      params.append('businessId', businessId);
+    }
+    const queryString = params.toString();
+    return apiRequest<Client>(`/clients/${clientId}${queryString ? `?${queryString}` : ''}`);
+  },
+
+  /**
+   * Obtener pedidos de un cliente
+   * @param clientId ID del cliente
+   * @param businessId ID de la sucursal/grupo para filtrar (opcional)
+   */
+  async getClientOrders(clientId: string, businessId?: string): Promise<Order[]> {
+    const params = new URLSearchParams();
+    if (businessId) {
+      params.append('businessId', businessId);
+    }
+    const queryString = params.toString();
+    return apiRequest<Order[]>(`/orders/client/${clientId}${queryString ? `?${queryString}` : ''}`);
   },
 };
 

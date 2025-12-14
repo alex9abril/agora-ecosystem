@@ -71,7 +71,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, loading: cartLoading, refreshCart } = useCart();
   const { isAuthenticated, signIn, signUp, user } = useAuth();
-  const { contextType, slug } = useStoreContext();
+  const { contextType, slug, getContextualUrl } = useStoreContext();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -83,6 +83,7 @@ export default function CheckoutPage() {
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   
   // Estados para autenticación
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -154,10 +155,7 @@ export default function CheckoutPage() {
   const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState<string | null>(null);
   const [paymentMethods] = useState<PaymentMethod[]>([
     { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
-    { id: 'cash', type: 'cash', label: 'Efectivo al recibir' },
-    { id: 'transfer', type: 'transfer', label: 'Transferencia bancaria' },
     { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
-    { id: 'karlopay', type: 'card', label: 'Karlopay' },
   ]);
   
   // Estados para confirmación
@@ -180,9 +178,11 @@ export default function CheckoutPage() {
   // Redirigir si no hay carrito (pero no si estamos en confirmación)
   useEffect(() => {
     if (!cartLoading && (!cart || !cart.items || cart.items.length === 0) && currentStep !== 'confirmation' && !orderId) {
-      router.push('/cart');
+      // Mantener el contexto de tienda al redirigir al carrito
+      const cartUrl = getContextualUrl('/cart');
+      router.push(cartUrl);
     }
-  }, [cart, cartLoading, router, currentStep, orderId]);
+  }, [cart, cartLoading, router, currentStep, orderId, getContextualUrl]);
 
   // Determinar paso inicial
   useEffect(() => {
@@ -223,7 +223,9 @@ export default function CheckoutPage() {
 
   // Cargar direcciones cuando el usuario está autenticado
   const loadAddresses = async () => {
-    if (!isAuthenticated) return;
+    // Verificar si hay token disponible (más confiable que isAuthenticated que puede tener delay)
+    const hasToken = typeof window !== 'undefined' && localStorage.getItem('auth_token');
+    if (!isAuthenticated && !hasToken) return;
     
     try {
       const response = await apiRequest<Address[]>('/addresses', {
@@ -442,6 +444,18 @@ export default function CheckoutPage() {
     try {
       if (authMode === 'login') {
         await signIn(authEmail, authPassword);
+        // Esperar a que el estado de autenticación se actualice
+        // Verificar que el token esté disponible antes de continuar
+        let attempts = 0;
+        while (attempts < 10) {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+          if (token || isAuthenticated) {
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+          attempts++;
+        }
+        // No redirigir - quedarse en el checkout y avanzar al siguiente paso
         setCurrentStep('shipping');
         await loadAddresses();
       } else {
@@ -453,6 +467,18 @@ export default function CheckoutPage() {
           phone: authPhone,
           role: 'client',
         });
+        // Esperar a que el estado de autenticación se actualice
+        // Verificar que el token esté disponible antes de continuar
+        let attempts = 0;
+        while (attempts < 10) {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+          if (token || isAuthenticated) {
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 50));
+          attempts++;
+        }
+        // No redirigir - quedarse en el checkout y avanzar al siguiente paso
         setCurrentStep('shipping');
         await loadAddresses();
       }
@@ -999,8 +1025,10 @@ export default function CheckoutPage() {
       }
       
       // Preparar información de pago para el backend
+      // Si se selecciona "Tarjeta de crédito/débito" (card), usar Karlopay internamente
+      const backendPaymentMethod = selectedPaymentMethod === 'card' ? 'karlopay' : selectedPaymentMethod;
       const paymentInfo: any = {
-        method: selectedPaymentMethod,
+        method: backendPaymentMethod,
       };
 
       // Si se usa wallet, agregar información de distribución
@@ -1011,8 +1039,10 @@ export default function CheckoutPage() {
         };
 
         // Si hay método secundario, agregarlo
+        // Si el método secundario es "card", usar "karlopay" internamente
         if (walletAmount < total && secondaryPaymentMethod) {
-          paymentInfo.secondary_method = secondaryPaymentMethod;
+          const backendSecondaryMethod = secondaryPaymentMethod === 'card' ? 'karlopay' : secondaryPaymentMethod;
+          paymentInfo.secondary_method = backendSecondaryMethod;
           paymentInfo.secondary_amount = total - walletAmount;
         }
       }
@@ -1029,18 +1059,23 @@ export default function CheckoutPage() {
           addressId: selectedAddressId,
           deliveryNotes: deliveryNotes.trim(),
           payment: paymentInfo,
+          deliveryFee: shippingTotal, // Enviar el costo de envío calculado al backend
           storeContext: storePath, // Ruta de la tienda para la URL de redirección
         }),
       });
 
-      // Si el método de pago es Karlopay y hay URL de pago, redirigir
-      if (selectedPaymentMethod === 'karlopay' && order.karlopay_payment_url) {
+      // Si el método de pago es Tarjeta (que usa Karlopay internamente) o hay método secundario Tarjeta, redirigir
+      const needsPaymentRedirect = 
+        (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'karlopay') ||
+        (selectedPaymentMethod === 'wallet' && secondaryPaymentMethod === 'card');
+      
+      if (needsPaymentRedirect && order.karlopay_payment_url) {
         // Asegurar que la URL tenga protocolo
         let paymentUrl = order.karlopay_payment_url;
         if (!paymentUrl.startsWith('http://') && !paymentUrl.startsWith('https://')) {
           paymentUrl = `https://${paymentUrl}`;
         }
-        console.log(`🔗 Redirigiendo a Karlopay: ${paymentUrl}`);
+        console.log(`🔗 Redirigiendo a pasarela de pago: ${paymentUrl}`);
         window.location.href = paymentUrl;
         return; // No continuar con el flujo normal
       }
@@ -2066,14 +2101,22 @@ export default function CheckoutPage() {
                     )}
 
                     <div className="space-y-3 mb-6">
-                      {paymentMethods.map((method) => (
+                      {paymentMethods
+                        .filter(method => {
+                          // Ocultar wallet si no hay saldo disponible
+                          if (method.id === 'wallet') {
+                            return walletBalance !== null && walletBalance > 0;
+                          }
+                          return true;
+                        })
+                        .map((method) => (
                         <label
                           key={method.id}
                           className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${
                             selectedPaymentMethod === method.id
                               ? 'border-blue-500 bg-blue-50'
                               : 'border-gray-200 hover:border-gray-300'
-                          } ${method.id === 'wallet' && (walletBalance === null || walletBalance === 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          }`}
                         >
                           <div className="flex items-center gap-3">
                             <input
@@ -2103,7 +2146,6 @@ export default function CheckoutPage() {
                                   setSecondaryPaymentMethod(null);
                                 }
                               }}
-                              disabled={method.id === 'wallet' && (walletBalance === null || walletBalance === 0)}
                               className="w-5 h-5"
                             />
                             <div className="flex items-center gap-3 flex-1">
@@ -2452,15 +2494,22 @@ export default function CheckoutPage() {
                       <div className="space-y-3">
                         {store.items.map((item: CartItem) => (
                           <div key={item.id} className="flex gap-3">
-                            {item.product_image_url && (
-                              <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                            <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-gray-200">
+                              {item.product_image_url && !imageErrors[item.id] ? (
                                 <img
                                   src={item.product_image_url}
                                   alt={item.product_name}
                                   className="w-full h-full object-contain p-1"
+                                  onError={() => {
+                                    setImageErrors(prev => ({ ...prev, [item.id]: true }));
+                                  }}
                                 />
-                              </div>
-                            )}
+                              ) : (
+                                <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
                               <p className="text-xs text-gray-500 mt-1">Cantidad: {item.quantity}</p>

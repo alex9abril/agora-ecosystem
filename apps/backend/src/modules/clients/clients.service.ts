@@ -156,13 +156,53 @@ export class ClientsService {
 
   /**
    * Obtener un cliente por ID con información detallada
+   * @param id ID del cliente
+   * @param businessId ID de la sucursal/grupo para filtrar estadísticas (opcional)
    */
-  async findOne(id: string) {
+  async findOne(id: string, businessId?: string) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
     const pool = dbPool;
+
+    // Si se proporciona businessId, obtener todas las sucursales del grupo
+    let businessIds: string[] = [];
+    if (businessId) {
+      try {
+        // Obtener el grupo de la sucursal
+        const businessResult = await pool.query(
+          `SELECT group_id FROM core.businesses WHERE id = $1`,
+          [businessId]
+        );
+        
+        if (businessResult.rows.length > 0 && businessResult.rows[0].group_id) {
+          const groupId = businessResult.rows[0].group_id;
+          // Obtener todas las sucursales del grupo
+          const groupBusinessesResult = await pool.query(
+            `SELECT id FROM core.businesses WHERE group_id = $1`,
+            [groupId]
+          );
+          businessIds = groupBusinessesResult.rows.map(row => row.id);
+        } else {
+          // Si no tiene grupo, solo usar el business_id proporcionado
+          businessIds = [businessId];
+        }
+      } catch (error) {
+        console.warn('Error obteniendo grupo de sucursal, usando solo business_id:', error);
+        businessIds = [businessId];
+      }
+    }
+
+    // Construir la condición de filtro para pedidos
+    let ordersFilter = '';
+    const params: any[] = [id];
+    
+    if (businessIds.length > 0) {
+      // Filtrar pedidos por business_id del grupo
+      ordersFilter = ` AND o.business_id = ANY($2)`;
+      params.push(businessIds);
+    }
 
     const sqlQuery = `
       SELECT 
@@ -171,8 +211,8 @@ export class ClientsService {
         au.created_at as auth_created_at,
         au.last_sign_in_at,
         au.confirmed_at,
-        COALESCE(COUNT(DISTINCT o.id), 0) as total_orders,
-        COALESCE(SUM(o.total_amount), 0) as total_spent,
+        COALESCE(COUNT(DISTINCT CASE WHEN o.id IS NOT NULL${ordersFilter} THEN o.id END), 0) as total_orders,
+        COALESCE(SUM(CASE WHEN o.id IS NOT NULL${ordersFilter} THEN o.total_amount ELSE 0 END), 0) as total_spent,
         COALESCE(AVG(
           CASE 
             WHEN r.business_rating IS NOT NULL THEN r.business_rating::numeric
@@ -181,18 +221,18 @@ export class ClientsService {
           END
         ), 0) as avg_rating_given,
         COUNT(DISTINCT r.id) as total_reviews_given,
-        COUNT(DISTINCT CASE WHEN o.status = 'delivered' THEN o.id END) as completed_orders,
-        COUNT(DISTINCT CASE WHEN o.status = 'cancelled' THEN o.id END) as cancelled_orders
+        COUNT(DISTINCT CASE WHEN o.status = 'delivered'${ordersFilter} THEN o.id END) as completed_orders,
+        COUNT(DISTINCT CASE WHEN o.status = 'cancelled'${ordersFilter} THEN o.id END) as cancelled_orders
       FROM core.user_profiles up
       LEFT JOIN auth.users au ON up.id = au.id
-      LEFT JOIN orders.orders o ON o.client_id = up.id
+      LEFT JOIN orders.orders o ON o.client_id = up.id${ordersFilter}
       LEFT JOIN reviews.reviews r ON r.reviewer_id = up.id
       WHERE up.id = $1 AND up.role = 'client'
       GROUP BY up.id, au.email, au.created_at, au.last_sign_in_at, au.confirmed_at
     `;
 
     try {
-      const result = await pool.query(sqlQuery, [id]);
+      const result = await pool.query(sqlQuery, params);
       
       if (result.rows.length === 0) {
         throw new NotFoundException('Cliente no encontrado');

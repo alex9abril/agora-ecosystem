@@ -10,6 +10,7 @@ import { categoriesService, ProductCategory } from '@/lib/categories';
 import ContextualLink from './ContextualLink';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CategoryIcon from '@mui/icons-material/Category';
+import { getCategoryIconFromData } from '@/lib/category-icons';
 
 interface CategoryInfoProps {
   categoryId: string;
@@ -134,7 +135,13 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
                 href={getContextualUrl(`/products?categoryId=${subcat.id}`)}
                 className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200 hover:border-toyota-red hover:shadow-sm transition-all group"
               >
-                <CategoryIcon className="w-4 h-4 text-gray-400 group-hover:text-toyota-red transition-colors flex-shrink-0" />
+                <div className="text-gray-400 group-hover:text-toyota-red transition-colors flex-shrink-0">
+                  {getCategoryIconFromData({
+                    name: subcat.name,
+                    icon_url: subcat.icon_url || undefined,
+                    mui_icon_name: undefined,
+                  })}
+                </div>
                 <span className="text-sm font-medium text-gray-700 group-hover:text-toyota-red transition-colors flex-1">
                   {subcat.name}
                 </span>

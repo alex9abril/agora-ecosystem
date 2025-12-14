@@ -43,6 +43,24 @@ export interface Order {
     change_reason?: string;
     is_automatic: boolean;
   };
+  payment_transactions?: PaymentTransaction[];
+}
+
+export interface PaymentTransaction {
+  id: string;
+  order_id: string;
+  payment_method: string;
+  transaction_id?: string;
+  external_reference?: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled' | 'refunded';
+  payment_data?: any;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  card_type?: string;
+  last_four?: string;
+  reference_number?: string;
 }
 
 export interface OrderItem {

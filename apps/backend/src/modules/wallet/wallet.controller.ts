@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Query,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -12,6 +13,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiParam,
 } from '@nestjs/swagger';
 import { WalletService } from './wallet.service';
 import { CreditWalletDto } from './dto/credit-wallet.dto';
@@ -151,6 +153,37 @@ export class WalletController {
       required_amount: amountNum,
       sufficient: canUse,
     };
+  }
+
+  @Get('user/:userId/balance')
+  @ApiOperation({ summary: 'Obtener saldo del wallet de un usuario específico (para admin)' })
+  @ApiParam({ name: 'userId', description: 'ID del usuario', type: String })
+  @ApiResponse({ status: 200, description: 'Saldo obtenido exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 503, description: 'Servicio no disponible' })
+  async getBalanceByUserId(@Param('userId') userId: string) {
+    const wallet = await this.walletService.getWallet(userId);
+    return {
+      wallet_id: wallet.id,
+      user_id: wallet.user_id,
+      balance: parseFloat(wallet.balance.toString()),
+      is_active: wallet.is_active,
+      is_blocked: wallet.is_blocked,
+      last_transaction_at: wallet.updated_at,
+    };
+  }
+
+  @Get('user/:userId/transactions')
+  @ApiOperation({ summary: 'Obtener historial de transacciones del wallet de un usuario específico (para admin)' })
+  @ApiParam({ name: 'userId', description: 'ID del usuario', type: String })
+  @ApiResponse({ status: 200, description: 'Historial obtenido exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 503, description: 'Servicio no disponible' })
+  async getTransactionsByUserId(
+    @Param('userId') userId: string,
+    @Query() filters: ListTransactionsDto,
+  ) {
+    return this.walletService.getTransactions(userId, filters);
   }
 }
 

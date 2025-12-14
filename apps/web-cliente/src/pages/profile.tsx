@@ -327,7 +327,7 @@ function OrdersTab({
         >
           <div className="flex items-start justify-between mb-2">
             <div>
-              <p className="font-semibold text-black">Pedido #{order.id.slice(0, 8)}</p>
+              <p className="font-semibold text-black">Pedido #{order.id.slice(-8).toUpperCase()}</p>
               {order.business_name && (
                 <p className="text-sm text-gray-600">{order.business_name}</p>
               )}

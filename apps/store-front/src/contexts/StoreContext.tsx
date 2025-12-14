@@ -207,7 +207,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const getContextualUrl = useCallback((path: string): string => {
     // Rutas absolutas que NO deben tener contexto
-    const absoluteRoutes = ['/auth/', '/api/', '/_next/'];
+    // Excluir /api/ y /_next/ pero permitir /auth/login y /auth/register con contexto
+    const absoluteRoutes = ['/api/', '/_next/'];
     if (absoluteRoutes.some(route => path.startsWith(route))) {
       return path;
     }
@@ -223,6 +224,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     
     // Agregar prefijo de contexto solo si no es global
+    // Esto incluye rutas de autenticación como /auth/login y /auth/register
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     return `/${contextType}/${slug}${cleanPath}`;
   }, [contextType, slug]);

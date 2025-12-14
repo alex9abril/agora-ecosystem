@@ -102,12 +102,13 @@ export default function OrdersPage() {
         <title>Mis Pedidos - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="flex gap-6">
-          {/* Sidebar de navegación */}
-          <AccountSidebar activeTab="orders" />
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex gap-6">
+            {/* Sidebar de navegación */}
+            <AccountSidebar activeTab="orders" />
 
           {/* Contenido principal */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0" style={{ minHeight: '600px' }}>
             <h1 className="text-3xl font-bold text-gray-900 mb-8">Mis Pedidos</h1>
 
             {orders.length === 0 ? (
@@ -135,7 +136,7 @@ export default function OrdersPage() {
                       <div>
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="text-lg font-semibold text-gray-900">
-                            Pedido #{order.id.slice(0, 8)}
+                            Pedido #{order.id.slice(-8).toUpperCase()}
                           </h3>
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
@@ -201,6 +202,7 @@ export default function OrdersPage() {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </div>
       </StoreLayout>

@@ -1,7 +1,7 @@
 /**
  * Componente de menú de categorías
  * Muestra un menú vertical con categorías principales y subcategorías
- * Similar al diseño de AutoZone
+ * Estilo similar a AliExpress - diseño ancho con panel lateral y contenido expandido
  */
 
 import React, { useState, useEffect } from 'react';
@@ -9,8 +9,10 @@ import { useRouter } from 'next/router';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { categoriesService, ProductCategory } from '@/lib/categories';
 import ContextualLink from './ContextualLink';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import CategoryIcon from '@mui/icons-material/Category';
+import MenuIcon from '@mui/icons-material/Menu';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { getCategoryIconFromData } from '@/lib/category-icons';
 
 interface CategoriesMenuProps {
   className?: string;
@@ -36,15 +38,13 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
     loadRootCategories();
   }, []);
 
-  // Cargar subcategorías cuando se selecciona una categoría
+  // Seleccionar automáticamente la primera categoría cuando se cargan las categorías raíz
   useEffect(() => {
-    if (selectedCategory) {
-      loadSubcategories(selectedCategory.id);
-    } else {
-      setSubcategories([]);
-      setSubSubcategories({});
+    if (rootCategories.length > 0 && !selectedCategory) {
+      // Seleccionar la primera categoría automáticamente
+      setSelectedCategory(rootCategories[0]);
     }
-  }, [selectedCategory]);
+  }, [rootCategories]);
 
   const loadRootCategories = async () => {
     try {
@@ -70,6 +70,16 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
       setLoading(false);
     }
   };
+
+  // Cargar subcategorías cuando se selecciona una categoría
+  useEffect(() => {
+    if (selectedCategory) {
+      loadSubcategories(selectedCategory.id);
+    } else {
+      setSubcategories([]);
+      setSubSubcategories({});
+    }
+  }, [selectedCategory]);
 
   const loadSubcategories = async (parentId: string) => {
     try {
@@ -147,54 +157,101 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
     );
   }
 
+  // Función para obtener un ícono basado en el nombre de la categoría
+  // Usar el sistema dinámico de iconos
+  const getCategoryIcon = (category: ProductCategory) => {
+    return getCategoryIconFromData({
+      name: category.name,
+      icon_url: category.icon_url || undefined,
+      mui_icon_name: undefined, // Se puede agregar al modelo de categoría si es necesario
+    });
+  };
+
   return (
-    <div className={`flex bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
-      {/* Menú lateral izquierdo */}
-      <div className="w-80 border-r border-gray-200 bg-gray-50">
-        <div className="p-4 bg-toyota-gray-dark text-white">
-          <h3 className="font-bold text-sm uppercase">Todos los Departamentos</h3>
+    <div className={`flex bg-white rounded-lg shadow-xl border border-gray-200 w-full ${className}`}>
+      {/* Menú lateral izquierdo - Estilo AliExpress */}
+      <div className="w-64 border-r border-gray-200 bg-white flex-shrink-0">
+        {/* Header del menú */}
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <MenuIcon className="w-5 h-5 text-gray-600" />
+            <h3 className="font-semibold text-sm text-gray-900">Todas las categorías</h3>
+          </div>
         </div>
-        <nav className="py-2">
-          {rootCategories.map((category) => (
-            <div
-              key={category.id}
-              onMouseEnter={() => handleCategoryHover(category)}
-              onMouseLeave={handleCategoryLeave}
-              className={`relative ${
-                selectedCategory?.id === category.id
-                  ? 'bg-white border-l-4 border-toyota-red'
-                  : 'hover:bg-gray-100'
-              } transition-colors`}
-            >
-              <button
-                onClick={() => handleCategoryClick(category)}
-                className="w-full text-left px-4 py-3 flex items-center justify-between group"
-              >
-                <span className="text-sm font-medium text-gray-900">{category.name}</span>
-                <ChevronRightIcon 
-                  className={`w-4 h-4 text-gray-400 transition-transform ${
-                    selectedCategory?.id === category.id ? 'rotate-90' : ''
-                  }`} 
-                />
-              </button>
+        
+        {/* Lista de categorías */}
+        <nav className="py-1">
+          {loading && rootCategories.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-gray-500">Cargando categorías...</p>
             </div>
-          ))}
+          ) : error && rootCategories.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          ) : (
+            rootCategories.map((category) => {
+              const isSelected = selectedCategory?.id === category.id;
+              return (
+                <div
+                  key={category.id}
+                  onMouseEnter={() => handleCategoryHover(category)}
+                  onMouseLeave={handleCategoryLeave}
+                  className={`relative transition-colors ${
+                    isSelected
+                      ? 'bg-gray-100'
+                      : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <ContextualLink
+                    href={`/products?categoryId=${category.id}`}
+                    onClick={() => {
+                      if (onCategoryClick) {
+                        onCategoryClick();
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left group"
+                  >
+                    {/* Ícono de la categoría */}
+                    <div className={`flex-shrink-0 transition-colors ${
+                      isSelected ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'
+                    }`}>
+                      {getCategoryIcon(category)}
+                    </div>
+                    
+                    {/* Nombre de la categoría */}
+                    <span className={`text-sm font-medium flex-1 transition-colors ${
+                      isSelected
+                        ? 'text-gray-900'
+                        : 'text-gray-700 group-hover:text-gray-900'
+                    }`}>
+                      {category.name}
+                    </span>
+                    
+                    {/* Flecha indicadora */}
+                    {isSelected && (
+                      <ChevronRightIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    )}
+                  </ContextualLink>
+                </div>
+              );
+            })
+          )}
         </nav>
       </div>
 
-      {/* Panel de subcategorías */}
+      {/* Panel de subcategorías - Estilo AliExpress */}
       {selectedCategory && (
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-6 bg-white min-h-[400px]">
           <div className="mb-4 pb-3 border-b border-gray-200">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900">{selectedCategory.name}</h2>
               <ContextualLink
                 href={`/products?categoryId=${selectedCategory.id}`}
-                className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                 onClick={onCategoryClick}
               >
-                Ver Todo
-                <ArrowForwardIcon className="w-4 h-4" />
+                Ver Todo →
               </ContextualLink>
             </div>
             {selectedCategory.description && (
@@ -211,35 +268,32 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
               <p className="text-gray-500">No hay subcategorías disponibles</p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-8">
+            <div className="grid grid-cols-5 gap-6">
               {subcategories.map((subcategory) => {
                 const subSubcats = subSubcategories[subcategory.id] || [];
                 const hasSubSubcategories = subSubcats.length > 0;
                 
                 return (
-                  <div key={subcategory.id} className="space-y-3">
+                  <div key={subcategory.id} className="space-y-2">
                     {/* Nivel 2: Subcategoría */}
                     <div>
                       <ContextualLink
                         href={`/products?categoryId=${subcategory.id}`}
-                        className="text-base font-bold text-gray-900 hover:text-toyota-red transition-colors block mb-2"
+                        className="text-sm font-semibold text-gray-900 hover:text-blue-600 transition-colors block mb-1"
                         onClick={onCategoryClick}
                       >
                         {subcategory.name}
                       </ContextualLink>
-                      {subcategory.description && (
-                        <p className="text-xs text-gray-500 mb-2">{subcategory.description}</p>
-                      )}
                     </div>
                     
                     {/* Nivel 3: Sub-subcategorías */}
-                    {hasSubSubcategories ? (
-                      <ul className="space-y-1.5">
+                    {hasSubSubcategories && (
+                      <ul className="space-y-1">
                         {subSubcats.map((subSubcat) => (
                           <li key={subSubcat.id}>
                             <ContextualLink
                               href={`/products?categoryId=${subSubcat.id}`}
-                              className="text-sm text-gray-700 hover:text-toyota-red transition-colors block py-0.5"
+                              className="text-xs text-gray-600 hover:text-blue-600 transition-colors block py-0.5"
                               onClick={onCategoryClick}
                             >
                               {subSubcat.name}
@@ -247,21 +301,7 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
                           </li>
                         ))}
                       </ul>
-                    ) : (
-                      <p className="text-xs text-gray-400 italic">Sin subcategorías</p>
                     )}
-                    
-                    {/* Link "Ver Todo" para la subcategoría */}
-                    <div className="pt-2 border-t border-gray-100">
-                      <ContextualLink
-                        href={`/products?categoryId=${subcategory.id}`}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                        onClick={onCategoryClick}
-                      >
-                        Ver Todo
-                        <ArrowForwardIcon className="w-3 h-3" />
-                      </ContextualLink>
-                    </div>
                   </div>
                 );
               })}
@@ -272,8 +312,8 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
 
       {/* Estado inicial - mostrar mensaje si no hay categoría seleccionada */}
       {!selectedCategory && (
-        <div className="flex-1 p-6 flex items-center justify-center">
-          <p className="text-gray-500">Pasa el mouse sobre una categoría para ver las subcategorías</p>
+        <div className="flex-1 p-6 flex items-center justify-center bg-white min-h-[400px]">
+          <p className="text-gray-500 text-sm">Pasa el mouse sobre una categoría para ver las subcategorías</p>
         </div>
       )}
     </div>

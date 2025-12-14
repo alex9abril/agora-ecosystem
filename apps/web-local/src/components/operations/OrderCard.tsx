@@ -81,7 +81,7 @@ export default function OrderCard({ order, onClick, onStatusChange }: OrderCardP
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-semibold text-gray-900 text-sm">
-              #{order.order_number || order.id.slice(0, 8)}
+              #{order.order_number || order.id.slice(-8).toUpperCase()}
             </span>
             <span className={`${getStatusColor(order.status)} text-xs font-medium px-2 py-0.5 rounded-full`}>
               {getStatusLabel(order.status)}

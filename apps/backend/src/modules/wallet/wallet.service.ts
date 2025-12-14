@@ -303,13 +303,15 @@ export class WalletService {
     const countResult = await dbPool.query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total, 10);
 
-    // Query principal
+    // Query principal - Incluir business_id del pedido relacionado
     const query = `
       SELECT 
         wt.*,
-        up.first_name || ' ' || up.last_name as created_by_name
+        up.first_name || ' ' || up.last_name as created_by_name,
+        o.business_id
       FROM commerce.wallet_transactions wt
       LEFT JOIN core.user_profiles up ON wt.created_by_user_id = up.id
+      LEFT JOIN orders.orders o ON wt.order_id = o.id
       ${whereClause}
       ORDER BY wt.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}

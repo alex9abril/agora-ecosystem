@@ -34,6 +34,22 @@ export interface OrderItem {
   created_at: string;
 }
 
+export interface PaymentTransaction {
+  id: string;
+  order_id: string;
+  payment_method: string;
+  transaction_id?: string;
+  external_reference?: string;
+  amount: number | string;
+  status: string;
+  payment_data?: any;
+  card_type?: string;
+  last_four?: string;
+  reference_number?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
 export interface Order {
   id: string;
   client_id: string;
@@ -62,6 +78,16 @@ export interface Order {
   items?: OrderItem[];
   item_count?: number; // Número de items diferentes en el pedido
   total_quantity?: number; // Cantidad total de productos (suma de quantities)
+  payment_transactions?: PaymentTransaction[];
+  shipping_label?: {
+    tracking_number: string;
+    carrier_name: string;
+    status: string;
+    generated_at: string;
+    picked_up_at?: string;
+    in_transit_at?: string;
+    delivered_at?: string;
+  } | null; // Guía de envío (folio de seguimiento) si existe
 }
 
 export interface CheckoutDto {

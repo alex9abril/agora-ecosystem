@@ -150,7 +150,7 @@ export default function KitchenOrderDetailPage() {
   return (
     <>
       <Head>
-        <title>Orden #{order.order_number || order.id.slice(0, 8)} - Cocina</title>
+        <title>Orden #{order.order_number || order.id.slice(-8).toUpperCase()} - Cocina</title>
       </Head>
       <KitchenLayout>
         <div className="w-full h-full flex flex-col bg-gray-50">
@@ -167,7 +167,7 @@ export default function KitchenOrderDetailPage() {
               </button>
               <div className="flex-1">
                 <h1 className="text-2xl font-bold text-gray-900">
-                  #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+                  #{order.order_number || order.id.slice(-8).toUpperCase()}
                 </h1>
                 <p className="text-sm text-gray-600">
                   {new Date(order.created_at).toLocaleString('es-MX')}

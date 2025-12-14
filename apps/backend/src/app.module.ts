@@ -26,6 +26,7 @@ import { VehiclesModule } from './modules/catalog/vehicles/vehicles.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
+import { LogisticsModule } from './modules/logistics/logistics.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
     SettingsModule,
     WalletModule,
     KarlopayModule,
+    LogisticsModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

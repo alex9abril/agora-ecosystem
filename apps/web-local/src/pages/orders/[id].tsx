@@ -7,6 +7,7 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
 import { productsService, Product } from '@/lib/products';
 import { walletService, WalletTransaction } from '@/lib/wallet';
+import { logisticsService, ShippingLabel } from '@/lib/logistics';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -19,7 +20,11 @@ export default function OrderDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [products, setProducts] = useState<Record<string, Product>>({});
   const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
+  const [walletPaymentTransactions, setWalletPaymentTransactions] = useState<WalletTransaction[]>([]);
   const [loadingWalletTransactions, setLoadingWalletTransactions] = useState(false);
+  const [shippingLabel, setShippingLabel] = useState<ShippingLabel | null>(null);
+  const [loadingShippingLabel, setLoadingShippingLabel] = useState(false);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -55,6 +60,10 @@ export default function OrderDetailPage() {
       });
       
       setOrder(orderData);
+      
+      // Debug: Verificar payment_transactions
+      console.log('💰 [LOAD ORDER] payment_transactions recibidas:', orderData.payment_transactions);
+      console.log('💰 [LOAD ORDER] Cantidad de transacciones:', orderData.payment_transactions?.length || 0);
 
       // Cargar información de productos para obtener imágenes y SKUs
       if (orderData.items && orderData.items.length > 0) {
@@ -93,30 +102,64 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar transacciones del wallet relacionadas con este pedido
-      try {
-        setLoadingWalletTransactions(true);
-        console.log('💰 [WALLET] Cargando transacciones del wallet para pedido:', orderData.id);
-        const transactionsResponse = await walletService.getTransactions({
-          page: 1,
-          limit: 50,
-        });
-        console.log('💰 [WALLET] Total de transacciones obtenidas:', transactionsResponse.data.length);
-        
-        // Filtrar solo las transacciones relacionadas con este pedido
-        const orderTransactions = transactionsResponse.data.filter(
-          tx => tx.order_id === orderData.id && tx.transaction_type === 'credit'
-        );
-        console.log('💰 [WALLET] Transacciones relacionadas con este pedido:', orderTransactions.length);
-        console.log('💰 [WALLET] Detalles de transacciones:', orderTransactions);
-        
-        setWalletTransactions(orderTransactions);
-      } catch (err) {
-        console.error('❌ [WALLET] Error cargando transacciones de wallet:', err);
-        // No fallar la carga de la orden si hay error cargando transacciones
-        setWalletTransactions([]);
-      } finally {
-        setLoadingWalletTransactions(false);
+      // Cargar transacciones del wallet del cliente relacionadas con este pedido
+      if (orderData.client_id) {
+        try {
+          setLoadingWalletTransactions(true);
+          console.log('💰 [WALLET] Cargando transacciones del wallet del cliente:', orderData.client_id, 'para pedido:', orderData.id);
+          const transactionsResponse = await walletService.getTransactionsByUserId(orderData.client_id, {
+            page: 1,
+            limit: 50,
+          });
+          console.log('💰 [WALLET] Total de transacciones obtenidas:', transactionsResponse.data.length);
+          
+          // Filtrar transacciones relacionadas con este pedido
+          const allOrderTransactions = transactionsResponse.data.filter(
+            tx => tx.order_id === orderData.id
+          );
+          
+          // Separar créditos (acreditaciones) y débitos (pagos)
+          const creditTransactions = allOrderTransactions.filter(
+            tx => tx.transaction_type === 'credit'
+          );
+          const paymentTransactions = allOrderTransactions.filter(
+            tx => tx.transaction_type === 'payment' || tx.transaction_type === 'debit'
+          );
+          
+          console.log('💰 [WALLET] Créditos relacionados con este pedido:', creditTransactions.length);
+          console.log('💰 [WALLET] Pagos relacionados con este pedido:', paymentTransactions.length);
+          console.log('💰 [WALLET] Detalles de transacciones:', allOrderTransactions);
+          
+          setWalletTransactions(creditTransactions);
+          setWalletPaymentTransactions(paymentTransactions);
+        } catch (err) {
+          console.error('❌ [WALLET] Error cargando transacciones de wallet:', err);
+          // No fallar la carga de la orden si hay error cargando transacciones
+          setWalletTransactions([]);
+        } finally {
+          setLoadingWalletTransactions(false);
+        }
+      }
+
+      // Cargar guía de envío si la orden está en estado completed o superior
+      if (orderData.status === 'completed' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
+        try {
+          setLoadingShippingLabel(true);
+          const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
+          if (label) {
+            setShippingLabel(label);
+            console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
+          } else {
+            setShippingLabel(null);
+            console.log('📦 [SHIPPING LABEL] No hay guía de envío para esta orden');
+          }
+        } catch (err) {
+          console.error('❌ [SHIPPING LABEL] Error cargando guía de envío:', err);
+          // No fallar la carga de la orden si hay error cargando la guía
+          setShippingLabel(null);
+        } finally {
+          setLoadingShippingLabel(false);
+        }
       }
     } catch (err: any) {
       console.error('❌ [LOAD ORDER] Error cargando pedido:', err);
@@ -802,6 +845,150 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
+              {/* Guía de envío - Solo mostrar si la orden está en estado completed o superior */}
+              {(order.status === 'completed' || order.status === 'in_transit' || order.status === 'delivered') && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Guía de Envío</h2>
+                    {shippingLabel && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            setDownloadingPDF(true);
+                            const blob = await logisticsService.downloadShippingLabelPDF(order.id);
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `guia-envio-${shippingLabel.tracking_number}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                          } catch (err: any) {
+                            console.error('Error descargando PDF:', err);
+                            alert('Error al descargar el PDF: ' + (err.message || 'Error desconocido'));
+                          } finally {
+                            setDownloadingPDF(false);
+                          }
+                        }}
+                        disabled={downloadingPDF || !shippingLabel}
+                        className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                      >
+                        {downloadingPDF ? (
+                          <>
+                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Descargar PDF
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  {loadingShippingLabel ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                      <span className="ml-2 text-xs text-gray-500">Cargando guía de envío...</span>
+                    </div>
+                  ) : shippingLabel ? (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Número de Guía</span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            shippingLabel.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                            shippingLabel.status === 'in_transit' ? 'bg-blue-100 text-blue-800' :
+                            shippingLabel.status === 'picked_up' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {shippingLabel.status === 'delivered' ? 'Entregado' :
+                             shippingLabel.status === 'in_transit' ? 'En Tránsito' :
+                             shippingLabel.status === 'picked_up' ? 'Recolectado' :
+                             'Generada'}
+                          </span>
+                        </div>
+                        <p className="text-lg font-mono font-bold text-blue-900">{shippingLabel.tracking_number}</p>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Transportista</p>
+                          <p className="text-gray-900">{shippingLabel.carrier_name}</p>
+                        </div>
+                        {shippingLabel.package_weight && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Peso</p>
+                            <p className="text-gray-900">{shippingLabel.package_weight} kg</p>
+                          </div>
+                        )}
+                        {shippingLabel.package_dimensions && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Dimensiones</p>
+                            <p className="text-gray-900">{shippingLabel.package_dimensions}</p>
+                          </div>
+                        )}
+                        {shippingLabel.declared_value && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Valor Declarado</p>
+                            <p className="text-gray-900">{formatCurrency(shippingLabel.declared_value)}</p>
+                          </div>
+                        )}
+                      </div>
+                      {shippingLabel.picked_up_at && (
+                        <div className="text-xs text-gray-500">
+                          <span className="font-semibold">Recolectado:</span> {formatDate(shippingLabel.picked_up_at)}
+                        </div>
+                      )}
+                      {shippingLabel.in_transit_at && (
+                        <div className="text-xs text-gray-500">
+                          <span className="font-semibold">En tránsito:</span> {formatDate(shippingLabel.in_transit_at)}
+                        </div>
+                      )}
+                      {shippingLabel.delivered_at && (
+                        <div className="text-xs text-gray-500">
+                          <span className="font-semibold">Entregado:</span> {formatDate(shippingLabel.delivered_at)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500 mb-2">No se ha generado la guía de envío aún</p>
+                      <button
+                        onClick={async () => {
+                          try {
+                            setLoadingShippingLabel(true);
+                            const label = await logisticsService.createShippingLabel({
+                              orderId: order.id,
+                              packageWeight: 1.0,
+                              packageDimensions: '30x20x15 cm',
+                              declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
+                            });
+                            setShippingLabel(label);
+                            alert('Guía de envío generada exitosamente');
+                          } catch (err: any) {
+                            console.error('Error generando guía:', err);
+                            alert('Error al generar la guía: ' + (err.message || 'Error desconocido'));
+                          } finally {
+                            setLoadingShippingLabel(false);
+                          }
+                        }}
+                        disabled={loadingShippingLabel}
+                        className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loadingShippingLabel ? 'Generando...' : 'Generar Guía de Envío'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Grid de dos columnas para resúmenes */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Resumen de orden */}
@@ -847,10 +1034,17 @@ export default function OrderDetailPage() {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Resumen de pago</h2>
-                    {/* Botón para confirmar pago - TEMPORAL: Habilitado para todos los métodos de pago */}
+                    {/* Botón para confirmar pago - Solo se muestra si hay transacciones pendientes */}
                     {(() => {
-                      // TEMPORAL: Mostrar botón si el pago está pendiente o fallido, sin importar el método
-                      const canShowButton = order.payment_status === 'pending' || order.payment_status === 'failed';
+                      // Verificar si hay transacciones pendientes
+                      const hasPendingTransactions = order.payment_transactions?.some(
+                        (tx) => tx.status === 'pending' || tx.status === 'failed'
+                      ) || false;
+                      
+                      // Solo mostrar el botón si hay transacciones pendientes
+                      // No mostrar si todas las transacciones están completadas (wallet + karlopay completados)
+                      const canShowButton = hasPendingTransactions && 
+                        (order.payment_status === 'pending' || order.payment_status === 'failed');
                       
                       return canShowButton ? (
                         <button
@@ -954,19 +1148,22 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {/* Créditos al Wallet */}
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              {/* Créditos al Wallet - Solo se muestra si hay créditos */}
+              {(!loadingWalletTransactions && walletTransactions.length > 0) || loadingWalletTransactions ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Créditos al Monedero</h2>
-                    <Link 
-                      href="/settings/wallet"
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                    >
-                      Ver monedero
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
+                    {order?.client_id && (
+                      <Link 
+                        href={`/clients/${order.client_id}?tab=wallet`}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                      >
+                        Ver monedero
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    )}
                   </div>
                   {loadingWalletTransactions ? (
                     <div className="flex items-center justify-center py-4">
@@ -980,48 +1177,50 @@ export default function OrderDetailPage() {
                       </p>
                       <div className="space-y-3">
                         {walletTransactions.map((transaction) => (
-                      <div key={transaction.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-                              </svg>
-                              <span className="text-sm font-semibold text-green-600">
-                                +{formatCurrency(transaction.amount)}
-                              </span>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                                Acreditado
-                              </span>
+                          <div key={transaction.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                  </svg>
+                                  <span className="text-sm font-semibold text-green-600">
+                                    +{formatCurrency(transaction.amount)}
+                                  </span>
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                                    Acreditado
+                                  </span>
+                                </div>
+                                {transaction.reason && (
+                                  <p className="text-xs text-gray-600 mb-1">{transaction.reason}</p>
+                                )}
+                                {transaction.description && (
+                                  <p className="text-xs text-gray-500 mb-1">{transaction.description}</p>
+                                )}
+                                <p className="text-xs text-gray-500">
+                                  {formatDate(transaction.created_at)}
+                                </p>
+                              </div>
+                              {order?.client_id && (
+                                <Link
+                                  href={`/clients/${order.client_id}?tab=wallet&transaction=${transaction.id}`}
+                                  className="ml-4 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 whitespace-nowrap"
+                                  title="Ver detalles de la transacción"
+                                >
+                                  Ver transacción
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </Link>
+                              )}
                             </div>
-                            {transaction.reason && (
-                              <p className="text-xs text-gray-600 mb-2">{transaction.reason}</p>
-                            )}
-                            <p className="text-xs text-gray-500">
-                              {formatDate(transaction.created_at)}
-                            </p>
                           </div>
-                          <Link
-                            href={`/settings/wallet?transaction=${transaction.id}`}
-                            className="ml-4 text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 whitespace-nowrap"
-                            title="Ver detalles de la transacción"
-                          >
-                            Ver transacción
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Link>
-                        </div>
-                      </div>
                         ))}
                       </div>
                     </>
-                  ) : (
-                    <p className="text-sm text-gray-500 text-center py-4">
-                      No hay créditos al monedero para este pedido
-                    </p>
-                  )}
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
 
             {/* Transacciones */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -1029,31 +1228,80 @@ export default function OrderDetailPage() {
                 <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Transacciones</h2>
                 <button className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Transacción manual</button>
               </div>
-              <div className="space-y-4">
-                <div className="border-b border-gray-200 pb-3">
-                  <p className="text-xs text-gray-500 mb-3">Transacción #1 el {formatDate(order.created_at)}</p>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                          SUCCESS
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">
-                          {formatCurrency(parseFloat(order.total_amount.toString()))}
-                        </span>
-                        <span className="text-xs text-gray-500">Capture</span>
-                      </div>
-                      <div className="text-right">
-                        <a href="#" className="text-xs text-blue-600 hover:text-blue-800">
-                          {order.id.slice(0, 8)}...
-                        </a>
-                        <p className="text-xs text-gray-500 mt-1">{formatDate(order.created_at)}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">{order.payment_method || 'Dummy Payment App'}</p>
-                  </div>
+              {loadingWalletTransactions ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                  <span className="ml-2 text-xs text-gray-500">Cargando transacciones...</span>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Transacciones de pago desde payment_transactions */}
+                  {order.payment_transactions && order.payment_transactions.length > 0 ? (
+                    <>
+                      {order.payment_transactions.map((transaction, index) => {
+                        const isWallet = transaction.payment_method === 'wallet';
+                        const isKarlopay = transaction.payment_method === 'karlopay' || transaction.payment_method === 'card';
+                        
+                        return (
+                          <div key={`payment-${transaction.id}`} className="border-b border-gray-200 pb-3">
+                            <p className="text-xs text-gray-500 mb-3">
+                              Transacción #{index + 1} el {formatDate(transaction.created_at)}
+                            </p>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    transaction.status === 'completed' 
+                                      ? 'bg-green-50 text-green-700' 
+                                      : transaction.status === 'pending'
+                                      ? 'bg-yellow-50 text-yellow-700'
+                                      : 'bg-red-50 text-red-700'
+                                  }`}>
+                                    {transaction.status === 'completed' ? 'SUCCESS' : 
+                                     transaction.status === 'pending' ? 'PENDING' : 'FAILED'}
+                                  </span>
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {formatCurrency(transaction.amount)}
+                                  </span>
+                                  <span className="text-xs text-gray-500">Capture</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs text-blue-600 font-mono">
+                                    {transaction.transaction_id?.slice(0, 8) || transaction.external_reference?.slice(0, 8) || transaction.id.slice(0, 8)}...
+                                  </span>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {transaction.completed_at ? formatDate(transaction.completed_at) : formatDate(transaction.created_at)}
+                                  </p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500">
+                                {isWallet ? 'wallet' : isKarlopay ? 'KarloPay' : transaction.payment_method}
+                                {transaction.last_four && ` • ${transaction.last_four}`}
+                                {transaction.card_type && ` • ${transaction.card_type}`}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Indicador de pago múltiple */}
+                      {order.payment_transactions.length > 1 && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-xs text-gray-500 italic">
+                            💳 Pago múltiple: {order.payment_transactions.map((tx, idx) => 
+                              `${tx.payment_method === 'wallet' ? 'wallet' : 'KarloPay'} (${formatCurrency(tx.amount)})`
+                            ).join(' + ')}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-xs text-gray-500">No hay transacciones registradas</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             </div>
           </div>

@@ -8,6 +8,9 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
 import ProductGrid from '@/components/ProductGrid';
+import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
+import CategoryCardsSlider from '@/components/CategoryCardsSlider';
+import SmartCategoryCards from '@/components/SmartCategoryCards';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { productsService } from '@/lib/products';
 import ContextualLink from '@/components/ContextualLink';
@@ -73,31 +76,94 @@ export default function StoreHomePage() {
           </div>
         ) : (
           <>
-            {/* Hero Section Personalizado */}
-            <div className="mb-12">
-              {storeData?.logo_url && (
-                <img 
-                  src={storeData.logo_url} 
-                  alt={storeName} 
-                  className="h-24 w-24 object-contain mb-4"
-                />
-              )}
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                {storeName}
-              </h1>
-              {storeDescription && (
-                <p className="text-lg text-gray-600 mb-6">
-                  {storeDescription}
-                </p>
-              )}
-              {contextType === 'sucursal' && branchData && (
-                <div className="text-gray-600 space-y-1">
-                  {branchData.address && <p>📍 {branchData.address}</p>}
-                  {branchData.phone && <p>📞 {branchData.phone}</p>}
-                  {branchData.email && <p>✉️ {branchData.email}</p>}
-                </div>
-              )}
-            </div>
+            {/* Slider Promocional Full Width */}
+            <PromotionalSlider
+              slides={[
+                {
+                  id: '1',
+                  gradientColors: ['#ef4444', '#dc2626', '#991b1b'],
+                  decorativeElements: true,
+                  overlay: {
+                    position: 'left',
+                    badge: 'OFERTA ESPECIAL',
+                    badgePosition: 'top-left',
+                    badgeColor: '#ec4899',
+                    title: `BIENVENIDO A`,
+                    titleHighlight: storeName.toUpperCase(),
+                    subtitle: 'Ofertas exclusivas para ti',
+                    description: storeDescription || 'Encuentra los mejores productos',
+                    ctaText: 'Ver productos',
+                    ctaLink: '/products',
+                    ctaColor: 'bg-white text-gray-900',
+                  },
+                },
+                {
+                  id: '2',
+                  gradientColors: ['#3b82f6', '#2563eb', '#1e40af'],
+                  decorativeElements: true,
+                  overlay: {
+                    position: 'center',
+                    title: 'ENVÍO GRATIS',
+                    subtitle: 'En tu primera compra',
+                    description: 'Aprovecha envíos gratuitos en todos tus pedidos',
+                    ctaText: 'Comprar ahora',
+                    ctaLink: '/products',
+                    ctaColor: 'bg-white text-gray-900',
+                  },
+                },
+                {
+                  id: '3',
+                  gradientColors: ['#10b981', '#059669', '#047857'],
+                  decorativeElements: true,
+                  overlay: {
+                    position: 'right',
+                    title: 'PRODUCTOS DESTACADOS',
+                    subtitle: 'Lo más vendido',
+                    description: 'Encuentra los productos más populares',
+                    ctaText: 'Ver destacados',
+                    ctaLink: '/products?isFeatured=true',
+                    ctaColor: 'bg-white text-gray-900',
+                  },
+                },
+                {
+                  id: '4',
+                  gradientColors: ['#ec4899', '#db2777', '#be185d'],
+                  decorativeElements: true,
+                  overlay: {
+                    position: 'center',
+                    title: 'HASTA 30% OFF',
+                    subtitle: 'En productos seleccionados',
+                    description: 'Aprovecha nuestras mejores ofertas',
+                    ctaText: 'Ver ofertas',
+                    ctaLink: '/products',
+                    ctaColor: 'bg-white text-gray-900',
+                  },
+                },
+                {
+                  id: '5',
+                  gradientColors: ['#6366f1', '#4f46e5', '#4338ca'],
+                  decorativeElements: true,
+                  overlay: {
+                    position: 'left',
+                    title: 'COMPRA Y RECOGE',
+                    subtitle: 'En tu tienda más cercana',
+                    description: 'Compra en línea y recoge en la sucursal',
+                    ctaText: 'Ver más',
+                    ctaLink: '/products',
+                    ctaColor: 'bg-white text-gray-900',
+                  },
+                },
+              ]}
+              autoPlay={true}
+              autoPlayInterval={5000}
+              height="450px"
+            />
+
+            {/* Tarjetas Inteligentes */}
+            <SmartCategoryCards />
+
+            {/* Contenido con contenedor */}
+            <div className="max-w-7xl mx-auto px-4 py-6">
 
             {/* Productos Destacados */}
             <section className="mb-12">
@@ -121,6 +187,7 @@ export default function StoreHomePage() {
               <h2 className="text-2xl font-semibold mb-6">Todos los Productos</h2>
               <ProductGrid />
             </section>
+            </div>
           </>
         )}
       </StoreLayout>

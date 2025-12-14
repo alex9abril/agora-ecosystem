@@ -190,7 +190,7 @@ export default function OrderDetailPage() {
   return (
     <>
       <Head>
-        <title>Pedido #{order.id.slice(0, 8)} - Localia</title>
+        <title>Pedido #{order.id.slice(-8).toUpperCase()} - Localia</title>
       </Head>
       <MobileLayout>
         <div className="mb-6">
@@ -202,7 +202,7 @@ export default function OrderDetailPage() {
             >
               <ArrowBackIcon className="w-5 h-5 text-gray-700" />
             </button>
-            <h1 className="text-2xl font-bold text-black">Pedido #{order.id.slice(0, 8)}</h1>
+            <h1 className="text-2xl font-bold text-black">Pedido #{order.id.slice(-8).toUpperCase()}</h1>
           </div>
 
           {/* Estado del pedido */}

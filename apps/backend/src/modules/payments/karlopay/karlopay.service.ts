@@ -203,11 +203,261 @@ export class KarlopayService {
   async processPaymentWebhook(webhookDto: KarlopayPaymentWebhookDto): Promise<void> {
     this.logger.log(`💰 Procesando webhook de pago de Karlopay para orden: ${webhookDto.numberOfOrder}`);
 
-    // Aquí se procesaría la confirmación de pago
-    // Por ejemplo, actualizar el estado del pedido en la base de datos
-    // Esto se implementará según la lógica de negocio específica
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) {
+      throw new Error('Conexión a base de datos no configurada');
+    }
 
-    this.logger.log(`✅ Webhook procesado exitosamente para orden: ${webhookDto.numberOfOrder}`);
+    const client = await dbPool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Buscar órdenes relacionadas con este numberOfOrder
+      // El numberOfOrder se guarda en delivery_notes como "Karlopay Order: {numberOfOrder}"
+      // O podemos buscar por order_group_id si está en additional.order_group_id
+      // También buscar por external_reference en payment_transactions
+      const orderGroupId = webhookDto.additional?.order_group_id;
+      const numberOfOrder = webhookDto.numberOfOrder;
+      
+      this.logger.log(`🔍 Buscando órdenes para:`, {
+        numberOfOrder,
+        orderGroupId,
+        additional: webhookDto.additional,
+      });
+      
+      let ordersResult;
+      if (orderGroupId) {
+        // Buscar por order_group_id
+        ordersResult = await client.query(
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+           FROM orders.orders o
+           WHERE o.order_group_id = $1`,
+          [orderGroupId]
+        );
+        this.logger.log(`📦 Encontradas ${ordersResult.rows.length} órdenes por order_group_id: ${orderGroupId}`);
+      }
+      
+      // Si no se encontraron por order_group_id, buscar por numberOfOrder en delivery_notes
+      if (!ordersResult || ordersResult.rows.length === 0) {
+        ordersResult = await client.query(
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+           FROM orders.orders o
+           WHERE o.delivery_notes LIKE $1`,
+          [`%Karlopay Order: ${numberOfOrder}%`]
+        );
+        this.logger.log(`📦 Encontradas ${ordersResult.rows.length} órdenes por delivery_notes con numberOfOrder: ${numberOfOrder}`);
+      }
+      
+      // Si aún no se encontraron, buscar por external_reference en payment_transactions
+      if (!ordersResult || ordersResult.rows.length === 0) {
+        ordersResult = await client.query(
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+           FROM orders.orders o
+           INNER JOIN orders.payment_transactions pt ON pt.order_id = o.id
+           WHERE pt.external_reference = $1 OR pt.transaction_id = $1`,
+          [numberOfOrder]
+        );
+        this.logger.log(`📦 Encontradas ${ordersResult.rows.length} órdenes por payment_transactions con external_reference: ${numberOfOrder}`);
+      }
+
+      if (!ordersResult || ordersResult.rows.length === 0) {
+        this.logger.warn(`⚠️ No se encontraron órdenes para numberOfOrder: ${numberOfOrder}, orderGroupId: ${orderGroupId}`);
+        // No hacer rollback, solo loguear el warning para debugging
+        await client.query('ROLLBACK');
+        return;
+      }
+
+      this.logger.log(`📦 Encontradas ${ordersResult.rows.length} órdenes para procesar`);
+
+      // Determinar el estado del pago basado en el webhook
+      // Si hay paymentInformation con totalPayment o totalToDepositBusiness, el pago está completado
+      // El webhook solo se envía cuando el pago se completa exitosamente
+      const hasPaymentInfo = webhookDto.paymentInformation && (
+        webhookDto.paymentInformation.totalPayment ||
+        webhookDto.paymentInformation.totalToDepositBusiness ||
+        webhookDto.paymentInformation.originalAmount
+      );
+      
+      const paymentStatus = hasPaymentInfo ? 'completed' : 'pending';
+      
+      const paymentAmount = webhookDto.paymentInformation?.totalPayment || 
+                           webhookDto.paymentInformation?.totalToDepositBusiness ||
+                           webhookDto.paymentInformation?.originalAmount || 
+                           0;
+
+      this.logger.log(`💰 Estado de pago determinado:`, {
+        paymentStatus,
+        paymentAmount,
+        hasPaymentInfo,
+        totalPayment: webhookDto.paymentInformation?.totalPayment,
+        totalToDepositBusiness: webhookDto.paymentInformation?.totalToDepositBusiness,
+        originalAmount: webhookDto.paymentInformation?.originalAmount,
+      });
+
+      // Procesar cada orden encontrada
+      for (const order of ordersResult.rows) {
+        // Verificar si ya existe una transacción de pago para esta orden con este transaction_id
+        const existingTx = await client.query(
+          `SELECT id FROM orders.payment_transactions
+           WHERE order_id = $1 AND external_reference = $2`,
+          [order.id, webhookDto.numberOfOrder]
+        );
+
+        if (existingTx.rows.length > 0) {
+          // Obtener el estado actual de la transacción
+          const currentTxResult = await client.query(
+            `SELECT status, payment_data FROM orders.payment_transactions WHERE id = $1`,
+            [existingTx.rows[0].id]
+          );
+          const currentStatus = currentTxResult.rows[0]?.status;
+          const currentPaymentData = currentTxResult.rows[0]?.payment_data || {};
+          
+          // Si la transacción ya está completada, solo actualizar información adicional (no cambiar status)
+          // Esto es para pagos con tarjeta que ya se marcaron como completados al crear la orden
+          const finalStatus = currentStatus === 'completed' ? 'completed' : paymentStatus;
+          const finalCompletedAt = currentStatus === 'completed' 
+            ? currentTxResult.rows[0]?.completed_at 
+            : (paymentStatus === 'completed' ? new Date() : null);
+          
+          // Combinar payment_data existente con los nuevos datos del webhook
+          const updatedPaymentData = {
+            ...(typeof currentPaymentData === 'string' ? JSON.parse(currentPaymentData) : currentPaymentData),
+            // Actualizar con datos del webhook (sobrescribir si vienen)
+            ...(webhookDto.cardType && { cardType: webhookDto.cardType }),
+            ...(webhookDto.cardDC && { cardDC: webhookDto.cardDC }),
+            ...(webhookDto.bankName && { bankName: webhookDto.bankName }),
+            ...(webhookDto.bankCode && { bankCode: webhookDto.bankCode }),
+            ...(webhookDto.referenceNumber && { referenceNumber: webhookDto.referenceNumber }),
+            ...(webhookDto.cardHolder && { cardHolder: webhookDto.cardHolder }),
+            ...(webhookDto.lastFour && { lastFour: webhookDto.lastFour }),
+            ...(webhookDto.paymentMethod && { paymentMethod: webhookDto.paymentMethod }),
+            ...(webhookDto.paymentForm && { paymentForm: webhookDto.paymentForm }),
+            ...(webhookDto.paymentDate && { paymentDate: webhookDto.paymentDate }),
+            ...(webhookDto.paymentInformation && { paymentInformation: webhookDto.paymentInformation }),
+            webhook_received: true, // Marcar que el webhook fue recibido
+            webhook_received_at: new Date().toISOString(),
+          };
+          
+          // Actualizar transacción existente
+          await client.query(
+            `UPDATE orders.payment_transactions
+             SET status = $1,
+                 amount = $2,
+                 payment_data = $3,
+                 completed_at = CASE WHEN $4 IS NOT NULL THEN $4::timestamp ELSE completed_at END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $5`,
+            [
+              finalStatus,
+              paymentAmount,
+              JSON.stringify(updatedPaymentData),
+              finalCompletedAt,
+              existingTx.rows[0].id,
+            ]
+          );
+          
+          if (currentStatus === 'completed') {
+            this.logger.log(`✅ Transacción ya estaba completada, solo se actualizó información adicional para orden ${order.id}`);
+          } else {
+            this.logger.log(`✅ Transacción actualizada de '${currentStatus}' a '${finalStatus}' para orden ${order.id}`);
+          }
+        } else {
+          // Crear nueva transacción
+          await client.query(
+            `INSERT INTO orders.payment_transactions (
+              order_id,
+              payment_method,
+              transaction_id,
+              external_reference,
+              amount,
+              status,
+              payment_data,
+              completed_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $6 = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+            [
+              order.id,
+              'karlopay',
+              webhookDto.referenceNumber || webhookDto.numberOfOrder,
+              webhookDto.numberOfOrder,
+              paymentAmount,
+              paymentStatus,
+              JSON.stringify({
+                cardType: webhookDto.cardType,
+                cardDC: webhookDto.cardDC,
+                bankName: webhookDto.bankName,
+                bankCode: webhookDto.bankCode,
+                referenceNumber: webhookDto.referenceNumber,
+                cardHolder: webhookDto.cardHolder,
+                lastFour: webhookDto.lastFour,
+                paymentMethod: webhookDto.paymentMethod,
+                paymentForm: webhookDto.paymentForm,
+                paymentDate: webhookDto.paymentDate,
+                paymentInformation: webhookDto.paymentInformation,
+              }),
+            ]
+          );
+          this.logger.log(`✅ Nueva transacción creada para orden ${order.id}`);
+        }
+
+        // Si el pago está completado, actualizar payment_status de la orden
+        if (paymentStatus === 'completed') {
+          // Verificar si todas las transacciones de pago están completadas
+          const allTransactionsResult = await client.query(
+            `SELECT COUNT(*) as total, 
+                    COUNT(*) FILTER (WHERE status = 'completed') as completed,
+                    SUM(amount) FILTER (WHERE status = 'completed') as total_completed_amount
+             FROM orders.payment_transactions
+             WHERE order_id = $1`,
+            [order.id]
+          );
+
+          const { total, completed, total_completed_amount } = allTransactionsResult.rows[0];
+          const totalCompleted = parseFloat(total_completed_amount || '0');
+          const orderTotal = parseFloat(order.total_amount || '0');
+          
+          this.logger.log(`🔍 Verificando estado de pago para orden ${order.id}:`, {
+            totalTransactions: parseInt(total),
+            completedTransactions: parseInt(completed),
+            totalCompletedAmount: totalCompleted,
+            orderTotal,
+            allCompleted: parseInt(completed) === parseInt(total) && parseInt(total) > 0,
+            amountMatches: Math.abs(totalCompleted - orderTotal) < 0.01, // Tolerancia de centavos
+          });
+          
+          // Si todas las transacciones están completadas Y el monto coincide, marcar la orden como pagada
+          if (parseInt(total) > 0 && parseInt(completed) === parseInt(total)) {
+            // Verificar que el monto total completado sea igual o mayor al total de la orden
+            // (puede ser mayor si hay propina o ajustes)
+            if (totalCompleted >= orderTotal - 0.01) { // Tolerancia de centavos
+              await client.query(
+                `UPDATE orders.orders
+                 SET payment_status = 'paid',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [order.id]
+              );
+              this.logger.log(`✅ Orden ${order.id} marcada como pagada (todas las transacciones completadas)`);
+            } else {
+              this.logger.warn(`⚠️ Orden ${order.id} no marcada como pagada: monto completado (${totalCompleted}) < total orden (${orderTotal})`);
+            }
+          } else {
+            this.logger.log(`⏳ Orden ${order.id} aún tiene transacciones pendientes: ${parseInt(completed)}/${parseInt(total)} completadas`);
+          }
+        } else {
+          this.logger.warn(`⚠️ Pago no completado para orden ${order.id}: paymentStatus = ${paymentStatus}`);
+        }
+      }
+
+      await client.query('COMMIT');
+      this.logger.log(`✅ Webhook procesado exitosamente para orden: ${webhookDto.numberOfOrder}`);
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      this.logger.error(`❌ Error procesando webhook de KarloPay:`, error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

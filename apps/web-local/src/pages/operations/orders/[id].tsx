@@ -286,7 +286,7 @@ export default function OperationsOrderDetailPage() {
   return (
     <>
       <Head>
-        <title>Orden #{order.order_number || order.id.slice(0, 8)} - Operaciones</title>
+        <title>Orden #{order.order_number || order.id.slice(-8).toUpperCase()} - Operaciones</title>
       </Head>
       <OperationsLayout>
         <div className="w-full h-full flex flex-col bg-gray-50">
@@ -303,7 +303,7 @@ export default function OperationsOrderDetailPage() {
               </button>
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">
-                  Orden #{order.order_number || order.id.slice(0, 8)}
+                  Orden #{order.order_number || order.id.slice(-8).toUpperCase()}
                 </h1>
                 <p className="text-sm text-gray-600">
                   {new Date(order.created_at).toLocaleString('es-MX')}

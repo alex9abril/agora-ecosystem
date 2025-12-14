@@ -316,6 +316,21 @@ export default function PrepareOrderPage() {
         status: 'completed',
       });
 
+      // Generar guía de envío automáticamente
+      try {
+        const { logisticsService } = await import('@/lib/logistics');
+        await logisticsService.createShippingLabel({
+          orderId: order.id,
+          packageWeight: 1.0, // Peso por defecto, se puede calcular basado en items
+          packageDimensions: '30x20x15 cm', // Dimensiones por defecto
+          declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
+        });
+        console.log('✅ Guía de envío generada automáticamente');
+      } catch (logisticsError: any) {
+        console.error('⚠️ Error generando guía de envío (no crítico):', logisticsError);
+        // No bloquear el flujo si falla la generación de guía
+      }
+
       // Regresar a la página de detalle del pedido
       router.push(`/orders/${order.id}`);
     } catch (err: any) {
@@ -373,7 +388,7 @@ export default function PrepareOrderPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Preparar pedido #{order.id.slice(0, 8)} - LOCALIA Local</title>
+        <title>Preparar pedido #{order.id.slice(-8).toUpperCase()} - LOCALIA Local</title>
       </Head>
       <div className="w-full h-full flex flex-col bg-white">
         {/* Header */}
@@ -388,7 +403,7 @@ export default function PrepareOrderPage() {
             Volver
           </button>
           <h1 className="text-2xl font-medium text-gray-700">
-            No. de orden {order.id.slice(0, 8)} - Agregar envío
+            No. de orden {order.id.slice(-8).toUpperCase()} - Agregar envío
           </h1>
         </div>
 

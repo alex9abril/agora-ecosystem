@@ -73,7 +73,7 @@ export default function ContextualProductsPage() {
             <p className="text-red-600 mb-4">{error}</p>
           </div>
         ) : (
-          <>
+          <div className="max-w-7xl mx-auto px-4 py-6">
             <div className="mb-8">
               {/* Breadcrumbs de categoría */}
               {categoryFilter && (
@@ -112,7 +112,7 @@ export default function ContextualProductsPage() {
                 </div>
               </div>
             </div>
-          </>
+          </div>
         )}
       </StoreLayout>
     </>

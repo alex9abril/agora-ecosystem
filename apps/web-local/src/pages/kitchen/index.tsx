@@ -624,7 +624,7 @@ export default function KitchenPage() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-semibold text-gray-900">
-                                  #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+                                  #{order.order_number || order.id.slice(-8).toUpperCase()}
                                 </span>
                               </div>
                               <div className="text-xs text-gray-600 mb-2">
@@ -656,7 +656,7 @@ export default function KitchenPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h2 className="text-base font-semibold text-gray-900">
-                          Orden #{selectedOrder.order_number || selectedOrder.id.slice(0, 8).toUpperCase()}
+                          Orden #{selectedOrder.order_number || selectedOrder.id.slice(-8).toUpperCase()}
                         </h2>
                         <div className="flex items-center gap-2 mt-0.5">
                           <p className="text-xs text-gray-600">

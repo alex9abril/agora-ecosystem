@@ -45,12 +45,16 @@ export class ClientsController {
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalle de un cliente' })
   @ApiParam({ name: 'id', description: 'ID del cliente (UUID)' })
+  @ApiQuery({ name: 'businessId', required: false, description: 'Filtrar estadísticas por ID de negocio o grupo' })
   @ApiResponse({ status: 200, description: 'Cliente obtenido exitosamente' })
   @ApiResponse({ status: 404, description: 'Cliente no encontrado' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
-  async findOne(@Param('id') id: string) {
-    return this.clientsService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @Query('businessId') businessId?: string,
+  ) {
+    return this.clientsService.findOne(id, businessId);
   }
 }
 

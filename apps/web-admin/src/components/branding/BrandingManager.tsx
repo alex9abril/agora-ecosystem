@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiRequest } from '@/lib/api';
+import { SketchPicker, ColorResult } from 'react-color';
 
 interface BrandingColors {
   primary_color?: string;
@@ -63,6 +64,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
   const [activeTab, setActiveTab] = useState<'logos' | 'colors' | 'fonts' | 'texts' | 'social' | 'advanced'>('logos');
   const [uploading, setUploading] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [openColorPicker, setOpenColorPicker] = useState<string | null>(null);
   
   const [branding, setBranding] = useState<Branding>({
     colors: {},
@@ -357,25 +359,96 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
     // No hacer nada aquí, el drop se maneja en el contenedor padre
   };
 
-  // Renderizar preview de color
-  const ColorPreview = ({ color, field, label }: { color?: string; field: string; label: string }) => (
-    <div className="flex items-center space-x-3">
-      <div
-        className="w-12 h-12 rounded border border-gray-300"
-        style={{ backgroundColor: color || '#FFFFFF' }}
-      />
-      <div className="flex-1">
-        <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
-        <input
-          type="text"
-          value={color || ''}
-          onChange={(e) => updateField('colors', field, e.target.value)}
-          placeholder="#000000"
-          className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-        />
+  // Cerrar color picker al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openColorPicker) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.color-picker-container')) {
+          setOpenColorPicker(null);
+        }
+      }
+    };
+
+    if (openColorPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [openColorPicker]);
+
+  // Renderizar preview de color con color picker
+  const ColorPreview = ({ color, field, label }: { color?: string; field: string; label: string }) => {
+    const isOpen = openColorPicker === field;
+    const displayColor = color || '#000000';
+
+    const handleColorChange = (newColor: ColorResult) => {
+      updateField('colors', field, newColor.hex);
+    };
+
+    const handleColorClick = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setOpenColorPicker(isOpen ? null : field);
+    };
+
+    return (
+      <div className="relative color-picker-container">
+        <div className="flex items-center space-x-3">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleColorClick}
+              className="w-12 h-12 rounded border-2 border-gray-300 hover:border-indigo-500 transition-colors cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              style={{ backgroundColor: displayColor }}
+              title="Haz clic para abrir el selector de color"
+            />
+            {isOpen && (
+              <div className="absolute z-50 mt-2 left-0">
+                <div
+                  className="fixed inset-0"
+                  onClick={() => setOpenColorPicker(null)}
+                  style={{ zIndex: 9998 }}
+                />
+                <div
+                  className="relative"
+                  style={{ zIndex: 9999 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <SketchPicker
+                    color={displayColor}
+                    onChange={handleColorChange}
+                    disableAlpha={false}
+                    width="250px"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={displayColor}
+                onChange={(e) => updateField('colors', field, e.target.value)}
+                placeholder="#000000"
+                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleColorClick}
+                className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                title="Abrir selector de color"
+              >
+                🎨
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (

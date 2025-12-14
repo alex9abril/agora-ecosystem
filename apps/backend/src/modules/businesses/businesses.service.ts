@@ -965,8 +965,9 @@ export class BusinessesService {
 
     // Asignar rol superadmin al usuario que crea el negocio
     // Esto es necesario para que el sistema de roles funcione correctamente
+    // IMPORTANTE: Sin este rol, el usuario no podrá gestionar la sucursal (branding, productos, etc.)
     try {
-      await pool.query(
+      const roleResult = await pool.query(
         `INSERT INTO core.business_users (
           business_id, 
           user_id, 
@@ -977,9 +978,10 @@ export class BusinessesService {
           updated_at
         ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT (business_id, user_id) DO UPDATE SET
-          role = 'superadmin',
+          role = 'superadmin'::core.business_role,
           is_active = TRUE,
-          updated_at = CURRENT_TIMESTAMP`,
+          updated_at = CURRENT_TIMESTAMP
+        RETURNING id, role, is_active`,
         [
           business.id,
           ownerId,
@@ -988,11 +990,29 @@ export class BusinessesService {
           true,
         ]
       );
-      console.log('[BusinessesService.create] Rol superadmin asignado al usuario:', ownerId);
+      
+      if (roleResult.rows.length > 0) {
+        console.log('[BusinessesService.create] ✅ Rol superadmin asignado correctamente:', {
+          business_id: business.id,
+          business_name: business.name,
+          user_id: ownerId,
+          role_assignment_id: roleResult.rows[0].id,
+          role: roleResult.rows[0].role,
+          is_active: roleResult.rows[0].is_active
+        });
+      } else {
+        console.warn('[BusinessesService.create] ⚠️ No se pudo asignar rol (pero la sucursal se creó)');
+      }
     } catch (roleError: any) {
-      console.error('[BusinessesService.create] Error al asignar rol superadmin:', roleError);
+      console.error('[BusinessesService.create] ❌ Error al asignar rol superadmin:', {
+        error: roleError.message,
+        code: roleError.code,
+        business_id: business.id,
+        user_id: ownerId
+      });
       // No lanzamos error aquí para no bloquear la creación del negocio
-      // El usuario puede ser asignado manualmente después si es necesario
+      // El trigger SQL debería asignar el rol automáticamente como respaldo
+      // Si el trigger también falla, el usuario puede ejecutar fix_missing_business_users_roles.sql
     }
 
     // Log de diagnóstico para verificar coordenadas guardadas
@@ -2435,8 +2455,17 @@ export class BusinessesService {
         throw new NotFoundException('Grupo empresarial no encontrado');
       }
 
+      // get_group_branding devuelve directamente el JSONB del branding
+      const branding = result.rows[0].branding || {};
+      
+      console.log('🎨 [Backend] Branding de grupo obtenido:', {
+        groupId,
+        branding,
+        colors: branding?.colors,
+      });
+
       return {
-        branding: result.rows[0].branding || {},
+        branding: branding,
       };
     } catch (error: any) {
       if (error instanceof NotFoundException) {
@@ -2472,14 +2501,14 @@ export class BusinessesService {
         return true;
       }
 
-      // Verificar si tiene permisos a través de business_users (admin o manager del grupo)
+      // Verificar si tiene permisos a través de business_users (superadmin o admin del grupo)
       const userCheck = await pool.query(
         `SELECT bu.role, bu.business_id, b.name as business_name
          FROM core.business_users bu
          INNER JOIN core.businesses b ON bu.business_id = b.id
          WHERE b.business_group_id = $1 
            AND bu.user_id = $2
-           AND bu.role IN ('admin', 'manager')
+           AND bu.role IN ('superadmin', 'admin')
            AND bu.is_active = TRUE`,
         [groupId, userId]
       );
@@ -2536,7 +2565,7 @@ export class BusinessesService {
         throw new NotFoundException('Grupo empresarial no encontrado');
       }
 
-      // Verificar permisos (owner o admin/manager a través de business_users)
+      // Verificar permisos (owner o superadmin/admin a través de business_users)
       // NOTA: Por ahora permitimos si el usuario está autenticado y el grupo existe
       // TODO: Implementar verificación de permisos más estricta si es necesario
       const hasPermission = await this.checkGroupPermissions(groupId, userId);
@@ -2605,7 +2634,7 @@ export class BusinessesService {
 
     try {
       const result = await pool.query(
-        `SELECT core.get_business_branding($1::uuid) as branding`,
+        `SELECT core.get_business_branding($1::uuid) as branding_result`,
         [businessId]
       );
 
@@ -2613,7 +2642,20 @@ export class BusinessesService {
         throw new NotFoundException('Sucursal no encontrada');
       }
 
-      return result.rows[0].branding || { branding: {} };
+      // get_business_branding devuelve {"branding": {...}}, así que extraemos el branding interno
+      const brandingResult = result.rows[0].branding_result;
+      const branding = brandingResult?.branding || brandingResult || {};
+      
+      console.log('🎨 [Backend] Branding de sucursal obtenido:', {
+        businessId,
+        brandingResult,
+        branding,
+        colors: branding?.colors,
+      });
+
+      return {
+        branding: branding,
+      };
     } catch (error: any) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -2632,28 +2674,119 @@ export class BusinessesService {
     const pool = dbPool;
 
     try {
-      // Verificar si es el propietario
+      // Verificar si es el propietario de la sucursal
       const ownerCheck = await pool.query(
-        `SELECT id FROM core.businesses WHERE id = $1 AND owner_id = $2`,
-        [businessId, userId]
+        `SELECT id, owner_id, name FROM core.businesses WHERE id = $1`,
+        [businessId]
       );
 
-      if (ownerCheck.rows.length > 0) {
+      if (ownerCheck.rows.length === 0) {
+        console.log(`[checkBusinessPermissions] Sucursal ${businessId} no encontrada`);
+        return false;
+      }
+
+      const business = ownerCheck.rows[0];
+      console.log(`[checkBusinessPermissions] Sucursal encontrada: ${business.name}, owner_id: ${business.owner_id}, userId: ${userId}`);
+
+      if (business.owner_id === userId) {
+        console.log(`[checkBusinessPermissions] Usuario ${userId} es propietario de la sucursal ${businessId}`);
         return true;
       }
 
-      // Verificar si tiene permisos a través de business_users (admin o manager)
+      // Verificar si tiene permisos a través de business_users (superadmin o admin)
       const userCheck = await pool.query(
-        `SELECT role 
+        `SELECT role, business_id, is_active
          FROM core.business_users 
          WHERE business_id = $1 
            AND user_id = $2
-           AND role IN ('admin', 'manager')
+           AND role IN ('superadmin', 'admin')
            AND is_active = TRUE`,
         [businessId, userId]
       );
 
-      return userCheck.rows.length > 0;
+      if (userCheck.rows.length > 0) {
+        console.log(`[checkBusinessPermissions] Usuario ${userId} tiene rol ${userCheck.rows[0].role} en la sucursal ${businessId}`);
+        return true;
+      }
+
+      // Verificar si tiene permisos a través del grupo empresarial
+      const groupCheck = await pool.query(
+        `SELECT b.business_group_id, bg.owner_id as group_owner_id, bg.name as group_name
+         FROM core.businesses b
+         LEFT JOIN core.business_groups bg ON b.business_group_id = bg.id
+         WHERE b.id = $1`,
+        [businessId]
+      );
+
+      if (groupCheck.rows.length > 0 && groupCheck.rows[0].business_group_id) {
+        const groupId = groupCheck.rows[0].business_group_id;
+        const groupOwnerId = groupCheck.rows[0].group_owner_id;
+        const groupName = groupCheck.rows[0].group_name;
+
+        console.log(`[checkBusinessPermissions] Sucursal pertenece al grupo ${groupId} (${groupName}), owner_id: ${groupOwnerId}`);
+
+        // Si es el propietario del grupo
+        if (groupOwnerId === userId) {
+          console.log(`[checkBusinessPermissions] Usuario ${userId} es propietario del grupo ${groupId} de la sucursal ${businessId}`);
+          return true;
+        }
+
+        // Verificar si tiene permisos a través de business_users en cualquier sucursal del grupo
+        const groupUserCheck = await pool.query(
+          `SELECT bu.role, bu.business_id, b.name as business_name
+           FROM core.business_users bu
+           INNER JOIN core.businesses b ON bu.business_id = b.id
+           WHERE b.business_group_id = $1 
+             AND bu.user_id = $2
+             AND bu.role IN ('superadmin', 'admin')
+             AND bu.is_active = TRUE`,
+          [groupId, userId]
+        );
+
+        if (groupUserCheck.rows.length > 0) {
+          console.log(`[checkBusinessPermissions] Usuario ${userId} tiene rol ${groupUserCheck.rows[0].role} en sucursal ${groupUserCheck.rows[0].business_id} (${groupUserCheck.rows[0].business_name}) del grupo ${groupId}`);
+          return true;
+        } else {
+          console.log(`[checkBusinessPermissions] Usuario ${userId} NO tiene roles superadmin/admin en ninguna sucursal del grupo ${groupId}`);
+          
+          // Debug: verificar qué roles tiene el usuario en las sucursales del grupo
+          const debugGroupCheck = await pool.query(
+            `SELECT bu.role, bu.business_id, bu.is_active, b.name as business_name
+             FROM core.business_users bu
+             INNER JOIN core.businesses b ON bu.business_id = b.id
+             WHERE b.business_group_id = $1 
+               AND bu.user_id = $2`,
+            [groupId, userId]
+          );
+          
+          if (debugGroupCheck.rows.length > 0) {
+            console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en sucursales del grupo:`, debugGroupCheck.rows);
+          } else {
+            console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en sucursales del grupo`);
+          }
+        }
+      } else {
+        console.log(`[checkBusinessPermissions] Sucursal ${businessId} NO pertenece a ningún grupo empresarial`);
+      }
+
+      console.log(`[checkBusinessPermissions] Usuario ${userId} NO tiene permisos para la sucursal ${businessId}`);
+      
+      // Debug: verificar qué roles tiene el usuario en esta sucursal
+      const debugCheck = await pool.query(
+        `SELECT role, business_id, is_active
+         FROM core.business_users 
+         WHERE business_id = $1 
+           AND user_id = $2`,
+        [businessId, userId]
+      );
+      
+      if (debugCheck.rows.length > 0) {
+        console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en la sucursal:`, debugCheck.rows);
+      } else {
+        console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en la sucursal`);
+      }
+
+      return false;
     } catch (error) {
       console.error('Error verificando permisos de la sucursal:', error);
       return false;
@@ -2681,7 +2814,7 @@ export class BusinessesService {
         throw new NotFoundException('Sucursal no encontrada');
       }
 
-      // Verificar permisos (owner o admin/manager a través de business_users)
+      // Verificar permisos (owner o superadmin/admin a través de business_users)
       const hasPermission = await this.checkBusinessPermissions(businessId, userId);
       if (!hasPermission) {
         throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
