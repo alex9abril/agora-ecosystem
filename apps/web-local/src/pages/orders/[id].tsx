@@ -534,7 +534,9 @@ export default function OrderDetailPage() {
     }> = [];
 
     // Definir acciones según el estado actual
-    switch (orderData.status) {
+    // Usar cast a any para permitir estados que pueden venir del backend pero no están en el tipo
+    const orderStatus = (orderData as any).status || orderData.status;
+    switch (orderStatus) {
       case 'pending':
         // Botón para confirmar pedido (solo si el pago está verificado)
         if (orderData.payment_status === 'paid') {
