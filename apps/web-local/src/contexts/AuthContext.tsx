@@ -33,7 +33,7 @@ interface AuthContextType {
   loading: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (data: any) => Promise<void>;
+  signUp: (data: any) => Promise<AuthResponse>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
