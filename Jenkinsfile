@@ -310,13 +310,18 @@ def deployApp(String appName, String port) {
         # Excluir node_modules del deploy (se instalarán en el servidor)
         rm -rf \${TEMP_DIR}/node_modules
         
-        # Excluir archivos de desarrollo y temporales (pero NO dist ni .next, que son necesarios)
+        # Excluir archivos de desarrollo y temporales
         find \${TEMP_DIR} -name '.env*' -not -name '.env.example' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '*.log' -delete 2>/dev/null || true
         find \${TEMP_DIR} -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
         find \${TEMP_DIR} -name '.cache' -type d -exec rm -rf {} + 2>/dev/null || true
-        # NO eliminar dist - es necesario para backend compilado
-        # NO eliminar .next - es necesario para Next.js (contiene BUILD_ID)
+        
+        # Para frontend: eliminar .next si existe (se generará en el servidor con el .env correcto)
+        # Para backend: NO eliminar dist - es necesario para backend compilado
+        if [ "${isFrontend}" = "true" ]; then
+            rm -rf \${TEMP_DIR}/.next 2>/dev/null || true
+            echo "ℹ️  .next eliminado (se generará en el servidor con el .env correcto)"
+        fi
         
         # Crear archivo tar para transferencia más eficiente
         cd \${TEMP_DIR}
@@ -352,9 +357,16 @@ def deployApp(String appName, String port) {
                 echo "📦 Extrayendo archivos en ${deployPath}..."
                 
                 # Limpiar directorio destino (mantener node_modules y .env si existen)
+                # Para frontend: también mantener .next si existe (se regenerará después)
                 echo "🧹 Limpiando directorio destino..."
                 cd ${deployPath}
-                find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
+                if [ "${IS_FRONTEND}" = "true" ]; then
+                    # Para frontend: borrar todo excepto node_modules, .env y .next (se regenerará)
+                    find . -mindepth 1 ! -name 'node_modules' ! -name '.env' ! -name '.next' -exec rm -rf {} + 2>/dev/null || true
+                else
+                    # Para backend: borrar todo excepto node_modules y .env
+                    find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
+                fi
                 
                 # Configurar umask para permisos correctos (027 = grupo rwx, otros sin acceso)
                 umask 027
@@ -447,14 +459,20 @@ def deployApp(String appName, String port) {
                         echo "✅ Build completado en servidor"
                         
                         # Aplicar permisos correctos a los archivos generados por el build
-                        # Los archivos estáticos deben ser legibles
+                        # Los archivos estáticos deben ser legibles por el proceso de Next.js
                         echo "🔐 Aplicando permisos a archivos del build..."
                         chgrp -R jenkins ${deployPath}/.next
                         find ${deployPath}/.next -type d -exec chmod 2750 {} +
                         find ${deployPath}/.next -type f -exec chmod 640 {} +
-                        # Asegurar que .next/static sea accesible
+                        # Asegurar que .next y .next/static sean accesibles
                         chmod 2750 ${deployPath}/.next
                         chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
+                        # Verificar que los archivos estáticos críticos existen
+                        if [ -f ${deployPath}/.next/BUILD_ID ]; then
+                            echo "✅ BUILD_ID encontrado: \$(cat ${deployPath}/.next/BUILD_ID)"
+                        else
+                            echo "⚠️  BUILD_ID no encontrado después del build"
+                        fi
                     else
                         echo "⚠️  No se encontró script 'build' en package.json"
                     fi
@@ -473,9 +491,16 @@ def deployApp(String appName, String port) {
             echo "📦 Extrayendo archivos en ${deployPath}..."
             
             # Limpiar directorio destino (mantener node_modules y .env si existen)
+            # Para frontend: también mantener .next si existe (se regenerará después)
             echo "🧹 Limpiando directorio destino..."
             cd ${deployPath}
-            find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
+            if [ "${env.IS_FRONTEND}" = "true" ]; then
+                # Para frontend: borrar todo excepto node_modules, .env y .next (se regenerará)
+                find . -mindepth 1 ! -name 'node_modules' ! -name '.env' ! -name '.next' -exec rm -rf {} + 2>/dev/null || true
+            else
+                # Para backend: borrar todo excepto node_modules y .env
+                find . -mindepth 1 ! -name 'node_modules' ! -name '.env' -exec rm -rf {} + 2>/dev/null || true
+            fi
             
             # Configurar umask para permisos correctos (027 = grupo rwx, otros sin acceso)
             umask 027
@@ -568,14 +593,20 @@ def deployApp(String appName, String port) {
                     echo "✅ Build completado en servidor"
                     
                     # Aplicar permisos correctos a los archivos generados por el build
-                    # Los archivos estáticos deben ser legibles
+                    # Los archivos estáticos deben ser legibles por el proceso de Next.js
                     echo "🔐 Aplicando permisos a archivos del build..."
                     chgrp -R jenkins ${deployPath}/.next
                     find ${deployPath}/.next -type d -exec chmod 2750 {} +
                     find ${deployPath}/.next -type f -exec chmod 640 {} +
-                    # Asegurar que .next/static sea accesible
+                    # Asegurar que .next y .next/static sean accesibles
                     chmod 2750 ${deployPath}/.next
                     chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
+                    # Verificar que los archivos estáticos críticos existen
+                    if [ -f ${deployPath}/.next/BUILD_ID ]; then
+                        echo "✅ BUILD_ID encontrado: \$(cat ${deployPath}/.next/BUILD_ID)"
+                    else
+                        echo "⚠️  BUILD_ID no encontrado después del build"
+                    fi
                 else
                     echo "⚠️  No se encontró script 'build' en package.json"
                 fi
