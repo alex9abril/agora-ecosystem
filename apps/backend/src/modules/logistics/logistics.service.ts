@@ -413,12 +413,15 @@ export class LogisticsService {
 
       // Verificar si ya existe una guía para esta orden
       const existingLabelResult = await client.query(
-        `SELECT id FROM orders.shipping_labels WHERE order_id = $1`,
+        `SELECT * FROM orders.shipping_labels WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
         [createDto.orderId]
       );
 
       if (existingLabelResult.rows.length > 0) {
-        throw new BadRequestException('Ya existe una guía de envío para esta orden');
+        // Si ya existe una guía, devolverla en lugar de lanzar un error
+        await client.query('COMMIT');
+        this.logger.log(`ℹ️ Guía de envío ya existe para orden ${createDto.orderId}, devolviendo la existente`);
+        return existingLabelResult.rows[0];
       }
 
       // 2. Generar número de guía
