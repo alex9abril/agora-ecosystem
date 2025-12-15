@@ -12,6 +12,7 @@ import { CheckoutDto } from './dto/checkout.dto';
 import { TaxesService } from '../catalog/taxes/taxes.service';
 import { WalletService } from '../wallet/wallet.service';
 import { KarlopayService } from '../payments/karlopay/karlopay.service';
+import { IntegrationsService } from '../settings/integrations.service';
 
 @Injectable()
 export class OrdersService {
@@ -22,6 +23,7 @@ export class OrdersService {
     private readonly walletService: WalletService,
     @Inject(forwardRef(() => KarlopayService))
     private readonly karlopayService: KarlopayService,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   /**
@@ -457,14 +459,15 @@ export class OrdersService {
           // Crear número de orden único (usar orderGroupId como base)
           const numberOfOrder = `AGORA_${orderGroupId.replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
-          // Construir URL de redirección después del pago
-          // Esta es la URL a la que Karlopay redirigirá al usuario después de completar el pago
-          // Formato: http://localhost:8000{tienda}/karlopay-redirect?session_id={session_id}
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3008';
+          // Construir URL de redirección después del pago usando la configuración de Karlopay
+          // Esta URL se obtiene de la configuración en la base de datos (dev/prod)
           const storeContext = checkoutDto.storeContext || ''; // Ruta de tienda (ej: /grupo/toyota-group o /sucursal/toyota-satelite)
-          const redirectUrl = `${frontendUrl}${storeContext}/karlopay-redirect?session_id=${numberOfOrder}`;
+          const redirectUrl = await this.integrationsService.buildKarlopayRedirectUrl({
+            sessionId: numberOfOrder,
+            storePath: storeContext,
+          });
           
-          console.log(`🔗 Redirect URL para Karlopay: ${redirectUrl}`);
+          console.log(`🔗 Redirect URL para Karlopay (desde configuración): ${redirectUrl}`);
           console.log(`📦 Contexto de tienda: ${storeContext || '(global)'}`);
 
           // Determinar el monto a cobrar en Karlopay
