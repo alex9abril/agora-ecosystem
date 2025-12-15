@@ -443,7 +443,19 @@ def deployApp(String appName, String port) {
                         # Asegurar que NODE_ENV esté en producción para el build
                         export NODE_ENV=production
                         
-                        npm run build
+                        # Mostrar variables de entorno críticas (sin valores sensibles)
+                        echo "🔍 Variables de entorno para build:"
+                        echo "  NODE_ENV=\${NODE_ENV}"
+                        echo "  NEXT_PUBLIC_API_URL=\${NEXT_PUBLIC_API_URL:-no definida}"
+                        
+                        # Ejecutar build y capturar salida
+                        echo "🏗️  Ejecutando npm run build..."
+                        npm run build 2>&1 | tee /tmp/build-output.log || {
+                            echo "❌ Error durante el build"
+                            echo "Últimas líneas del log:"
+                            tail -50 /tmp/build-output.log
+                            exit 1
+                        }
                         
                         # Verificar que el build se completó correctamente
                         if [ ! -d ${deployPath}/.next ]; then
@@ -456,7 +468,26 @@ def deployApp(String appName, String port) {
                             exit 1
                         fi
                         
-                        echo "✅ Build completado en servidor"
+                        # Verificar BUILD_ID
+                        if [ ! -f ${deployPath}/.next/BUILD_ID ]; then
+                            echo "❌ Error: BUILD_ID no encontrado después del build"
+                            exit 1
+                        fi
+                        
+                        BUILD_ID=\$(cat ${deployPath}/.next/BUILD_ID)
+                        echo "✅ BUILD_ID generado: \${BUILD_ID}"
+                        
+                        # Verificar que existen archivos estáticos críticos
+                        if [ ! -d ${deployPath}/.next/static/\${BUILD_ID} ]; then
+                            echo "❌ Error: No se encontró directorio de build estático .next/static/\${BUILD_ID}"
+                            exit 1
+                        fi
+                        
+                        # Listar algunos archivos generados para verificación
+                        echo "📋 Archivos estáticos generados:"
+                        ls -la ${deployPath}/.next/static/\${BUILD_ID}/ 2>/dev/null | head -10 || echo "⚠️  No se pudieron listar archivos"
+                        
+                        echo "✅ Build completado exitosamente en servidor"
                         
                         # Aplicar permisos correctos a los archivos generados por el build
                         # Los archivos estáticos deben ser legibles por el proceso de Next.js
@@ -467,11 +498,26 @@ def deployApp(String appName, String port) {
                         # Asegurar que .next y .next/static sean accesibles
                         chmod 2750 ${deployPath}/.next
                         chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
-                        # Verificar que los archivos estáticos críticos existen
+                        # Verificar permisos finales
+                        echo "🔍 Verificando permisos finales:"
+                        ls -ld ${deployPath}/.next
+                        ls -ld ${deployPath}/.next/static 2>/dev/null || echo "⚠️  .next/static no accesible"
+                        
+                        # Verificar que los archivos críticos son legibles
+                        echo "🔍 Verificando legibilidad de archivos críticos:"
                         if [ -f ${deployPath}/.next/BUILD_ID ]; then
-                            echo "✅ BUILD_ID encontrado: \$(cat ${deployPath}/.next/BUILD_ID)"
+                            cat ${deployPath}/.next/BUILD_ID && echo "" || echo "⚠️  No se pudo leer BUILD_ID"
+                        fi
+                        if [ -d ${deployPath}/.next/static/\${BUILD_ID} ]; then
+                            echo "✅ Directorio de build estático existe y es accesible"
+                            # Verificar que hay archivos dentro
+                            FILE_COUNT=\$(find ${deployPath}/.next/static/\${BUILD_ID} -type f | wc -l)
+                            echo "📊 Archivos estáticos encontrados: \${FILE_COUNT}"
+                            if [ "\${FILE_COUNT}" -eq 0 ]; then
+                                echo "⚠️  Advertencia: No se encontraron archivos estáticos en .next/static/\${BUILD_ID}"
+                            fi
                         else
-                            echo "⚠️  BUILD_ID no encontrado después del build"
+                            echo "❌ Error: Directorio de build estático no existe: .next/static/\${BUILD_ID}"
                         fi
                     else
                         echo "⚠️  No se encontró script 'build' en package.json"
@@ -577,7 +623,19 @@ def deployApp(String appName, String port) {
                     # Asegurar que NODE_ENV esté en producción para el build
                     export NODE_ENV=production
                     
-                    npm run build
+                    # Mostrar variables de entorno críticas (sin valores sensibles)
+                    echo "🔍 Variables de entorno para build:"
+                    echo "  NODE_ENV=\${NODE_ENV}"
+                    echo "  NEXT_PUBLIC_API_URL=\${NEXT_PUBLIC_API_URL:-no definida}"
+                    
+                    # Ejecutar build y capturar salida
+                    echo "🏗️  Ejecutando npm run build..."
+                    npm run build 2>&1 | tee /tmp/build-output.log || {
+                        echo "❌ Error durante el build"
+                        echo "Últimas líneas del log:"
+                        tail -50 /tmp/build-output.log
+                        exit 1
+                    }
                     
                     # Verificar que el build se completó correctamente
                     if [ ! -d ${deployPath}/.next ]; then
@@ -590,7 +648,26 @@ def deployApp(String appName, String port) {
                         exit 1
                     fi
                     
-                    echo "✅ Build completado en servidor"
+                    # Verificar BUILD_ID
+                    if [ ! -f ${deployPath}/.next/BUILD_ID ]; then
+                        echo "❌ Error: BUILD_ID no encontrado después del build"
+                        exit 1
+                    fi
+                    
+                    BUILD_ID=\$(cat ${deployPath}/.next/BUILD_ID)
+                    echo "✅ BUILD_ID generado: \${BUILD_ID}"
+                    
+                    # Verificar que existen archivos estáticos críticos
+                    if [ ! -d ${deployPath}/.next/static/\${BUILD_ID} ]; then
+                        echo "❌ Error: No se encontró directorio de build estático .next/static/\${BUILD_ID}"
+                        exit 1
+                    fi
+                    
+                    # Listar algunos archivos generados para verificación
+                    echo "📋 Archivos estáticos generados:"
+                    ls -la ${deployPath}/.next/static/\${BUILD_ID}/ 2>/dev/null | head -10 || echo "⚠️  No se pudieron listar archivos"
+                    
+                    echo "✅ Build completado exitosamente en servidor"
                     
                     # Aplicar permisos correctos a los archivos generados por el build
                     # Los archivos estáticos deben ser legibles por el proceso de Next.js
@@ -601,11 +678,26 @@ def deployApp(String appName, String port) {
                     # Asegurar que .next y .next/static sean accesibles
                     chmod 2750 ${deployPath}/.next
                     chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
-                    # Verificar que los archivos estáticos críticos existen
+                    # Verificar permisos finales
+                    echo "🔍 Verificando permisos finales:"
+                    ls -ld ${deployPath}/.next
+                    ls -ld ${deployPath}/.next/static 2>/dev/null || echo "⚠️  .next/static no accesible"
+                    
+                    # Verificar que los archivos críticos son legibles
+                    echo "🔍 Verificando legibilidad de archivos críticos:"
                     if [ -f ${deployPath}/.next/BUILD_ID ]; then
-                        echo "✅ BUILD_ID encontrado: \$(cat ${deployPath}/.next/BUILD_ID)"
+                        cat ${deployPath}/.next/BUILD_ID && echo "" || echo "⚠️  No se pudo leer BUILD_ID"
+                    fi
+                    if [ -d ${deployPath}/.next/static/\${BUILD_ID} ]; then
+                        echo "✅ Directorio de build estático existe y es accesible"
+                        # Verificar que hay archivos dentro
+                        FILE_COUNT=\$(find ${deployPath}/.next/static/\${BUILD_ID} -type f | wc -l)
+                        echo "📊 Archivos estáticos encontrados: \${FILE_COUNT}"
+                        if [ "\${FILE_COUNT}" -eq 0 ]; then
+                            echo "⚠️  Advertencia: No se encontraron archivos estáticos en .next/static/\${BUILD_ID}"
+                        fi
                     else
-                        echo "⚠️  BUILD_ID no encontrado después del build"
+                        echo "❌ Error: Directorio de build estático no existe: .next/static/\${BUILD_ID}"
                     fi
                 else
                     echo "⚠️  No se encontró script 'build' en package.json"
