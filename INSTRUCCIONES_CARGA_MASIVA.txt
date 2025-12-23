@@ -1,0 +1,89 @@
+================================================================================
+INSTRUCCIONES PARA CARGA MASIVA DE PRODUCTOS
+================================================================================
+
+ARCHIVOS INCLUIDOS:
+  • template_carga_masiva_productos.csv - Template para productos
+  • catalogo_categorias.csv - Catálogo completo de categorías con relación padre-hijo
+
+COLUMNAS REQUERIDAS (marcadas con *):
+  * name: Nombre del producto (máximo 255 caracteres)
+  * price: Precio base del producto (formato: 150.00)
+  * product_type: Tipo de producto (valores válidos):
+    - refaccion: Refacción (pieza de repuesto)
+    - accesorio: Accesorio (personalización)
+    - servicio_instalacion: Servicio de Instalación
+    - servicio_mantenimiento: Servicio de Mantenimiento
+    - fluido: Fluidos y Lubricantes
+
+COLUMNAS OPCIONALES:
+  • sku: Código único del producto (máximo 100 caracteres)
+  • description: Descripción del producto
+  • category_slug: Slug de la categoría (ver catalogo_categorias.csv)
+    - El slug es el identificador único de la categoría
+    - Consulta el archivo catalogo_categorias.csv para ver todos los slugs disponibles
+    - Si no se especifica, el producto se puede asignar manualmente después
+  • is_available: true/false (default: true)
+  • is_featured: true/false (default: false)
+  • display_order: Número entero (default: 0)
+
+CAMPOS PARA CÁLCULO DE ENVÍO:
+  Estos campos son necesarios para calcular el costo de envío con paqueterías:
+  • weight_kg: Peso del producto en kilogramos (ej: 0.5, 1.2, 2.5)
+  • length_cm: Largo del producto en centímetros (ej: 25, 30, 50)
+  • width_cm: Ancho del producto en centímetros (ej: 20, 15, 30)
+  • height_cm: Alto del producto en centímetros (ej: 5, 10, 20)
+  • NOTA: Para servicios (instalación, mantenimiento), estos campos pueden dejarse vacíos
+  • NOTA: Las paqueterías usan peso y dimensiones para calcular el costo de envío
+  • NOTA: El volumen se calcula automáticamente: largo × ancho × alto (cm³)
+
+ESPECIFICACIONES TÉCNICAS:
+  • technical_specs: Especificaciones técnicas del producto en formato simple
+  • Formato: campo:valor|campo:valor|campo:valor
+  • Ejemplos:
+    marca:Toyota|modelo:Corolla|año:2020-2023
+    viscosidad:5W-30|tipo:Sintético|certificaciones:API SN Plus
+    tiempo_estimado:2-6 horas|dificultad:Media-Alta|garantia:3 meses
+
+  • Puedes usar cualquier campo y valor que necesites
+  • Separa cada especificación con el símbolo | (pipe)
+  • Formato: nombre_campo:valor_del_campo
+
+CATÁLOGO DE CATEGORÍAS:
+  El archivo catalogo_categorias.csv contiene todas las categorías disponibles.
+  Columnas del catálogo:
+    • Nivel: Nivel de jerarquía (0 = categoría principal, 1 = subcategoría, etc.)
+    • Ruta Completa: Ruta completa de la categoría (ej: Refacciones > Motor > Filtros)
+    • Nombre: Nombre de la categoría
+    • Slug: Slug a usar en la columna category_slug del template de productos
+    • Descripción: Descripción de la categoría
+    • Categoría Padre: Nombre de la categoría padre (si aplica)
+    • Slug Padre: Slug de la categoría padre (si aplica)
+
+  Para usar una categoría en tu producto:
+    1. Abre catalogo_categorias.csv
+    2. Busca la categoría que necesitas
+    3. Copia el valor de la columna 'Slug'
+    4. Pégalo en la columna 'Slug de Categoría' de tu producto
+
+NOTAS IMPORTANTES:
+  • NO incluir campos de stock ni relaciones con sucursales
+  • Solo se considera el precio base del producto
+  • El category_slug es opcional pero recomendado
+  • El slug de categoría debe coincidir exactamente con el slug del catálogo
+  • Los campos de envío son opcionales pero recomendados para productos físicos
+  • Para servicios, los campos de envío pueden dejarse vacíos
+  • El archivo CSV usa codificación UTF-8 con BOM para compatibilidad con Excel
+
+EJEMPLOS:
+  El archivo CSV incluye 3 ejemplos completos:
+  1. Filtro de Aire Original Toyota (refaccion con datos de envío)
+  2. Aceite Motor 5W-30 Sintético (fluido con datos de envío)
+  3. Instalación de Sistema de Audio (servicio sin datos de envío)
+
+USO:
+  1. Abre template_carga_masiva_productos.csv en Excel o Google Sheets
+  2. Consulta catalogo_categorias.csv para obtener los slugs de categorías
+  3. Completa las filas con tus productos
+  4. Guarda el archivo
+  5. Importa el archivo usando el sistema de carga masiva

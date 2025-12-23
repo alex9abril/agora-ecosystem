@@ -1,0 +1,122 @@
+﻿Nivel,Ruta Completa,Nombre,Slug,Descripción,Categoría Padre,Slug Padre
+0,Refacciones,Refacciones,refacciones,Piezas de repuesto y componentes originales y alternativos para vehículos,,
+0,Accesorios,Accesorios,accesorios,"Productos de personalización, mejora y comodidad para vehículos",,
+0,Instalación,Instalación,instalacion,Servicios de instalación profesional de refacciones y accesorios,,
+1,Accesorios > Audio y Multimedia,Audio y Multimedia,audio-y-multimedia,"Sistemas de audio, pantallas y multimedia",Accesorios,accesorios
+1,Instalación > Instalación de Refacciones,Instalación de Refacciones,instalacion-de-refacciones,Servicio profesional de instalación de componentes y piezas de repuesto,Instalación,instalacion
+1,Refacciones > Motor,Motor,motor,Componentes del motor y sistema de combustión,Refacciones,refacciones
+1,Accesorios > Iluminación,Iluminación,iluminacion,"Luces LED, faros auxiliares y accesorios de iluminación",Accesorios,accesorios
+1,Instalación > Instalación de Accesorios,Instalación de Accesorios,instalacion-de-accesorios,"Instalación profesional de accesorios de audio, iluminación y personalización",Instalación,instalacion
+1,Refacciones > Sistema de Frenos,Sistema de Frenos,sistema-de-frenos,Componentes del sistema de frenos,Refacciones,refacciones
+1,Accesorios > Seguridad,Seguridad,seguridad,"Alarmas, sistemas de seguridad y protección",Accesorios,accesorios
+1,Instalación > Servicios de Mantenimiento,Servicios de Mantenimiento,servicios-de-mantenimiento,"Cambio de aceite, alineación, balanceo y mantenimiento preventivo",Instalación,instalacion
+1,Refacciones > Suspensión y Dirección,Suspensión y Dirección,suspension-y-direccion,"Componentes de suspensión, dirección y alineación",Refacciones,refacciones
+1,Instalación > Diagnóstico y Reparación,Diagnóstico y Reparación,diagnostico-y-reparacion,"Escaneo computarizado, diagnóstico de fallas y servicios de reparación",Instalación,instalacion
+1,Accesorios > Estética y Personalización,Estética y Personalización,estetica-y-personalizacion,Accesorios decorativos y de personalización,Accesorios,accesorios
+1,Refacciones > Sistema Eléctrico,Sistema Eléctrico,sistema-electrico,Componentes eléctricos y electrónicos del vehículo,Refacciones,refacciones
+1,Refacciones > Combustible y Emisiones,Combustible y Emisiones,combustible-y-emisiones,"Sistema de combustible, escape y control de emisiones",Refacciones,refacciones
+1,Accesorios > Confort e Interior,Confort e Interior,confort-e-interior,Accesorios de comodidad y organización interior,Accesorios,accesorios
+1,Accesorios > Performance,Performance,performance,Accesorios para mejorar el rendimiento del vehículo,Accesorios,accesorios
+1,Refacciones > Transmisión y Tren Motriz,Transmisión y Tren Motriz,transmision-y-tren-motriz,Componentes de transmisión y tren motriz,Refacciones,refacciones
+1,Accesorios > Carga y Transporte,Carga y Transporte,carga-y-transporte,"Portaequipajes, remolques y accesorios de carga",Accesorios,accesorios
+1,Refacciones > Control de Clima,Control de Clima,control-de-clima,Sistema de aire acondicionado y calefacción,Refacciones,refacciones
+1,Refacciones > Carrocería y Exterior,Carrocería y Exterior,carroceria-y-exterior,"Componentes de carrocería, cristales y exterior",Refacciones,refacciones
+1,Refacciones > Mantenimiento y Fluidos,Mantenimiento y Fluidos,mantenimiento-y-fluidos,"Aceites, fluidos y productos de mantenimiento",Refacciones,refacciones
+1,Refacciones > Iluminación,Iluminación,iluminacion,"Faros, calaveras, luces y componentes de iluminación",Refacciones,refacciones
+2,Refacciones > Mantenimiento y Fluidos > Aceites de Motor,Aceites de Motor,aceites-de-motor,"Aceites sintéticos, convencionales y de alto kilometraje",Mantenimiento y Fluidos,mantenimiento-y-fluidos
+2,Accesorios > Seguridad > Alarmas,Alarmas,alarmas,"Sistemas de alarma, inmovilizadores y seguridad",Seguridad,seguridad
+2,Refacciones > Suspensión y Dirección > Amortiguadores y Puntales,Amortiguadores y Puntales,amortiguadores-y-puntales,"Amortiguadores, puntales, resortes y componentes de suspensión",Suspensión y Dirección,suspension-y-direccion
+2,Refacciones > Sistema Eléctrico > Baterías,Baterías,baterias,"Baterías de auto, baterías de moto y baterías de respaldo",Sistema Eléctrico,sistema-electrico
+2,Accesorios > Estética y Personalización > Calcomanías y Vinilos,Calcomanías y Vinilos,calcomanias-y-vinilos,"Calcomanías decorativas, vinilos y gráficos",Estética y Personalización,estetica-y-personalizacion
+2,Instalación > Servicios de Mantenimiento > Cambio de Aceite,Cambio de Aceite,cambio-de-aceite,Servicio de cambio de aceite y filtro,Servicios de Mantenimiento,servicios-de-mantenimiento
+2,Refacciones > Control de Clima > Compresor de Aire Acondicionado,Compresor de Aire Acondicionado,compresor-de-aire-acondicionado,"Compresores, condensadores y componentes del sistema AC",Control de Clima,control-de-clima
+2,Refacciones > Transmisión y Tren Motriz > Embragues,Embragues,embragues,"Kits de embrague, discos, platos y componentes",Transmisión y Tren Motriz,transmision-y-tren-motriz
+2,Instalación > Diagnóstico y Reparación > Escaneo Computarizado,Escaneo Computarizado,escaneo-computarizado,"Escaneo OBD-II, lectura de códigos y diagnóstico electrónico",Diagnóstico y Reparación,diagnostico-y-reparacion
+2,Refacciones > Iluminación > Faros y Calaveras,Faros y Calaveras,faros-y-calaveras,"Faros delanteros, calaveras traseras y componentes",Iluminación,iluminacion
+2,Refacciones > Motor > Filtros,Filtros,filtros,"Filtros de aceite, aire, combustible y habitáculo",Motor,motor
+2,Accesorios > Performance > Filtros de Alto Flujo,Filtros de Alto Flujo,filtros-de-alto-flujo,Filtros de aire de alto rendimiento y filtros de aceite,Performance,performance
+2,Refacciones > Combustible y Emisiones > Filtros de Combustible,Filtros de Combustible,filtros-de-combustible,Filtros de combustible y filtros de inyector,Combustible y Emisiones,combustible-y-emisiones
+2,Instalación > Instalación de Accesorios > Instalación de Audio,Instalación de Audio,instalacion-de-audio,"Instalación de sistemas de audio, bocinas y amplificadores",Instalación de Accesorios,instalacion-de-accesorios
+2,Instalación > Instalación de Refacciones > Instalación de Motor,Instalación de Motor,instalacion-de-motor,"Instalación de componentes del motor: filtros, bujías, correas, sensores",Instalación de Refacciones,instalacion-de-refacciones
+2,Accesorios > Iluminación > Luces LED,Luces LED,luces-led,"Kits de luces LED, tiras LED y accesorios LED",Iluminación,iluminacion
+2,Refacciones > Carrocería y Exterior > Parabrisas y Cristales,Parabrisas y Cristales,parabrisas-y-cristales,"Parabrisas, ventanas laterales y cristales traseros",Carrocería y Exterior,carroceria-y-exterior
+2,Refacciones > Sistema de Frenos > Pastillas de Freno,Pastillas de Freno,pastillas-de-freno,Pastillas de freno delanteras y traseras,Sistema de Frenos,sistema-de-frenos
+2,Accesorios > Carga y Transporte > Portaequipajes,Portaequipajes,portaequipajes,"Barras de techo, portaequipajes y sistemas de carga",Carga y Transporte,carga-y-transporte
+2,Accesorios > Audio y Multimedia > Sistemas de Audio,Sistemas de Audio,sistemas-de-audio,"Estéreos, pantallas táctiles y sistemas multimedia",Audio y Multimedia,audio-y-multimedia
+2,Accesorios > Confort e Interior > Tapetes y Alfombras,Tapetes y Alfombras,tapetes-y-alfombras,"Tapetes de piso, alfombras y protectores",Confort e Interior,confort-e-interior
+2,Refacciones > Mantenimiento y Fluidos > Aditivos,Aditivos,aditivos,"Aditivos para motor, combustible y sistemas",Mantenimiento y Fluidos,mantenimiento-y-fluidos
+2,Instalación > Servicios de Mantenimiento > Alineación y Balanceo,Alineación y Balanceo,alineacion-y-balanceo,Alineación de dirección y balanceo de llantas,Servicios de Mantenimiento,servicios-de-mantenimiento
+2,Refacciones > Sistema Eléctrico > Alternadores,Alternadores,alternadores,Alternadores y reguladores de voltaje,Sistema Eléctrico,sistema-electrico
+2,Accesorios > Audio y Multimedia > Bocinas y Altavoces,Bocinas y Altavoces,bocinas-y-altavoces,"Bocinas, tweeters, subwoofers y sistemas de sonido",Audio y Multimedia,audio-y-multimedia
+2,Refacciones > Combustible y Emisiones > Bombas de Combustible,Bombas de Combustible,bombas-de-combustible,Bombas de combustible eléctricas y mecánicas,Combustible y Emisiones,combustible-y-emisiones
+2,Refacciones > Motor > Bujías y Encendido,Bujías y Encendido,bujias-y-encendido,"Bujías, cables, bobinas y componentes de encendido",Motor,motor
+2,Accesorios > Seguridad > Cámaras y Sensores,Cámaras y Sensores,camaras-y-sensores,"Cámaras de reversa, sensores de estacionamiento y sistemas de visión",Seguridad,seguridad
+2,Instalación > Diagnóstico y Reparación > Diagnóstico de Fallas,Diagnóstico de Fallas,diagnostico-de-fallas,Diagnóstico de problemas mecánicos y eléctricos,Diagnóstico y Reparación,diagnostico-y-reparacion
+2,Refacciones > Sistema de Frenos > Discos y Tambores,Discos y Tambores,discos-y-tambores,"Discos de freno, tambores y componentes relacionados",Sistema de Frenos,sistema-de-frenos
+2,Accesorios > Performance > Escape Deportivo,Escape Deportivo,escape-deportivo,Sistemas de escape deportivo y componentes de rendimiento,Performance,performance
+2,Refacciones > Carrocería y Exterior > Espejos,Espejos,espejos,Espejos retrovisores exteriores e interiores,Carrocería y Exterior,carroceria-y-exterior
+2,Refacciones > Control de Clima > Evaporador y Núcleo,Evaporador y Núcleo,evaporador-y-nucleo,"Evaporadores, núcleos de calefacción y componentes",Control de Clima,control-de-clima
+2,Accesorios > Iluminación > Faros Auxiliares,Faros Auxiliares,faros-auxiliares,"Faros de niebla, faros de trabajo y luces auxiliares",Iluminación,iluminacion
+2,Refacciones > Iluminación > Focos y Bombillas,Focos y Bombillas,focos-y-bombillas,"Bombillas H4, H7, LED y otros tipos de focos",Iluminación,iluminacion
+2,Accesorios > Confort e Interior > Fundas para Asientos,Fundas para Asientos,fundas-para-asientos,"Fundas para asientos, protectores y cobertores",Confort e Interior,confort-e-interior
+2,Instalación > Instalación de Refacciones > Instalación de Frenos,Instalación de Frenos,instalacion-de-frenos,"Instalación de pastillas, discos, pinzas y componentes de frenos",Instalación de Refacciones,instalacion-de-refacciones
+2,Instalación > Instalación de Accesorios > Instalación de Iluminación,Instalación de Iluminación,instalacion-de-iluminacion,"Instalación de luces LED, faros auxiliares y sistemas de iluminación",Instalación de Accesorios,instalacion-de-accesorios
+2,Refacciones > Transmisión y Tren Motriz > Líquido de Transmisión,Líquido de Transmisión,liquido-de-transmision,Aceite de transmisión automática y manual,Transmisión y Tren Motriz,transmision-y-tren-motriz
+2,Accesorios > Carga y Transporte > Remolques y Accesorios,Remolques y Accesorios,remolques-y-accesorios,"Bolas de remolque, enganches y accesorios para remolque",Carga y Transporte,carga-y-transporte
+2,Refacciones > Suspensión y Dirección > Rótulas y Terminales,Rótulas y Terminales,rotulas-y-terminales,"Rótulas, terminales de dirección y componentes de dirección",Suspensión y Dirección,suspension-y-direccion
+2,Accesorios > Estética y Personalización > Spoilers y Alerones,Spoilers y Alerones,spoilers-y-alerones,"Spoilers traseros, alerones y componentes aerodinámicos",Estética y Personalización,estetica-y-personalizacion
+2,Accesorios > Audio y Multimedia > Amplificadores,Amplificadores,amplificadores,Amplificadores de audio y procesadores de señal,Audio y Multimedia,audio-y-multimedia
+2,Refacciones > Sistema Eléctrico > Arrancadores,Arrancadores,arrancadores,Motor de arranque y solenoides,Sistema Eléctrico,sistema-electrico
+2,Refacciones > Suspensión y Dirección > Barras y Cremalleras,Barras y Cremalleras,barras-y-cremalleras,"Barras de dirección, cremalleras y componentes de dirección asistida",Suspensión y Dirección,suspension-y-direccion
+2,Accesorios > Seguridad > Cerraduras y Seguridad,Cerraduras y Seguridad,cerraduras-y-seguridad,"Cerraduras eléctricas, bloqueadores y sistemas de seguridad",Seguridad,seguridad
+2,Accesorios > Performance > Chips y Módulos,Chips y Módulos,chips-y-modulos,"Chips de potencia, módulos de rendimiento y reprogramación",Performance,performance
+2,Refacciones > Motor > Correas y Mangueras,Correas y Mangueras,correas-y-mangueras,"Correas de distribución, alternador, mangueras de radiador y calefacción",Motor,motor
+2,Refacciones > Carrocería y Exterior > Defensas y Parachoques,Defensas y Parachoques,defensas-y-parachoques,"Parachoques delanteros y traseros, defensas",Carrocería y Exterior,carroceria-y-exterior
+2,Accesorios > Estética y Personalización > Emblemas y Logos Personalizados,Emblemas y Logos Personalizados,emblemas-y-logos-personalizados,"Emblemas personalizados, logos y letreros decorativos",Estética y Personalización,estetica-y-personalizacion
+2,Refacciones > Transmisión y Tren Motriz > Filtros de Transmisión,Filtros de Transmisión,filtros-de-transmision,Filtros de transmisión y componentes relacionados,Transmisión y Tren Motriz,transmision-y-tren-motriz
+2,Refacciones > Mantenimiento y Fluidos > Fluidos Hidráulicos,Fluidos Hidráulicos,fluidos-hidraulicos,"Líquido de dirección, líquido de frenos y fluidos hidráulicos",Mantenimiento y Fluidos,mantenimiento-y-fluidos
+2,Instalación > Instalación de Accesorios > Instalación de Seguridad,Instalación de Seguridad,instalacion-de-seguridad,"Instalación de alarmas, cámaras y sistemas de seguridad",Instalación de Accesorios,instalacion-de-accesorios
+2,Instalación > Instalación de Refacciones > Instalación de Suspensión,Instalación de Suspensión,instalacion-de-suspension,"Instalación de amortiguadores, puntales y componentes de suspensión",Instalación de Refacciones,instalacion-de-refacciones
+2,Accesorios > Iluminación > Luces de Neón,Luces de Neón,luces-de-neon,"Tubos de neón, luces de ambiente y efectos de iluminación",Iluminación,iluminacion
+2,Refacciones > Iluminación > Luces de Señalización,Luces de Señalización,luces-de-senalizacion,"Luces direccionales, intermitentes y de emergencia",Iluminación,iluminacion
+2,Instalación > Servicios de Mantenimiento > Mantenimiento Preventivo,Mantenimiento Preventivo,mantenimiento-preventivo,"Revisión general, mantenimiento programado y servicios preventivos",Servicios de Mantenimiento,servicios-de-mantenimiento
+2,Accesorios > Confort e Interior > Organizadores,Organizadores,organizadores,"Organizadores de consola, portaobjetos y accesorios de organización",Confort e Interior,confort-e-interior
+2,Refacciones > Sistema de Frenos > Pinzas y Cilindros,Pinzas y Cilindros,pinzas-y-cilindros,"Pinzas de freno, cilindros maestros y de rueda",Sistema de Frenos,sistema-de-frenos
+2,Accesorios > Carga y Transporte > Portabicicletas,Portabicicletas,portabicicletas,Portabicicletas de techo y traseros,Carga y Transporte,carga-y-transporte
+2,Refacciones > Control de Clima > Refrigerante,Refrigerante,refrigerante,"Refrigerante R134a, R1234yf y otros refrigerantes",Control de Clima,control-de-clima
+2,Instalación > Diagnóstico y Reparación > Reparación Mecánica,Reparación Mecánica,reparacion-mecanica,"Servicios de reparación de motor, transmisión y sistemas mecánicos",Diagnóstico y Reparación,diagnostico-y-reparacion
+2,Refacciones > Combustible y Emisiones > Sistema de Escape,Sistema de Escape,sistema-de-escape,"Mofles, tubos de escape, convertidores catalíticos",Combustible y Emisiones,combustible-y-emisiones
+2,Accesorios > Estética y Personalización > Accesorios Decorativos,Accesorios Decorativos,accesorios-decorativos,"Molduras, protectores y accesorios de estilo",Estética y Personalización,estetica-y-personalizacion
+2,Accesorios > Audio y Multimedia > Accesorios de Audio,Accesorios de Audio,accesorios-de-audio,"Cables, adaptadores y accesorios para sistemas de audio",Audio y Multimedia,audio-y-multimedia
+2,Accesorios > Confort e Interior > Accesorios de Limpieza,Accesorios de Limpieza,accesorios-de-limpieza,"Aspiradoras, productos de limpieza y cuidado interior",Confort e Interior,confort-e-interior
+2,Refacciones > Suspensión y Dirección > Baleros y Rodamientos,Baleros y Rodamientos,baleros-y-rodamientos,"Baleros de rueda, rodamientos y componentes de soporte",Suspensión y Dirección,suspension-y-direccion
+2,Refacciones > Carrocería y Exterior > Capó y Puertas,Capó y Puertas,capo-y-puertas,"Capós, puertas, bisagras y componentes de carrocería",Carrocería y Exterior,carroceria-y-exterior
+2,Accesorios > Performance > Componentes de Rendimiento,Componentes de Rendimiento,componentes-de-rendimiento,"Turbos, supercargadores y componentes de potencia",Performance,performance
+2,Refacciones > Control de Clima > Filtros de Aire de Cabina,Filtros de Aire de Cabina,filtros-de-aire-de-cabina,Filtros de aire de habitáculo y filtros HEPA,Control de Clima,control-de-clima
+2,Refacciones > Sistema Eléctrico > Fusibles y Relés,Fusibles y Relés,fusibles-y-reles,"Fusibles, relés y cajas de fusibles",Sistema Eléctrico,sistema-electrico
+2,Instalación > Instalación de Refacciones > Instalación Eléctrica,Instalación Eléctrica,instalacion-electrica,"Instalación de baterías, alternadores, arrancadores y componentes eléctricos",Instalación de Refacciones,instalacion-de-refacciones
+2,Instalación > Instalación de Accesorios > Instalación de Accesorios Estéticos,Instalación de Accesorios Estéticos,instalacion-de-accesorios-esteticos,"Instalación de spoilers, alerones y accesorios de personalización",Instalación de Accesorios,instalacion-de-accesorios
+2,Refacciones > Transmisión y Tren Motriz > Juntas Homocinéticas,Juntas Homocinéticas,juntas-homocineticas,"Juntas homocinéticas, semiejes y componentes del tren motriz",Transmisión y Tren Motriz,transmision-y-tren-motriz
+2,Refacciones > Iluminación > Luces Interiores,Luces Interiores,luces-interiores,"Luces de techo, luces de cortesía y iluminación interior",Iluminación,iluminacion
+2,Refacciones > Sistema de Frenos > Líquido de Frenos,Líquido de Frenos,liquido-de-frenos,"Líquido de frenos DOT 3, DOT 4, DOT 5",Sistema de Frenos,sistema-de-frenos
+2,Refacciones > Mantenimiento y Fluidos > Productos de Limpieza,Productos de Limpieza,productos-de-limpieza,"Limpiadores de motor, desengrasantes y productos de mantenimiento",Mantenimiento y Fluidos,mantenimiento-y-fluidos
+2,Instalación > Diagnóstico y Reparación > Reparación Eléctrica,Reparación Eléctrica,reparacion-electrica,Reparación de sistemas eléctricos y electrónicos,Diagnóstico y Reparación,diagnostico-y-reparacion
+2,Refacciones > Combustible y Emisiones > Sensores de Emisiones,Sensores de Emisiones,sensores-de-emisiones,"Sensores de oxígeno (O2), sensores de temperatura de escape",Combustible y Emisiones,combustible-y-emisiones
+2,Refacciones > Motor > Sensores del Motor,Sensores del Motor,sensores-del-motor,"Sensores de temperatura, presión, posición y otros sensores",Motor,motor
+2,Instalación > Servicios de Mantenimiento > Servicio de Fluidos,Servicio de Fluidos,servicio-de-fluidos,"Cambio de fluidos: transmisión, dirección, frenos, refrigerante",Servicios de Mantenimiento,servicios-de-mantenimiento
+2,Accesorios > Confort e Interior > Ambientadores,Ambientadores,ambientadores,"Ambientadores, purificadores y aromatizantes",Confort e Interior,confort-e-interior
+2,Refacciones > Sistema Eléctrico > Cables y Terminales,Cables y Terminales,cables-y-terminales,"Cables de batería, terminales y conectores eléctricos",Sistema Eléctrico,sistema-electrico
+2,Refacciones > Suspensión y Dirección > Componentes de Alineación,Componentes de Alineación,componentes-de-alineacion,"Brazos de control, bujes y componentes para alineación",Suspensión y Dirección,suspension-y-direccion
+2,Refacciones > Transmisión y Tren Motriz > Componentes de Transmisión,Componentes de Transmisión,componentes-de-transmision,"Solenoides, válvulas y componentes internos de transmisión",Transmisión y Tren Motriz,transmision-y-tren-motriz
+2,Refacciones > Carrocería y Exterior > Emblemas y Logos,Emblemas y Logos,emblemas-y-logos,"Emblemas de marca, logos y letreros",Carrocería y Exterior,carroceria-y-exterior
+2,Instalación > Instalación de Refacciones > Instalación de Transmisión,Instalación de Transmisión,instalacion-de-transmision,Instalación de embragues y componentes de transmisión,Instalación de Refacciones,instalacion-de-refacciones
+2,Refacciones > Combustible y Emisiones > Inyectores,Inyectores,inyectores,Inyectores de combustible y componentes relacionados,Combustible y Emisiones,combustible-y-emisiones
+2,Refacciones > Sistema de Frenos > Líneas y Mangueras,Líneas y Mangueras,lineas-y-mangueras,"Mangueras de freno, líneas de freno y conectores",Sistema de Frenos,sistema-de-frenos
+2,Refacciones > Motor > Radiador y Enfriamiento,Radiador y Enfriamiento,radiador-y-enfriamiento,"Radiadores, termostatos, bombas de agua y componentes de enfriamiento",Motor,motor
+2,Refacciones > Control de Clima > Ventiladores y Motores,Ventiladores y Motores,ventiladores-y-motores,"Ventiladores de radiador, motores de ventilador y componentes",Control de Clima,control-de-clima
+2,Refacciones > Motor > Componentes de Sincronización,Componentes de Sincronización,componentes-de-sincronizacion,"Cadenas, engranajes y componentes de sincronización del motor",Motor,motor
+2,Refacciones > Suspensión y Dirección > Líquido de Dirección,Líquido de Dirección,liquido-de-direccion,Líquido de dirección asistida y fluidos hidráulicos,Suspensión y Dirección,suspension-y-direccion
+2,Refacciones > Sistema Eléctrico > Sensores Eléctricos,Sensores Eléctricos,sensores-electricos,"Sensores de velocidad, posición y otros sensores eléctricos",Sistema Eléctrico,sistema-electrico
+2,Refacciones > Sistema de Frenos > Sensores de Freno,Sensores de Freno,sensores-de-freno,Sensores de desgaste y sensores ABS,Sistema de Frenos,sistema-de-frenos
+2,Refacciones > Combustible y Emisiones > Tanque y Líneas,Tanque y Líneas,tanque-y-lineas,"Tanques de combustible, líneas y válvulas",Combustible y Emisiones,combustible-y-emisiones
+2,Refacciones > Motor > Aceites y Lubricantes,Aceites y Lubricantes,aceites-y-lubricantes,"Aceites de motor, aditivos y lubricantes",Motor,motor
