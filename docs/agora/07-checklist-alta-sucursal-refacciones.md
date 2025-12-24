@@ -1,31 +1,171 @@
-# Checklist de Alta de Sucursal - Tienda de Refacciones
+# Checklist de Alta - Grupo Empresarial y Sucursales de Refacciones
 
-Este documento contiene el checklist completo de todos los requisitos, información e insumos necesarios para dar de alta una sucursal activa y ponerla en operación como tienda de refacciones en la plataforma AGORA.
+Este documento contiene el checklist completo de todos los requisitos, información e insumos necesarios para dar de alta un grupo empresarial y sus sucursales activas para ponerlas en operación como tiendas de refacciones en la plataforma AGORA.
+
+## 🎯 Flujo Recomendado
+
+**Para organizaciones con múltiples sucursales:**
+1. **Primero**: Crear el Grupo Empresarial (Parte I)
+2. **Después**: Crear las Sucursales y asociarlas al grupo (Parte II)
+
+**Para sucursales independientes:**
+- Puedes crear sucursales directamente sin crear un grupo empresarial
+- Las sucursales pueden existir sin pertenecer a un grupo
+
+**Nota**: Si planeas tener múltiples sucursales bajo una misma organización, es recomendable crear primero el grupo empresarial para facilitar la gestión centralizada.
 
 ---
 
 ## 📋 Índice
 
-1. [Información Básica del Negocio](#1-información-básica-del-negocio)
-2. [Información de Contacto y Ubicación](#2-información-de-contacto-y-ubicación)
-3. [Configuración de Marcas de Vehículos](#3-configuración-de-marcas-de-vehículos)
-4. [Catálogo de Productos](#4-catálogo-de-productos)
-5. [Configuración Operativa](#5-configuración-operativa)
-6. [Usuarios y Roles](#6-usuarios-y-roles)
-7. [Configuración de Wallet](#7-configuración-de-wallet)
-8. [Documentos e Imágenes](#8-documentos-e-imágenes)
-9. [Configuración de Comisiones y Pagos](#9-configuración-de-comisiones-y-pagos)
-10. [Verificaciones Finales](#10-verificaciones-finales)
+### Parte I: Grupo Empresarial
+1. [Información Básica del Grupo Empresarial](#1-información-básica-del-grupo-empresarial)
+2. [Identificación y Branding del Grupo](#2-identificación-y-branding-del-grupo)
+3. [Información Fiscal del Grupo](#3-información-fiscal-del-grupo)
+4. [Configuración del Grupo Empresarial](#4-configuración-del-grupo-empresarial)
+
+### Parte II: Sucursales
+5. [Información Básica de la Sucursal](#5-información-básica-de-la-sucursal)
+6. [Información de Contacto y Ubicación](#6-información-de-contacto-y-ubicación)
+7. [Configuración de Marcas de Vehículos](#7-configuración-de-marcas-de-vehículos)
+8. [Catálogo de Productos](#8-catálogo-de-productos)
+9. [Configuración Operativa](#9-configuración-operativa)
+10. [Usuarios y Roles](#10-usuarios-y-roles)
+11. [Configuración de Wallet](#11-configuración-de-wallet)
+12. [Documentos e Imágenes](#12-documentos-e-imágenes)
+13. [Configuración de Comisiones y Pagos](#13-configuración-de-comisiones-y-pagos)
+14. [Verificaciones Finales](#14-verificaciones-finales)
 
 ---
 
-## 1. Información Básica del Negocio
+# Parte I: Grupo Empresarial
+
+## 1. Información Básica del Grupo Empresarial
 
 ### ✅ Datos Requeridos
 
-- [ ] **Nombre del negocio** (máximo 255 caracteres)
-  - Ejemplo: "Refaccionaria La Roma", "Auto Parts CDMX"
+- [ ] **Nombre comercial del grupo** (máximo 255 caracteres)
+  - Ejemplo: "Grupo Andrade", "AutoParts México", "Refaccionaria Nacional"
   - ⚠️ **Requerido**: Este campo es obligatorio
+  - ⚠️ **Nota**: Este es el nombre que aparecerá públicamente para identificar al grupo empresarial
+
+- [ ] **Razón social** (opcional, máximo 255 caracteres)
+  - Ejemplo: "Grupo Andrade S.A. de C.V.", "AutoParts México S. de R.L. de C.V."
+  - ⚠️ **Opcional**: Recomendado para facturación y documentos legales
+  - ⚠️ **Nota**: Si el grupo tiene razón social diferente al nombre comercial, es importante registrarla
+
+- [ ] **Descripción del grupo empresarial** (opcional)
+  - Breve descripción del grupo, su misión, especialidades o alcance
+  - Ejemplo: "Grupo empresarial dedicado a la venta de refacciones automotrices con presencia en múltiples ciudades"
+  - ⚠️ **Opcional**: Ayuda a identificar el propósito y alcance del grupo
+
+### ✅ Usuario Propietario del Grupo
+
+- [ ] **Cuenta de usuario propietario creada**
+  - El propietario debe tener una cuenta en `auth.users` (Supabase Auth)
+  - Perfil creado en `core.user_profiles` con rol `local` o `admin`
+  - ⚠️ **Requerido**: El `owner_id` debe ser un UUID válido de `auth.users`
+  - ⚠️ **Nota**: El propietario del grupo será el administrador principal y podrá gestionar todas las sucursales del grupo
+
+---
+
+## 2. Identificación y Branding del Grupo
+
+### ✅ Slug (Identificador Único)
+
+- [ ] **Slug del grupo** (opcional, se genera automáticamente si no se proporciona)
+  - Identificador único y amigable para URLs
+  - Ejemplo: `grupo-andrade`, `autoparts-mexico`
+  - ⚠️ **Opcional**: Si no se proporciona, se genera automáticamente a partir del nombre
+  - ⚠️ **Importante**: El slug debe ser único en todo el sistema
+  - ⚠️ **Formato**: Solo letras minúsculas, números y guiones. Sin espacios ni caracteres especiales
+
+### ✅ Logo del Grupo
+
+- [ ] **Logo del grupo empresarial** (`logo_url`)
+  - URL de la imagen del logo
+  - Se sube al storage de Supabase (bucket: `business-logos` o similar)
+  - Formato recomendado: PNG con fondo transparente o JPG
+  - Tamaño recomendado: 512x512px o mayor (cuadrado)
+  - ⚠️ **Opcional**: Recomendado para branding consistente en todas las sucursales
+  - ⚠️ **Nota**: El logo del grupo puede heredarse a las sucursales si se configura así
+
+### ✅ Sitio Web
+
+- [ ] **Sitio web del grupo** (opcional)
+  - URL del sitio web corporativo del grupo si existe
+  - Ejemplo: `https://www.grupoandrade.com`
+  - ⚠️ **Opcional**: Útil para proporcionar información corporativa adicional
+
+---
+
+## 3. Información Fiscal del Grupo
+
+### ✅ Identificador Fiscal
+
+- [ ] **RFC / Tax ID** (opcional, máximo 50 caracteres)
+  - Identificador fiscal del grupo empresarial
+  - En México: RFC (Registro Federal de Contribuyentes)
+  - En otros países: NIT, CUIT, o equivalente según el país
+  - Ejemplo: `GAN850101ABC` (RFC mexicano)
+  - ⚠️ **Opcional**: Recomendado para facturación y reportes fiscales
+  - ⚠️ **Nota**: Este identificador es a nivel de grupo, no de sucursal individual
+
+---
+
+## 4. Configuración del Grupo Empresarial
+
+### ✅ Configuraciones Adicionales
+
+- [ ] **Settings** (opcional, formato JSONB)
+  - Configuraciones adicionales del grupo en formato JSON
+  - Puede incluir:
+    - Branding (colores, fuentes, estilos)
+    - Configuraciones de funcionalidades
+    - Preferencias operativas
+  - Ejemplo:
+    ```json
+    {
+      "branding": {
+        "primary_color": "#FF5733",
+        "secondary_color": "#33C3F0",
+        "font_family": "Arial"
+      },
+      "features": {
+        "multi_branch": true,
+        "centralized_inventory": false
+      }
+    }
+    ```
+  - ⚠️ **Opcional**: Permite personalización avanzada del grupo
+
+### ✅ Estado del Grupo
+
+- [ ] **Grupo activo** (`is_active`)
+  - Por defecto: `true`
+  - Si es `false`, el grupo y todas sus sucursales no aparecerán en búsquedas
+  - ⚠️ **Importante**: Un grupo inactivo afecta a todas sus sucursales
+
+### 📝 Notas sobre Grupos Empresariales
+
+- **Relación con Sucursales**: Las sucursales se asocian al grupo mediante el campo `business_group_id`
+- **Herencia de Configuraciones**: Las sucursales pueden heredar configuraciones del grupo (branding, colores, etc.)
+- **Gestión Centralizada**: El propietario del grupo puede gestionar todas las sucursales desde un panel centralizado
+- **Múltiples Grupos**: Un usuario puede ser propietario de múltiples grupos empresariales
+- **Sucursales sin Grupo**: Las sucursales pueden existir sin pertenecer a un grupo (campo `business_group_id` en NULL)
+
+---
+
+# Parte II: Sucursales
+
+## 5. Información Básica de la Sucursal
+
+### ✅ Datos Requeridos
+
+- [ ] **Nombre de la sucursal** (máximo 255 caracteres)
+  - Ejemplo: "Refaccionaria La Roma", "Auto Parts CDMX", "Grupo Andrade - Sucursal Centro"
+  - ⚠️ **Requerido**: Este campo es obligatorio
+  - ⚠️ **Nota**: Si la sucursal pertenece a un grupo, puede incluir el nombre del grupo para identificación
 
 - [ ] **Razón social** (opcional, máximo 255 caracteres)
   - Ejemplo: "Refaccionaria La Roma S.A. de C.V."
@@ -44,9 +184,14 @@ Este documento contiene el checklist completo de todos los requisitos, informaci
   - Etiquetas para mejorar la búsqueda
   - Ejemplos: `['multimarca', 'instalacion', 'garantia']`
 
+- [ ] **Asociación al Grupo Empresarial** (opcional)
+  - Si la sucursal pertenece a un grupo empresarial, se asigna mediante `business_group_id`
+  - ⚠️ **Opcional**: Las sucursales pueden existir sin grupo
+  - ⚠️ **Nota**: Si se asigna a un grupo, la sucursal puede heredar configuraciones del grupo
+
 ---
 
-## 2. Información de Contacto y Ubicación
+## 6. Información de Contacto y Ubicación
 
 ### ✅ Datos de Contacto
 
@@ -89,7 +234,7 @@ Este documento contiene el checklist completo de todos los requisitos, informaci
 
 ---
 
-## 3. Configuración de Marcas de Vehículos
+## 7. Configuración de Marcas de Vehículos
 
 ### ✅ Marcas Comercializadas
 
@@ -114,7 +259,7 @@ Este documento contiene el checklist completo de todos los requisitos, informaci
 
 ---
 
-## 4. Catálogo de Productos
+## 8. Catálogo de Productos
 
 ### ✅ Tipos de Producto Disponibles
 
@@ -235,7 +380,7 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 5. Configuración Operativa
+## 9. Configuración Operativa
 
 ### ✅ Horarios de Operación
 
@@ -288,7 +433,7 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 6. Usuarios y Roles
+## 10. Usuarios y Roles
 
 ### ✅ Usuario Propietario
 
@@ -314,7 +459,7 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 7. Configuración de Wallet
+## 11. Configuración de Wallet
 
 ### ✅ Integración con Wallet
 
@@ -332,7 +477,7 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 8. Documentos e Imágenes
+## 12. Documentos e Imágenes
 
 ### ✅ Imágenes del Negocio
 
@@ -370,7 +515,7 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 9. Configuración de Comisiones y Pagos
+## 13. Configuración de Comisiones y Pagos
 
 ### ✅ Comisiones
 
@@ -394,9 +539,24 @@ La plataforma soporta 5 tipos de productos:
 
 ---
 
-## 10. Verificaciones Finales
+## 14. Verificaciones Finales
 
-### ✅ Checklist de Activación
+### ✅ Checklist de Activación - Grupo Empresarial
+
+Antes de crear sucursales, verificar que el grupo esté configurado:
+
+- [ ] **Información básica del grupo completa**
+  - [ ] Nombre comercial del grupo
+  - [ ] Usuario propietario activo
+  - [ ] Slug generado correctamente
+
+- [ ] **Información fiscal** (si aplica)
+  - [ ] RFC o identificador fiscal registrado
+
+- [ ] **Branding básico** (recomendado)
+  - [ ] Logo del grupo cargado
+
+### ✅ Checklist de Activación - Sucursal
 
 Antes de poner la sucursal en operación, verificar:
 
@@ -456,26 +616,50 @@ Antes de poner la sucursal en operación, verificar:
 
 ## 📋 Resumen de Campos Requeridos vs Opcionales
 
-### ⚠️ Campos Obligatorios (Requeridos)
+### ⚠️ Campos Obligatorios - Grupo Empresarial
 
-1. `name` - Nombre del negocio
+1. `name` - Nombre comercial del grupo
+2. `owner_id` - ID del usuario propietario (UUID válido)
+3. `slug` - Identificador único (se genera automáticamente si no se proporciona)
+
+### ⚠️ Campos Obligatorios - Sucursal
+
+1. `name` - Nombre de la sucursal
 2. `category` - Categoría del negocio
 3. `longitude` - Longitud (coordenada)
 4. `latitude` - Latitud (coordenada)
 5. `owner_id` - ID del usuario propietario (UUID válido)
 
-### ✅ Campos Opcionales pero Recomendados
+### ✅ Campos Opcionales pero Recomendados - Grupo Empresarial
+
+1. `legal_name` - Razón social del grupo
+2. `description` - Descripción del grupo
+3. `logo_url` - Logo del grupo
+4. `tax_id` - RFC o identificador fiscal
+5. `website_url` - Sitio web del grupo
+
+### ✅ Campos Opcionales pero Recomendados - Sucursal
 
 1. `legal_name` - Razón social
 2. `description` - Descripción del negocio
 3. `phone` - Teléfono de contacto
 4. `email` - Email de contacto
 5. `address_line1` - Dirección completa
-6. `logo_url` - Logo del negocio
+6. `logo_url` - Logo de la sucursal
 7. `opening_hours` - Horarios de operación
 8. `accepts_pickup` - Acepta recolección en tienda
+9. `business_group_id` - ID del grupo empresarial (si pertenece a un grupo)
 
-### 📝 Campos Opcionales
+### 📝 Campos Opcionales - Grupo Empresarial
+
+1. `legal_name` - Razón social
+2. `description` - Descripción
+3. `logo_url` - Logo del grupo
+4. `website_url` - Sitio web
+5. `tax_id` - RFC o identificador fiscal
+6. `settings` - Configuraciones adicionales (JSONB)
+
+### 📝 Campos Opcionales - Sucursal
 
 1. `legal_name` - Razón social
 2. `description` - Descripción
@@ -483,6 +667,7 @@ Antes de poner la sucursal en operación, verificar:
 4. `website_url` - Sitio web
 5. `cover_image_url` - Imagen de portada
 6. `wallet_business_id` - ID del wallet
+7. `business_group_id` - ID del grupo empresarial
 
 ---
 

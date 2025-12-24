@@ -68,7 +68,7 @@ Documentación del sistema de roles y permisos para gestionar sucursales.
 - Troubleshooting de problemas comunes
 - Consultas de verificación
 
-### 7. [Checklist de Alta de Sucursal - Tienda de Refacciones](./checklist-alta-sucursal-refacciones.md)
+### 7. [Checklist de Alta de Sucursal - Tienda de Refacciones](./07-checklist-alta-sucursal-refacciones.md)
 Checklist completo de todos los requisitos, información e insumos necesarios para dar de alta una sucursal activa y ponerla en operación.
 
 **Contenido:**
@@ -108,7 +108,7 @@ Checklist completo de todos los requisitos, información e insumos necesarios pa
 4. Revisar [Sistema de Configuraciones e Impuestos](./04-sistema-configuraciones-impuestos.md)
 5. Revisar [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
 6. Revisar [Sistema de Roles y Permisos para Sucursales](./06-sistema-roles-sucursales.md)
-7. **Para dar de alta una sucursal**: Consultar [Checklist de Alta de Sucursal](./checklist-alta-sucursal-refacciones.md)
+7. **Para dar de alta una sucursal**: Consultar [Checklist de Alta de Sucursal](./07-checklist-alta-sucursal-refacciones.md)
 8. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
 9. Adaptar formularios y frontend según sea necesario
 
