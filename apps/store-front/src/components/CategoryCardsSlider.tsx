@@ -50,6 +50,7 @@ export default function CategoryCardsSlider({
           title: cat.name.toUpperCase(),
           description: cat.description || 'Descubre nuestros productos',
           iconUrl: cat.icon_url || undefined,
+          imageUrl: undefined, // No hay imagen URL para categorías del sistema
           link: `/products?categoryId=${cat.id}`,
           backgroundColor: undefined, // No hay color de fondo para categorías del sistema
           // Guardar la categoría completa para usar el sistema de iconos
