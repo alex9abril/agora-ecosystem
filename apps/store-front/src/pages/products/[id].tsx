@@ -121,7 +121,8 @@ export default function ProductDetailPage() {
 
   // Escuchar cambios en el vehículo seleccionado
   useEffect(() => {
-    if (!product || (product.product_type !== 'refaccion' && product.product_type !== 'accesorio')) {
+    // Solo reaccionar a cambios de vehículo cuando el producto es no alimenticio (refacción/accesorio)
+    if (!product || product.product_type !== 'non_food') {
       return;
     }
 
