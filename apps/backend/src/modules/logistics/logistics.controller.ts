@@ -173,6 +173,46 @@ export class LogisticsController {
     res.send(pdfBuffer);
   }
 
+  @Get('shipments/:orderId/tracking')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Obtener estado de seguimiento de envío',
+    description: 'Obtiene el estado actual de seguimiento de un envío desde Skydropx y actualiza el estado en la base de datos',
+  })
+  @ApiParam({
+    name: 'orderId',
+    description: 'ID de la orden',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado de seguimiento obtenido exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No se encontró shipping label para la orden',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Error al consultar Skydropx',
+  })
+  async getShipmentTracking(@Param('orderId') orderId: string) {
+    this.logger.log(`📦 Consultando tracking para orden: ${orderId}`);
+    
+    const tracking = await this.logisticsService.getShipmentTracking(orderId);
+
+    if (!tracking) {
+      throw new NotFoundException(
+        `No se encontró información de tracking para la orden ${orderId}`
+      );
+    }
+
+    return {
+      success: true,
+      data: tracking,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Post('quotations')
   @Public()
   @ApiOperation({

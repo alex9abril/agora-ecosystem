@@ -27,6 +27,25 @@ export interface ShippingLabel {
   updated_at: string;
 }
 
+export interface TrackingEvent {
+  status: string;
+  description: string;
+  location?: string;
+  timestamp: string;
+}
+
+export interface ShipmentTracking {
+  shipment_id: string;
+  tracking_number: string | null;
+  status: string;
+  carrier: string | null;
+  service: string | null;
+  estimated_delivery?: string | null;
+  current_location?: string | null;
+  tracking_events: TrackingEvent[];
+  tracking_url?: string | null;
+}
+
 export interface CreateShippingLabelData {
   orderId: string;
   packageWeight?: number;
@@ -109,6 +128,20 @@ export const logisticsService = {
     }
 
     return response.blob();
+  },
+
+  /**
+   * Obtener estado de seguimiento de envío desde Skydropx
+   */
+  async getShipmentTracking(orderId: string): Promise<ShipmentTracking> {
+    const response = await apiRequest<{ success: boolean; data: ShipmentTracking; timestamp: string }>(
+      `/logistics/shipments/${orderId}/tracking`,
+      {
+        method: 'GET',
+      }
+    );
+
+    return response.data;
   },
 };
 

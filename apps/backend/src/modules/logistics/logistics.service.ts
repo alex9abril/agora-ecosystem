@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 const PDFDocument = require('pdfkit');
 import { CreateShippingLabelDto } from './dto/create-shipping-label.dto';
-import { SkydropxService } from './skydropx/skydropx.service';
+import { SkydropxService, SkydropxTracking } from './skydropx/skydropx.service';
 
 export interface ShippingLabel {
   id: string;
@@ -543,19 +543,39 @@ export class LogisticsService {
           const products = itemsResult.rows.map((item: any) => {
             // Formatear HS code a 10 dígitos (padding con ceros)
             // Nota: hs_code no existe en catalog.products, usar fallback
-            const rawHsCode = '0000000000'; // Fallback: código HS genérico
+            // Código HS para partes y accesorios de vehículos automotores: 8708.99.99
+            const rawHsCode = '8708999999'; // Código HS para partes y accesorios automotrices
             const hsCode = String(rawHsCode).padStart(10, '0').slice(0, 10);
             
+            // Construir descripción mejorada en inglés para Skydropx
+            const productName = item.item_name || 'Producto';
+            const productDescription = item.description || productName;
+            
+            // Descripción en inglés más específica para refacciones/accesorios automotrices
+            let descriptionEn = productDescription;
+            if (!descriptionEn || descriptionEn === productName) {
+              // Si no hay descripción o es igual al nombre, crear una descripción genérica apropiada
+              descriptionEn = `Automotive parts and accessories - ${productName}`;
+            } else {
+              // Si hay descripción, asegurarse de que mencione que es automotriz
+              if (!descriptionEn.toLowerCase().includes('automotive') && 
+                  !descriptionEn.toLowerCase().includes('auto') && 
+                  !descriptionEn.toLowerCase().includes('vehicle') &&
+                  !descriptionEn.toLowerCase().includes('car')) {
+                descriptionEn = `Automotive parts and accessories: ${descriptionEn}`;
+              }
+            }
+            
             return {
-              name: item.item_name || 'Producto',
-              description_en: item.description || item.item_name || 'Product',
+              name: productName,
+              description_en: descriptionEn,
               quantity: parseInt(item.quantity) || 1,
               price: parseFloat(item.item_price) || 0,
               sku: item.sku || `PROD-${item.product_id?.slice(0, 8) || 'UNKNOWN'}`,
               hs_code: hsCode,
-              hs_code_description: item.item_name || 'Producto',
+              hs_code_description: `Automotive parts and accessories - ${productName}`,
               product_type_code: 'P',
-              product_type_name: 'Producto',
+              product_type_name: 'Automotive Parts and Accessories',
               country_code: 'MX',
             };
           });
@@ -565,14 +585,23 @@ export class LogisticsService {
             return sum + (parseFloat(item.item_price || 0) * parseInt(item.quantity || 1));
           }, 0);
 
+          // Construir descripción del contenido del paquete basada en los productos
+          const packageContent = products.length === 1 
+            ? products[0].name 
+            : products.length > 0
+            ? `Refacciones y accesorios automotrices (${products.length} ${products.length === 1 ? 'artículo' : 'artículos'})`
+            : 'Refacciones y accesorios automotrices';
+
           // Construir paquete único
           const packages = [{
             package_number: '1',
             package_protected: false,
             declared_value: declaredValue,
-            consignment_note: '53102400', // Código aduanal por defecto
+            consignment_note: '53102400', // Código aduanal válido de Skydropx (no es código HS)
             package_type: '4G', // Tipo de paquete por defecto
             products: products,
+            content: packageContent, // Descripción del contenido del paquete
+            content_description: 'Refacciones y accesorios automotrices', // Descripción alternativa
           }];
 
           // Crear shipment en Skydropx
@@ -585,43 +614,127 @@ export class LogisticsService {
           });
 
           // Priorizar el tracking_number de Skydropx, solo usar el generado si no está disponible
+          // NUNCA usar tracking_number local si hay metadata de Skydropx disponible
           if (skydropxShipment.tracking_number && !skydropxShipment.tracking_number.startsWith('AGO-')) {
             trackingNumber = skydropxShipment.tracking_number;
-            this.logger.log(`✅ Tracking number de Skydropx: ${trackingNumber}`);
-          } else {
-            // Si no hay tracking_number válido, intentar extraerlo del metadata antes de generar uno local
-            if (skydropxShipment.metadata) {
-              try {
-                const metadata = skydropxShipment.metadata;
-                const fullResponse = metadata.full_response || metadata;
-                const data = fullResponse?.data || fullResponse;
-                const attributes = data?.attributes || data;
-                const included = fullResponse?.included || [];
+            this.logger.log(`✅ Tracking number de Skydropx (directo): ${trackingNumber}`);
+          } else if (skydropxShipment.metadata) {
+            // Si no hay tracking_number directo, SIEMPRE intentar extraerlo del metadata
+            try {
+              const metadata = skydropxShipment.metadata;
+              const fullResponse = metadata.full_response || metadata;
+              const data = fullResponse?.data || fullResponse;
+              const attributes = data?.attributes || data;
+              const included = fullResponse?.included || [];
+              
+              // Buscar tracking_number en las ubicaciones correctas según la estructura de Skydropx
+              // Orden de prioridad:
+              // 1. master_tracking_number en attributes (ubicación principal)
+              // 2. tracking_number en included[0].attributes (muy común en Skydropx)
+              // 3. tracking_number en attributes (fallback)
+              const extractedTracking = 
+                attributes?.master_tracking_number ||
+                (included.length > 0 && included[0]?.attributes?.tracking_number) ||
+                attributes?.tracking_number || 
+                data?.tracking_number || 
+                metadata?.tracking_number;
+              
+              if (extractedTracking && !extractedTracking.startsWith('AGO-') && extractedTracking.length >= 10) {
+                trackingNumber = extractedTracking;
+                this.logger.log(`✅ Tracking number extraído del metadata: ${trackingNumber}`);
+              } else {
+                // Si no se encontró tracking_number válido, esperar y hacer múltiples consultas
+                this.logger.warn(`⚠️ No se encontró tracking_number válido en metadata inmediatamente, esperando y consultando nuevamente...`);
                 
-                // Buscar tracking_number en las ubicaciones correctas según la estructura de Skydropx
-                // 1. master_tracking_number en attributes (ubicación principal)
-                // 2. tracking_number en included[0].attributes (fallback)
-                const extractedTracking = 
-                  attributes?.master_tracking_number ||
-                  (included.length > 0 && included[0]?.attributes?.tracking_number) ||
-                  attributes?.tracking_number || 
-                  data?.tracking_number || 
-                  metadata?.tracking_number;
-                
-                if (extractedTracking && !extractedTracking.startsWith('AGO-') && extractedTracking.length >= 10) {
-                  trackingNumber = extractedTracking;
-                  this.logger.log(`✅ Tracking number extraído del metadata inmediatamente: ${trackingNumber}`);
-                } else {
-                  trackingNumber = this.generateTrackingNumber();
-                  this.logger.warn(`⚠️ No se obtuvo tracking_number válido de Skydropx, usando generado local: ${trackingNumber}`);
+                // Hacer hasta 3 intentos con delays crecientes
+                let foundTracking = false;
+                for (let attempt = 1; attempt <= 3 && !foundTracking; attempt++) {
+                  const delay = attempt * 2000; // 2s, 4s, 6s
+                  this.logger.log(`🔄 Intento ${attempt}/3: Esperando ${delay}ms antes de consultar...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                  
+                  try {
+                    const updatedShipment = await this.skydropxService.getShipmentTracking(skydropxShipment.id);
+                    if (updatedShipment.tracking_number && !updatedShipment.tracking_number.startsWith('AGO-') && updatedShipment.tracking_number.length >= 10) {
+                      trackingNumber = updatedShipment.tracking_number;
+                      this.logger.log(`✅ Tracking number obtenido en intento ${attempt}: ${trackingNumber}`);
+                      foundTracking = true;
+                    } else if (updatedShipment.metadata) {
+                      // Intentar extraer del metadata de la respuesta actualizada
+                      const updatedMetadata = updatedShipment.metadata;
+                      const updatedFullResponse = updatedMetadata.full_response || updatedMetadata;
+                      const updatedData = updatedFullResponse?.data || updatedFullResponse;
+                      const updatedAttributes = updatedData?.attributes || updatedData;
+                      const updatedIncluded = updatedFullResponse?.included || [];
+                      
+                      const updatedExtracted = 
+                        updatedAttributes?.master_tracking_number ||
+                        (updatedIncluded.length > 0 && updatedIncluded[0]?.attributes?.tracking_number) ||
+                        updatedAttributes?.tracking_number;
+                      
+                      if (updatedExtracted && !updatedExtracted.startsWith('AGO-') && updatedExtracted.length >= 10) {
+                        trackingNumber = updatedExtracted;
+                        this.logger.log(`✅ Tracking number extraído del metadata actualizado en intento ${attempt}: ${trackingNumber}`);
+                        foundTracking = true;
+                      }
+                    }
+                  } catch (retryError: any) {
+                    this.logger.warn(`⚠️ Error en intento ${attempt}: ${retryError.message}`);
+                  }
                 }
-              } catch (metaError: any) {
-                trackingNumber = this.generateTrackingNumber();
-                this.logger.warn(`⚠️ Error extrayendo tracking_number del metadata, usando generado local: ${trackingNumber}`);
+                
+                // Solo generar tracking local si NO se encontró después de todos los intentos
+                if (!foundTracking) {
+                  // Generar un tracking temporal que será reemplazado
+                  // Usar un formato especial que indique que es temporal: "PENDING-{shipment_id}"
+                  trackingNumber = `PENDING-${skydropxShipment.id.substring(0, 8)}`;
+                  this.logger.warn(`⚠️ No se obtuvo tracking_number después de 3 intentos. Usando temporal: ${trackingNumber}`);
+                  this.logger.warn(`⚠️ El tracking_number se actualizará automáticamente cuando Skydropx lo proporcione.`);
+                }
               }
-            } else {
-              trackingNumber = this.generateTrackingNumber();
-              this.logger.warn(`⚠️ No se obtuvo tracking_number de Skydropx y no hay metadata, usando generado local: ${trackingNumber}`);
+            } catch (metaError: any) {
+              // Si hay metadata pero hay error, usar formato temporal
+              trackingNumber = `PENDING-${skydropxShipment.id.substring(0, 8)}`;
+              this.logger.warn(`⚠️ Error extrayendo tracking_number del metadata: ${metaError.message}`);
+              this.logger.warn(`⚠️ Usando tracking temporal: ${trackingNumber}. Se actualizará automáticamente cuando Skydropx lo proporcione.`);
+            }
+          } else {
+            // Si no hay metadata, solo entonces generar tracking local como último recurso
+            trackingNumber = this.generateTrackingNumber();
+            this.logger.warn(`⚠️ No se obtuvo tracking_number de Skydropx y no hay metadata, usando generado local temporal: ${trackingNumber}`);
+            this.logger.warn(`⚠️ NOTA: El tracking_number se actualizará automáticamente cuando Skydropx lo proporcione`);
+          }
+          
+          // Si trackingNumber es temporal (PENDING-), intentar una última vez después de un delay
+          if (trackingNumber && trackingNumber.startsWith('PENDING-') && skydropxShipment.metadata) {
+            this.logger.log(`🔄 tracking_number es temporal, esperando 5 segundos y consultando shipment nuevamente...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            try {
+              const finalShipment = await this.skydropxService.getShipmentTracking(skydropxShipment.id);
+              if (finalShipment.tracking_number && !finalShipment.tracking_number.startsWith('AGO-') && !finalShipment.tracking_number.startsWith('PENDING-') && finalShipment.tracking_number.length >= 10) {
+                trackingNumber = finalShipment.tracking_number;
+                this.logger.log(`✅ Tracking number obtenido en consulta final: ${trackingNumber}`);
+              } else if (finalShipment.metadata) {
+                // Intentar extraer del metadata una vez más
+                const finalMetadata = finalShipment.metadata;
+                const finalFullResponse = finalMetadata.full_response || finalMetadata;
+                const finalData = finalFullResponse?.data || finalFullResponse;
+                const finalAttributes = finalData?.attributes || finalData;
+                const finalIncluded = finalFullResponse?.included || [];
+                
+                const finalExtracted = 
+                  finalAttributes?.master_tracking_number ||
+                  (finalIncluded.length > 0 && finalIncluded[0]?.attributes?.tracking_number) ||
+                  finalAttributes?.tracking_number;
+                
+                if (finalExtracted && !finalExtracted.startsWith('AGO-') && !finalExtracted.startsWith('PENDING-') && finalExtracted.length >= 10) {
+                  trackingNumber = finalExtracted;
+                  this.logger.log(`✅ Tracking number extraído del metadata en consulta final: ${trackingNumber}`);
+                }
+              }
+            } catch (finalError: any) {
+              this.logger.warn(`⚠️ Error en consulta final: ${finalError.message}`);
             }
           }
           
@@ -819,9 +932,11 @@ export class LogisticsService {
 
       const shippingLabel = insertResult.rows[0];
 
-      // Si el tracking_number guardado es el generado localmente pero hay metadata de Skydropx,
+      // Si el tracking_number guardado es temporal (AGO- o PENDING-) pero hay metadata de Skydropx,
       // intentar extraer el tracking_number real del metadata y actualizarlo
-      if (shippingLabel.tracking_number && shippingLabel.tracking_number.startsWith('AGO-') && shippingLabel.metadata) {
+      if (shippingLabel.tracking_number && 
+          (shippingLabel.tracking_number.startsWith('AGO-') || shippingLabel.tracking_number.startsWith('PENDING-')) && 
+          shippingLabel.metadata) {
         try {
           const metadata = typeof shippingLabel.metadata === 'string' 
             ? JSON.parse(shippingLabel.metadata) 
@@ -1165,6 +1280,125 @@ export class LogisticsService {
     );
 
     return result.rows.length > 0 ? result.rows[0] : null;
+  }
+
+  /**
+   * Obtener y actualizar el estado de seguimiento de un envío desde Skydropx
+   * @param orderId ID de la orden
+   * @returns Información de tracking actualizada
+   */
+  async getShipmentTracking(orderId: string): Promise<SkydropxTracking | null> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    // 1. Obtener la shipping_label de la orden
+    const shippingLabel = await this.getShippingLabelByOrderId(orderId);
+    
+    if (!shippingLabel) {
+      this.logger.warn(`⚠️ No se encontró shipping label para orden ${orderId}`);
+      return null;
+    }
+
+    // 2. Extraer skydropx_shipment_id del metadata
+    let skydropxShipmentId: string | null = null;
+    
+    if (shippingLabel.metadata) {
+      // Intentar extraer de diferentes ubicaciones posibles
+      const metadata = shippingLabel.metadata;
+      
+      // Opción 1: metadata.skydropx_shipment_id (directo)
+      if (metadata.skydropx_shipment_id) {
+        skydropxShipmentId = metadata.skydropx_shipment_id;
+      }
+      // Opción 2: metadata.full_response.data.id
+      else if (metadata.full_response?.data?.id) {
+        skydropxShipmentId = metadata.full_response.data.id;
+      }
+      // Opción 3: metadata.full_response.data.attributes.id
+      else if (metadata.full_response?.data?.attributes?.id) {
+        skydropxShipmentId = metadata.full_response.data.attributes.id;
+      }
+    }
+
+    if (!skydropxShipmentId) {
+      this.logger.warn(`⚠️ No se encontró skydropx_shipment_id en metadata para orden ${orderId}`);
+      return null;
+    }
+
+    this.logger.log(`📦 Consultando tracking de Skydropx para shipment: ${skydropxShipmentId}`);
+
+    try {
+      // 3. Obtener tracking de Skydropx
+      const tracking = await this.skydropxService.getShipmentTracking(skydropxShipmentId);
+
+      // 4. Mapear el status de Skydropx a nuestro formato
+      // Skydropx: 'created', 'picked_up', 'in_transit', 'delivered', 'exception', 'cancelled'
+      // Nuestro sistema: 'generated', 'picked_up', 'in_transit', 'delivered', 'cancelled'
+      let newStatus = tracking.status;
+      if (newStatus === 'created') {
+        newStatus = 'generated';
+      } else if (newStatus === 'exception') {
+        newStatus = 'in_transit'; // Mantener como in_transit si hay excepción
+      } else if (newStatus === 'cancelled') {
+        // Si está cancelado, actualizar el estado a 'cancelled' pero no cambiar el estado de la orden
+        newStatus = 'cancelled';
+        this.logger.warn(`⚠️ Shipment cancelado, actualizando estado a 'cancelled'`);
+      }
+
+      // 5. Actualizar estado en BD si cambió
+      // Si está cancelado, solo actualizar el status de la shipping_label, no el de la orden
+      if (shippingLabel.status !== newStatus) {
+        this.logger.log(
+          `🔄 Actualizando estado de shipping_label ${shippingLabel.id}: ${shippingLabel.status} → ${newStatus}`
+        );
+        
+        if (newStatus === 'cancelled') {
+          // Si está cancelado, solo actualizar el status de la shipping_label, no cambiar el estado de la orden
+          const client = await dbPool.connect();
+          try {
+            await client.query(
+              `UPDATE orders.shipping_labels 
+               SET status = $1, updated_at = CURRENT_TIMESTAMP 
+               WHERE id = $2`,
+              [newStatus, shippingLabel.id]
+            );
+            this.logger.log(`✅ Estado de shipping_label actualizado a 'cancelled' (orden no modificada)`);
+          } finally {
+            client.release();
+          }
+        } else {
+          // Para otros estados, actualizar normalmente (incluyendo el estado de la orden)
+          await this.updateShippingStatus(shippingLabel.id, orderId, newStatus);
+        }
+      } else {
+        this.logger.debug(`✅ Estado ya está actualizado: ${newStatus}`);
+      }
+
+      // 6. Actualizar tracking_number si cambió
+      if (tracking.tracking_number && tracking.tracking_number !== shippingLabel.tracking_number) {
+        this.logger.log(
+          `🔄 Actualizando tracking_number: ${shippingLabel.tracking_number} → ${tracking.tracking_number}`
+        );
+        
+        const client = await dbPool.connect();
+        try {
+          await client.query(
+            `UPDATE orders.shipping_labels 
+             SET tracking_number = $1, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = $2`,
+            [tracking.tracking_number, shippingLabel.id]
+          );
+        } finally {
+          client.release();
+        }
+      }
+
+      return tracking;
+    } catch (error: any) {
+      this.logger.error(`❌ Error obteniendo tracking de Skydropx: ${error.message}`);
+      throw error;
+    }
   }
 }
 

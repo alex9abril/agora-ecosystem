@@ -84,6 +84,8 @@ export interface SkydropxShipmentPackage {
   consignment_note: string;
   package_type: string; // Ej: "4G"
   products: SkydropxShipmentProduct[];
+  content?: string; // Descripción del contenido del paquete (opcional)
+  content_description?: string; // Descripción alternativa del contenido (opcional)
 }
 
 export interface SkydropxShipmentRequest {
@@ -101,6 +103,26 @@ export interface SkydropxShipment {
   workflow_status: string; // 'in_progress', 'success', 'failed', 'cancelled'
   carrier?: string;
   service?: string;
+  metadata?: any; // Respuesta completa de Skydropx
+}
+
+export interface SkydropxTrackingEvent {
+  status: string;
+  description: string;
+  location?: string;
+  timestamp: string;
+}
+
+export interface SkydropxTracking {
+  shipment_id: string;
+  tracking_number: string | null;
+  status: string; // 'created', 'picked_up', 'in_transit', 'delivered', 'exception', 'cancelled'
+  carrier: string | null;
+  service: string | null;
+  estimated_delivery?: string | null;
+  current_location?: string | null;
+  tracking_events: SkydropxTrackingEvent[];
+  tracking_url?: string | null;
   metadata?: any; // Respuesta completa de Skydropx
 }
 
@@ -626,11 +648,16 @@ export class SkydropxService {
         const workflowStatus = attributes.workflow_status || pollData.workflow_status;
         
         if (workflowStatus === 'success') {
-          // Buscar tracking_number en las ubicaciones correctas
+          // Obtener included primero para buscar tracking_number ahí también
+          const included = pollResponse.data.included || pollData.included || [];
+          
+          // Buscar tracking_number en las ubicaciones correctas (orden de prioridad)
           // 1. master_tracking_number en attributes (ubicación principal según estructura de Skydropx)
-          // 2. tracking_number en attributes (fallback)
+          // 2. tracking_number en included[0].attributes (muy común en Skydropx)
+          // 3. tracking_number en attributes (fallback)
           const trackingNumber = 
             attributes.master_tracking_number ||
+            (included.length > 0 && included[0]?.attributes?.tracking_number) ||
             attributes.tracking_number || 
             pollData.tracking_number || 
             null;
@@ -638,7 +665,6 @@ export class SkydropxService {
           // Buscar label_url en las ubicaciones correctas
           // 1. En included[0].attributes.label_url (ubicación principal según estructura de Skydropx)
           // 2. En attributes.label_url (fallback)
-          const included = pollResponse.data.included || pollData.included || [];
           const labelUrl = 
             (included.length > 0 && included[0]?.attributes?.label_url) ||
             attributes.label_url || 
@@ -695,11 +721,25 @@ export class SkydropxService {
       
       const finalData = finalResponse.data.data || finalResponse.data;
       const finalAttributes = finalData.attributes || finalData;
+      const finalIncluded = finalResponse.data.included || finalData.included || [];
+      
+      // Buscar tracking_number en todas las ubicaciones posibles
+      const finalTrackingNumber = 
+        finalAttributes.master_tracking_number ||
+        (finalIncluded.length > 0 && finalIncluded[0]?.attributes?.tracking_number) ||
+        finalAttributes.tracking_number || 
+        null;
+      
+      // Buscar label_url en todas las ubicaciones posibles
+      const finalLabelUrl = 
+        (finalIncluded.length > 0 && finalIncluded[0]?.attributes?.label_url) ||
+        finalAttributes.label_url || 
+        null;
       
       return {
         id: finalData.id || finalAttributes.id,
-        tracking_number: finalAttributes.tracking_number || null,
-        label_url: finalAttributes.label_url || null,
+        tracking_number: finalTrackingNumber,
+        label_url: finalLabelUrl,
         workflow_status: finalAttributes.workflow_status || 'in_progress',
         carrier: finalAttributes.carrier || null,
         service: finalAttributes.service || null,
@@ -709,6 +749,168 @@ export class SkydropxService {
       this.logger.error(`❌ Error en consulta final del shipment:`, error.message);
       throw new ServiceUnavailableException(
         `No se pudo obtener el estado final del shipment después de ${MAX_ATTEMPTS} intentos`
+      );
+    }
+  }
+
+  /**
+   * Obtener el estado de seguimiento de un envío
+   * Consulta el endpoint /shipments/:id de Skydropx (el tracking viene en la respuesta del shipment)
+   */
+  async getShipmentTracking(shipmentId: string): Promise<SkydropxTracking> {
+    const enabled = await this.isEnabled();
+    if (!enabled) {
+      throw new ServiceUnavailableException('Skydropx no está habilitado');
+    }
+
+    if (!shipmentId) {
+      throw new BadRequestException('shipmentId es requerido');
+    }
+
+    try {
+      const { endpoint } = await this.getCredentials();
+      const headers = await this.getAuthHeaders();
+
+      this.logger.log(`📦 Consultando tracking de shipment: ${shipmentId}`);
+
+      // Skydropx no tiene un endpoint separado /tracking, el tracking viene en /shipments/:id
+      const response = await axios.get(
+        `${endpoint}/shipments/${shipmentId}`,
+        { 
+          headers,
+          validateStatus: (status) => status < 500,
+        }
+      );
+
+      if (response.status >= 400) {
+        const errorData = response.data;
+        const errorMessage = errorData?.message || 
+                            errorData?.error_description || 
+                            errorData?.error || 
+                            `Error ${response.status}: ${response.statusText}`;
+        
+        this.logger.error('❌ Error obteniendo tracking de Skydropx:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+          shipmentId,
+        });
+
+        if (response.status === 401) {
+          // Token expirado, limpiar cache y reintentar
+          this.logger.warn('🔄 Token expirado, limpiando cache...');
+          this.tokenCache = null;
+          throw new ServiceUnavailableException('Error de autenticación con Skydropx. Por favor, intenta nuevamente.');
+        }
+
+        throw new ServiceUnavailableException(
+          `Error de Skydropx (${response.status}): ${errorMessage}`
+        );
+      }
+
+      const data = response.data.data || response.data;
+      const attributes = data.attributes || data;
+      const included = response.data.included || [];
+
+      // Extraer tracking events si están disponibles
+      const trackingEvents: SkydropxTrackingEvent[] = [];
+      if (attributes.tracking_events && Array.isArray(attributes.tracking_events)) {
+        trackingEvents.push(...attributes.tracking_events.map((event: any) => ({
+          status: event.status || event.event_type || 'unknown',
+          description: event.description || event.message || '',
+          location: event.location || event.city || null,
+          timestamp: event.timestamp || event.created_at || new Date().toISOString(),
+        })));
+      }
+
+      // Mapear el status de Skydropx a nuestro formato
+      // Skydropx puede usar: 'created', 'picked_up', 'in_transit', 'delivered', 'exception', 'cancelled'
+      // También puede usar workflow_status: 'in_progress', 'success', 'failed', 'cancelled'
+      // Y tracking_status en packages: 'created', 'picked_up', 'in_transit', 'delivered', 'canceled'
+      // Nuestro sistema usa: 'generated', 'picked_up', 'in_transit', 'delivered', 'cancelled'
+      
+      // Prioridad: tracking_status del package > workflow_status > status general
+      let mappedStatus = 'created';
+      
+      // Primero intentar obtener el tracking_status del package (más preciso)
+      if (included.length > 0) {
+        const packageTrackingStatus = included[0]?.attributes?.tracking_status;
+        if (packageTrackingStatus) {
+          mappedStatus = packageTrackingStatus;
+        }
+      }
+      
+      // Si no hay tracking_status del package, usar workflow_status o status general
+      if (mappedStatus === 'created') {
+        mappedStatus = attributes.workflow_status || attributes.status || attributes.tracking_status || 'created';
+      }
+      
+      // Normalizar variantes de "cancelled"
+      if (mappedStatus === 'canceled' || mappedStatus === 'cancelled') {
+        mappedStatus = 'cancelled';
+      }
+      
+      // Mapear estados de workflow a estados de tracking
+      if (mappedStatus === 'success' || mappedStatus === 'in_progress') {
+        // Si workflow está en progreso o exitoso pero no hay tracking_status específico,
+        // mantener como 'generated' (recién creado, esperando recolección)
+        mappedStatus = 'generated';
+      }
+      
+      // Mapear 'created' a 'generated'
+      if (mappedStatus === 'created') {
+        mappedStatus = 'generated';
+      }
+
+      // Extraer tracking_number de diferentes ubicaciones posibles
+      const trackingNumber = 
+        attributes.master_tracking_number ||
+        attributes.tracking_number ||
+        (included.length > 0 && included[0]?.attributes?.tracking_number) ||
+        null;
+
+      // Extraer tracking_url del carrier
+      const trackingUrl = 
+        attributes.tracking_url_provider ||
+        attributes.tracking_url ||
+        null;
+
+      const tracking: SkydropxTracking = {
+        shipment_id: data.id || attributes.id || shipmentId,
+        tracking_number: trackingNumber,
+        status: mappedStatus,
+        carrier: attributes.carrier_name || attributes.carrier || null,
+        service: attributes.service_name || attributes.service || null,
+        estimated_delivery: attributes.estimated_delivery || attributes.estimated_delivery_date || null,
+        current_location: attributes.current_location || attributes.location || null,
+        tracking_events: trackingEvents,
+        tracking_url: trackingUrl,
+        metadata: response.data, // Guardar respuesta completa
+      };
+
+      this.logger.log(`✅ Tracking obtenido: ${tracking.status} (${tracking.tracking_number || 'SIN TRACKING'})`);
+
+      return tracking;
+    } catch (error: any) {
+      this.logger.error('❌ Error obteniendo tracking de Skydropx:', error);
+
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      if (error.response) {
+        const errorMessage = error.response.data?.message || 
+                            error.response.data?.error_description || 
+                            error.response.data?.error || 
+                            `Error ${error.response.status}: ${error.response.statusText}`;
+        
+        throw new ServiceUnavailableException(
+          `Error de Skydropx (${error.response.status}): ${errorMessage}`
+        );
+      }
+
+      throw new ServiceUnavailableException(
+        `Error obteniendo tracking: ${error.message}`
       );
     }
   }

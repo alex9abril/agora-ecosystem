@@ -7,7 +7,7 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
 import { productsService, Product } from '@/lib/products';
 import { walletService, WalletTransaction } from '@/lib/wallet';
-import { logisticsService, ShippingLabel } from '@/lib/logistics';
+import { logisticsService, ShippingLabel, ShipmentTracking } from '@/lib/logistics';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -25,6 +25,8 @@ export default function OrderDetailPage() {
   const [shippingLabel, setShippingLabel] = useState<ShippingLabel | null>(null);
   const [loadingShippingLabel, setLoadingShippingLabel] = useState(false);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [tracking, setTracking] = useState<ShipmentTracking | null>(null);
+  const [loadingTracking, setLoadingTracking] = useState(false);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -169,16 +171,45 @@ export default function OrderDetailPage() {
         orderId: id,
         businessId,
       });
-      
-      if (err.statusCode === 404) {
-        setError('Pedido no encontrado. Puede que haya sido eliminado o no pertenezca a esta tienda.');
-      } else {
-        setError(`Error al cargar el pedido: ${err.message || 'Error desconocido'}`);
-      }
+      setError(err.message || 'Error al cargar el pedido');
     } finally {
       setLoading(false);
     }
   };
+
+  // Cargar tracking automáticamente cuando hay shipping label
+  useEffect(() => {
+    const loadTracking = async () => {
+      if (!shippingLabel || !order) return;
+      
+      // Solo cargar tracking si no está ya cargado o si el status no es cancelled
+      if (tracking && tracking.status === 'cancelled') {
+        return; // No recargar si ya está cancelado
+      }
+
+      try {
+        setLoadingTracking(true);
+        const trackingData = await logisticsService.getShipmentTracking(order.id);
+        setTracking(trackingData);
+        
+        // Recargar shipping label para obtener estado actualizado
+        const updatedLabel = await logisticsService.getShippingLabelByOrderId(order.id);
+        if (updatedLabel) {
+          setShippingLabel(updatedLabel);
+        }
+        
+        console.log('✅ [TRACKING] Estado de seguimiento cargado:', trackingData.status);
+      } catch (err: any) {
+        console.error('❌ [TRACKING] Error obteniendo tracking:', err);
+        // No mostrar error al usuario, solo loguear
+        // El tracking puede no estar disponible aún o el shipment puede no existir
+      } finally {
+        setLoadingTracking(false);
+      }
+    };
+
+    loadTracking();
+  }, [shippingLabel?.id, order?.id]); // Solo ejecutar cuando cambie el shipping label o la orden
 
   const handleConfirmPayment = async () => {
     if (!order) return;
@@ -993,6 +1024,125 @@ export default function OrderDetailPage() {
                       {shippingLabel.delivered_at && (
                         <div className="text-xs text-gray-500">
                           <span className="font-semibold">Entregado:</span> {formatDate(shippingLabel.delivered_at)}
+                        </div>
+                      )}
+                      
+                      {/* Mostrar información de tracking si está disponible */}
+                      {loadingTracking && (
+                        <div className="pt-4 border-t border-gray-200">
+                          <div className="flex items-center justify-center py-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                            <span className="ml-2 text-xs text-gray-500">Cargando estado de seguimiento...</span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {tracking && (
+                        <div className={`mt-4 border rounded-lg p-4 space-y-3 ${
+                          tracking.status === 'cancelled' 
+                            ? 'bg-red-50 border-red-200' 
+                            : 'bg-gray-50 border-gray-200'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Estado Actual de Seguimiento</h3>
+                            {tracking.status === 'cancelled' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Cancelado
+                              </span>
+                            )}
+                            {tracking.status === 'delivered' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Entregado
+                              </span>
+                            )}
+                            {tracking.status === 'in_transit' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                En Tránsito
+                              </span>
+                            )}
+                            {tracking.status === 'picked_up' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                Recolectado
+                              </span>
+                            )}
+                            {tracking.status === 'generated' && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                Generado
+                              </span>
+                            )}
+                          </div>
+                          
+                          {tracking.status === 'cancelled' && (
+                            <div className="bg-red-100 border border-red-300 rounded p-3">
+                              <p className="text-sm text-red-800 font-medium">⚠️ Este envío ha sido cancelado</p>
+                              {tracking.metadata?.data?.attributes?.payment_status === 'refunded' && (
+                                <p className="text-xs text-red-700 mt-1">El pago ha sido reembolsado.</p>
+                              )}
+                            </div>
+                          )}
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {tracking.carrier && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Carrier</p>
+                                <p className="text-gray-900 capitalize">{tracking.carrier}</p>
+                              </div>
+                            )}
+                            {tracking.service && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Servicio</p>
+                                <p className="text-gray-900">{tracking.service}</p>
+                              </div>
+                            )}
+                            {tracking.estimated_delivery && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Entrega Estimada</p>
+                                <p className="text-gray-900">{new Date(tracking.estimated_delivery).toLocaleDateString('es-MX')}</p>
+                              </div>
+                            )}
+                            {tracking.current_location && (
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Ubicación Actual</p>
+                                <p className="text-gray-900">{tracking.current_location}</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {tracking.tracking_url && (
+                            <div>
+                              <a
+                                href={tracking.tracking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:text-blue-800 underline"
+                              >
+                                Ver seguimiento en sitio del carrier →
+                              </a>
+                            </div>
+                          )}
+                          
+                          {tracking.tracking_events && tracking.tracking_events.length > 0 && (
+                            <div className="mt-4">
+                              <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Historial de Eventos</p>
+                              <div className="space-y-2">
+                                {tracking.tracking_events.map((event, index) => (
+                                  <div key={index} className="text-xs bg-white border border-gray-200 rounded p-2">
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex-1">
+                                        <p className="font-medium text-gray-900">{event.description || event.status}</p>
+                                        {event.location && (
+                                          <p className="text-gray-600 mt-1">📍 {event.location}</p>
+                                        )}
+                                      </div>
+                                      <p className="text-gray-500 ml-2">
+                                        {new Date(event.timestamp).toLocaleString('es-MX')}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
