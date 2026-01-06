@@ -700,8 +700,8 @@ export default function ProductDetailPage() {
             <span className="text-sm font-medium">Volver</span>
           </button>
 
-          {/* Leyenda de compatibilidad con vehículo - Solo para refacciones y accesorios */}
-          {product && (product.product_type === 'refaccion' || product.product_type === 'accesorio') && (
+          {/* Leyenda de compatibilidad con vehículo - Solo para productos no alimenticios */}
+          {product && product.product_type === 'non_food' && (
             <>
               {!currentVehicle ? (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
