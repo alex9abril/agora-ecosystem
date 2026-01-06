@@ -146,8 +146,8 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar guía de envío si la orden está en estado completed o superior
-      if (orderData.status === 'completed' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
+      // Cargar guía de envío si la orden está en estado ready o superior
+      if (orderData.status === 'ready' || orderData.status === 'picked_up' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
         try {
           setLoadingShippingLabel(true);
           const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
@@ -919,7 +919,7 @@ export default function OrderDetailPage() {
               )}
 
               {/* Guía de envío - Solo mostrar si la orden está en estado completed o superior */}
-              {((order as any).status === 'completed' || order.status === 'in_transit' || order.status === 'delivered') && (
+              {(order.status === 'ready' || order.status === 'picked_up' || order.status === 'in_transit' || order.status === 'delivered') && (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Guía de Envío</h2>
