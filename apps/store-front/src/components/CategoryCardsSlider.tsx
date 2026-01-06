@@ -51,6 +51,7 @@ export default function CategoryCardsSlider({
           description: cat.description || 'Descubre nuestros productos',
           iconUrl: cat.icon_url || undefined,
           link: `/products?categoryId=${cat.id}`,
+          backgroundColor: undefined, // No hay color de fondo para categorías del sistema
           // Guardar la categoría completa para usar el sistema de iconos
           categoryData: cat,
         }));
