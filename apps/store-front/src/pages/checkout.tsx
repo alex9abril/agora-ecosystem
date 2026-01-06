@@ -472,7 +472,7 @@ export default function CheckoutPage() {
         })
         .map((q) => ({
           id: `${storeId}-skydropx-${q.id}`,
-          provider: 'skydropx',
+          provider: 'skydropx' as const, // asegúranos de mantener el literal del union
           label: `${(q.carrier || 'Envío').toUpperCase()} - ${q.service || 'Estándar'}`,
           price: q.price,
           estimatedDays: q.estimated_days,
