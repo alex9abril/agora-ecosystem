@@ -256,6 +256,11 @@ CREATE TRIGGER trigger_check_year_overlap
 -- ============================================================================
 
 -- Función: Verificar compatibilidad de un producto con un vehículo
+-- LÓGICA CORREGIDA (ver fix_product_vehicle_compatibility_logic.sql para más detalles):
+-- 1. Si el producto tiene spec_id, el vehículo DEBE tener ese mismo spec_id
+-- 2. Si el producto tiene year_id, el vehículo DEBE tener ese mismo year_id
+-- 3. Si el producto tiene model_id, el vehículo DEBE tener ese mismo model_id
+-- 4. Si el producto solo tiene brand_id (sin model_id), cualquier modelo de esa marca es compatible
 CREATE OR REPLACE FUNCTION catalog.check_product_vehicle_compatibility(
     p_product_id UUID,
     p_brand_id UUID DEFAULT NULL,
@@ -264,7 +269,30 @@ CREATE OR REPLACE FUNCTION catalog.check_product_vehicle_compatibility(
     p_spec_id UUID DEFAULT NULL
 )
 RETURNS BOOLEAN AS $$
+DECLARE
+    v_has_conflicting_model BOOLEAN;
 BEGIN
+    -- Si el vehículo tiene un model_id específico, verificar que el producto
+    -- NO tenga registros con model_id diferente (conflictivos)
+    IF p_model_id IS NOT NULL THEN
+        SELECT EXISTS(
+            SELECT 1
+            FROM catalog.product_vehicle_compatibility pvc
+            WHERE pvc.product_id = p_product_id
+              AND pvc.is_active = TRUE
+              AND pvc.is_universal = FALSE
+              AND pvc.vehicle_brand_id = p_brand_id
+              AND pvc.vehicle_model_id IS NOT NULL
+              AND pvc.vehicle_model_id != p_model_id
+        ) INTO v_has_conflicting_model;
+        
+        -- Si hay registros conflictivos (con model_id diferente), NO es compatible
+        IF v_has_conflicting_model THEN
+            RETURN FALSE;
+        END IF;
+    END IF;
+    
+    -- Verificar compatibilidad positiva
     RETURN EXISTS(
         SELECT 1
         FROM catalog.product_vehicle_compatibility pvc
@@ -274,25 +302,41 @@ BEGIN
             -- Compatibilidad universal
             pvc.is_universal = TRUE
             OR
-            -- Compatibilidad específica (jerarquía)
+            -- Compatibilidad específica (lógica estricta)
             (
-              -- Si hay spec_id, debe coincidir exactamente
-              (p_spec_id IS NOT NULL AND pvc.vehicle_spec_id = p_spec_id)
-              OR
-              -- Si hay year_id, debe coincidir (y puede tener spec_id o no)
-              (p_year_id IS NOT NULL AND pvc.vehicle_year_id = p_year_id 
-               AND (pvc.vehicle_spec_id IS NULL OR pvc.vehicle_spec_id = p_spec_id))
-              OR
-              -- Si hay model_id, debe coincidir (y puede tener year_id o no)
-              (p_model_id IS NOT NULL AND pvc.vehicle_model_id = p_model_id
-               AND (pvc.vehicle_year_id IS NULL OR pvc.vehicle_year_id = p_year_id)
-               AND (pvc.vehicle_spec_id IS NULL OR pvc.vehicle_spec_id = p_spec_id))
-              OR
-              -- Si solo hay brand_id, debe coincidir (y puede tener model_id o no)
-              (p_brand_id IS NOT NULL AND pvc.vehicle_brand_id = p_brand_id
-               AND (pvc.vehicle_model_id IS NULL OR pvc.vehicle_model_id = p_model_id)
-               AND (pvc.vehicle_year_id IS NULL OR pvc.vehicle_year_id = p_year_id)
-               AND (pvc.vehicle_spec_id IS NULL OR pvc.vehicle_spec_id = p_spec_id))
+              -- La marca DEBE coincidir siempre
+              pvc.vehicle_brand_id = p_brand_id
+              
+              -- MODEL_ID: Si el vehículo tiene model_id, el producto debe tener ese mismo model_id o no tenerlo
+              -- Si el vehículo NO tiene model_id, acepta cualquier cosa
+              AND (
+                (p_model_id IS NOT NULL AND (
+                  pvc.vehicle_model_id IS NULL 
+                  OR pvc.vehicle_model_id = p_model_id
+                ))
+                OR
+                (p_model_id IS NULL)
+              )
+              
+              -- YEAR_ID: Si el vehículo tiene year_id, el producto debe tener ese mismo year_id o no tenerlo
+              AND (
+                (p_year_id IS NOT NULL AND (
+                  pvc.vehicle_year_id IS NULL 
+                  OR pvc.vehicle_year_id = p_year_id
+                ))
+                OR
+                (p_year_id IS NULL)
+              )
+              
+              -- SPEC_ID: Si el vehículo tiene spec_id, el producto debe tener ese mismo spec_id o no tenerlo
+              AND (
+                (p_spec_id IS NOT NULL AND (
+                  pvc.vehicle_spec_id IS NULL 
+                  OR pvc.vehicle_spec_id = p_spec_id
+                ))
+                OR
+                (p_spec_id IS NULL)
+              )
             )
           )
     );

@@ -75,6 +75,9 @@ export interface OrderItem {
   variant_selection?: any;
   item_subtotal: number;
   special_instructions?: string;
+  quotation_id?: string; // ID de cotización de Skydropx
+  shipping_carrier?: string; // Paquetería seleccionada (ej: "FEDEX", "DHL", "ESTAFETA")
+  shipping_service?: string; // Tipo de servicio seleccionado (ej: "Express Saver", "Standard Overnight")
   created_at: string;
 }
 

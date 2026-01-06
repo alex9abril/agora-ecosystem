@@ -68,5 +68,20 @@ export class CheckoutDto {
   @IsOptional()
   @IsString()
   storeContext?: string;
+
+  @ApiPropertyOptional({ description: 'Mapa de quotation_id por business_id (para Skydropx)', example: { "business-id-1": "quotation-id-123" } })
+  @IsOptional()
+  @IsObject()
+  quotationIds?: Record<string, string>; // businessId -> quotation_id
+
+  @ApiPropertyOptional({ description: 'Mapa de rate_id por business_id (para crear shipment en Skydropx)', example: { "business-id-1": "rate-id-789" } })
+  @IsOptional()
+  @IsObject()
+  rateIds?: Record<string, string>; // businessId -> rate_id
+
+  @ApiPropertyOptional({ description: 'Mapa de información de envío por business_id (carrier y service)', example: { "business-id-1": { "carrier": "FEDEX", "service": "Express Saver" } } })
+  @IsOptional()
+  @IsObject()
+  shippingInfo?: Record<string, { carrier?: string; service?: string }>; // businessId -> { carrier, service }
 }
 

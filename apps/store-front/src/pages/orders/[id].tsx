@@ -272,6 +272,44 @@ export default function OrderDetailPage() {
             </div>
           )}
 
+          {/* Método de envío elegido */}
+          {order.items && order.items.some(item => item.shipping_carrier || item.quotation_id) && (
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-indigo-500">
+              <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                <LocalShippingIcon className="w-5 h-5 text-indigo-500" />
+                Método de Envío Seleccionado
+              </h2>
+              <div className="space-y-3">
+                {(() => {
+                  // Obtener el primer item con información de envío (todos los items de una orden tienen el mismo método)
+                  const shippingItem = order.items!.find(item => item.shipping_carrier || item.quotation_id);
+                  if (!shippingItem) return null;
+                  
+                  const shippingMethod = shippingItem.shipping_carrier 
+                    ? `${shippingItem.shipping_carrier}${shippingItem.shipping_service ? ` - ${shippingItem.shipping_service}` : ''}`
+                    : 'Recoger en tienda';
+                  
+                  return (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium text-gray-700">Paquetería y Servicio:</span>
+                        <span className="text-base font-semibold text-gray-900">{shippingMethod}</span>
+                      </div>
+                      {shippingItem.quotation_id && (
+                        <div className="flex justify-between items-start pt-2 border-t border-gray-100">
+                          <span className="text-sm font-medium text-gray-700">ID de Cotización:</span>
+                          <span className="text-xs font-mono text-gray-700 bg-gray-50 px-2 py-1 rounded break-all max-w-xs text-right">
+                            {shippingItem.quotation_id}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
           {/* Folio de seguimiento (Guía de envío) */}
           {order.shipping_label && order.shipping_label.tracking_number && (
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border-l-4 border-blue-500">

@@ -3,9 +3,11 @@
  * Inspirado en AutoZone - muestra 6 categorías en tarjetas horizontales fijas
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ContextualLink from './ContextualLink';
-import { categoriesService, ProductCategory } from '@/lib/categories';
+import { ProductCategory } from '@/lib/categories';
+import { useAppSelector } from '@/store/hooks';
+import { selectRootCategories, selectCategoriesInitialized } from '@/store/slices/categoriesSlice';
 import { getCategoryIconFromData } from '@/lib/category-icons';
 
 interface CategoryCard {
@@ -28,30 +30,22 @@ export default function CategoryCardsSlider({
   categories: providedCategories,
   className = '',
 }: CategoryCardsSliderProps) {
-  const [categories, setCategories] = useState<CategoryCard[]>([]);
-  const [loading, setLoading] = useState(!providedCategories);
+  // Obtener categorías desde Redux
+  const rootCategories = useAppSelector(selectRootCategories);
+  const categoriesInitialized = useAppSelector(selectCategoriesInitialized);
+  const [loading, setLoading] = useState(!providedCategories && !categoriesInitialized);
 
-  // Cargar categorías si no se proporcionan
-  useEffect(() => {
+  // Convertir categorías a formato de tarjetas usando Redux o las proporcionadas
+  const categories = useMemo(() => {
     if (providedCategories) {
-      setCategories(providedCategories.slice(0, 6));
-      setLoading(false);
-      return;
+      return providedCategories.slice(0, 6);
     }
 
-    const loadCategories = async () => {
-      try {
-        setLoading(true);
-        const response = await categoriesService.getRootCategories({
-          isActive: true,
-          globalOnly: true,
-          limit: 20,
-          sortBy: 'display_order',
-          sortOrder: 'asc',
-        });
-
-        // Convertir categorías a formato de tarjetas
-        const cards: CategoryCard[] = response.data.slice(0, 6).map((cat: ProductCategory) => ({
+    if (rootCategories.length > 0) {
+      // Convertir categorías de Redux a formato de tarjetas
+      return rootCategories
+        .slice(0, 6)
+        .map((cat: ProductCategory) => ({
           id: cat.id,
           title: cat.name.toUpperCase(),
           description: cat.description || 'Descubre nuestros productos',
@@ -60,99 +54,66 @@ export default function CategoryCardsSlider({
           // Guardar la categoría completa para usar el sistema de iconos
           categoryData: cat,
         }));
+    }
 
-        // Si hay menos de 6 categorías, agregar algunas por defecto
-        if (cards.length < 6) {
-          const defaultCards: CategoryCard[] = [
-            {
-              id: 'instalacion',
-              title: 'INSTALACIÓN',
-              description: 'Servicios de instalación profesional de refacciones y accesorios',
-              backgroundColor: '#ffffff',
-            },
-            {
-              id: 'promo',
-              title: 'FOLLETO PROMOCIONAL',
-              description: 'Las mejores ofertas y promociones',
-              backgroundColor: '#fef3c7',
-            },
-            {
-              id: 'offers',
-              title: 'OFERTAS Y AHORROS',
-              description: 'Conoce las mejores ofertas',
-              backgroundColor: '#fee2e2',
-            },
-            {
-              id: 'services',
-              title: 'SERVICIOS GRATUITOS',
-              description: 'Nosotros cuidamos de tu auto',
-              backgroundColor: '#dbeafe',
-            },
-            {
-              id: 'store',
-              title: 'UBICA TU TIENDA',
-              description: 'Estamos cerca de ti',
-              backgroundColor: '#dcfce7',
-            },
-            {
-              id: 'pickup',
-              title: 'CLIC, COMPRA Y RECOGE',
-              description: 'Compra en línea y recoge en tu tienda',
-              backgroundColor: '#f3e8ff',
-            },
-          ];
-          cards.push(...defaultCards.slice(0, 6 - cards.length));
-        }
+    return [];
+  }, [providedCategories, rootCategories]);
 
-        setCategories(cards.slice(0, 6));
-      } catch (error) {
-        console.error('Error cargando categorías:', error);
-        // Usar categorías por defecto si falla
-        setCategories([
-          {
-            id: 'instalacion',
-            title: 'INSTALACIÓN',
-            description: 'Servicios de instalación profesional de refacciones y accesorios',
-            backgroundColor: '#ffffff',
-          },
-          {
-            id: 'promo',
-            title: 'FOLLETO PROMOCIONAL',
-            description: 'Las mejores ofertas y promociones',
-            backgroundColor: '#fef3c7',
-          },
-          {
-            id: 'offers',
-            title: 'OFERTAS Y AHORROS',
-            description: 'Conoce las mejores ofertas',
-            backgroundColor: '#fee2e2',
-          },
-          {
-            id: 'services',
-            title: 'SERVICIOS GRATUITOS',
-            description: 'Nosotros cuidamos de tu auto',
-            backgroundColor: '#dbeafe',
-          },
-          {
-            id: 'store',
-            title: 'UBICA TU TIENDA',
-            description: 'Estamos cerca de ti',
-            backgroundColor: '#dcfce7',
-          },
-          {
-            id: 'pickup',
-            title: 'CLIC, COMPRA Y RECOGE',
-            description: 'Compra en línea y recoge en tu tienda',
-            backgroundColor: '#f3e8ff',
-          },
-        ].slice(0, 6));
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Agregar tarjetas por defecto si hay menos de 6 categorías
+  const finalCategories = useMemo(() => {
+    const result = [...categories];
+    
+    if (result.length < 6) {
+      const defaultCards: CategoryCard[] = [
+        {
+          id: 'instalacion',
+          title: 'INSTALACIÓN',
+          description: 'Servicios de instalación profesional de refacciones y accesorios',
+          backgroundColor: '#ffffff',
+        },
+        {
+          id: 'promo',
+          title: 'FOLLETO PROMOCIONAL',
+          description: 'Las mejores ofertas y promociones',
+          backgroundColor: '#fef3c7',
+        },
+        {
+          id: 'offers',
+          title: 'OFERTAS Y AHORROS',
+          description: 'Conoce las mejores ofertas',
+          backgroundColor: '#fee2e2',
+        },
+        {
+          id: 'services',
+          title: 'SERVICIOS GRATUITOS',
+          description: 'Nosotros cuidamos de tu auto',
+          backgroundColor: '#dbeafe',
+        },
+        {
+          id: 'store',
+          title: 'UBICA TU TIENDA',
+          description: 'Estamos cerca de ti',
+          backgroundColor: '#dcfce7',
+        },
+        {
+          id: 'pickup',
+          title: 'CLIC, COMPRA Y RECOGE',
+          description: 'Compra en línea y recoge en tu tienda',
+          backgroundColor: '#f3e8ff',
+        },
+      ];
+      result.push(...defaultCards.slice(0, 6 - result.length));
+    }
+    
+    return result;
+  }, [categories]);
 
-    loadCategories();
-  }, [providedCategories]);
+  // Actualizar loading cuando las categorías se inicialicen
+  useEffect(() => {
+    if (categoriesInitialized && !providedCategories) {
+      setLoading(false);
+    }
+  }, [categoriesInitialized, providedCategories]);
 
   if (loading) {
     return (
@@ -168,7 +129,7 @@ export default function CategoryCardsSlider({
     );
   }
 
-  if (categories.length === 0) {
+  if (finalCategories.length === 0 && !loading) {
     return null;
   }
 
@@ -180,7 +141,7 @@ export default function CategoryCardsSlider({
       <div className="max-w-7xl mx-auto px-4">
         {/* Contenedor de tarjetas - Grid fijo de 6 columnas */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {categories.slice(0, 6).map((category) => {
+          {finalCategories.slice(0, 6).map((category) => {
             const CardContent = (
               <div
                 className="h-48 rounded-lg shadow-md hover:shadow-xl transition-all hover:scale-105 p-6 flex flex-col justify-between cursor-pointer"

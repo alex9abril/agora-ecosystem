@@ -367,11 +367,25 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
       {/* Proveedores de Logística */}
       <div className="border-t pt-6 mt-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Proveedores de Logística</h2>
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <p className="text-sm text-gray-600">
-            La configuración de proveedores de logística estará disponible próximamente.
-          </p>
-        </div>
+        
+        {renderProviderSection(
+          'skydropx',
+          'Skydropx',
+          (
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <span className="text-xs font-bold text-orange-700">SD</span>
+            </div>
+          ),
+          'integrations.logistics.skydropx.enabled',
+          [
+            { label: 'Endpoint Base', key: 'integrations.logistics.skydropx.dev.endpoint' },
+            { label: 'Endpoint Cotizaciones', key: 'integrations.logistics.skydropx.dev.quotations_endpoint' },
+          ],
+          [
+            { label: 'Endpoint Base', key: 'integrations.logistics.skydropx.prod.endpoint' },
+            { label: 'Endpoint Cotizaciones', key: 'integrations.logistics.skydropx.prod.quotations_endpoint' },
+          ]
+        )}
       </div>
     </div>
   );

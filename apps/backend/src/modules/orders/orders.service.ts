@@ -294,6 +294,13 @@ export class OrdersService {
         const order = orderResult.rows[0];
         createdOrders.push(order);
 
+        // Obtener información de envío para esta tienda (si existe)
+        const quotationId = checkoutDto.quotationIds?.[businessId] || null;
+        const rateId = checkoutDto.rateIds?.[businessId] || null;
+        const shippingInfo = checkoutDto.shippingInfo?.[businessId] || {};
+        const shippingCarrier = shippingInfo.carrier || null;
+        const shippingService = shippingInfo.service || null;
+
         // Crear order_items para esta orden
         for (const item of items) {
           const taxBreakdown = itemTaxBreakdownsMap.get(item.product_id) || { taxes: [], total_tax: 0 };
@@ -301,8 +308,9 @@ export class OrdersService {
           await client.query(
             `INSERT INTO orders.order_items (
               order_id, product_id, item_name, item_price,
-              quantity, original_quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown
-            ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9)`,
+              quantity, original_quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown, 
+              quotation_id, rate_id, shipping_carrier, shipping_service
+            ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
             [
               order.id,
               item.product_id,
@@ -313,6 +321,10 @@ export class OrdersService {
               item.item_subtotal,
               item.special_instructions || null,
               JSON.stringify(taxBreakdown),
+              quotationId, // quotation_id de Skydropx (si aplica)
+              rateId, // rate_id de Skydropx (necesario para crear shipment)
+              shippingCarrier, // carrier seleccionado por el usuario (ej: "FEDEX", "DHL")
+              shippingService, // service seleccionado por el usuario (ej: "Express Saver")
             ]
           );
         }
@@ -860,6 +872,10 @@ export class OrdersService {
           oi.item_subtotal,
           oi.special_instructions,
           oi.tax_breakdown,
+          oi.quotation_id,
+          oi.rate_id,
+          oi.shipping_carrier,
+          oi.shipping_service,
           oi.created_at,
           -- Obtener la imagen principal del producto
           (
@@ -1665,6 +1681,10 @@ export class OrdersService {
           variant_selection,
           item_subtotal,
           special_instructions,
+          quotation_id,
+          rate_id,
+          shipping_carrier,
+          shipping_service,
           created_at
         FROM orders.order_items
         WHERE order_id = $1

@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { dbPool } from '../../../config/database.config';
@@ -247,7 +248,7 @@ export class VehiclesService {
          LEFT JOIN catalog.vehicle_models vm ON pvc.vehicle_model_id = vm.id
          LEFT JOIN catalog.vehicle_years vy ON pvc.vehicle_year_id = vy.id
          LEFT JOIN catalog.vehicle_specs vs ON pvc.vehicle_spec_id = vs.id
-         WHERE pvc.product_id = $1
+         WHERE pvc.product_id = $1 AND pvc.is_active = TRUE
          ORDER BY pvc.is_universal DESC, vb.name, vm.name, vy.year_start`,
         [productId]
       );
@@ -338,15 +339,39 @@ export class VehiclesService {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
+    // Validar que el ID no esté vacío
+    if (!compatibilityId || compatibilityId.trim() === '') {
+      throw new BadRequestException('ID de compatibilidad inválido');
+    }
+
     try {
-      // Eliminación lógica
-      await dbPool.query(
-        `UPDATE catalog.product_vehicle_compatibility
-         SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
+      // Verificar que la compatibilidad existe
+      const checkResult = await dbPool.query(
+        `SELECT id, product_id FROM catalog.product_vehicle_compatibility WHERE id = $1`,
         [compatibilityId]
       );
+
+      if (checkResult.rows.length === 0) {
+        throw new NotFoundException('Compatibilidad no encontrada');
+      }
+
+      // Eliminación lógica
+      const result = await dbPool.query(
+        `UPDATE catalog.product_vehicle_compatibility
+         SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND is_active = TRUE
+         RETURNING id`,
+        [compatibilityId]
+      );
+
+      if (result.rows.length === 0) {
+        // Ya estaba desactivada, pero no es un error crítico
+        console.log(`⚠️ Compatibilidad ${compatibilityId} ya estaba desactivada`);
+      }
     } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
       console.error('❌ Error eliminando compatibilidad:', error);
       throw new ServiceUnavailableException(`Error al eliminar compatibilidad: ${error.message}`);
     }

@@ -2226,6 +2226,51 @@ export class BusinessesService {
   }
 
   /**
+   * Obtener sucursal por ID (público)
+   */
+  async getBranchById(id: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT 
+          b.id, b.name, b.slug, b.business_group_id, b.description, b.logo_url,
+          b.phone, b.email, b.is_active, b.created_at, b.updated_at,
+          a.city, a.state,
+          (b.location)[0] as longitude,
+          (b.location)[1] as latitude,
+          CONCAT_WS(', ',
+            NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
+            NULLIF(a.neighborhood, ''),
+            NULLIF(a.city, ''),
+            NULLIF(a.state, ''),
+            NULLIF(a.postal_code, '')
+          ) as address
+        FROM core.businesses b
+        LEFT JOIN core.addresses a ON b.address_id = a.id
+        WHERE b.id = $1 AND b.is_active = TRUE`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return result.rows[0];
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('❌ Error obteniendo sucursal por ID:', error);
+      throw new ServiceUnavailableException(`Error al obtener sucursal: ${error.message}`);
+    }
+  }
+
+  /**
    * Obtener el grupo empresarial del usuario actual (owner_id)
    */
   async getMyBusinessGroup(ownerId: string) {

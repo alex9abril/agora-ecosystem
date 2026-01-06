@@ -112,6 +112,7 @@ export default function Header() {
       
       if (selected) {
         // Si hay un vehículo seleccionado, usarlo (respeta la decisión del usuario)
+        // Funciona tanto para usuarios autenticados como no autenticados
         setCurrentVehicle(selected);
         setIsVehicleLoaded(true);
         return;
@@ -124,27 +125,53 @@ export default function Header() {
         return;
       }
       
-      // Solo si la clave NO existe (primera vez), entonces cargar el predeterminado
-      const hasSelectedKey = typeof window !== 'undefined' && 
-        localStorage.getItem('user_vehicle_selected') !== null;
-      
-      if (isAuthenticated && !hasSelectedKey) {
-        try {
-          const defaultVehicle = await userVehiclesService.getDefaultVehicle();
-          if (defaultVehicle) {
-            setCurrentVehicle(defaultVehicle);
-            // Establecer como seleccionado solo si es la primera vez
-            setSelectedVehicle(defaultVehicle);
-          } else {
-            setCurrentVehicle(null);
+      // Si el usuario está autenticado, intentar cargar el predeterminado de la cuenta
+      if (isAuthenticated) {
+        const hasSelectedKey = typeof window !== 'undefined' && 
+          localStorage.getItem('user_vehicle_selected') !== null;
+        
+        // Solo cargar predeterminado si no hay selección previa explícita del usuario
+        // Si hay una selección previa, respetarla (puede ser un vehículo local que el usuario quiere usar)
+        if (!hasSelectedKey) {
+          try {
+            const defaultVehicle = await userVehiclesService.getDefaultVehicle();
+            if (defaultVehicle) {
+              setCurrentVehicle(defaultVehicle);
+              // Establecer como seleccionado automáticamente
+              setSelectedVehicle(defaultVehicle);
+              console.log('[Header] Vehículo predeterminado cargado automáticamente:', defaultVehicle.nickname || defaultVehicle.brand_name);
+            } else {
+              // Si no hay predeterminado en cuenta, verificar localStorage
+              const localVehicle = getStoredVehicle();
+              if (localVehicle) {
+                setCurrentVehicle(localVehicle);
+                setSelectedVehicle(localVehicle);
+              } else {
+                setCurrentVehicle(null);
+              }
+            }
+          } catch (error) {
+            console.error('Error cargando vehículo predeterminado:', error);
+            // En caso de error, intentar usar vehículo local
+            const localVehicle = getStoredVehicle();
+            setCurrentVehicle(localVehicle || null);
           }
-        } catch (error) {
-          console.error('Error cargando vehículo predeterminado:', error);
-          setCurrentVehicle(null);
+        } else {
+          // Hay una selección previa, usarla (puede ser local o de cuenta)
+          const selected = getSelectedVehicle();
+          if (selected) {
+            setCurrentVehicle(selected);
+          }
         }
       } else {
-        // Si no está autenticado o ya se estableció antes, usar el seleccionado
-        setCurrentVehicle(selected);
+        // Usuario no autenticado: usar vehículo de localStorage si existe
+        const localVehicle = getStoredVehicle();
+        if (localVehicle) {
+          setCurrentVehicle(localVehicle);
+          setSelectedVehicle(localVehicle);
+        } else {
+          setCurrentVehicle(null);
+        }
       }
       
       setIsVehicleLoaded(true);
@@ -173,8 +200,38 @@ export default function Header() {
 
     window.addEventListener('storage', handleStorageChange);
 
+    // Escuchar evento de sincronización de vehículos después de login/registro
+    const handleVehiclesSynced = async () => {
+      if (isAuthenticated) {
+        console.log('[Header] Vehículos sincronizados, recargando vehículo predeterminado...');
+        try {
+          // Cargar el vehículo predeterminado de la cuenta automáticamente
+          const defaultVehicle = await userVehiclesService.getDefaultVehicle();
+          if (defaultVehicle) {
+            setCurrentVehicle(defaultVehicle);
+            setSelectedVehicle(defaultVehicle);
+            console.log('[Header] Vehículo predeterminado cargado automáticamente:', defaultVehicle.nickname || defaultVehicle.brand_name);
+          } else {
+            // Si no hay predeterminado, verificar si hay vehículos locales
+            const localVehicle = getStoredVehicle();
+            if (localVehicle) {
+              setCurrentVehicle(localVehicle);
+              setSelectedVehicle(localVehicle);
+            } else {
+              setCurrentVehicle(null);
+            }
+          }
+        } catch (error) {
+          console.error('[Header] Error cargando vehículo después de sincronización:', error);
+        }
+      }
+    };
+
+    window.addEventListener('auth:vehicles-synced', handleVehiclesSynced);
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth:vehicles-synced', handleVehiclesSynced);
     };
   }, [isClient, isAuthenticated]);
 
@@ -918,24 +975,32 @@ export default function Header() {
             // Si se deseleccionó el vehículo, solo limpiar la selección local sin hacer peticiones
             setCurrentVehicle(null);
             setSelectedVehicle(null);
+            // Disparar evento para que otros componentes sepan que el vehículo cambió
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('vehicle-selected', { detail: null }));
+            }
             return;
           }
           
-          setCurrentVehicle(vehicle);
-          // Si está autenticado, recargar el vehículo predeterminado
-          if (isAuthenticated && vehicle) {
-            try {
-              const defaultVehicle = await userVehiclesService.getDefaultVehicle();
-              setCurrentVehicle(defaultVehicle);
-              if (defaultVehicle) {
-                setSelectedVehicle(defaultVehicle);
-              }
-            } catch (error) {
-              console.error('Error recargando vehículo:', error);
-            }
-          } else if (vehicle) {
-            // Para usuarios no autenticados, establecer como seleccionado
+          // Verificar si el vehículo es de la cuenta (tiene id) o local (no tiene id)
+          const isAccountVehicle = 'id' in vehicle;
+          
+          if (isAuthenticated && isAccountVehicle) {
+            // Si está autenticado y seleccionó un vehículo de la cuenta
+            // El vehículo ya fue establecido como predeterminado en VehicleSelectorDialog
+            // Solo actualizar el estado local con el vehículo seleccionado
+            setCurrentVehicle(vehicle);
             setSelectedVehicle(vehicle);
+          } else {
+            // Si es un vehículo local (sin sesión o vehículo local con sesión)
+            // Usar el vehículo seleccionado directamente, NO recargar el predeterminado
+            setCurrentVehicle(vehicle);
+            setSelectedVehicle(vehicle);
+          }
+          
+          // Disparar evento para que otros componentes sepan que el vehículo cambió
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('vehicle-selected', { detail: vehicle }));
           }
         }}
       />

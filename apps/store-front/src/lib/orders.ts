@@ -31,6 +31,9 @@ export interface OrderItem {
   tax_breakdown?: TaxBreakdown;
   product_image_path?: string;
   product_image_url?: string;
+  quotation_id?: string; // ID de cotización de Skydropx
+  shipping_carrier?: string; // Paquetería seleccionada (ej: "FEDEX", "DHL", "ESTAFETA")
+  shipping_service?: string; // Tipo de servicio seleccionado (ej: "Express Saver", "Standard Overnight")
   created_at: string;
 }
 

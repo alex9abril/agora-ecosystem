@@ -15,6 +15,8 @@ import { taxesService } from '@/lib/taxes';
 import { formatPrice } from '@/lib/format';
 import { apiRequest } from '@/lib/api';
 import { walletService, Wallet } from '@/lib/wallet';
+import { logisticsService, type Address as LogisticsAddress, type Parcel } from '@/lib/logistics';
+import { branchesService } from '@/lib/branches';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -56,10 +58,14 @@ interface PaymentMethod {
 
 interface ShippingOption {
   id: string;
-  provider: 'fedex' | 'dhl' | 'pickup';
+  provider: 'fedex' | 'dhl' | 'pickup' | 'skydropx';
   label: string;
   price: number;
   estimatedDays?: number;
+  quotation_id?: string; // ID de la cotización de Skydropx (para referencia)
+  rate_id?: string; // ID del rate específico dentro de la cotización (necesario para crear shipment)
+  carrier?: string; // Nombre del transportista (ej: "FedEx", "DHL")
+  service?: string; // Tipo de servicio (ej: "Express", "Standard")
 }
 
 interface ShippingSelection {
@@ -145,6 +151,8 @@ export default function CheckoutPage() {
   // Estados para envío
   const [shippingSelections, setShippingSelections] = useState<Record<string, string>>({}); // storeId -> optionId
   const [shippingOptionsByStore, setShippingOptionsByStore] = useState<Record<string, ShippingOption[]>>({});
+  const [loadingQuotations, setLoadingQuotations] = useState<Record<string, boolean>>({}); // storeId -> loading
+  const [quotationErrors, setQuotationErrors] = useState<Record<string, string>>({}); // storeId -> error
   
   // Estados para pago
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
@@ -362,67 +370,190 @@ export default function CheckoutPage() {
     return Object.values(taxesByStore).reduce((sum, storeTax) => sum + storeTax, 0);
   }, [taxesByStore]);
 
-  // Simular cálculo de opciones de envío por tienda
-  const calculateShippingOptions = useMemo(() => {
-    const options: Record<string, ShippingOption[]> = {};
+  // Obtener cotizaciones de Skydropx para una tienda
+  const fetchQuotationsForStore = async (storeId: string) => {
+    if (!selectedAddressId) return;
     
-    Object.keys(storesInfo).forEach((storeId) => {
-      const store = storesInfo[storeId];
-      const subtotal = subtotalsByStore[storeId] || 0;
-      
-      // Simular precios basados en el subtotal y la tienda
-      // Precios más altos para tiendas más lejanas o pedidos más grandes
-      const basePrice = Math.max(50, Math.min(500, subtotal * 0.05)); // Entre $50 y $500, o 5% del subtotal
-      
-      // Variar precios por tienda (simulando diferentes ubicaciones)
-      const storeMultiplier = storeId.charCodeAt(0) % 3; // Variación simple basada en el ID
-      const multipliers = [1.0, 1.2, 0.9];
-      const multiplier = multipliers[storeMultiplier] || 1.0;
-      
-      options[storeId] = [
-        {
-          id: `${storeId}-fedex`,
-          provider: 'fedex',
-          label: 'FedEx',
-          price: Math.round(basePrice * multiplier * 1.0),
-          estimatedDays: 2,
-        },
-        {
-          id: `${storeId}-dhl`,
-          provider: 'dhl',
-          label: 'DHL',
-          price: Math.round(basePrice * multiplier * 0.95),
-          estimatedDays: 3,
-        },
-        {
-          id: `${storeId}-pickup`,
-          provider: 'pickup',
-          label: 'Recoger en tienda',
-          price: 0,
-          estimatedDays: 0,
-        },
-      ];
-    });
-    
-    return options;
-  }, [storesInfo, subtotalsByStore]);
-
-  // Inicializar opciones de envío y selecciones por defecto
-  useEffect(() => {
-    if (Object.keys(calculateShippingOptions).length > 0) {
-      setShippingOptionsByStore(calculateShippingOptions);
-      
-      // Seleccionar "Recoger en tienda" por defecto para cada tienda
-      const defaultSelections: Record<string, string> = {};
-      Object.keys(calculateShippingOptions).forEach((storeId) => {
-        const pickupOption = calculateShippingOptions[storeId].find(opt => opt.provider === 'pickup');
-        if (pickupOption) {
-          defaultSelections[storeId] = pickupOption.id;
-        }
+    try {
+      setLoadingQuotations(prev => ({ ...prev, [storeId]: true }));
+      setQuotationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[storeId];
+        return newErrors;
       });
-      setShippingSelections(defaultSelections);
+
+      // Obtener información de la tienda
+      const business = await branchesService.getBranchById(storeId);
+      
+      // Obtener dirección de envío seleccionada
+      const destinationAddress = addresses.find(addr => addr.id === selectedAddressId);
+      if (!destinationAddress) {
+        throw new Error('Dirección de envío no encontrada');
+      }
+
+      // Obtener dirección de la tienda (origen)
+      // Parsear la dirección de la tienda si está disponible
+      // El formato típico es: "Calle, Colonia, Ciudad, Estado, CP"
+      let originStreet = 'Calle Principal';
+      let originDistrict = '';
+      let originCity = business.city || 'Ciudad de México';
+      let originState = business.state || 'CDMX';
+      let originPostalCode = '00000';
+
+      if (business.address) {
+        const addressParts = business.address.split(',').map(p => p.trim());
+        if (addressParts.length > 0) originStreet = addressParts[0];
+        if (addressParts.length > 1) originDistrict = addressParts[1];
+        if (addressParts.length > 2) originCity = addressParts[2] || originCity;
+        if (addressParts.length > 3) originState = addressParts[3] || originState;
+        if (addressParts.length > 4) originPostalCode = addressParts[4] || originPostalCode;
+      }
+
+      const originAddress: LogisticsAddress = {
+        name: business.name || 'Tienda',
+        street: originStreet,
+        number: '1',
+        district: originDistrict,
+        city: originCity,
+        state: originState,
+        country: 'MX', // Skydropx espera código de país ISO (MX para México)
+        postal_code: originPostalCode,
+        phone: business.phone || '5555555555',
+        email: business.email,
+      };
+
+      // Dirección de destino
+      const destAddress: LogisticsAddress = {
+        name: destinationAddress.receiver_name || user?.firstName || 'Cliente',
+        street: destinationAddress.street,
+        number: destinationAddress.street_number || '1',
+        district: destinationAddress.neighborhood,
+        city: destinationAddress.city,
+        state: destinationAddress.state,
+        country: destinationAddress.country === 'México' ? 'MX' : (destinationAddress.country || 'MX'),
+        postal_code: destinationAddress.postal_code,
+        phone: destinationAddress.receiver_phone || user?.phone || '5555555555',
+        email: user?.email,
+      };
+
+      // Calcular peso y dimensiones del paquete
+      // Por ahora usamos valores por defecto, pero podrían venir del producto
+      const storeItems = storesInfo[storeId]?.items || [];
+      const totalQuantity = storeItems.reduce((sum, item) => sum + item.quantity, 0);
+      
+      // Valores por defecto: 1kg por producto, dimensiones estándar
+      const parcel: Parcel = {
+        weight: Math.max(0.5, totalQuantity * 0.5), // Mínimo 0.5kg, 0.5kg por producto
+        distance_unit: 'CM',
+        mass_unit: 'KG',
+        height: 10,
+        width: 20,
+        length: 30,
+      };
+
+      // Obtener cotizaciones de Skydropx
+      const quotationResponse = await logisticsService.getQuotations({
+        origin: originAddress,
+        destination: destAddress,
+        parcels: [parcel],
+      });
+
+      // Convertir cotizaciones a ShippingOption
+      // Usar un Set para eliminar duplicados basados en el quotation_id
+      const seenIds = new Set<string>();
+      const skydropxOptions: ShippingOption[] = quotationResponse.quotations
+        .filter((q) => {
+          // Filtrar duplicados basados en quotation_id
+          if (seenIds.has(q.id)) {
+            return false;
+          }
+          seenIds.add(q.id);
+          return true;
+        })
+        .map((q) => ({
+          id: `${storeId}-skydropx-${q.id}`,
+          provider: 'skydropx',
+          label: `${(q.carrier || 'Envío').toUpperCase()} - ${q.service || 'Estándar'}`,
+          price: q.price,
+          estimatedDays: q.estimated_days,
+          quotation_id: q.id, // ID de la cotización (para referencia)
+          rate_id: q.id, // ID del rate específico (necesario para crear shipment)
+          carrier: q.carrier,
+          service: q.service,
+        }))
+        .sort((a, b) => {
+          // Ordenar primero por carrier (alfabéticamente)
+          const carrierA = (a.carrier || '').toUpperCase();
+          const carrierB = (b.carrier || '').toUpperCase();
+          if (carrierA !== carrierB) {
+            return carrierA.localeCompare(carrierB);
+          }
+          // Si el carrier es el mismo, ordenar por precio (menor a mayor)
+          return a.price - b.price;
+        });
+
+      // Agregar opción de recoger en tienda
+      const pickupOption: ShippingOption = {
+        id: `${storeId}-pickup`,
+        provider: 'pickup',
+        label: 'Recoger en tienda',
+        price: 0,
+        estimatedDays: 0,
+      };
+
+      // Actualizar opciones de envío para esta tienda
+      setShippingOptionsByStore(prev => ({
+        ...prev,
+        [storeId]: [...skydropxOptions, pickupOption],
+      }));
+
+      // Seleccionar "Recoger en tienda" por defecto
+      setShippingSelections(prev => ({
+        ...prev,
+        [storeId]: pickupOption.id,
+      }));
+    } catch (error: any) {
+      console.error(`[Checkout] Error obteniendo cotizaciones para tienda ${storeId}:`, error);
+      setQuotationErrors(prev => ({
+        ...prev,
+        [storeId]: error.message || 'Error al obtener cotizaciones de envío',
+      }));
+
+      // En caso de error, mostrar solo la opción de recoger en tienda
+      const pickupOption: ShippingOption = {
+        id: `${storeId}-pickup`,
+        provider: 'pickup',
+        label: 'Recoger en tienda',
+        price: 0,
+        estimatedDays: 0,
+      };
+      setShippingOptionsByStore(prev => ({
+        ...prev,
+        [storeId]: [pickupOption],
+      }));
+      setShippingSelections(prev => ({
+        ...prev,
+        [storeId]: pickupOption.id,
+      }));
+    } finally {
+      setLoadingQuotations(prev => ({ ...prev, [storeId]: false }));
     }
-  }, [calculateShippingOptions]);
+  };
+
+  // Obtener cotizaciones cuando se avanza al paso de shipping-method
+  useEffect(() => {
+    if (currentStep === 'shipping-method' && selectedAddressId && Object.keys(storesInfo).length > 0) {
+      // Limpiar cotizaciones anteriores antes de cargar nuevas
+      setShippingOptionsByStore({});
+      setShippingSelections({});
+      
+      // Obtener cotizaciones para cada tienda
+      Object.keys(storesInfo).forEach((storeId) => {
+        fetchQuotationsForStore(storeId);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, selectedAddressId]);
 
   // Calcular total de envío
   const shippingTotal = useMemo(() => {
@@ -1053,6 +1184,28 @@ export default function CheckoutPage() {
         storePath = `/${contextType}/${slug}`;
       }
 
+      // Preparar quotation_ids y rate_ids por tienda
+      const quotationIds: Record<string, string> = {};
+      const rateIds: Record<string, string> = {};
+      const shippingInfo: Record<string, { carrier?: string; service?: string }> = {};
+      Object.entries(shippingSelections).forEach(([storeId, optionId]) => {
+        const options = shippingOptionsByStore[storeId] || [];
+        const selectedOption = options.find(opt => opt.id === optionId);
+        if (selectedOption?.quotation_id) {
+          quotationIds[storeId] = selectedOption.quotation_id;
+        }
+        if (selectedOption?.rate_id) {
+          rateIds[storeId] = selectedOption.rate_id;
+        }
+        // Guardar información de envío (carrier y service) si es una opción de Skydropx
+        if (selectedOption?.provider === 'skydropx' && selectedOption?.carrier && selectedOption?.service) {
+          shippingInfo[storeId] = {
+            carrier: selectedOption.carrier.toUpperCase(),
+            service: selectedOption.service,
+          };
+        }
+      });
+
       const order = await apiRequest<{ id: string; order_number: string; karlopay_payment_url?: string }>('/orders/checkout', {
         method: 'POST',
         body: JSON.stringify({
@@ -1061,6 +1214,9 @@ export default function CheckoutPage() {
           payment: paymentInfo,
           deliveryFee: shippingTotal, // Enviar el costo de envío calculado al backend
           storeContext: storePath, // Ruta de la tienda para la URL de redirección
+          quotationIds: Object.keys(quotationIds).length > 0 ? quotationIds : undefined, // Enviar quotation_ids si existen
+          rateIds: Object.keys(rateIds).length > 0 ? rateIds : undefined, // Enviar rate_ids si existen (necesario para crear shipment)
+          shippingInfo: Object.keys(shippingInfo).length > 0 ? shippingInfo : undefined, // Enviar información de envío si existe
         }),
       });
 
@@ -1997,6 +2153,8 @@ export default function CheckoutPage() {
                       {Object.entries(storesInfo).map(([storeId, store]) => {
                         const options = shippingOptionsByStore[storeId] || [];
                         const selectedOptionId = shippingSelections[storeId];
+                        const isLoading = loadingQuotations[storeId];
+                        const error = quotationErrors[storeId];
                         
                         return (
                           <div key={storeId} className="border-2 border-gray-200 rounded-lg p-4">
@@ -2007,8 +2165,26 @@ export default function CheckoutPage() {
                               </p>
                             </div>
                             
-                            <div className="space-y-2">
-                              {options.map((option) => (
+                            {isLoading && (
+                              <div className="py-4 text-center">
+                                <p className="text-sm text-gray-500">Obteniendo opciones de envío...</p>
+                              </div>
+                            )}
+                            
+                            {error && !isLoading && (
+                              <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <p className="text-xs text-yellow-800">
+                                  {error}
+                                </p>
+                                <p className="text-xs text-yellow-700 mt-1">
+                                  Solo está disponible la opción de recoger en tienda.
+                                </p>
+                              </div>
+                            )}
+                            
+                            {!isLoading && (
+                              <div className="space-y-2">
+                                {options.map((option) => (
                                 <label
                                   key={option.id}
                                   className={`block p-3 border-2 rounded-lg cursor-pointer transition-colors ${
@@ -2053,8 +2229,9 @@ export default function CheckoutPage() {
                                     </div>
                                   </div>
                                 </label>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

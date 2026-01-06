@@ -16,7 +16,10 @@ import {
   clearAuth,
 } from '@/lib/storage';
 import { userVehiclesService } from '@/lib/user-vehicles';
-import { getStoredVehicle, setStoredVehicle } from '@/lib/vehicle-storage';
+import { 
+  syncLocalVehiclesToAccount,
+  clearLocalVehicleAfterSync 
+} from '@/lib/vehicle-sync';
 
 interface AuthContextType {
   user: any | null;
@@ -124,24 +127,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Sincronizar vehículo de localStorage a la base de datos si existe
       try {
-        const storedVehicle = getStoredVehicle();
-        if (storedVehicle && storedVehicle.vehicle_brand_id) {
-          // Intentar crear el vehículo en la base de datos
-          await userVehiclesService.createUserVehicle({
-            vehicle_brand_id: storedVehicle.vehicle_brand_id,
-            vehicle_model_id: storedVehicle.vehicle_model_id || undefined,
-            vehicle_year_id: storedVehicle.vehicle_year_id || undefined,
-            vehicle_spec_id: storedVehicle.vehicle_spec_id || undefined,
-            nickname: storedVehicle.nickname || undefined,
-            is_default: true, // El vehículo guardado localmente se convierte en predeterminado
-          });
-          // Limpiar localStorage después de sincronizar
-          setStoredVehicle(null);
-          console.log('[Auth] Vehículo sincronizado desde localStorage');
+        const syncedVehicles = await syncLocalVehiclesToAccount();
+        if (syncedVehicles.length > 0) {
+          // Limpiar localStorage solo después de sincronización exitosa
+          clearLocalVehicleAfterSync();
+          console.log('[Auth] Vehículo(s) sincronizado(s) desde localStorage:', syncedVehicles.length);
+        }
+        
+        // Disparar evento para que los componentes sepan que los vehículos están listos
+        // Esto permite que el Header y otros componentes carguen automáticamente los vehículos
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:vehicles-synced'));
         }
       } catch (vehicleError: any) {
-        // Si falla la sincronización, no interrumpir el login
-        console.warn('[Auth] Error sincronizando vehículo:', vehicleError);
+        // Si falla la sincronización, NO limpiar localStorage para mantener los datos locales
+        console.warn('[Auth] Error sincronizando vehículo (se mantiene en localStorage):', vehicleError);
+        // Aún así disparar el evento para que se carguen los vehículos de la cuenta
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:vehicles-synced'));
+        }
       }
       
       // No redirigir automáticamente - dejar que el componente que llama maneje la redirección
@@ -167,24 +171,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Sincronizar vehículo de localStorage a la base de datos si existe
       try {
-        const storedVehicle = getStoredVehicle();
-        if (storedVehicle && storedVehicle.vehicle_brand_id) {
-          // Intentar crear el vehículo en la base de datos
-          await userVehiclesService.createUserVehicle({
-            vehicle_brand_id: storedVehicle.vehicle_brand_id,
-            vehicle_model_id: storedVehicle.vehicle_model_id || undefined,
-            vehicle_year_id: storedVehicle.vehicle_year_id || undefined,
-            vehicle_spec_id: storedVehicle.vehicle_spec_id || undefined,
-            nickname: storedVehicle.nickname || undefined,
-            is_default: true, // El vehículo guardado localmente se convierte en predeterminado
-          });
-          // Limpiar localStorage después de sincronizar
-          setStoredVehicle(null);
-          console.log('[Auth] Vehículo sincronizado desde localStorage');
+        const syncedVehicles = await syncLocalVehiclesToAccount();
+        if (syncedVehicles.length > 0) {
+          // Limpiar localStorage solo después de sincronización exitosa
+          clearLocalVehicleAfterSync();
+          console.log('[Auth] Vehículo(s) sincronizado(s) desde localStorage:', syncedVehicles.length);
+        }
+        
+        // Disparar evento para que los componentes sepan que los vehículos están listos
+        // Esto permite que el Header y otros componentes carguen automáticamente los vehículos
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:vehicles-synced'));
         }
       } catch (vehicleError: any) {
-        // Si falla la sincronización, no interrumpir el registro
-        console.warn('[Auth] Error sincronizando vehículo:', vehicleError);
+        // Si falla la sincronización, NO limpiar localStorage para mantener los datos locales
+        console.warn('[Auth] Error sincronizando vehículo (se mantiene en localStorage):', vehicleError);
+        // Aún así disparar el evento para que se carguen los vehículos de la cuenta
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:vehicles-synced'));
+        }
       }
       
       // No redirigir automáticamente - dejar que el componente que llama maneje la redirección

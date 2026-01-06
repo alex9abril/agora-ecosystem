@@ -319,15 +319,27 @@ export default function PrepareOrderPage() {
       // Generar guía de envío automáticamente
       try {
         const { logisticsService } = await import('@/lib/logistics');
-        await logisticsService.createShippingLabel({
+        console.log('🚚 Intentando crear guía de envío para orden:', order.id);
+        const shippingLabel = await logisticsService.createShippingLabel({
           orderId: order.id,
           packageWeight: 1.0, // Peso por defecto, se puede calcular basado en items
           packageDimensions: '30x20x15 cm', // Dimensiones por defecto
           declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
         });
-        console.log('✅ Guía de envío generada automáticamente');
+        console.log('✅ Guía de envío generada automáticamente:', {
+          trackingNumber: shippingLabel.tracking_number,
+          carrier: shippingLabel.carrier_name,
+          status: shippingLabel.status,
+        });
       } catch (logisticsError: any) {
-        console.error('⚠️ Error generando guía de envío (no crítico):', logisticsError);
+        console.error('❌ Error generando guía de envío:', {
+          message: logisticsError.message,
+          statusCode: logisticsError.statusCode,
+          response: logisticsError.response,
+          orderId: order.id,
+        });
+        // Mostrar alerta al usuario para que sepa que hubo un problema
+        alert(`⚠️ La orden se marcó como completada, pero hubo un problema al generar la guía de envío: ${logisticsError.message || 'Error desconocido'}. Puedes generar la guía manualmente desde el detalle de la orden.`);
         // No bloquear el flujo si falla la generación de guía
       }
 

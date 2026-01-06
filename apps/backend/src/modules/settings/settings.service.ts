@@ -209,7 +209,7 @@ export class SettingsService {
   }
 
   /**
-   * Actualizar una configuración por clave
+   * Actualizar una configuración por clave (upsert: crea si no existe)
    */
   async updateByKey(key: string, updateDto: UpdateSettingDto) {
     if (!dbPool) {
@@ -217,11 +217,14 @@ export class SettingsService {
     }
 
     try {
-      // Validar que la configuración existe
-      const existing = await this.findByKey(key);
-
-      // Validar el valor según el tipo
-      this.validateValue(updateDto.value, existing.value_type, existing.validation);
+      // Intentar obtener la configuración existente
+      let existing: SiteSetting | null = null;
+      try {
+        existing = await this.findByKey(key);
+      } catch (error) {
+        // Si no existe, continuamos para crearla
+        existing = null;
+      }
 
       // Convertir valor a JSONB
       let valueJsonb: string;
@@ -231,75 +234,159 @@ export class SettingsService {
         valueJsonb = JSON.stringify(updateDto.value);
       }
 
-      // Construir la consulta dinámicamente con solo los campos que se actualizarán
-      const setParts: string[] = ['value = $1::jsonb'];
-      const params: any[] = [valueJsonb];
-      let paramIndex = 2;
-
-      if (updateDto.label !== undefined) {
-        setParts.push(`label = $${paramIndex}`);
-        params.push(updateDto.label);
-        paramIndex++;
-      }
-      if (updateDto.description !== undefined) {
-        setParts.push(`description = $${paramIndex}`);
-        params.push(updateDto.description);
-        paramIndex++;
-      }
-      if (updateDto.help_text !== undefined) {
-        setParts.push(`help_text = $${paramIndex}`);
-        params.push(updateDto.help_text);
-        paramIndex++;
+      // Si existe, validar el valor según el tipo
+      if (existing) {
+        this.validateValue(updateDto.value, existing.value_type, existing.validation);
       }
 
-      setParts.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(key);
+      // Determinar el tipo de valor si no existe
+      let valueType = 'string';
+      if (existing) {
+        valueType = existing.value_type;
+      } else {
+        if (typeof updateDto.value === 'boolean') {
+          valueType = 'boolean';
+        } else if (typeof updateDto.value === 'number') {
+          valueType = 'number';
+        } else if (Array.isArray(updateDto.value)) {
+          valueType = 'array';
+        } else if (typeof updateDto.value === 'object') {
+          valueType = 'object';
+        }
+      }
 
-      const query = `
-        UPDATE catalog.site_settings
-        SET ${setParts.join(', ')}
-        WHERE key = $${paramIndex}
-        RETURNING 
-          id,
+      // Extraer categoría de la clave (ej: "integrations.logistics.skydropx.enabled" -> "integrations")
+      const category = key.split('.')[0] || 'general';
+
+      if (existing) {
+        // UPDATE: La configuración existe, actualizarla
+        const setParts: string[] = ['value = $1::jsonb'];
+        const params: any[] = [valueJsonb];
+        let paramIndex = 2;
+
+        if (updateDto.label !== undefined) {
+          setParts.push(`label = $${paramIndex}`);
+          params.push(updateDto.label);
+          paramIndex++;
+        }
+        if (updateDto.description !== undefined) {
+          setParts.push(`description = $${paramIndex}`);
+          params.push(updateDto.description);
+          paramIndex++;
+        }
+        if (updateDto.help_text !== undefined) {
+          setParts.push(`help_text = $${paramIndex}`);
+          params.push(updateDto.help_text);
+          paramIndex++;
+        }
+
+        setParts.push('updated_at = CURRENT_TIMESTAMP');
+        params.push(key);
+
+        const query = `
+          UPDATE catalog.site_settings
+          SET ${setParts.join(', ')}
+          WHERE key = $${paramIndex}
+          RETURNING 
+            id,
+            key,
+            value,
+            category,
+            label,
+            description,
+            help_text,
+            value_type,
+            validation,
+            is_active,
+            display_order,
+            created_at,
+            updated_at
+        `;
+
+        const result = await dbPool.query(query, params);
+        return this.mapRowToSetting(result.rows[0]);
+      } else {
+        // INSERT: La configuración no existe, crearla
+        const query = `
+          INSERT INTO catalog.site_settings (
+            key,
+            value,
+            category,
+            label,
+            description,
+            help_text,
+            value_type,
+            validation,
+            is_active,
+            display_order
+          ) VALUES (
+            $1,
+            $2::jsonb,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            NULL,
+            TRUE,
+            999
+          )
+          RETURNING 
+            id,
+            key,
+            value,
+            category,
+            label,
+            description,
+            help_text,
+            value_type,
+            validation,
+            is_active,
+            display_order,
+            created_at,
+            updated_at
+        `;
+
+        const params = [
           key,
-          value,
+          valueJsonb,
           category,
-          label,
-          description,
-          help_text,
-          value_type,
-          validation,
-          is_active,
-          display_order,
-          created_at,
-          updated_at
-      `;
+          updateDto.label || key,
+          updateDto.description || null,
+          updateDto.help_text || null,
+          valueType,
+        ];
 
-      const result = await dbPool.query(query, params);
-
-      const row = result.rows[0];
-      return {
-        id: row.id,
-        key: row.key,
-        value: row.value,
-        category: row.category,
-        label: row.label,
-        description: row.description,
-        help_text: row.help_text,
-        value_type: row.value_type,
-        validation: row.validation,
-        is_active: row.is_active,
-        display_order: row.display_order,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-      };
-    } catch (error: any) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
+        const result = await dbPool.query(query, params);
+        return this.mapRowToSetting(result.rows[0]);
       }
+    } catch (error: any) {
       console.error('❌ Error actualizando configuración:', error);
-      throw new ServiceUnavailableException(`Error al actualizar configuración: ${error.message}`);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuración: ${error.message}`
+      );
     }
+  }
+
+  /**
+   * Mapear fila de base de datos a SiteSetting
+   */
+  private mapRowToSetting(row: any): SiteSetting {
+    return {
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      category: row.category,
+      label: row.label,
+      description: row.description,
+      help_text: row.help_text,
+      value_type: row.value_type,
+      validation: row.validation,
+      is_active: row.is_active,
+      display_order: row.display_order,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   }
 
   /**

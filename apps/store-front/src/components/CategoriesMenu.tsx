@@ -4,10 +4,19 @@
  * Estilo similar a AliExpress - diseño ancho con panel lateral y contenido expandido
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useStoreContext } from '@/contexts/StoreContext';
-import { categoriesService, ProductCategory } from '@/lib/categories';
+import { ProductCategory } from '@/lib/categories';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { store } from '@/store';
+import {
+  selectRootCategories,
+  selectSubcategories,
+  selectCategoriesLoading,
+  selectCategoriesInitialized,
+  fetchSubcategories,
+} from '@/store/slices/categoriesSlice';
 import ContextualLink from './ContextualLink';
 import CategoryIcon from '@mui/icons-material/Category';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -26,17 +35,29 @@ interface CategoryWithChildren extends ProductCategory {
 export default function CategoriesMenu({ className = '', onCategoryClick }: CategoriesMenuProps) {
   const router = useRouter();
   const { contextType, getContextualUrl } = useStoreContext();
-  const [rootCategories, setRootCategories] = useState<CategoryWithChildren[]>([]);
+  const dispatch = useAppDispatch();
+  
+  // Obtener categorías desde Redux
+  const rootCategoriesFromRedux = useAppSelector(selectRootCategories);
+  const categoriesLoading = useAppSelector(selectCategoriesLoading);
+  const categoriesInitialized = useAppSelector(selectCategoriesInitialized);
+  
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
-  const [subcategories, setSubcategories] = useState<ProductCategory[]>([]);
   const [subSubcategories, setSubSubcategories] = useState<Record<string, ProductCategory[]>>({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadingSubSubcategories, setLoadingSubSubcategories] = useState<Record<string, boolean>>({});
 
-  // Cargar categorías raíz al montar el componente
-  useEffect(() => {
-    loadRootCategories();
-  }, []);
+  // Convertir categorías de Redux al formato con children
+  const rootCategories: CategoryWithChildren[] = useMemo(() => 
+    rootCategoriesFromRedux.map(cat => ({
+      ...cat,
+      children: [],
+    })), [rootCategoriesFromRedux]
+  );
+
+  // Obtener subcategorías desde Redux
+  const subcategories = useAppSelector((state) => 
+    selectedCategory ? selectSubcategories(state, selectedCategory.id) : []
+  );
 
   // Seleccionar automáticamente la primera categoría cuando se cargan las categorías raíz
   useEffect(() => {
@@ -44,74 +65,57 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
       // Seleccionar la primera categoría automáticamente
       setSelectedCategory(rootCategories[0]);
     }
-  }, [rootCategories]);
-
-  const loadRootCategories = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await categoriesService.getRootCategories({
-        isActive: true,
-        globalOnly: true,
-        limit: 100,
-      });
-      
-      // Organizar categorías con sus hijos
-      const categoriesWithChildren = response.data.map(cat => ({
-        ...cat,
-        children: [],
-      }));
-      
-      setRootCategories(categoriesWithChildren);
-    } catch (err: any) {
-      console.error('Error cargando categorías raíz:', err);
-      setError('Error al cargar las categorías');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [rootCategories.length, selectedCategory]);
 
   // Cargar subcategorías cuando se selecciona una categoría
   useEffect(() => {
-    if (selectedCategory) {
-      loadSubcategories(selectedCategory.id);
+    if (selectedCategory && categoriesInitialized) {
+      // Verificar si ya tenemos las subcategorías en Redux
+      const state = store.getState();
+      const currentSubcategories = selectSubcategories(state, selectedCategory.id);
+      
+      if (currentSubcategories.length === 0) {
+        dispatch(fetchSubcategories(selectedCategory.id));
+      }
     } else {
-      setSubcategories([]);
       setSubSubcategories({});
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, categoriesInitialized, dispatch]);
 
-  const loadSubcategories = async (parentId: string) => {
-    try {
-      setLoading(true);
-      const response = await categoriesService.getSubcategories(parentId, {
-        isActive: true,
-        globalOnly: true,
-        limit: 100,
-      });
-      
-      setSubcategories(response.data);
-      
-      // Cargar sub-subcategorías para cada subcategoría
-      const subSubcats: Record<string, ProductCategory[]> = {};
-      for (const subcat of response.data) {
-        const subSubResponse = await categoriesService.getSubcategories(subcat.id, {
-          isActive: true,
-          globalOnly: true,
-          limit: 100,
-        });
-        if (subSubResponse.data.length > 0) {
-          subSubcats[subcat.id] = subSubResponse.data;
+  // Cargar sub-subcategorías cuando cambian las subcategorías
+  useEffect(() => {
+    if (subcategories.length > 0) {
+      const loadSubSubcategories = async () => {
+        const subSubcats: Record<string, ProductCategory[]> = {};
+        
+        for (const subcat of subcategories) {
+          try {
+            // Verificar si ya tenemos las sub-subcategorías en Redux
+            const state = store.getState();
+            const existing = selectSubcategories(state, subcat.id);
+            
+            if (existing.length > 0) {
+              subSubcats[subcat.id] = existing;
+            } else {
+              // Cargar desde Redux (que hará la petición si no están en cache)
+              await dispatch(fetchSubcategories(subcat.id));
+              const updatedState = store.getState();
+              const loaded = selectSubcategories(updatedState, subcat.id);
+              if (loaded.length > 0) {
+                subSubcats[subcat.id] = loaded;
+              }
+            }
+          } catch (err) {
+            console.error('Error cargando sub-subcategorías:', err);
+          }
         }
-      }
-      setSubSubcategories(subSubcats);
-    } catch (err: any) {
-      console.error('Error cargando subcategorías:', err);
-      setError('Error al cargar las subcategorías');
-    } finally {
-      setLoading(false);
+        
+        setSubSubcategories(subSubcats);
+      };
+      
+      loadSubSubcategories();
     }
-  };
+  }, [subcategories, dispatch]);
 
   const handleCategoryHover = (category: ProductCategory) => {
     setSelectedCategory(category);
@@ -122,36 +126,57 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
   };
 
   const handleCategoryClick = (category: ProductCategory) => {
+    // Construir la URL completa con query params usando getContextualUrl
     const url = getContextualUrl(`/products?categoryId=${category.id}`);
-    router.push(url);
+    
+    // Parsear la URL para separar pathname y query
+    const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const pathname = urlObj.pathname;
+    const queryParams: Record<string, string> = {};
+    urlObj.searchParams.forEach((value, key) => {
+      queryParams[key] = value;
+    });
+    
+    // Usar router.push con pathname y query explícitos para asegurar que se actualicen correctamente
+    router.push({
+      pathname,
+      query: queryParams,
+    }, undefined, { shallow: false });
+    
     if (onCategoryClick) {
       onCategoryClick();
     }
   };
 
   const handleSubcategoryClick = (category: ProductCategory) => {
+    // Construir la URL completa con query params usando getContextualUrl
     const url = getContextualUrl(`/products?categoryId=${category.id}`);
-    router.push(url);
+    
+    // Parsear la URL para separar pathname y query
+    const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const pathname = urlObj.pathname;
+    const queryParams: Record<string, string> = {};
+    urlObj.searchParams.forEach((value, key) => {
+      queryParams[key] = value;
+    });
+    
+    // Usar router.push con pathname y query explícitos para asegurar que se actualicen correctamente
+    router.push({
+      pathname,
+      query: queryParams,
+    }, undefined, { shallow: false });
+    
     if (onCategoryClick) {
       onCategoryClick();
     }
   };
 
-  if (loading && rootCategories.length === 0) {
+  // Mostrar loading solo si no hay categorías y están cargando
+  if (categoriesLoading && rootCategories.length === 0) {
     return (
       <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
         <div className="p-4">
           <p className="text-gray-500 text-center">Cargando categorías...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && rootCategories.length === 0) {
-    return (
-      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
-        <div className="p-4">
-          <p className="text-red-600 text-center">{error}</p>
         </div>
       </div>
     );
@@ -181,13 +206,9 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
         
         {/* Lista de categorías */}
         <nav className="py-1">
-          {loading && rootCategories.length === 0 ? (
+          {categoriesLoading && rootCategories.length === 0 ? (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-gray-500">Cargando categorías...</p>
-            </div>
-          ) : error && rootCategories.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm text-red-600">{error}</p>
             </div>
           ) : (
             rootCategories.map((category) => {
@@ -259,7 +280,7 @@ export default function CategoriesMenu({ className = '', onCategoryClick }: Cate
             )}
           </div>
 
-          {loading && subcategories.length === 0 ? (
+          {subcategories.length === 0 && selectedCategory ? (
             <div className="text-center py-8">
               <p className="text-gray-500">Cargando subcategorías...</p>
             </div>

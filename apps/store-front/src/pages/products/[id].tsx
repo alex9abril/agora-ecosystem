@@ -21,7 +21,12 @@ import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { formatPrice } from '@/lib/format';
 import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
+import { getSelectedVehicle } from '@/lib/vehicle-storage';
+import { checkProductCompatibility } from '@/lib/product-compatibility';
+import VehicleSelectorDialog from '@/components/VehicleSelectorDialog';
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -45,6 +50,10 @@ export default function ProductDetailPage() {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  const [currentVehicle, setCurrentVehicle] = useState<any | null>(null);
+  const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
+  const [checkingCompatibility, setCheckingCompatibility] = useState(false);
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -60,6 +69,114 @@ export default function ProductDetailPage() {
       }
     }
   }, []);
+
+  // Cargar vehículo actual y verificar compatibilidad
+  useEffect(() => {
+    const loadVehicleAndCheckCompatibility = async () => {
+      if (typeof window === 'undefined' || !product) {
+        setCurrentVehicle(null);
+        setIsCompatible(null);
+        return;
+      }
+
+      // Solo verificar compatibilidad para productos de tipo refacción o accesorio
+      if (product.product_type !== 'refaccion' && product.product_type !== 'accesorio') {
+        setCurrentVehicle(null);
+        setIsCompatible(null);
+        return;
+      }
+
+      // Obtener vehículo seleccionado
+      const vehicle = getSelectedVehicle();
+      setCurrentVehicle(vehicle);
+
+      if (!vehicle || !vehicle.vehicle_brand_id) {
+        // No hay vehículo seleccionado
+        setIsCompatible(null);
+        return;
+      }
+
+      // Verificar compatibilidad
+      if (product && product.id) {
+        try {
+          setCheckingCompatibility(true);
+          const compatible = await checkProductCompatibility(product.id, {
+            brandId: vehicle.vehicle_brand_id,
+            modelId: vehicle.vehicle_model_id || undefined,
+            yearId: vehicle.vehicle_year_id || undefined,
+            specId: vehicle.vehicle_spec_id || undefined,
+          });
+          setIsCompatible(compatible);
+        } catch (error) {
+          console.error('Error verificando compatibilidad:', error);
+          setIsCompatible(null);
+        } finally {
+          setCheckingCompatibility(false);
+        }
+      }
+    };
+
+    loadVehicleAndCheckCompatibility();
+  }, [product]);
+
+  // Escuchar cambios en el vehículo seleccionado
+  useEffect(() => {
+    if (!product || (product.product_type !== 'refaccion' && product.product_type !== 'accesorio')) {
+      return;
+    }
+
+    const checkCompatibility = async (vehicle: any) => {
+      setCurrentVehicle(vehicle);
+      
+      if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
+        // Verificar compatibilidad
+        try {
+          setCheckingCompatibility(true);
+          const compatible = await checkProductCompatibility(product.id, {
+            brandId: vehicle.vehicle_brand_id,
+            modelId: vehicle.vehicle_model_id || undefined,
+            yearId: vehicle.vehicle_year_id || undefined,
+            specId: vehicle.vehicle_spec_id || undefined,
+          });
+          setIsCompatible(compatible);
+        } catch (error) {
+          console.error('Error verificando compatibilidad:', error);
+          setIsCompatible(null);
+        } finally {
+          setCheckingCompatibility(false);
+        }
+      } else {
+        setIsCompatible(null);
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user_vehicle_selected') {
+        const vehicle = getSelectedVehicle();
+        checkCompatibility(vehicle);
+      }
+    };
+
+    // Escuchar eventos de storage (cambios en otras pestañas)
+    window.addEventListener('storage', handleStorageChange);
+    
+    // También escuchar eventos personalizados (cambios en la misma ventana)
+    const handleVehicleChanged = () => {
+      const vehicle = getSelectedVehicle();
+      checkCompatibility(vehicle);
+    };
+    
+    window.addEventListener('vehicle-selected', handleVehicleChanged);
+    
+    // Verificar cuando se carga la página
+    const vehicle = getSelectedVehicle();
+    checkCompatibility(vehicle);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('vehicle-selected', handleVehicleChanged);
+    };
+  }, [product]);
 
   // Cuando se carga la sucursal guardada, si hay disponibilidades ya cargadas, seleccionarla automáticamente
   useEffect(() => {
@@ -547,6 +664,24 @@ export default function ProductDetailPage() {
     ? (product.branch_is_enabled !== false && product.is_available)
     : product.is_available;
 
+  // Función para obtener la descripción completa del vehículo
+  const getVehicleDescription = (vehicle: any): string => {
+    if (!vehicle) return 'tu vehículo';
+    
+    const parts: string[] = [];
+    if (vehicle.brand_name) parts.push(vehicle.brand_name);
+    if (vehicle.model_name) parts.push(vehicle.model_name);
+    if (vehicle.year_start) {
+      if (vehicle.year_end && vehicle.year_end !== vehicle.year_start) {
+        parts.push(`${vehicle.year_start}-${vehicle.year_end}`);
+      } else {
+        parts.push(`${vehicle.year_start}`);
+      }
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : 'tu vehículo';
+  };
+
   return (
     <>
       <Head>
@@ -558,11 +693,76 @@ export default function ProductDetailPage() {
           {/* Botón de regresar */}
           <button
             onClick={() => router.back()}
-            className="mb-6 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
             <ArrowBackIcon className="w-5 h-5" />
             <span className="text-sm font-medium">Volver</span>
           </button>
+
+          {/* Leyenda de compatibilidad con vehículo - Solo para refacciones y accesorios */}
+          {product && (product.product_type === 'refaccion' || product.product_type === 'accesorio') && (
+            <>
+              {!currentVehicle ? (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
+              <InfoIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-900 font-medium mb-1">
+                  Verifica la compatibilidad
+                </p>
+                <p className="text-sm text-blue-700">
+                  Para verificar si este producto es compatible con tu vehículo,{' '}
+                  <button
+                    onClick={() => setShowVehicleSelector(true)}
+                    className="text-blue-600 hover:text-blue-800 underline font-medium"
+                  >
+                    selecciona un vehículo
+                  </button>
+                  .
+                </p>
+              </div>
+            </div>
+          ) : checkingCompatibility ? (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+              <p className="text-sm text-gray-700">
+                Verificando compatibilidad con {getVehicleDescription(currentVehicle)}...
+              </p>
+            </div>
+          ) : isCompatible === true ? (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+              <CheckCircleIcon className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-green-900 font-medium mb-1">
+                  ✓ Compatible con tu vehículo
+                </p>
+                <p className="text-sm text-green-700">
+                  Este producto es compatible con{' '}
+                  <span className="font-semibold">
+                    {getVehicleDescription(currentVehicle)}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+          ) : isCompatible === false ? (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
+              <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-yellow-900 font-medium mb-1">
+                  ⚠ No compatible con tu vehículo
+                </p>
+                <p className="text-sm text-yellow-700">
+                  Este producto no es compatible con{' '}
+                  <span className="font-semibold">
+                    {getVehicleDescription(currentVehicle)}
+                  </span>
+                  . Verifica las especificaciones antes de comprar.
+                </p>
+              </div>
+            </div>
+          ) : null}
+            </>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Galería de imágenes */}
@@ -851,6 +1051,58 @@ export default function ProductDetailPage() {
             {snackbarMessage}
           </Alert>
         </Snackbar>
+
+        {/* Selector de vehículos */}
+        <VehicleSelectorDialog
+          open={showVehicleSelector}
+          onClose={() => {
+            setShowVehicleSelector(false);
+            // Recargar vehículo actual después de cerrar el modal
+            const vehicle = getSelectedVehicle();
+            setCurrentVehicle(vehicle);
+            
+            // Si hay vehículo y producto, verificar compatibilidad
+            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
+              checkProductCompatibility(product.id, {
+                brandId: vehicle.vehicle_brand_id,
+                modelId: vehicle.vehicle_model_id || undefined,
+                yearId: vehicle.vehicle_year_id || undefined,
+                specId: vehicle.vehicle_spec_id || undefined,
+              }).then((compatible) => {
+                setIsCompatible(compatible);
+              }).catch((error) => {
+                console.error('Error verificando compatibilidad:', error);
+                setIsCompatible(null);
+              });
+            } else {
+              setIsCompatible(null);
+            }
+          }}
+          onVehicleSelected={async (vehicle) => {
+            setCurrentVehicle(vehicle);
+            
+            // Si hay vehículo y producto, verificar compatibilidad
+            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
+              try {
+                setCheckingCompatibility(true);
+                const compatible = await checkProductCompatibility(product.id, {
+                  brandId: vehicle.vehicle_brand_id,
+                  modelId: vehicle.vehicle_model_id || undefined,
+                  yearId: vehicle.vehicle_year_id || undefined,
+                  specId: vehicle.vehicle_spec_id || undefined,
+                });
+                setIsCompatible(compatible);
+              } catch (error) {
+                console.error('Error verificando compatibilidad:', error);
+                setIsCompatible(null);
+              } finally {
+                setCheckingCompatibility(false);
+              }
+            } else {
+              setIsCompatible(null);
+            }
+          }}
+        />
       </>
     );
   }

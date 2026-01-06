@@ -141,8 +141,8 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar guía de envío si la orden está en estado in_transit o superior
-      if (orderData.status === 'in_transit' || orderData.status === 'delivered') {
+      // Cargar guía de envío si la orden está en estado completed o superior
+      if (orderData.status === 'completed' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
         try {
           setLoadingShippingLabel(true);
           const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
@@ -848,6 +848,42 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
+              {/* Información de envío seleccionada por el usuario - Detalle por item */}
+              {order.items && order.items.some(item => item.quotation_id || item.shipping_carrier) && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide mb-4">Detalle de Envío por Producto</h2>
+                  <div className="space-y-3">
+                    {order.items
+                      .filter(item => item.quotation_id || item.shipping_carrier)
+                      .map((item, index) => (
+                        <div key={item.id} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                          <div className="text-xs font-medium text-gray-700 mb-2">{item.item_name}</div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                            {item.shipping_carrier && (
+                              <div>
+                                <span className="text-gray-600 block mb-1">Paquetería:</span>
+                                <span className="font-semibold text-gray-900 text-sm">{item.shipping_carrier}</span>
+                              </div>
+                            )}
+                            {item.shipping_service && (
+                              <div>
+                                <span className="text-gray-600 block mb-1">Servicio:</span>
+                                <span className="font-semibold text-gray-900 text-sm">{item.shipping_service}</span>
+                              </div>
+                            )}
+                            {item.quotation_id && (
+                              <div>
+                                <span className="text-gray-600 block mb-1">ID Cotización:</span>
+                                <span className="font-mono text-xs text-gray-700 break-all bg-gray-50 px-2 py-1 rounded">{item.quotation_id}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Guía de envío - Solo mostrar si la orden está en estado completed o superior */}
               {((order as any).status === 'completed' || order.status === 'in_transit' || order.status === 'delivered') && (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -875,11 +911,11 @@ export default function OrderDetailPage() {
                           }
                         }}
                         disabled={downloadingPDF || !shippingLabel}
-                        className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                        className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
                       >
                         {downloadingPDF ? (
                           <>
-                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
@@ -887,8 +923,8 @@ export default function OrderDetailPage() {
                           </>
                         ) : (
                           <>
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                             Descargar PDF
                           </>
@@ -967,25 +1003,58 @@ export default function OrderDetailPage() {
                         onClick={async () => {
                           try {
                             setLoadingShippingLabel(true);
+                            
+                            // Crear la guía de envío (esto llama a Skydropx)
                             const label = await logisticsService.createShippingLabel({
                               orderId: order.id,
                               packageWeight: 1.0,
                               packageDimensions: '30x20x15 cm',
                               declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
                             });
-                            setShippingLabel(label);
-                            alert('Guía de envío generada exitosamente');
+                            
+                            // Recargar la guía para obtener todos los datos actualizados
+                            const updatedLabel = await logisticsService.getShippingLabelByOrderId(order.id);
+                            if (updatedLabel) {
+                              setShippingLabel(updatedLabel);
+                              
+                              // Intentar descargar el PDF automáticamente
+                              try {
+                                setDownloadingPDF(true);
+                                const blob = await logisticsService.downloadShippingLabelPDF(order.id);
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `guia-envio-${updatedLabel.tracking_number || order.id}.pdf`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                                
+                                alert('✅ Guía de envío generada y descargada exitosamente');
+                              } catch (pdfError: any) {
+                                console.warn('⚠️ Guía generada pero no se pudo descargar el PDF:', pdfError);
+                                // La guía se generó correctamente, solo falló la descarga del PDF
+                                alert('✅ Guía de envío generada exitosamente. Puedes descargarla usando el botón de descarga.');
+                              } finally {
+                                setDownloadingPDF(false);
+                              }
+                            } else {
+                              setShippingLabel(label);
+                              alert('✅ Guía de envío generada exitosamente');
+                            }
                           } catch (err: any) {
                             console.error('Error generando guía:', err);
-                            alert('Error al generar la guía: ' + (err.message || 'Error desconocido'));
+                            alert('❌ Error al generar la guía: ' + (err.message || 'Error desconocido'));
                           } finally {
                             setLoadingShippingLabel(false);
                           }
                         }}
-                        disabled={loadingShippingLabel}
+                        disabled={loadingShippingLabel || downloadingPDF}
                         className="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
-                        {loadingShippingLabel ? 'Generando...' : 'Generar Guía de Envío'}
+                        {loadingShippingLabel || downloadingPDF 
+                          ? (downloadingPDF ? 'Descargando...' : 'Generando...') 
+                          : 'Generar Guía de Envío'}
                       </button>
                     </div>
                   )}
@@ -1003,10 +1072,41 @@ export default function OrderDetailPage() {
                       <span className="text-gray-900">{formatCurrency(parseFloat(order.subtotal.toString()))}</span>
                     </div>
                     {parseFloat(order.delivery_fee.toString()) > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Envío</span>
-                        <span className="text-gray-900">{formatCurrency(parseFloat(order.delivery_fee.toString()))}</span>
-                      </div>
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Envío</span>
+                          <span className="text-gray-900">{formatCurrency(parseFloat(order.delivery_fee.toString()))}</span>
+                        </div>
+                        {/* Mostrar método de envío elegido si está disponible */}
+                        {order.items && order.items.some(item => item.shipping_carrier) && (
+                          <div className="pt-2 border-t border-gray-100">
+                            {order.items
+                              .filter(item => item.shipping_carrier)
+                              .map((item, idx) => {
+                                // Agrupar items con el mismo carrier y service
+                                const shippingInfo = `${item.shipping_carrier}${item.shipping_service ? ` - ${item.shipping_service}` : ''}`;
+                                return (
+                                  <div key={item.id} className="text-xs text-gray-600 space-y-1">
+                                    {idx === 0 && (
+                                      <>
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-gray-600">Método de envío:</span>
+                                          <span className="font-medium text-gray-900">{shippingInfo}</span>
+                                        </div>
+                                        {item.quotation_id && (
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-gray-600">ID Cotización:</span>
+                                            <span className="font-mono text-xs text-gray-700 break-all">{item.quotation_id}</span>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+                      </>
                     )}
                     <div className="flex justify-between">
                       <span className="text-gray-600">Impuestos</span>

@@ -253,6 +253,16 @@ export class BusinessesController {
     return this.businessesService.getBranches(query);
   }
 
+  @Get('branches/id/:id')
+  @Public()
+  @ApiOperation({ summary: 'Obtener sucursal por ID (Público)' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Sucursal obtenida exitosamente' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  async getBranchById(@Param('id') id: string) {
+    return this.businessesService.getBranchById(id);
+  }
+
   @Get('branches/:slug')
   @Public()
   @ApiOperation({ summary: 'Obtener sucursal por slug (Público)' })

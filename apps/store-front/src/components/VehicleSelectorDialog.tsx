@@ -53,6 +53,7 @@ interface VehicleSpec {
 }
 
 import { getStoredVehicle, setStoredVehicle, getSelectedVehicle, setSelectedVehicle as setSelectedVehicleStorage } from '@/lib/vehicle-storage';
+import { getUnifiedVehicles, VehicleSource } from '@/lib/vehicle-sync';
 
 export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected }: VehicleSelectorDialogProps) {
   const { isAuthenticated } = useAuth();
@@ -68,6 +69,7 @@ export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected
   
   // Vehículos del usuario
   const [userVehicles, setUserVehicles] = useState<UserVehicle[]>([]);
+  const [unifiedVehicles, setUnifiedVehicles] = useState<VehicleSource[]>([]);
   const [storedVehicleState, setStoredVehicleState] = useState<any | null>(null);
   const [selectedVehicleState, setSelectedVehicleState] = useState<any | null>(null);
   
@@ -77,7 +79,7 @@ export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected
   });
   const [nickname, setNickname] = useState('');
 
-  // Cargar datos al abrir el diálogo
+  // Cargar datos al abrir el diálogo o cuando cambia la autenticación
   useEffect(() => {
     if (open) {
       loadData();
@@ -98,21 +100,46 @@ export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected
         const vehicles = await userVehiclesService.getUserVehicles();
         setUserVehicles(vehicles);
         
+        // Obtener vehículos unificados (cuenta + local, sin duplicar)
+        const unified = getUnifiedVehicles(vehicles, true);
+        setUnifiedVehicles(unified);
+        
         // Verificar si hay un vehículo seleccionado (para usuarios autenticados, el predeterminado está seleccionado)
         const defaultVehicle = vehicles.find(v => v.is_default);
         if (defaultVehicle) {
           setSelectedVehicleState(defaultVehicle);
+        } else if (unified.length > 0) {
+          // Si no hay predeterminado pero hay vehículos unificados, usar el primero
+          setSelectedVehicleState(unified[0].vehicle);
         } else {
           setSelectedVehicleState(null);
         }
       } else {
-        // Si no está autenticado, cargar del localStorage (vehículo guardado, no necesariamente seleccionado)
+        // Para usuarios no autenticados, cargar vehículo de localStorage
         const stored = getStoredVehicle();
-        setStoredVehicleState(stored);
-        
-        // Verificar si hay un vehículo seleccionado (puede ser diferente del guardado)
         const selected = getSelectedVehicle();
-        setSelectedVehicleState(selected);
+        
+        // El vehículo puede estar en stored (permanente) o en selected (temporal)
+        // Usar el seleccionado si existe, sino el guardado
+        const vehicleToUse = selected || stored;
+        
+        console.log('[VehicleSelector] Sin sesión - stored:', stored, 'selected:', selected, 'vehicleToUse:', vehicleToUse);
+        
+        setStoredVehicleState(vehicleToUse);
+        setSelectedVehicleState(vehicleToUse);
+        
+        // Crear lista unificada con el vehículo local (si existe)
+        if (vehicleToUse && vehicleToUse.vehicle_brand_id) {
+          setUnifiedVehicles([{
+            source: 'local',
+            vehicle: vehicleToUse,
+            isDefault: false,
+          }]);
+          console.log('[VehicleSelector] Vehículo local agregado a unifiedVehicles');
+        } else {
+          setUnifiedVehicles([]);
+          console.log('[VehicleSelector] No hay vehículo local disponible');
+        }
       }
     } catch (err: any) {
       console.error('Error cargando datos:', err);
@@ -423,98 +450,93 @@ export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected
                   <div className="text-center py-8 text-gray-500">Cargando...</div>
                 ) : (
                   <>
-                    {/* Vehículos del usuario (si está autenticado) */}
-                    {isAuthenticated && userVehicles.length > 0 && (
+                    {/* Vehículos unificados (cuenta + local) */}
+                    {unifiedVehicles.length > 0 && (
                       <div className="space-y-2">
-                        {userVehicles.map((vehicle) => (
-                          <div
-                            key={vehicle.id}
-                            className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                              vehicle.is_default
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            onClick={() => handleSelectVehicle(vehicle)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                  <DirectionsCarIcon className="w-5 h-5 text-gray-600" />
-                                  <span className="font-semibold text-gray-900 uppercase">
-                                    {getVehicleDisplayName(vehicle)}
-                                  </span>
-                                  {vehicle.is_default && (
-                                    <span className="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
-                                      Predeterminado
+                        {unifiedVehicles.map((vehicleSource) => {
+                          const vehicle = vehicleSource.vehicle;
+                          
+                          // Mejorar la comparación de vehículos seleccionados
+                          let isSelected = false;
+                          if (selectedVehicleState) {
+                            // Si ambos tienen id (vehículos de cuenta)
+                            if ('id' in vehicle && 'id' in selectedVehicleState) {
+                              isSelected = vehicle.id === selectedVehicleState.id;
+                            } 
+                            // Si ambos son vehículos locales (sin id)
+                            else if (!('id' in vehicle) && !('id' in selectedVehicleState)) {
+                              // Comparar por brand_id, model_id, year_id y spec_id
+                              isSelected = 
+                                vehicle.vehicle_brand_id === selectedVehicleState.vehicle_brand_id &&
+                                (vehicle.vehicle_model_id || null) === (selectedVehicleState.vehicle_model_id || null) &&
+                                (vehicle.vehicle_year_id || null) === (selectedVehicleState.vehicle_year_id || null) &&
+                                (vehicle.vehicle_spec_id || null) === (selectedVehicleState.vehicle_spec_id || null);
+                            }
+                          }
+                          
+                          const isDefault = vehicleSource.isDefault || 
+                            ('is_default' in vehicle && vehicle.is_default);
+                          
+                          return (
+                            <div
+                              key={'id' in vehicle ? vehicle.id : `local-${vehicle.vehicle_brand_id}`}
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300 bg-white'
+                              }`}
+                              onClick={() => handleSelectVehicle(vehicle)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <DirectionsCarIcon className="w-5 h-5 text-gray-600" />
+                                    <span className="font-semibold text-gray-900 uppercase">
+                                      {getVehicleDisplayName(vehicle)}
                                     </span>
+                                    {isDefault && (
+                                      <span className="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
+                                        Predeterminado
+                                      </span>
+                                    )}
+                                    {vehicleSource.source === 'local' && (
+                                      <span className="px-2 py-1 bg-gray-500 text-white text-xs font-medium rounded">
+                                        Local
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-sm text-gray-600">
+                                    {vehicle.brand_name}
+                                    {vehicle.model_name && ` ${vehicle.model_name}`}
+                                    {vehicle.year_start && ` ${vehicle.year_start}`}
+                                    {vehicle.year_end && `-${vehicle.year_end}`}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isSelected && (
+                                    <CheckCircleIcon className="w-5 h-5 text-blue-600" />
+                                  )}
+                                  {isAuthenticated && vehicleSource.source === 'account' && 'id' in vehicle && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteVehicle(vehicle.id);
+                                      }}
+                                      className="p-2 text-red-500 hover:text-red-700 transition-colors"
+                                    >
+                                      <DeleteIcon className="w-5 h-5" />
+                                    </button>
                                   )}
                                 </div>
-                                <div className="mt-1 text-sm text-gray-600">
-                                  {vehicle.brand_name}
-                                  {vehicle.model_name && ` ${vehicle.model_name}`}
-                                  {vehicle.year_start && ` ${vehicle.year_start}`}
-                                  {vehicle.year_end && `-${vehicle.year_end}`}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {vehicle.is_default && (
-                                  <CheckCircleIcon className="w-5 h-5 text-blue-600" />
-                                )}
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteVehicle(vehicle.id);
-                                  }}
-                                  className="p-2 text-red-500 hover:text-red-700 transition-colors"
-                                >
-                                  <DeleteIcon className="w-5 h-5" />
-                                </button>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Vehículo de localStorage (si no está autenticado) */}
-                    {!isAuthenticated && storedVehicleState && (
-                      <div 
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                          selectedVehicleState 
-                            ? 'border-blue-500 bg-blue-50' 
-                            : 'border-gray-200 hover:border-gray-300 bg-white'
-                        }`}
-                        onClick={() => handleSelectVehicle(storedVehicleState)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <DirectionsCarIcon className="w-5 h-5 text-gray-600" />
-                              <span className="font-semibold text-gray-900 uppercase">
-                                {getVehicleDisplayName(storedVehicleState)}
-                              </span>
-                              {selectedVehicleState && (
-                                <span className="px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded">
-                                  Vehículo Actual
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 text-sm text-gray-600">
-                              {storedVehicleState.brand_name}
-                              {storedVehicleState.model_name && ` ${storedVehicleState.model_name}`}
-                              {storedVehicleState.year_start && ` ${storedVehicleState.year_start}`}
-                              {storedVehicleState.year_end && `-${storedVehicleState.year_end}`}
-                            </div>
-                          </div>
-                          {selectedVehicleState && (
-                            <CheckCircleIcon className="w-5 h-5 text-blue-600" />
-                          )}
-                        </div>
+                          );
+                        })}
                       </div>
                     )}
 
                     {/* Mensaje si no hay vehículos */}
-                    {isAuthenticated && userVehicles.length === 0 && !storedVehicleState && (
+                    {unifiedVehicles.length === 0 && (
                       <div className="text-center py-8 text-gray-500">
                         <DirectionsCarIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                         <p>No tienes vehículos agregados</p>
@@ -523,7 +545,7 @@ export default function VehicleSelectorDialog({ open, onClose, onVehicleSelected
                     )}
 
                     {/* Opción para comprar sin auto - Solo si hay vehículos */}
-                    {(isAuthenticated && userVehicles.length > 0) || storedVehicleState ? (
+                    {unifiedVehicles.length > 0 ? (
                       <button
                         onClick={handleRemoveVehicle}
                         className="w-full p-4 border-2 border-gray-300 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"

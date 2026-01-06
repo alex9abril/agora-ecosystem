@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 const PDFDocument = require('pdfkit');
 import { CreateShippingLabelDto } from './dto/create-shipping-label.dto';
+import { SkydropxService } from './skydropx/skydropx.service';
 
 export interface ShippingLabel {
   id: string;
@@ -26,6 +27,7 @@ export interface ShippingLabel {
   declared_value?: number;
   pdf_url?: string;
   pdf_path?: string;
+  metadata?: any; // JSONB metadata de Skydropx
   generated_at: Date;
   picked_up_at?: Date;
   in_transit_at?: Date;
@@ -41,7 +43,9 @@ export class LogisticsService {
   private readonly PDF_STORAGE_DIR = path.join(process.cwd(), 'storage', 'shipping-labels');
   private statusUpdateIntervals: Map<string, NodeJS.Timeout> = new Map();
 
-  constructor() {
+  constructor(
+    private readonly skydropxService: SkydropxService
+  ) {
     // Crear directorio de almacenamiento si no existe
     if (!fs.existsSync(this.PDF_STORAGE_DIR)) {
       fs.mkdirSync(this.PDF_STORAGE_DIR, { recursive: true });
@@ -368,32 +372,58 @@ export class LogisticsService {
     try {
       await client.query('BEGIN');
 
-      // 1. Obtener información de la orden
+      // 1. Obtener información completa de la orden
       const orderResult = await client.query(
         `SELECT 
           o.id,
           o.status,
+          o.delivery_address_id,
           o.delivery_address_text,
           o.total_amount,
+          o.subtotal,
           o.client_id,
           o.business_id,
           b.name as business_name,
+          b.email as business_email,
+          b.phone as business_phone,
+          -- Dirección del negocio (origen)
+          ba.street as business_street,
+          ba.street_number as business_street_number,
+          ba.interior_number as business_interior_number,
+          ba.neighborhood as business_neighborhood,
+          ba.city as business_city,
+          ba.state as business_state,
+          ba.postal_code as business_postal_code,
+          ba.country as business_country,
           COALESCE(
             CONCAT_WS(', ',
-              NULLIF(TRIM(CONCAT_WS(' ', a.street, a.street_number)), ''),
-              NULLIF(a.neighborhood, ''),
-              NULLIF(a.city, ''),
-              NULLIF(a.state, ''),
-              NULLIF(a.postal_code, '')
+              NULLIF(TRIM(CONCAT_WS(' ', ba.street, ba.street_number)), ''),
+              NULLIF(ba.neighborhood, ''),
+              NULLIF(ba.city, ''),
+              NULLIF(ba.state, ''),
+              NULLIF(ba.postal_code, '')
             ),
             'Dirección del negocio'
           ) as business_address,
+          -- Dirección del cliente (destino)
+          da.street as delivery_street,
+          da.street_number as delivery_street_number,
+          da.interior_number as delivery_interior_number,
+          da.neighborhood as delivery_neighborhood,
+          da.city as delivery_city,
+          da.state as delivery_state,
+          da.postal_code as delivery_postal_code,
+          da.country as delivery_country,
+          da.additional_references as delivery_references,
           up.first_name || ' ' || COALESCE(up.last_name, '') as client_name,
-          up.phone as client_phone
+          up.phone as client_phone,
+          au.email as client_email
         FROM orders.orders o
         INNER JOIN core.businesses b ON o.business_id = b.id
-        LEFT JOIN core.addresses a ON b.address_id = a.id
+        LEFT JOIN core.addresses ba ON b.address_id = ba.id
+        LEFT JOIN core.addresses da ON o.delivery_address_id = da.id
         INNER JOIN core.user_profiles up ON o.client_id = up.id
+        LEFT JOIN auth.users au ON up.id = au.id
         WHERE o.id = $1`,
         [createDto.orderId]
       );
@@ -424,14 +454,296 @@ export class LogisticsService {
         return existingLabelResult.rows[0];
       }
 
-      // 2. Generar número de guía
-      const trackingNumber = this.generateTrackingNumber();
+      // 2. Buscar rate_id, quotation_id y información de envío en los order_items
+      const itemsResult = await client.query(
+        `SELECT 
+          oi.id,
+          oi.product_id,
+          oi.item_name,
+          oi.item_price,
+          oi.quantity,
+          oi.item_subtotal,
+          oi.quotation_id,
+          oi.rate_id,
+          oi.shipping_carrier,
+          oi.shipping_service,
+          p.sku,
+          p.description
+        FROM orders.order_items oi
+        LEFT JOIN catalog.products p ON oi.product_id = p.id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_at ASC`,
+        [createDto.orderId]
+      );
 
-      // 3. Preparar datos de la guía
+      if (itemsResult.rows.length === 0) {
+        throw new NotFoundException(`La orden ${createDto.orderId} no tiene items`);
+      }
+
+      const hasRateId = itemsResult.rows.some(row => row.rate_id);
+      const rateId = hasRateId ? itemsResult.rows.find(row => row.rate_id)?.rate_id : null;
+      const quotationId = itemsResult.rows[0]?.quotation_id || null;
+      const shippingCarrier = itemsResult.rows[0]?.shipping_carrier || null;
+      const shippingService = itemsResult.rows[0]?.shipping_service || null;
+
+      this.logger.log(`📋 Información de envío encontrada:`, {
+        orderId: createDto.orderId,
+        hasRateId,
+        rateId,
+        quotationId,
+        shippingCarrier,
+        shippingService,
+        itemsCount: itemsResult.rows.length,
+      });
+
+      let trackingNumber: string;
+      let carrierName: string;
+      let labelUrl: string | null = null;
+      let pdfPath: string | null = null;
+      let shipmentMetadata: any = null;
+
+      // 3. Si hay rate_id, usar Skydropx para crear el envío
+      if (rateId) {
+        try {
+          this.logger.log(`🚚 Creando envío en Skydropx con rate_id: ${rateId}`);
+          
+          // Construir dirección de origen (negocio)
+          const addressFrom: any = {
+            country_code: order.business_country === 'México' ? 'MX' : (order.business_country || 'MX'),
+            postal_code: order.business_postal_code || '',
+            area_level1: order.business_state || '',
+            area_level2: order.business_city || '',
+            area_level3: order.business_neighborhood || '',
+            street1: `${order.business_street || ''} ${order.business_street_number || ''}`.trim() || '',
+            internal_number: order.business_interior_number || '',
+            reference: order.business_neighborhood || order.business_city || 'Sin referencia', // Valor por defecto si está vacío
+            name: order.business_name || '',
+            company: order.business_name || '',
+            phone: order.business_phone || '5550000000', // Valor por defecto si está vacío
+            email: order.business_email || '',
+          };
+
+          // Construir dirección de destino (cliente)
+          const addressTo: any = {
+            country_code: order.delivery_country === 'México' ? 'MX' : (order.delivery_country || 'MX'),
+            postal_code: order.delivery_postal_code || '',
+            area_level1: order.delivery_state || '',
+            area_level2: order.delivery_city || '',
+            area_level3: order.delivery_neighborhood || '',
+            street1: `${order.delivery_street || ''} ${order.delivery_street_number || ''}`.trim() || '',
+            internal_number: order.delivery_interior_number || '',
+            reference: (order.delivery_references || order.delivery_neighborhood || order.delivery_city || 'Sin referencia').substring(0, 30), // Máximo 30 caracteres, con valor por defecto
+            name: order.client_name || '',
+            company: '',
+            phone: order.client_phone || '5550000000', // Valor por defecto si está vacío
+            email: order.client_email || '',
+          };
+
+          // Construir productos para el paquete
+          const products = itemsResult.rows.map((item: any) => {
+            // Formatear HS code a 10 dígitos (padding con ceros)
+            // Nota: hs_code no existe en catalog.products, usar fallback
+            const rawHsCode = '0000000000'; // Fallback: código HS genérico
+            const hsCode = String(rawHsCode).padStart(10, '0').slice(0, 10);
+            
+            return {
+              name: item.item_name || 'Producto',
+              description_en: item.description || item.item_name || 'Product',
+              quantity: parseInt(item.quantity) || 1,
+              price: parseFloat(item.item_price) || 0,
+              sku: item.sku || `PROD-${item.product_id?.slice(0, 8) || 'UNKNOWN'}`,
+              hs_code: hsCode,
+              hs_code_description: item.item_name || 'Producto',
+              product_type_code: 'P',
+              product_type_name: 'Producto',
+              country_code: 'MX',
+            };
+          });
+
+          // Calcular valor declarado (suma de precios × cantidad)
+          const declaredValue = itemsResult.rows.reduce((sum: number, item: any) => {
+            return sum + (parseFloat(item.item_price || 0) * parseInt(item.quantity || 1));
+          }, 0);
+
+          // Construir paquete único
+          const packages = [{
+            package_number: '1',
+            package_protected: false,
+            declared_value: declaredValue,
+            consignment_note: '53102400', // Código aduanal por defecto
+            package_type: '4G', // Tipo de paquete por defecto
+            products: products,
+          }];
+
+          // Crear shipment en Skydropx
+          const skydropxShipment = await this.skydropxService.createShipment({
+            rate_id: rateId,
+            printing_format: 'thermal',
+            address_from: addressFrom,
+            address_to: addressTo,
+            packages: packages,
+          });
+
+          // Priorizar el tracking_number de Skydropx, solo usar el generado si no está disponible
+          if (skydropxShipment.tracking_number && !skydropxShipment.tracking_number.startsWith('AGO-')) {
+            trackingNumber = skydropxShipment.tracking_number;
+            this.logger.log(`✅ Tracking number de Skydropx: ${trackingNumber}`);
+          } else {
+            // Si no hay tracking_number válido, intentar extraerlo del metadata antes de generar uno local
+            if (skydropxShipment.metadata) {
+              try {
+                const metadata = skydropxShipment.metadata;
+                const fullResponse = metadata.full_response || metadata;
+                const data = fullResponse?.data || fullResponse;
+                const attributes = data?.attributes || data;
+                const included = fullResponse?.included || [];
+                
+                // Buscar tracking_number en las ubicaciones correctas según la estructura de Skydropx
+                // 1. master_tracking_number en attributes (ubicación principal)
+                // 2. tracking_number en included[0].attributes (fallback)
+                const extractedTracking = 
+                  attributes?.master_tracking_number ||
+                  (included.length > 0 && included[0]?.attributes?.tracking_number) ||
+                  attributes?.tracking_number || 
+                  data?.tracking_number || 
+                  metadata?.tracking_number;
+                
+                if (extractedTracking && !extractedTracking.startsWith('AGO-') && extractedTracking.length >= 10) {
+                  trackingNumber = extractedTracking;
+                  this.logger.log(`✅ Tracking number extraído del metadata inmediatamente: ${trackingNumber}`);
+                } else {
+                  trackingNumber = this.generateTrackingNumber();
+                  this.logger.warn(`⚠️ No se obtuvo tracking_number válido de Skydropx, usando generado local: ${trackingNumber}`);
+                }
+              } catch (metaError: any) {
+                trackingNumber = this.generateTrackingNumber();
+                this.logger.warn(`⚠️ Error extrayendo tracking_number del metadata, usando generado local: ${trackingNumber}`);
+              }
+            } else {
+              trackingNumber = this.generateTrackingNumber();
+              this.logger.warn(`⚠️ No se obtuvo tracking_number de Skydropx y no hay metadata, usando generado local: ${trackingNumber}`);
+            }
+          }
+          
+          carrierName = shippingCarrier || skydropxShipment.carrier || 'SKYDROPX';
+          
+          // PRIORIDAD 1: Intentar obtener label_url directamente de skydropxShipment
+          labelUrl = skydropxShipment.label_url || null;
+          
+          // PRIORIDAD 2: Si no está disponible directamente, extraer del metadata
+          // El label_url está en metadata.full_response.included[0].attributes.label_url
+          if (!labelUrl && skydropxShipment.metadata) {
+            try {
+              const metadata = skydropxShipment.metadata;
+              const fullResponse = metadata.full_response || metadata;
+              const included = fullResponse?.included || [];
+              
+              this.logger.log(`🔍 Buscando label_url en metadata, included.length: ${included.length}`);
+              
+              // Buscar label_url en included[0].attributes.label_url (ubicación principal según estructura de Skydropx)
+              if (included.length > 0 && included[0]?.attributes?.label_url) {
+                labelUrl = included[0].attributes.label_url;
+                this.logger.log(`✅ Label URL extraído del metadata: ${labelUrl}`);
+              } else {
+                this.logger.warn(`⚠️ No se encontró label_url en included[0].attributes.label_url`);
+                if (included.length > 0) {
+                  this.logger.log(`🔍 included[0].attributes keys: ${Object.keys(included[0]?.attributes || {}).join(', ')}`);
+                }
+              }
+            } catch (urlError: any) {
+              this.logger.error(`❌ Error extrayendo label_url del metadata: ${urlError.message}`);
+            }
+          }
+
+          this.logger.log(`✅ Envío creado en Skydropx: ${trackingNumber} (carrier: ${carrierName})`);
+          this.logger.log(`📄 Label URL FINAL: ${labelUrl || 'NO DISPONIBLE'}`);
+
+          // Si hay label_url, descargar el PDF de Skydropx y guardarlo localmente
+          // IMPORTANTE: Siempre usar el PDF de Skydropx, no generar uno local
+          if (labelUrl) {
+            try {
+              const axios = require('axios');
+              this.logger.log(`📄 Descargando PDF desde Skydropx: ${labelUrl}`);
+              const pdfResponse = await axios.get(labelUrl, { 
+                responseType: 'arraybuffer',
+                timeout: 30000,
+              });
+              const fileName = `shipping-label-${trackingNumber}.pdf`;
+              pdfPath = path.join(this.PDF_STORAGE_DIR, fileName);
+              fs.writeFileSync(pdfPath, pdfResponse.data);
+              this.logger.log(`✅ PDF de Skydropx descargado y guardado: ${pdfPath}`);
+            } catch (pdfError: any) {
+              this.logger.error(`❌ No se pudo descargar el PDF de Skydropx: ${pdfError.message}`);
+              // NO generar PDF local si falla Skydropx - dejar pdfPath como null
+              // El método getShippingLabelPDF intentará descargarlo nuevamente cuando se solicite
+            }
+          }
+
+          // Guardar metadata en shipping_labels
+          shipmentMetadata = {
+            skydropx_shipment_id: skydropxShipment.id,
+            workflow_status: skydropxShipment.workflow_status,
+            carrier: skydropxShipment.carrier,
+            service: skydropxShipment.service,
+            full_response: skydropxShipment.metadata,
+          };
+          
+          // El labelUrl ya debería estar extraído arriba, pero verificamos una vez más
+          if (!labelUrl) {
+            this.logger.error(`❌ CRÍTICO: labelUrl es null después de intentar extraerlo. Esto no debería pasar si hay metadata.`);
+          }
+          
+          // Si no tenemos tracking_number pero hay metadata, intentar extraerlo
+          if (!trackingNumber || trackingNumber.startsWith('AGO-')) {
+            if (skydropxShipment.metadata) {
+              try {
+                const metadata = skydropxShipment.metadata;
+                const fullResponse = metadata.full_response || metadata;
+                const data = fullResponse?.data || fullResponse;
+                const attributes = data?.attributes || data;
+                const included = fullResponse?.included || [];
+                
+                // Buscar tracking_number en las ubicaciones correctas según la estructura de Skydropx
+                // 1. master_tracking_number en attributes (ubicación principal)
+                // 2. tracking_number en included[0].attributes (fallback)
+                const extractedTracking = 
+                  attributes?.master_tracking_number ||
+                  (included.length > 0 && included[0]?.attributes?.tracking_number) ||
+                  attributes?.tracking_number || 
+                  data?.tracking_number || 
+                  metadata?.tracking_number;
+                
+                if (extractedTracking && !extractedTracking.startsWith('AGO-') && extractedTracking.length >= 10) {
+                  trackingNumber = extractedTracking;
+                  this.logger.log(`✅ Tracking number extraído del metadata: ${trackingNumber}`);
+                } else {
+                  this.logger.debug(`🔍 Tracking number encontrado en metadata pero no válido: ${extractedTracking}`);
+                }
+              } catch (metaError: any) {
+                this.logger.warn(`⚠️ No se pudo extraer tracking_number del metadata: ${metaError.message}`);
+              }
+            }
+          }
+          
+        } catch (skydropxError: any) {
+          this.logger.error(`❌ Error creando envío en Skydropx: ${skydropxError.message}`);
+          // Si falla Skydropx, usar método simulado como fallback
+          this.logger.log(`🔄 Usando método simulado como fallback`);
+          trackingNumber = this.generateTrackingNumber();
+          carrierName = shippingCarrier || this.CARRIER_NAME;
+        }
+      } else {
+        // 4. Si no hay quotation_id, usar método simulado
+        this.logger.log(`📦 Usando método simulado (sin quotation_id)`);
+        trackingNumber = this.generateTrackingNumber();
+        carrierName = this.CARRIER_NAME;
+      }
+
+      // 5. Preparar datos de la guía (usar el trackingNumber que se obtuvo de Skydropx o el generado)
       const shippingLabelData = {
         order_id: createDto.orderId,
-        tracking_number: trackingNumber,
-        carrier_name: this.CARRIER_NAME,
+        tracking_number: trackingNumber, // Este ya tiene el valor correcto (Skydropx o generado)
+        carrier_name: carrierName,
         status: 'generated',
         origin_address: order.business_address || 'Dirección del negocio',
         destination_address: order.delivery_address_text || 'Dirección de entrega',
@@ -440,16 +752,29 @@ export class LogisticsService {
         package_weight: createDto.packageWeight || 1.0,
         package_dimensions: createDto.packageDimensions || '30x20x15 cm',
         declared_value: createDto.declaredValue || parseFloat(order.total_amount),
+        pdf_url: labelUrl, // Guardar label_url de Skydropx como pdf_url (debe estar en metadata.full_response.included[0].attributes.label_url)
       };
 
-      // 4. Generar PDF
-      const pdfPath = await this.generateShippingLabelPDF(
-        trackingNumber,
-        order,
-        shippingLabelData
-      );
+      this.logger.log(`📋 Guardando shipping label con tracking_number: ${shippingLabelData.tracking_number}`);
+      this.logger.log(`📄 PDF URL que se guardará: ${shippingLabelData.pdf_url || 'NO DISPONIBLE'}`);
 
-      // 5. Guardar en base de datos
+      // 6. Si no hay PDF de Skydropx, NO generar uno local automáticamente
+      // Solo generar PDF local como último recurso si Skydropx no está disponible
+      // Esto asegura que siempre se use el PDF real de Skydropx cuando esté disponible
+      if (!pdfPath && !labelUrl) {
+        this.logger.warn(`⚠️ No hay PDF de Skydropx disponible, generando PDF local como fallback`);
+        pdfPath = await this.generateShippingLabelPDF(
+          trackingNumber,
+          order,
+          shippingLabelData
+        );
+      } else if (!pdfPath && labelUrl) {
+        this.logger.log(`ℹ️ PDF de Skydropx disponible (${labelUrl}), se descargará cuando se solicite. No se generará PDF local.`);
+      }
+
+      // 7. Guardar en base de datos
+      this.logger.log(`💾 Guardando en BD - pdf_url: ${labelUrl || 'NULL'}, pdf_path: ${pdfPath || 'NULL'}`);
+      
       const insertResult = await client.query(
         `INSERT INTO orders.shipping_labels (
           order_id,
@@ -464,9 +789,11 @@ export class LogisticsService {
           package_dimensions,
           declared_value,
           pdf_path,
+          pdf_url,
+          metadata,
           generated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
-        RETURNING *`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+        RETURNING id, order_id, tracking_number, pdf_url, pdf_path`,
         [
           shippingLabelData.order_id,
           shippingLabelData.tracking_number,
@@ -480,17 +807,77 @@ export class LogisticsService {
           shippingLabelData.package_dimensions,
           shippingLabelData.declared_value,
           pdfPath,
+          labelUrl,
+          shipmentMetadata ? JSON.stringify(shipmentMetadata) : null,
         ]
       );
+      
+      const savedLabel = insertResult.rows[0];
+      this.logger.log(`✅ Shipping label guardado - ID: ${savedLabel.id}, pdf_url guardado: ${savedLabel.pdf_url || 'NULL'}, pdf_path guardado: ${savedLabel.pdf_path || 'NULL'}`);
 
       await client.query('COMMIT');
 
       const shippingLabel = insertResult.rows[0];
 
-      this.logger.log(`✅ Guía de envío creada: ${trackingNumber} para orden ${createDto.orderId}`);
+      // Si el tracking_number guardado es el generado localmente pero hay metadata de Skydropx,
+      // intentar extraer el tracking_number real del metadata y actualizarlo
+      if (shippingLabel.tracking_number && shippingLabel.tracking_number.startsWith('AGO-') && shippingLabel.metadata) {
+        try {
+          const metadata = typeof shippingLabel.metadata === 'string' 
+            ? JSON.parse(shippingLabel.metadata) 
+            : shippingLabel.metadata;
+          
+          const fullResponse = metadata.full_response || metadata;
+          const data = fullResponse?.data || fullResponse;
+          const attributes = data?.attributes || data;
+          const included = fullResponse?.included || [];
+          
+          // Buscar tracking_number en las ubicaciones correctas según la estructura de Skydropx
+          // 1. master_tracking_number en attributes (ubicación principal)
+          // 2. tracking_number en included[0].attributes (fallback)
+          const skydropxTracking = 
+            attributes?.master_tracking_number ||
+            (included.length > 0 && included[0]?.attributes?.tracking_number) ||
+            attributes?.tracking_number || 
+            data?.tracking_number;
+          
+          if (skydropxTracking && skydropxTracking !== shippingLabel.tracking_number) {
+            this.logger.log(`🔄 Actualizando tracking_number de ${shippingLabel.tracking_number} a ${skydropxTracking}`);
+            
+            // Reconectar para hacer el UPDATE
+            const updateClient = await dbPool.connect();
+            try {
+              await updateClient.query('BEGIN');
+              const updateResult = await updateClient.query(
+                `UPDATE orders.shipping_labels 
+                 SET tracking_number = $1, updated_at = CURRENT_TIMESTAMP 
+                 WHERE id = $2 
+                 RETURNING *`,
+                [skydropxTracking, shippingLabel.id]
+              );
+              await updateClient.query('COMMIT');
+              
+              if (updateResult.rows.length > 0) {
+                shippingLabel.tracking_number = skydropxTracking;
+                this.logger.log(`✅ Tracking number actualizado exitosamente: ${skydropxTracking}`);
+              }
+            } finally {
+              updateClient.release();
+            }
+          }
+        } catch (updateError: any) {
+          this.logger.warn(`⚠️ No se pudo actualizar tracking_number del metadata: ${updateError.message}`);
+        }
+      }
 
-      // 6. Iniciar simulación automática de estados
-      this.startStatusSimulation(shippingLabel.id, createDto.orderId);
+      this.logger.log(`✅ Guía de envío creada para orden ${createDto.orderId}`);
+      this.logger.log(`📦 Tracking number guardado en BD: ${shippingLabel.tracking_number}`);
+      this.logger.log(`📋 Carrier: ${shippingLabel.carrier_name}`);
+
+      // 8. Iniciar simulación automática de estados (solo si no es Skydropx)
+      if (!quotationId) {
+        this.startStatusSimulation(shippingLabel.id, createDto.orderId);
+      }
 
       return shippingLabel;
     } catch (error: any) {
@@ -629,32 +1016,139 @@ export class LogisticsService {
     }
 
     const result = await dbPool.query(
-      `SELECT * FROM orders.shipping_labels WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT 
+        id, order_id, tracking_number, carrier_name, status,
+        origin_address, destination_address, destination_name, destination_phone,
+        package_weight, package_dimensions, declared_value,
+        pdf_path, pdf_url, metadata,
+        generated_at, picked_up_at, in_transit_at, delivered_at,
+        created_at, updated_at
+       FROM orders.shipping_labels 
+       WHERE order_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
       [orderId]
     );
 
-    return result.rows.length > 0 ? result.rows[0] : null;
+    if (result.rows.length > 0) {
+      const label = result.rows[0];
+      this.logger.debug(`📦 Guía de envío encontrada para orden ${orderId}: tracking_number=${label.tracking_number}, carrier=${label.carrier_name}`);
+      return label;
+    }
+
+    return null;
   }
 
   /**
    * Obtener PDF de guía de envío
+   * Extrae el label_url del metadata y descarga el PDF desde Skydropx
    */
   async getShippingLabelPDF(orderId: string): Promise<Buffer | null> {
     const shippingLabel = await this.getShippingLabelByOrderId(orderId);
 
-    if (!shippingLabel || !shippingLabel.pdf_path) {
+    if (!shippingLabel) {
+      this.logger.warn(`⚠️ No se encontró shipping label para orden ${orderId}`);
       return null;
     }
 
-    try {
-      if (fs.existsSync(shippingLabel.pdf_path)) {
-        return fs.readFileSync(shippingLabel.pdf_path);
+    this.logger.log(`📦 Obteniendo PDF para orden ${orderId}`);
+    this.logger.log(`📄 pdf_url en BD: ${shippingLabel.pdf_url || 'NULL'}`);
+    this.logger.log(`📦 metadata presente: ${shippingLabel.metadata ? 'SÍ' : 'NO'}`);
+
+    // Extraer label_url del metadata
+    // El label_url está en: metadata.full_response.included[0].attributes.label_url
+    let labelUrl: string | null = null;
+
+    // PRIORIDAD 1: Si ya tenemos pdf_url guardado Y es de Skydropx (no local), usarlo
+    if (shippingLabel.pdf_url) {
+      if (shippingLabel.pdf_url.startsWith('https://pro.skydropx.com')) {
+        labelUrl = shippingLabel.pdf_url;
+        this.logger.log(`✅ Usando pdf_url guardado (Skydropx): ${labelUrl}`);
+      } else {
+        this.logger.warn(`⚠️ pdf_url guardado NO es de Skydropx, ignorándolo: ${shippingLabel.pdf_url}`);
+        this.logger.warn(`⚠️ Extrayendo label_url del metadata en su lugar`);
       }
-    } catch (error: any) {
-      this.logger.error(`❌ Error leyendo PDF: ${error.message}`);
+    }
+    
+    // PRIORIDAD 2: Extraer del metadata (SIEMPRE si hay metadata y no tenemos labelUrl válido)
+    if (!labelUrl && shippingLabel.metadata) {
+      try {
+        const metadata = typeof shippingLabel.metadata === 'string' 
+          ? JSON.parse(shippingLabel.metadata) 
+          : shippingLabel.metadata;
+        
+        const fullResponse = metadata.full_response || metadata;
+        const included = fullResponse?.included || [];
+        
+        this.logger.log(`🔍 Buscando label_url en metadata, included.length: ${included.length}`);
+        
+        if (included.length > 0) {
+          this.logger.log(`🔍 included[0].type: ${included[0]?.type}`);
+          this.logger.log(`🔍 included[0].attributes keys: ${Object.keys(included[0]?.attributes || {}).join(', ')}`);
+          
+          if (included[0]?.attributes?.label_url) {
+            labelUrl = included[0].attributes.label_url;
+            this.logger.log(`✅ Label URL extraído del metadata: ${labelUrl}`);
+          } else {
+            this.logger.error(`❌ included[0].attributes.label_url NO existe`);
+            this.logger.error(`❌ included[0].attributes completo: ${JSON.stringify(included[0]?.attributes || {}).substring(0, 500)}`);
+            return null;
+          }
+        } else {
+          this.logger.error(`❌ No hay elementos en included[]`);
+          return null;
+        }
+      } catch (error: any) {
+        this.logger.error(`❌ Error parseando metadata: ${error.message}`);
+        return null;
+      }
+    }
+    
+    // Validar que tenemos la URL
+    if (!labelUrl) {
+      this.logger.error(`❌ No se pudo obtener label_url ni de pdf_url ni de metadata`);
+      if (!shippingLabel.metadata) {
+        this.logger.error(`❌ No hay metadata disponible`);
+      }
+      return null;
     }
 
-    return null;
+    // Descargar el PDF desde Skydropx
+    try {
+      this.logger.log(`📄 Descargando PDF desde Skydropx: ${labelUrl}`);
+      const axios = require('axios');
+      const pdfResponse = await axios.get(labelUrl, { 
+        responseType: 'arraybuffer',
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'Agora-Ecosystem/1.0',
+        },
+      });
+      
+      this.logger.log(`✅ PDF descargado exitosamente, tamaño: ${pdfResponse.data.length} bytes`);
+      
+      // Guardar el PDF localmente y actualizar pdf_url en BD para futuras solicitudes
+      if (shippingLabel.tracking_number && dbPool) {
+        const fileName = `shipping-label-${shippingLabel.tracking_number}.pdf`;
+        const pdfPath = path.join(this.PDF_STORAGE_DIR, fileName);
+        fs.writeFileSync(pdfPath, pdfResponse.data);
+        
+        await dbPool.query(
+          `UPDATE orders.shipping_labels 
+           SET pdf_path = $1, pdf_url = $2, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $3`,
+          [pdfPath, labelUrl, shippingLabel.id]
+        );
+        
+        this.logger.log(`✅ PDF guardado localmente y pdf_url actualizado en BD`);
+      }
+      
+      return Buffer.from(pdfResponse.data);
+    } catch (error: any) {
+      this.logger.error(`❌ Error descargando PDF desde Skydropx: ${error.message}`);
+      this.logger.error(`❌ URL intentada: ${labelUrl}`);
+      return null;
+    }
   }
 
   /**

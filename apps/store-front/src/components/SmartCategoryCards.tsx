@@ -54,8 +54,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
     try {
       setLoading(true);
 
-      // 1. Cargar vehículo del usuario (desde localStorage)
-      if (typeof window !== 'undefined') {
+      // 1. Cargar vehículo del usuario (solo si está autenticado)
+      if (isAuthenticated && typeof window !== 'undefined') {
         const vehicleStr = localStorage.getItem('user_vehicle');
         if (vehicleStr) {
           try {
@@ -64,6 +64,9 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
             console.error('Error parsing vehicle:', e);
           }
         }
+      } else {
+        // Si no está autenticado, limpiar el vehículo
+        setUserVehicle(null);
       }
 
       // 2. Cargar pedidos recientes (si está autenticado)
@@ -74,6 +77,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
         } catch (error) {
           console.error('Error cargando pedidos:', error);
         }
+      } else {
+        setRecentOrders([]);
       }
 
       // 3. Cargar último producto visitado (desde localStorage)
@@ -114,8 +119,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 2️⃣ Vehículo no seleccionado (prioridad 2 - solo si no hay vehículo)
-    if (!userVehicle) {
+    // 2️⃣ Vehículo no seleccionado (prioridad 2 - solo si no hay vehículo y está autenticado)
+    if (isAuthenticated && !userVehicle) {
       generatedCards.push({
         id: 'select-vehicle',
         type: 'select-vehicle',
@@ -128,8 +133,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 3️⃣ Refacciones compatibles (prioridad 3 - solo si hay vehículo)
-    if (userVehicle) {
+    // 3️⃣ Refacciones compatibles (prioridad 3 - solo si hay vehículo y está autenticado)
+    if (isAuthenticated && userVehicle) {
       generatedCards.push({
         id: 'compatible-parts',
         type: 'compatible-parts',
@@ -142,8 +147,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 4️⃣ Productos más comprados (prioridad 4 - solo si hay vehículo)
-    if (userVehicle) {
+    // 4️⃣ Productos más comprados (prioridad 4 - solo si hay vehículo y está autenticado)
+    if (isAuthenticated && userVehicle) {
       generatedCards.push({
         id: 'popular-parts',
         type: 'popular-parts',
@@ -156,8 +161,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 5️⃣ Mantenimiento recomendado (prioridad 5 - solo si hay vehículo)
-    if (userVehicle) {
+    // 5️⃣ Mantenimiento recomendado (prioridad 5 - solo si hay vehículo y está autenticado)
+    if (isAuthenticated && userVehicle) {
       generatedCards.push({
         id: 'maintenance',
         type: 'maintenance',
@@ -170,8 +175,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 6️⃣ Ofertas relevantes (prioridad 6 - solo si hay vehículo)
-    if (userVehicle) {
+    // 6️⃣ Ofertas relevantes (prioridad 6 - solo si hay vehículo y está autenticado)
+    if (isAuthenticated && userVehicle) {
       generatedCards.push({
         id: 'vehicle-offers',
         type: 'vehicle-offers',
@@ -184,8 +189,8 @@ export default function SmartCategoryCards({ className = '' }: SmartCategoryCard
       });
     }
 
-    // 7️⃣ Accesorios populares (prioridad 7 - solo si hay vehículo)
-    if (userVehicle) {
+    // 7️⃣ Accesorios populares (prioridad 7 - solo si hay vehículo y está autenticado)
+    if (isAuthenticated && userVehicle) {
       generatedCards.push({
         id: 'accessories',
         type: 'accessories',

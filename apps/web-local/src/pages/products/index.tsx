@@ -2447,11 +2447,13 @@ function VehicleCompatibilitySection({
   const [notes, setNotes] = useState('');
 
   // Cargar compatibilidades cuando se edita un producto
+  // Solo ejecutar cuando cambie el ID del producto, no cuando cambie la función
   useEffect(() => {
     if (editingProduct?.id && onLoadProductCompatibilities) {
       onLoadProductCompatibilities();
     }
-  }, [editingProduct?.id, onLoadProductCompatibilities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingProduct?.id]); // Removido onLoadProductCompatibilities de las dependencias
 
   // Cargar marcas al montar
   useEffect(() => {
@@ -2586,8 +2588,32 @@ function VehicleCompatibilitySection({
     setNotes('');
   };
 
-  const handleRemoveCompatibility = (index: number) => {
-    setProductCompatibilities(compatibilities.filter((_, i) => i !== index));
+  const handleRemoveCompatibility = async (index: number) => {
+    const compatibility = compatibilities[index];
+    
+    // Si la compatibilidad tiene un ID válido (ya está guardada en BD), eliminarla inmediatamente
+    if (compatibility.id && compatibility.id.trim() !== '') {
+      try {
+        // Eliminar del estado local primero (optimistic update)
+        const updatedCompatibilities = compatibilities.filter((_, i) => i !== index);
+        setProductCompatibilities(updatedCompatibilities);
+        
+        // Luego eliminar de la base de datos
+        await vehiclesService.removeProductCompatibility(compatibility.id);
+        
+        // NO recargar las compatibilidades porque ya las actualizamos localmente
+        // Si hay algún error, el backend ya lo maneja y podemos recargar solo en caso de error
+      } catch (error: any) {
+        console.error('Error eliminando compatibilidad:', error);
+        // Si falla, restaurar la compatibilidad en el estado local
+        setProductCompatibilities(compatibilities);
+        // Mostrar mensaje de error al usuario
+        alert(`Error al eliminar compatibilidad: ${error.message || 'Error desconocido'}`);
+      }
+    } else {
+      // Si no tiene ID (es nueva, no guardada), solo eliminar del estado local
+      setProductCompatibilities(compatibilities.filter((_, i) => i !== index));
+    }
   };
 
   const getCompatibilityLabel = (compatibility: ProductCompatibility): string => {

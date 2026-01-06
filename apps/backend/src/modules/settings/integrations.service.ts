@@ -49,6 +49,15 @@ export interface StripeCredentials extends PaymentProviderCredentials {
   webhookSecret: string;
 }
 
+export interface SkydropxCredentials {
+  enabled: boolean;
+  endpoint: string; // Endpoint base para operaciones generales
+  quotationsEndpoint: string; // Endpoint específico para cotizaciones
+  apiKey: string; // Desde variables de entorno
+  apiSecret: string; // Desde variables de entorno
+  mode: 'dev' | 'prod';
+}
+
 @Injectable()
 export class IntegrationsService {
   constructor(private readonly settingsService: SettingsService) {}
@@ -88,6 +97,55 @@ export class IntegrationsService {
       authPassword: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.auth_password`, ''),
       redirectUrl: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.redirect_url`, ''),
       endpoint: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.domain`, ''),
+      mode,
+    };
+  }
+
+  /**
+   * Obtener credenciales de Skydropx según el modo activo
+   */
+  async getSkydropxCredentials(): Promise<SkydropxCredentials> {
+    const mode = await this.getMode();
+    const enabled = await this.getSettingValue(
+      'integrations.logistics.skydropx.enabled',
+      false
+    );
+
+    if (!enabled) {
+      throw new NotFoundException('Skydropx no está habilitado');
+    }
+
+    const prefix = mode === 'dev' ? 'dev' : 'prod';
+    const endpoint = await this.getSettingValue(
+      `integrations.logistics.skydropx.${prefix}.endpoint`,
+      'https://pro.skydropx.com/api/v1'
+    );
+    const quotationsEndpoint = await this.getSettingValue(
+      `integrations.logistics.skydropx.${prefix}.quotations_endpoint`,
+      'https://pro.skydropx.com/api/v1'
+    );
+
+    // Las credenciales se toman de las variables de entorno
+    // Skydropx usa OAuth2, por lo que necesitamos Client ID y Client Secret
+    // Por compatibilidad, mantenemos los nombres SKYDROPPX_API_KEY y SKYDROPPX_API_SECRET
+    // pero estos deben contener el Client ID y Client Secret respectivamente
+    const apiKey = process.env.SKYDROPPX_API_KEY || process.env.SKYDROPPX_CLIENT_ID;
+    const apiSecret = process.env.SKYDROPPX_API_SECRET || process.env.SKYDROPPX_CLIENT_SECRET;
+
+    if (!apiKey || !apiSecret) {
+      throw new ServiceUnavailableException(
+        'Credenciales de Skydropx no configuradas en variables de entorno. ' +
+        'Necesitas configurar SKYDROPPX_API_KEY (Client ID) y SKYDROPPX_API_SECRET (Client Secret) ' +
+        'o SKYDROPPX_CLIENT_ID y SKYDROPPX_CLIENT_SECRET'
+      );
+    }
+
+    return {
+      enabled: true,
+      endpoint,
+      quotationsEndpoint,
+      apiKey, // Client ID para OAuth2
+      apiSecret, // Client Secret para OAuth2
       mode,
     };
   }
