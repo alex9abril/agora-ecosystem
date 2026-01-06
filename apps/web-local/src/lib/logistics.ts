@@ -46,6 +46,7 @@ export interface ShipmentTracking {
   current_location?: string | null;
   tracking_events: TrackingEvent[];
   tracking_url?: string | null;
+  metadata?: any; // Metadatos adicionales de Skydropx (opcional)
 }
 
 export interface CreateShippingLabelData {
