@@ -107,10 +107,12 @@ export interface SkydropxShipment {
 }
 
 export interface SkydropxTrackingEvent {
+  id?: string;
   status: string;
   description: string;
   location?: string;
   timestamp: string;
+  date?: string; // Fecha alternativa del evento
 }
 
 export interface SkydropxTracking {
@@ -911,6 +913,126 @@ export class SkydropxService {
 
       throw new ServiceUnavailableException(
         `Error obteniendo tracking: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Obtener eventos de tracking detallados desde el endpoint de tracking de Skydropx
+   * GET /shipments/tracking?tracking_number={tracking_number}&carrier_name={carrier_name}
+   */
+  async getTrackingEvents(trackingNumber: string, carrierName: string): Promise<SkydropxTrackingEvent[]> {
+    const enabled = await this.isEnabled();
+    if (!enabled) {
+      throw new ServiceUnavailableException('Skydropx no está habilitado');
+    }
+
+    if (!trackingNumber || !carrierName) {
+      throw new BadRequestException('trackingNumber y carrierName son requeridos');
+    }
+
+    try {
+      const { endpoint } = await this.getCredentials();
+      const headers = await this.getAuthHeaders();
+
+      this.logger.log(`📦 Consultando eventos de tracking: ${trackingNumber} (${carrierName})`);
+
+      const response = await axios.get(
+        `${endpoint}/shipments/tracking`,
+        {
+          params: {
+            tracking_number: trackingNumber,
+            carrier_name: carrierName,
+          },
+          headers,
+          validateStatus: (status) => status < 500,
+        }
+      );
+
+      if (response.status >= 400) {
+        const errorData = response.data;
+        const errorMessage = errorData?.message || 
+                            errorData?.error_description || 
+                            errorData?.error || 
+                            `Error ${response.status}: ${response.statusText}`;
+        
+        this.logger.error('❌ Error obteniendo eventos de tracking de Skydropx:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+          trackingNumber,
+          carrierName,
+        });
+
+        if (response.status === 401) {
+          this.logger.warn('🔄 Token expirado, limpiando cache...');
+          this.tokenCache = null;
+          throw new ServiceUnavailableException('Error de autenticación con Skydropx. Por favor, intenta nuevamente.');
+        }
+
+        // Si es 404, puede que el tracking aún no esté disponible, retornar array vacío
+        if (response.status === 404) {
+          this.logger.warn(`⚠️ No se encontraron eventos de tracking para ${trackingNumber}. Puede que aún no estén disponibles.`);
+          return [];
+        }
+
+        throw new ServiceUnavailableException(
+          `Error de Skydropx (${response.status}): ${errorMessage}`
+        );
+      }
+
+      // La respuesta de Skydropx viene como un array en data
+      const eventsData = response.data.data || response.data || [];
+      
+      if (!Array.isArray(eventsData)) {
+        this.logger.warn('⚠️ Respuesta de tracking events no es un array:', eventsData);
+        return [];
+      }
+
+      // Transformar eventos de Skydropx a nuestro formato
+      const events: SkydropxTrackingEvent[] = eventsData.map((event: any) => {
+        const attributes = event.attributes || event;
+        
+        return {
+          id: event.id || attributes.id,
+          status: attributes.status || attributes.code || 'unknown',
+          description: attributes.description || attributes.message || 'Evento de seguimiento',
+          location: attributes.location || attributes.city || null,
+          timestamp: attributes.date || attributes.timestamp || attributes.created_at || new Date().toISOString(),
+          date: attributes.date || attributes.timestamp || attributes.created_at,
+        };
+      });
+
+      // Ordenar eventos: más recientes primero
+      events.sort((a, b) => {
+        const dateA = new Date(a.timestamp || a.date || 0).getTime();
+        const dateB = new Date(b.timestamp || b.date || 0).getTime();
+        return dateB - dateA; // Más reciente primero
+      });
+
+      this.logger.log(`✅ ${events.length} evento(s) de tracking obtenido(s)`);
+
+      return events;
+    } catch (error: any) {
+      this.logger.error('❌ Error obteniendo eventos de tracking de Skydropx:', error);
+
+      if (error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      if (error.response) {
+        const errorMessage = error.response.data?.message || 
+                            error.response.data?.error_description || 
+                            error.response.data?.error || 
+                            `Error ${error.response.status}: ${error.response.statusText}`;
+        
+        throw new ServiceUnavailableException(
+          `Error de Skydropx (${error.response.status}): ${errorMessage}`
+        );
+      }
+
+      throw new ServiceUnavailableException(
+        `Error obteniendo eventos de tracking: ${error.message}`
       );
     }
   }

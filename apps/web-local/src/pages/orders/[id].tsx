@@ -7,7 +7,7 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
 import { productsService, Product } from '@/lib/products';
 import { walletService, WalletTransaction } from '@/lib/wallet';
-import { logisticsService, ShippingLabel, ShipmentTracking } from '@/lib/logistics';
+import { logisticsService, ShippingLabel, ShipmentTracking, TrackingEvent } from '@/lib/logistics';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -27,6 +27,9 @@ export default function OrderDetailPage() {
   const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [tracking, setTracking] = useState<ShipmentTracking | null>(null);
   const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
+  const [loadingTrackingEvents, setLoadingTrackingEvents] = useState(false);
+  const [showTrackingTimeline, setShowTrackingTimeline] = useState(false);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -1121,6 +1124,153 @@ export default function OrderDetailPage() {
                             </div>
                           )}
                           
+                          {/* Acordeón para Timeline de Seguimiento */}
+                          <div className="mt-4 border-t border-gray-200 pt-4">
+                            <button
+                              onClick={async () => {
+                                if (!showTrackingTimeline && trackingEvents.length === 0) {
+                                  // Cargar eventos solo la primera vez
+                                  try {
+                                    setLoadingTrackingEvents(true);
+                                    const events = await logisticsService.getTrackingEvents(id as string);
+                                    setTrackingEvents(events);
+                                  } catch (error: any) {
+                                    console.error('Error cargando eventos de tracking:', error);
+                                    alert('No se pudieron cargar los eventos de seguimiento. Intenta nuevamente.');
+                                  } finally {
+                                    setLoadingTrackingEvents(false);
+                                  }
+                                }
+                                setShowTrackingTimeline(!showTrackingTimeline);
+                              }}
+                              className="w-full flex items-center justify-between text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md p-2 -m-2"
+                            >
+                              <span className="flex items-center">
+                                <svg
+                                  className={`mr-2 h-5 w-5 text-gray-500 transform transition-transform ${showTrackingTimeline ? 'rotate-90' : ''}`}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                Ver Timeline de Seguimiento
+                              </span>
+                              {loadingTrackingEvents && (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              )}
+                            </button>
+
+                            {showTrackingTimeline && (
+                              <div className="mt-4">
+                                {loadingTrackingEvents ? (
+                                  <div className="flex items-center justify-center py-8">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    <span className="ml-3 text-sm text-gray-500">Cargando eventos de seguimiento...</span>
+                                  </div>
+                                ) : trackingEvents.length === 0 ? (
+                                  <div className="text-center py-4 text-sm text-gray-500">
+                                    <p>No hay eventos de seguimiento disponibles aún.</p>
+                                    <p className="text-xs mt-1">Los eventos aparecerán cuando el carrier actualice el estado del envío.</p>
+                                  </div>
+                                ) : (
+                                  <div className="relative">
+                                    {/* Timeline vertical */}
+                                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+                                    
+                                    <div className="space-y-4">
+                                      {trackingEvents.map((event, index) => {
+                                        const isLast = index === trackingEvents.length - 1;
+                                        const eventDate = new Date(event.timestamp || event.date || Date.now());
+                                        const isActive = index === 0; // El más reciente está activo
+                                        
+                                        // Determinar color según el estado
+                                        let statusColor = 'bg-gray-400';
+                                        let statusBg = 'bg-gray-50';
+                                        let statusBorder = 'border-gray-300';
+                                        
+                                        if (event.status === 'delivered' || event.description?.toLowerCase().includes('entregado')) {
+                                          statusColor = 'bg-green-500';
+                                          statusBg = 'bg-green-50';
+                                          statusBorder = 'border-green-300';
+                                        } else if (event.status === 'in_transit' || event.description?.toLowerCase().includes('tránsito')) {
+                                          statusColor = 'bg-blue-500';
+                                          statusBg = 'bg-blue-50';
+                                          statusBorder = 'border-blue-300';
+                                        } else if (event.status === 'last_mile' || event.description?.toLowerCase().includes('ruta de entrega')) {
+                                          statusColor = 'bg-orange-500';
+                                          statusBg = 'bg-orange-50';
+                                          statusBorder = 'border-orange-300';
+                                        } else if (event.status === 'collected' || event.description?.toLowerCase().includes('recolectado')) {
+                                          statusColor = 'bg-yellow-500';
+                                          statusBg = 'bg-yellow-50';
+                                          statusBorder = 'border-yellow-300';
+                                        } else if (event.status === 'exception' || event.description?.toLowerCase().includes('excepción')) {
+                                          statusColor = 'bg-red-500';
+                                          statusBg = 'bg-red-50';
+                                          statusBorder = 'border-red-300';
+                                        } else if (isActive) {
+                                          statusColor = 'bg-blue-500';
+                                          statusBg = 'bg-blue-50';
+                                          statusBorder = 'border-blue-300';
+                                        }
+                                        
+                                        return (
+                                          <div key={event.id || index} className="relative flex items-start">
+                                            {/* Círculo del timeline */}
+                                            <div className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full ${statusColor} ${isActive ? 'ring-2 ring-offset-2 ring-blue-400' : ''}`}>
+                                              {isActive && (
+                                                <div className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75"></div>
+                                              )}
+                                              <div className={`w-3 h-3 rounded-full ${isActive ? 'bg-white' : 'bg-gray-200'}`}></div>
+                                            </div>
+                                            
+                                            {/* Contenido del evento */}
+                                            <div className={`ml-4 flex-1 ${isLast ? '' : 'pb-4'}`}>
+                                              <div className={`border rounded-lg p-3 ${statusBg} ${statusBorder}`}>
+                                                <div className="flex items-start justify-between">
+                                                  <div className="flex-1">
+                                                    <p className={`text-sm font-medium ${isActive ? 'text-gray-900' : 'text-gray-700'}`}>
+                                                      {event.description || event.status}
+                                                    </p>
+                                                    {event.location && (
+                                                      <p className="text-xs text-gray-600 mt-1 flex items-center">
+                                                        <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        </svg>
+                                                        {event.location}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                  <div className="text-right ml-4">
+                                                    <p className="text-xs font-medium text-gray-500">
+                                                      {eventDate.toLocaleDateString('es-MX', {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                      })}
+                                                    </p>
+                                                    <p className="text-xs text-gray-400">
+                                                      {eventDate.toLocaleTimeString('es-MX', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                      })}
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Historial de eventos básico (mantener por compatibilidad) */}
                           {tracking.tracking_events && tracking.tracking_events.length > 0 && (
                             <div className="mt-4">
                               <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Historial de Eventos</p>

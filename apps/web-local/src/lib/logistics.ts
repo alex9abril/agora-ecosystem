@@ -28,10 +28,12 @@ export interface ShippingLabel {
 }
 
 export interface TrackingEvent {
+  id?: string;
   status: string;
   description: string;
   location?: string;
   timestamp: string;
+  date?: string;
 }
 
 export interface ShipmentTracking {
@@ -142,6 +144,20 @@ export const logisticsService = {
     );
 
     return response.data;
+  },
+
+  /**
+   * Obtener eventos de tracking detallados para mostrar en timeline
+   */
+  async getTrackingEvents(orderId: string): Promise<TrackingEvent[]> {
+    const response = await apiRequest<{ success: boolean; data: { events: TrackingEvent[]; count: number } }>(
+      `/logistics/shipments/${orderId}/tracking-events`,
+      {
+        method: 'GET',
+      }
+    );
+
+    return response.data.events;
   },
 };
 

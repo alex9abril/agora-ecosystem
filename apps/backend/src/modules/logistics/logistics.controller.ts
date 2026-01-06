@@ -213,6 +213,43 @@ export class LogisticsController {
     };
   }
 
+  @Get('shipments/:orderId/tracking-events')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Obtener eventos de tracking detallados',
+    description: 'Obtiene el historial completo de eventos de tracking desde Skydropx para mostrar en un timeline',
+  })
+  @ApiParam({
+    name: 'orderId',
+    description: 'ID de la orden',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Eventos de tracking obtenidos exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No se encontró shipping label para la orden',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Error al consultar Skydropx',
+  })
+  async getTrackingEvents(@Param('orderId') orderId: string) {
+    this.logger.log(`📦 Consultando eventos de tracking para orden: ${orderId}`);
+    
+    const events = await this.logisticsService.getTrackingEvents(orderId);
+
+    return {
+      success: true,
+      data: {
+        events,
+        count: events.length,
+      },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Post('quotations')
   @Public()
   @ApiOperation({

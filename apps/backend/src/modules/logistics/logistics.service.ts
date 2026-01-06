@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 const PDFDocument = require('pdfkit');
 import { CreateShippingLabelDto } from './dto/create-shipping-label.dto';
-import { SkydropxService, SkydropxTracking } from './skydropx/skydropx.service';
+import { SkydropxService, SkydropxTracking, SkydropxTrackingEvent } from './skydropx/skydropx.service';
 
 export interface ShippingLabel {
   id: string;
@@ -1397,6 +1397,44 @@ export class LogisticsService {
       return tracking;
     } catch (error: any) {
       this.logger.error(`❌ Error obteniendo tracking de Skydropx: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener eventos de tracking detallados para un envío
+   * @param orderId ID de la orden
+   * @returns Array de eventos de tracking
+   */
+  async getTrackingEvents(orderId: string): Promise<SkydropxTrackingEvent[]> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    // 1. Obtener la shipping_label de la orden
+    const shippingLabel = await this.getShippingLabelByOrderId(orderId);
+    
+    if (!shippingLabel) {
+      this.logger.warn(`⚠️ No se encontró shipping label para orden ${orderId}`);
+      return [];
+    }
+
+    // 2. Verificar que tenga tracking_number y carrier_name
+    if (!shippingLabel.tracking_number || !shippingLabel.carrier_name) {
+      this.logger.warn(`⚠️ Shipping label no tiene tracking_number o carrier_name`);
+      return [];
+    }
+
+    // 3. Obtener eventos de tracking desde Skydropx
+    try {
+      const events = await this.skydropxService.getTrackingEvents(
+        shippingLabel.tracking_number,
+        shippingLabel.carrier_name.toLowerCase() // Skydropx espera el carrier en minúsculas
+      );
+
+      return events;
+    } catch (error: any) {
+      this.logger.error(`❌ Error obteniendo eventos de tracking: ${error.message}`);
       throw error;
     }
   }
