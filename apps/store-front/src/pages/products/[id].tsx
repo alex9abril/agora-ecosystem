@@ -79,8 +79,8 @@ export default function ProductDetailPage() {
         return;
       }
 
-      // Solo verificar compatibilidad para productos de tipo refacción o accesorio
-      if (product.product_type !== 'refaccion' && product.product_type !== 'accesorio') {
+      // Solo verificar compatibilidad para productos no alimenticios/medicina (refacciones/accesorios)
+      if (product.product_type !== 'non_food') {
         setCurrentVehicle(null);
         setIsCompatible(null);
         return;
