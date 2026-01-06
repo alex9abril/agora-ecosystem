@@ -146,25 +146,24 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar guía de envío si la orden está en estado ready o superior
-      if (orderData.status === 'ready' || orderData.status === 'picked_up' || orderData.status === 'in_transit' || orderData.status === 'delivered') {
-        try {
-          setLoadingShippingLabel(true);
-          const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
-          if (label) {
-            setShippingLabel(label);
-            console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
-          } else {
-            setShippingLabel(null);
-            console.log('📦 [SHIPPING LABEL] No hay guía de envío para esta orden');
-          }
-        } catch (err) {
-          console.error('❌ [SHIPPING LABEL] Error cargando guía de envío:', err);
-          // No fallar la carga de la orden si hay error cargando la guía
+      // Cargar guía de envío siempre (para cualquier estado de orden)
+      // Esto permite mostrar el panel incluso si la orden está en estados anteriores
+      try {
+        setLoadingShippingLabel(true);
+        const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
+        if (label) {
+          setShippingLabel(label);
+          console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
+        } else {
           setShippingLabel(null);
-        } finally {
-          setLoadingShippingLabel(false);
+          console.log('📦 [SHIPPING LABEL] No hay guía de envío para esta orden');
         }
+      } catch (err) {
+        console.error('❌ [SHIPPING LABEL] Error cargando guía de envío:', err);
+        // No fallar la carga de la orden si hay error cargando la guía
+        setShippingLabel(null);
+      } finally {
+        setLoadingShippingLabel(false);
       }
     } catch (err: any) {
       console.error('❌ [LOAD ORDER] Error cargando pedido:', err);
@@ -918,8 +917,8 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* Guía de envío - Solo mostrar si la orden está en estado completed o superior */}
-              {(order.status === 'ready' || order.status === 'picked_up' || order.status === 'in_transit' || order.status === 'delivered') && (
+              {/* Guía de envío - Mostrar siempre si hay información de envío o si la orden tiene items con shipping */}
+              {((order.status === 'ready' || order.status === 'picked_up' || order.status === 'in_transit' || order.status === 'delivered') || shippingLabel || (order.items && order.items.some(item => item.quotation_id || item.shipping_carrier))) && (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Guía de Envío</h2>
