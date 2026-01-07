@@ -29,7 +29,7 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import StoreSelectorDialog from '../StoreSelectorDialog';
+import StoreMenu from '../StoreMenu';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
 import VehicleMenu from '../VehicleMenu';
@@ -910,9 +910,9 @@ export default function Header() {
         )}
       </header>
 
-      {/* Selector de tienda */}
-      <StoreSelectorDialog
-        open={showStoreSelector}
+      {/* Panel de tienda (lateral derecho) */}
+      <StoreMenu
+        isOpen={showStoreSelector}
         onClose={() => setShowStoreSelector(false)}
       />
       
