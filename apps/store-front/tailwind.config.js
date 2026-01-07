@@ -7,7 +7,12 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Roboto', 'Arial', 'sans-serif'],
+        // Fuente principal: Source Sans Pro (similar a Toyota)
+        sans: ['Source Sans Pro', 'Arial', 'Helvetica Neue', 'sans-serif'],
+        // Fuente para títulos y elementos destacados: Montserrat
+        display: ['Montserrat', 'Source Sans Pro', 'Arial', 'sans-serif'],
+        // Fuente monoespaciada (para códigos, etc.)
+        mono: ['Courier New', 'monospace'],
       },
       colors: {
         toyota: {

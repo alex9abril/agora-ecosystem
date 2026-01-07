@@ -284,6 +284,24 @@ Script de migración que agrega campos adicionales a la tabla `core.businesses` 
 **Vista disponible:**
 - `catalog.businesses_with_vehicle_brands`: Vista que muestra sucursales con sus marcas en formato JSON
 
+### `setup_storage_policies_sliders.sql` 🆕
+
+Script para configurar políticas RLS de Supabase Storage para la carpeta `sliders/` dentro del bucket `personalizacion`.
+
+**Contenido:**
+- ✅ Crea políticas para INSERT, SELECT, UPDATE, DELETE en la carpeta `sliders/`
+- ✅ Permite operaciones a `authenticated`, `anon`, y `service_role`
+- ✅ SELECT es público para acceso a las imágenes
+- ✅ Estructura: `sliders/{type}/{id}/slider-{timestamp}-{random}.{ext}`
+
+**Uso:**
+```sql
+-- Ejecutar después de setup_storage_policies_branding.sql
+\i database/agora/setup_storage_policies_sliders.sql
+```
+
+**Nota:** El bucket `personalizacion` ya tiene políticas para `branding/`, este script agrega soporte para `sliders/` en el mismo bucket.
+
 ### `migration_business_groups.sql` 🆕
 
 Script de migración que crea la tabla `core.business_groups` para almacenar información de grupos empresariales que son propietarios de múltiples sucursales.

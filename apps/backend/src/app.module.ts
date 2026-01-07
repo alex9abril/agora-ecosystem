@@ -28,6 +28,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
 import { LogisticsModule } from './modules/logistics/logistics.module';
+import { LandingSlidersModule } from './modules/commerce/landing-sliders/landing-sliders.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { LogisticsModule } from './modules/logistics/logistics.module';
     WalletModule,
     KarlopayModule,
     LogisticsModule,
+    LandingSlidersModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

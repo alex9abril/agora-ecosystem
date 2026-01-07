@@ -128,19 +128,20 @@ export default function PromotionalSlider({
         }}
       >
         {/* Fondo con gradiente o color sólido */}
-        <div
-          className="absolute inset-0"
-          style={gradientStyle}
-        >
-          {/* Imagen de fondo si existe */}
-          {currentSlide.imageUrl && (
-            <img
-              src={currentSlide.imageUrl}
-              alt={currentSlide.imageAlt || `Slide ${currentIndex + 1}`}
-              className="w-full h-full object-cover opacity-30"
-            />
-          )}
-        </div>
+        {currentSlide.imageUrl ? (
+          // Si hay imagen, mostrarla como fondo principal
+          <img
+            src={currentSlide.imageUrl}
+            alt={currentSlide.imageAlt || `Slide ${currentIndex + 1}`}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          // Si no hay imagen, mostrar gradiente o color de fondo
+          <div
+            className="absolute inset-0"
+            style={gradientStyle}
+          />
+        )}
 
         {/* Elementos decorativos flotantes (como Mercado Libre) */}
         {currentSlide.decorativeElements && (
@@ -192,16 +193,16 @@ export default function PromotionalSlider({
         {/* Badge superior (ej: "YA DISPONIBLE") */}
         {currentSlide.overlay?.badge && currentSlide.overlay.badgePosition && (
           <div
-            className={`absolute top-6 z-20 ${
+            className={`absolute top-8 z-20 ${
               currentSlide.overlay.badgePosition === 'top-right'
-                ? 'right-6'
+                ? 'right-8'
                 : currentSlide.overlay.badgePosition === 'top-center'
                 ? 'left-1/2 -translate-x-1/2'
-                : 'left-6'
+                : 'left-8'
             }`}
           >
             <div
-              className={`px-4 py-2 rounded-lg text-sm md:text-base font-bold text-white shadow-lg ${
+              className={`px-6 py-3 rounded-lg text-lg md:text-xl font-bold text-white shadow-lg ${
                 currentSlide.overlay.badgeColor || 'bg-pink-500'
               }`}
             >
@@ -233,7 +234,7 @@ export default function PromotionalSlider({
               {/* Badge de oferta (si no está en posición superior) */}
               {currentSlide.overlay.badge && !currentSlide.overlay.badgePosition && (
                 <div
-                  className={`inline-block px-4 py-2 rounded-lg text-2xl md:text-3xl font-bold text-white mb-4 shadow-lg ${
+                  className={`inline-block px-6 py-3 rounded-lg text-3xl md:text-4xl font-bold text-white mb-6 shadow-lg ${
                     currentSlide.overlay.badgeColor || 'bg-toyota-red'
                   }`}
                 >
@@ -243,11 +244,11 @@ export default function PromotionalSlider({
 
               {/* Título con parte destacada */}
               {currentSlide.overlay.title && (
-                <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 drop-shadow-2xl leading-tight">
+                <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 drop-shadow-2xl leading-tight">
                   {currentSlide.overlay.titleHighlight ? (
                     <>
                       {currentSlide.overlay.title.split(currentSlide.overlay.titleHighlight)[0]}
-                      <span className="text-3xl md:text-4xl lg:text-5xl block mt-1" style={{ textShadow: '0 0 15px rgba(255,255,255,0.5)' }}>
+                      <span className="text-5xl md:text-6xl lg:text-7xl block mt-2 font-bold" style={{ textShadow: '0 0 15px rgba(255,255,255,0.5)' }}>
                         {currentSlide.overlay.titleHighlight}
                       </span>
                     </>
@@ -259,14 +260,14 @@ export default function PromotionalSlider({
 
               {/* Subtítulo */}
               {currentSlide.overlay.subtitle && (
-                <h3 className="text-base md:text-lg font-semibold text-white mb-1 drop-shadow-md">
+                <h3 className="font-display text-xl md:text-2xl lg:text-3xl font-semibold text-white mb-2 drop-shadow-md">
                   {currentSlide.overlay.subtitle}
                 </h3>
               )}
 
               {/* Descripción */}
               {currentSlide.overlay.description && (
-                <p className="text-sm md:text-base text-white mb-2 drop-shadow-md">
+                <p className="text-lg md:text-xl lg:text-2xl text-white mb-4 drop-shadow-md leading-relaxed font-normal">
                   {currentSlide.overlay.description}
                 </p>
               )}
@@ -297,11 +298,11 @@ export default function PromotionalSlider({
 
               {/* Botón CTA */}
               {currentSlide.overlay.ctaText && (
-                <div className="mt-4">
+                <div className="mt-6">
                   {currentSlide.overlay.ctaLink ? (
                     <ContextualLink
                       href={currentSlide.overlay.ctaLink}
-                      className={`inline-block px-6 py-3 rounded-lg text-base font-bold text-white transition-all hover:scale-110 shadow-xl hover:shadow-2xl ${
+                      className={`inline-block px-8 py-4 rounded-lg text-lg md:text-xl font-bold text-white transition-all hover:scale-110 shadow-xl hover:shadow-2xl ${
                         currentSlide.overlay.ctaColor || 'bg-white text-gray-900 hover:bg-gray-100'
                       }`}
                     >
@@ -309,7 +310,7 @@ export default function PromotionalSlider({
                     </ContextualLink>
                   ) : (
                     <button
-                      className={`inline-block px-6 py-3 rounded-lg text-base font-bold text-white transition-all hover:scale-110 shadow-xl hover:shadow-2xl ${
+                      className={`inline-block px-8 py-4 rounded-lg text-lg md:text-xl font-bold text-white transition-all hover:scale-110 shadow-xl hover:shadow-2xl ${
                         currentSlide.overlay.ctaColor || 'bg-white text-gray-900 hover:bg-gray-100'
                       }`}
                     >
@@ -330,41 +331,48 @@ export default function PromotionalSlider({
         )}
       </div>
 
-      {/* Botones de navegación */}
-      {showArrows && slides.length > 1 && (
-        <>
-          <button
-            onClick={goToPrevious}
-            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-3 shadow-xl transition-all hover:scale-110 z-30 backdrop-blur-sm"
-            aria-label="Slide anterior"
-          >
-            <ChevronLeftIcon className="w-6 h-6 text-gray-800" />
-          </button>
-          <button
-            onClick={goToNext}
-            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-3 shadow-xl transition-all hover:scale-110 z-30 backdrop-blur-sm"
-            aria-label="Slide siguiente"
-          >
-            <ChevronRightIcon className="w-6 h-6 text-gray-800" />
-          </button>
-        </>
-      )}
-
-      {/* Indicadores de puntos (dots) */}
-      {showDots && slides.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-30">
-          {slides.map((_, index) => (
+      {/* Controles de navegación y bullets - Diseño moderno en la parte inferior */}
+      {(showArrows || showDots) && slides.length > 1 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 z-30 bg-black/20 backdrop-blur-md rounded-full px-4 py-2">
+          {/* Botón anterior */}
+          {showArrows && (
             <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`h-2 rounded-full transition-all ${
-                index === currentIndex
-                  ? 'bg-white w-8 shadow-lg'
-                  : 'bg-white/50 hover:bg-white/75 w-2'
-              }`}
-              aria-label={`Ir al slide ${index + 1}`}
-            />
-          ))}
+              onClick={goToPrevious}
+              className="flex items-center justify-center w-8 h-8 bg-white/90 hover:bg-white rounded-full shadow-lg transition-all hover:scale-110 active:scale-95"
+              aria-label="Slide anterior"
+            >
+              <ChevronLeftIcon className="w-5 h-5 text-gray-800" />
+            </button>
+          )}
+
+          {/* Indicadores de puntos (bullets) */}
+          {showDots && (
+            <div className="flex items-center gap-2">
+              {slides.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => goToSlide(index)}
+                  className={`rounded-full transition-all ${
+                    index === currentIndex
+                      ? 'bg-white w-8 h-2 shadow-lg'
+                      : 'bg-white/50 hover:bg-white/75 w-2 h-2'
+                  }`}
+                  aria-label={`Ir al slide ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Botón siguiente */}
+          {showArrows && (
+            <button
+              onClick={goToNext}
+              className="flex items-center justify-center w-8 h-8 bg-white/90 hover:bg-white rounded-full shadow-lg transition-all hover:scale-110 active:scale-95"
+              aria-label="Slide siguiente"
+            >
+              <ChevronRightIcon className="w-5 h-5 text-gray-800" />
+            </button>
+          )}
         </div>
       )}
 

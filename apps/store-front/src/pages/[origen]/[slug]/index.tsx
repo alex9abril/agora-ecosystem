@@ -13,20 +13,32 @@ import CategoryCardsSlider from '@/components/CategoryCardsSlider';
 import SmartCategoryCards from '@/components/SmartCategoryCards';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { productsService } from '@/lib/products';
+import { landingSlidersService, LandingSlider } from '@/lib/landing-sliders';
 import ContextualLink from '@/components/ContextualLink';
 
 export default function StoreHomePage() {
   const router = useRouter();
   const { origen, slug } = router.query;
-  const { contextType, groupData, branchData, isLoading, error } = useStoreContext();
+  const { contextType, groupData, branchData, groupId, branchId, isLoading, error } = useStoreContext();
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sliders, setSliders] = useState<SlideContent[]>([]);
+  const [loadingSliders, setLoadingSliders] = useState(true);
 
   useEffect(() => {
     if (contextType !== 'global' && !isLoading) {
       loadFeaturedProducts();
     }
   }, [contextType, isLoading]);
+
+  useEffect(() => {
+    // Cargar sliders solo cuando tengamos el ID correspondiente
+    if (contextType === 'grupo' && groupId && !isLoading) {
+      loadSliders();
+    } else if (contextType === 'sucursal' && branchId && !isLoading) {
+      loadSliders();
+    }
+  }, [contextType, isLoading, groupId, branchId]);
 
   const loadFeaturedProducts = async () => {
     try {
@@ -56,6 +68,126 @@ export default function StoreHomePage() {
     }
   };
 
+  const loadSliders = async () => {
+    try {
+      setLoadingSliders(true);
+      
+      // Obtener sliders según el contexto
+      const businessGroupId = contextType === 'grupo' ? groupId : undefined;
+      const businessId = contextType === 'sucursal' ? branchId : undefined;
+
+      // Validar que tengamos el ID necesario
+      if (contextType === 'grupo' && !businessGroupId) {
+        console.warn('⚠️ [loadSliders] No hay groupId disponible');
+        setSliders([getDefaultSlider()]);
+        return;
+      }
+      if (contextType === 'sucursal' && !businessId) {
+        console.warn('⚠️ [loadSliders] No hay branchId disponible');
+        setSliders([getDefaultSlider()]);
+        return;
+      }
+
+      console.log('🔍 [loadSliders] Cargando sliders:', {
+        contextType,
+        businessGroupId,
+        businessId,
+        groupId,
+        branchId,
+        groupData: groupData?.id,
+        branchData: branchData?.id,
+      });
+
+      const slidersData = await landingSlidersService.getActiveSliders(
+        businessGroupId,
+        businessId,
+      );
+
+      console.log('🔍 [loadSliders] Sliders recibidos del servicio:', slidersData);
+      console.log('🔍 [loadSliders] Cantidad de sliders:', slidersData.length);
+
+      // Convertir sliders del backend al formato de SlideContent
+      const convertedSliders: SlideContent[] = slidersData.map((slider) => ({
+        id: slider.id,
+        imageUrl: slider.content?.imageUrl,
+        backgroundColor: slider.content?.backgroundColor || '#f3f4f6',
+        overlay: {
+          position: slider.content?.overlay?.position || 'left',
+          title: slider.content?.overlay?.title,
+          subtitle: slider.content?.overlay?.subtitle,
+          description: slider.content?.overlay?.description,
+          ctaText: slider.content?.overlay?.ctaText,
+          ctaLink: slider.content?.overlay?.ctaLink || getRedirectUrl(slider),
+        },
+        decorativeElements: true,
+      }));
+
+      console.log('🔍 [loadSliders] Sliders convertidos:', convertedSliders);
+
+      // Si no hay sliders, usar uno por defecto
+      if (convertedSliders.length === 0) {
+        console.log('⚠️ [loadSliders] No hay sliders, usando slider por defecto');
+        convertedSliders.push(getDefaultSlider());
+      }
+
+      // Ordenar por display_order
+      convertedSliders.sort((a, b) => {
+        const aOrder = slidersData.find(s => s.id === a.id)?.display_order || 0;
+        const bOrder = slidersData.find(s => s.id === b.id)?.display_order || 0;
+        return aOrder - bOrder;
+      });
+
+      setSliders(convertedSliders);
+    } catch (error) {
+      console.error('❌ Error cargando sliders:', error);
+      // Si hay error, usar slider por defecto
+      setSliders([getDefaultSlider()]);
+    } finally {
+      setLoadingSliders(false);
+    }
+  };
+
+  const getRedirectUrl = (slider: LandingSlider): string => {
+    if (slider.redirect_type === 'url' && slider.redirect_url) {
+      return slider.redirect_url;
+    }
+    if (slider.redirect_type === 'category' && slider.redirect_target_id) {
+      return `/products?category=${slider.redirect_target_id}`;
+    }
+    if (slider.redirect_type === 'promotion' && slider.redirect_target_id) {
+      return `/products?promotion=${slider.redirect_target_id}`;
+    }
+    if (slider.redirect_type === 'branch' && slider.redirect_target_id) {
+      return `/sucursal/${slider.redirect_target_id}`;
+    }
+    return '/products';
+  };
+
+  const getDefaultSlider = (): SlideContent => {
+    const storeData = contextType === 'grupo' ? groupData : branchData;
+    const storeName = storeData?.name || 'Agora';
+    const storeDescription = storeData?.description || '';
+
+    return {
+      id: 'default',
+      gradientColors: ['#ef4444', '#dc2626', '#991b1b'],
+      decorativeElements: true,
+      overlay: {
+        position: 'left',
+        badge: 'BIENVENIDO',
+        badgePosition: 'top-left',
+        badgeColor: '#ec4899',
+        title: `BIENVENIDO A`,
+        titleHighlight: storeName.toUpperCase(),
+        subtitle: 'Ofertas exclusivas para ti',
+        description: storeDescription || 'Encuentra los mejores productos',
+        ctaText: 'Ver productos',
+        ctaLink: '/products',
+        ctaColor: 'bg-white text-gray-900',
+      },
+    };
+  };
+
   const storeData = contextType === 'grupo' ? groupData : branchData;
   const storeName = storeData?.name || 'Agora';
   const storeDescription = storeData?.description || '';
@@ -77,87 +209,18 @@ export default function StoreHomePage() {
         ) : (
           <>
             {/* Slider Promocional Full Width */}
-            <PromotionalSlider
-              slides={[
-                {
-                  id: '1',
-                  gradientColors: ['#ef4444', '#dc2626', '#991b1b'],
-                  decorativeElements: true,
-                  overlay: {
-                    position: 'left',
-                    badge: 'OFERTA ESPECIAL',
-                    badgePosition: 'top-left',
-                    badgeColor: '#ec4899',
-                    title: `BIENVENIDO A`,
-                    titleHighlight: storeName.toUpperCase(),
-                    subtitle: 'Ofertas exclusivas para ti',
-                    description: storeDescription || 'Encuentra los mejores productos',
-                    ctaText: 'Ver productos',
-                    ctaLink: '/products',
-                    ctaColor: 'bg-white text-gray-900',
-                  },
-                },
-                {
-                  id: '2',
-                  gradientColors: ['#3b82f6', '#2563eb', '#1e40af'],
-                  decorativeElements: true,
-                  overlay: {
-                    position: 'center',
-                    title: 'ENVÍO GRATIS',
-                    subtitle: 'En tu primera compra',
-                    description: 'Aprovecha envíos gratuitos en todos tus pedidos',
-                    ctaText: 'Comprar ahora',
-                    ctaLink: '/products',
-                    ctaColor: 'bg-white text-gray-900',
-                  },
-                },
-                {
-                  id: '3',
-                  gradientColors: ['#10b981', '#059669', '#047857'],
-                  decorativeElements: true,
-                  overlay: {
-                    position: 'right',
-                    title: 'PRODUCTOS DESTACADOS',
-                    subtitle: 'Lo más vendido',
-                    description: 'Encuentra los productos más populares',
-                    ctaText: 'Ver destacados',
-                    ctaLink: '/products?isFeatured=true',
-                    ctaColor: 'bg-white text-gray-900',
-                  },
-                },
-                {
-                  id: '4',
-                  gradientColors: ['#ec4899', '#db2777', '#be185d'],
-                  decorativeElements: true,
-                  overlay: {
-                    position: 'center',
-                    title: 'HASTA 30% OFF',
-                    subtitle: 'En productos seleccionados',
-                    description: 'Aprovecha nuestras mejores ofertas',
-                    ctaText: 'Ver ofertas',
-                    ctaLink: '/products',
-                    ctaColor: 'bg-white text-gray-900',
-                  },
-                },
-                {
-                  id: '5',
-                  gradientColors: ['#6366f1', '#4f46e5', '#4338ca'],
-                  decorativeElements: true,
-                  overlay: {
-                    position: 'left',
-                    title: 'COMPRA Y RECOGE',
-                    subtitle: 'En tu tienda más cercana',
-                    description: 'Compra en línea y recoge en la sucursal',
-                    ctaText: 'Ver más',
-                    ctaLink: '/products',
-                    ctaColor: 'bg-white text-gray-900',
-                  },
-                },
-              ]}
-              autoPlay={true}
-              autoPlayInterval={5000}
-              height="450px"
-            />
+            {loadingSliders ? (
+              <div className="w-full h-[810px] bg-gray-200 animate-pulse flex items-center justify-center">
+                <p className="text-gray-500">Cargando sliders...</p>
+              </div>
+            ) : (
+              <PromotionalSlider
+                slides={sliders}
+                autoPlay={true}
+                autoPlayInterval={5000}
+                height="810px"
+              />
+            )}
 
             {/* Tarjetas Inteligentes */}
             <SmartCategoryCards />

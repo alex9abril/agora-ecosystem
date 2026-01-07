@@ -32,7 +32,7 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import StoreSelectorDialog from '../StoreSelectorDialog';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
-import VehicleSelectorDialog from '../VehicleSelectorDialog';
+import VehicleMenu from '../VehicleMenu';
 import { getStoredVehicle, getSelectedVehicle, setSelectedVehicle } from '@/lib/vehicle-storage';
 import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
 
@@ -438,13 +438,13 @@ export default function Header() {
         className="sticky top-0 z-50" 
         style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}
       >
-        {/* Primera fila: Logo, promoción y acciones de usuario */}
+        {/* Primera fila: Logo y acciones de usuario */}
         <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
-          <div className="w-full px-4 py-3">
+          <div className="w-full px-6 py-4">
             <div className="flex items-center justify-between">
-              {/* Logo y branding */}
-              <div className="flex items-center gap-4">
-                <ContextualLink href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              {/* Logo y nombre de tienda */}
+              <div className="flex items-center gap-4 flex-shrink-0">
+                <ContextualLink href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
                   <div className="relative" style={{ width: '128px', height: '38px' }}>
                     {shouldShowLogo ? (
                       <>
@@ -486,17 +486,13 @@ export default function Header() {
               </div>
 
               {/* Acciones de usuario */}
-              <div className="flex items-center gap-1">
-                {/* Separador visual */}
-                <div className="h-6 w-px mx-2" style={{ backgroundColor: separatorColor }} />
+              <div className="flex items-center gap-2 flex-shrink-0">
                 
                 {/* Botón Navegar */}
                 <button
                   onClick={() => setShowNavigationDialog(true)}
-                  className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                  className="px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
                   style={{ color: textColor }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   <BusinessIcon className="w-5 h-5" style={{ color: textColor }} />
                   <span className="hidden sm:inline">Navegar</span>
@@ -506,10 +502,8 @@ export default function Header() {
                 {!isAuthenticated ? (
                   <ContextualLink 
                     href="/auth/login" 
-                    className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5"
+                    className="px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <PersonIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="hidden sm:inline">Ingresar</span>
@@ -630,9 +624,6 @@ export default function Header() {
                   </div>
                 )}
                 
-                {/* Separador visual */}
-                <div className="h-6 w-px mx-2" style={{ backgroundColor: separatorColor }} />
-                
                 {/* Carrito con preview */}
                 <div 
                   className="relative"
@@ -641,10 +632,8 @@ export default function Header() {
                 >
                   <ContextualLink 
                     href={getCartUrl()} 
-                    className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap group"
+                    className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap group hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <div className="relative">
                       <ShoppingCartIcon className="w-6 h-6 transition-colors" style={{ color: textColor }} />
@@ -749,9 +738,9 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Segunda fila: Menú, búsqueda y selector de tienda */}
+        {/* Segunda fila: Menú, buscador, selector de vehículo y tienda */}
         <div style={{ backgroundColor: primaryColor, borderTop: `1px solid ${borderColor}` }}>
-          <div className="w-full px-4 py-3">
+          <div className="w-full px-6 py-3">
             <div className="flex items-center gap-4">
               {/* Grupo izquierdo: Menú y selector de vehículo */}
               <div className="flex items-center gap-4 flex-shrink-0 relative">
@@ -760,38 +749,27 @@ export default function Header() {
                     setShowCategoriesMenu(!showCategoriesMenu);
                     setShowMobileMenu(false);
                   }}
-                  onMouseEnter={() => setShowCategoriesMenu(true)}
-                  className="flex items-center gap-2 transition-colors relative"
+                  className="flex items-center gap-2 transition-colors relative hover:opacity-80"
                   style={{ color: textColor }}
-                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                 >
                   <MenuIcon className="w-6 h-6" style={{ color: textColor }} />
                   <span className="hidden sm:inline text-sm font-medium">Menú</span>
                 </button>
                 
-                {/* Menú de categorías flotante - Estilo AliExpress */}
-                {showCategoriesMenu && headerRef.current && (
-                  <div
-                    className="fixed left-0 right-0 z-50"
-                    style={{ 
-                      top: `${headerRef.current.offsetHeight + headerRef.current.offsetTop + 8}px`,
-                    }}
-                    onMouseLeave={() => setShowCategoriesMenu(false)}
-                  >
-                    <div className="w-full px-4">
-                      <CategoriesMenu onCategoryClick={() => setShowCategoriesMenu(false)} />
-                    </div>
-                  </div>
+                {/* Menú de categorías flotante lateral izquierdo */}
+                {showCategoriesMenu && (
+                  <CategoriesMenu 
+                    isOpen={showCategoriesMenu}
+                    onClose={() => setShowCategoriesMenu(false)}
+                    onCategoryClick={() => setShowCategoriesMenu(false)} 
+                  />
                 )}
 
                 {isClient && isVehicleLoaded && currentVehicle ? (
                   <button 
                     onClick={() => setShowVehicleSelector(true)}
-                    className="hidden md:flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[200px] max-w-[280px]"
+                    className="hidden md:flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[200px] max-w-[280px] hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <span className="flex-shrink-0">
                       <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
@@ -812,10 +790,8 @@ export default function Header() {
                 ) : isClient && isVehicleLoaded ? (
                   <button 
                     onClick={() => setShowVehicleSelector(true)}
-                    className="hidden md:flex items-center gap-2 transition-colors"
+                    className="hidden md:flex items-center gap-2 transition-colors hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                   >
                     <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="text-sm font-medium">Agregar Vehículo</span>
@@ -825,55 +801,43 @@ export default function Header() {
               </div>
 
               {/* Barra de búsqueda - Ocupa todo el espacio disponible */}
-              <form onSubmit={handleSearch} className="flex-1 min-w-0 flex">
-                {/* Botón de categorías */}
-                <button
-                  type="button"
-                  className="flex items-center gap-1 px-4 py-2 bg-toyota-gray-light text-toyota-gray rounded-l-lg border border-r-0 border-gray-300 hover:bg-gray-200 transition-colors text-sm font-medium whitespace-nowrap flex-shrink-0"
-                >
-                  <span>Todas las categorías</span>
-                  <span className="text-toyota-gray">▼</span>
-                </button>
-                
-                {/* Input de búsqueda */}
-                <div className="relative flex-1 min-w-0">
+              <div className="flex-1 min-w-0 px-4">
+                <form onSubmit={handleSearch} className="relative w-full">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar en Agora Parts"
-                    className="block w-full h-full pl-4 pr-12 py-2 border border-gray-300 focus:ring-2 focus:ring-toyota-red focus:border-toyota-red text-sm rounded-none"
+                    placeholder="Buscar palabras clave, números de parte o VIN"
+                    className="w-full pl-6 pr-14 py-3 border border-gray-300 rounded-full bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-base shadow-inner font-sans"
+                    style={{
+                      boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)',
+                    }}
                   />
-                  {searchQuery && (
+                  {searchQuery ? (
                     <button
                       type="button"
                       onClick={clearSearch}
-                      className="absolute inset-y-0 right-12 flex items-center pr-2 text-gray-400 hover:text-gray-600"
+                      className="absolute inset-y-0 right-12 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                     >
-                      <CloseIcon className="h-4 w-4" />
+                      <CloseIcon className="h-5 w-5" />
                     </button>
-                  )}
-                </div>
-                
-                {/* Botón de búsqueda */}
-                <button
-                  type="submit"
-                  className="flex items-center justify-center px-4 rounded-r-lg hover:opacity-90 transition-opacity flex-shrink-0"
-                  style={{ backgroundColor: primaryColor, color: textColor }}
-                >
-                  <SearchIcon className="h-5 w-5" style={{ color: textColor }} />
-                </button>
-              </form>
+                  ) : null}
+                  <button
+                    type="submit"
+                    className="absolute inset-y-0 right-0 flex items-center justify-center w-12 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
+                  >
+                    <SearchIcon className="h-5 w-5 text-gray-900" />
+                  </button>
+                </form>
+              </div>
 
               {/* Información de tienda seleccionada - Alineado a la derecha */}
               <div className="flex-shrink-0">
                 {isClient && storeInfo ? (
                   <button
                     onClick={() => setShowStoreSelector(true)}
-                    className="hidden lg:flex items-start gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[240px] max-w-[320px]"
+                    className="hidden lg:flex items-start gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[240px] max-w-[320px] hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBgColor}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <span className="flex-shrink-0 mt-0.5">
                       <CheckCircleIcon className="w-5 h-5" style={{ color: textColor }} />
@@ -896,10 +860,8 @@ export default function Header() {
                 ) : (
                   <button
                     onClick={() => setShowStoreSelector(true)}
-                    className="hidden lg:flex items-center gap-2 transition-colors whitespace-nowrap"
+                    className="hidden lg:flex items-center gap-2 transition-colors whitespace-nowrap hover:opacity-80"
                     style={{ color: textColor }}
-                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
-                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                   >
                     <LocationOnIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="text-sm font-medium">Seleccionar Tienda</span>
@@ -960,9 +922,9 @@ export default function Header() {
         onClose={() => setShowNavigationDialog(false)}
       />
       
-      {/* Selector de vehículos */}
-      <VehicleSelectorDialog
-        open={showVehicleSelector}
+      {/* Panel de vehículos (lateral derecho) */}
+      <VehicleMenu
+        isOpen={showVehicleSelector}
         onClose={() => {
           setShowVehicleSelector(false);
           // Solo recargar vehículo desde localStorage, no hacer peticiones al backend
@@ -987,7 +949,7 @@ export default function Header() {
           
           if (isAuthenticated && isAccountVehicle) {
             // Si está autenticado y seleccionó un vehículo de la cuenta
-            // El vehículo ya fue establecido como predeterminado en VehicleSelectorDialog
+            // El vehículo ya fue establecido como predeterminado en VehicleMenu
             // Solo actualizar el estado local con el vehículo seleccionado
             setCurrentVehicle(vehicle);
             setSelectedVehicle(vehicle);
