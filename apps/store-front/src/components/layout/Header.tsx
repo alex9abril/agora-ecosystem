@@ -525,7 +525,7 @@ export default function Header() {
                     {/* En el servidor y en la primera renderización del cliente: SIEMPRE logo por defecto */}
                     {/* Solo después de la hidratación se puede cambiar */}
                     {shouldShowLogo ? (
-                      useCustomLogo ? (
+                      useCustomLogo && logoUrl ? (
                         <img
                           src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
                           alt={logoAlt}
