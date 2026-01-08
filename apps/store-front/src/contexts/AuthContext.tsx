@@ -160,14 +160,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response: AuthResponse = await authService.signUp(data);
       
-      setToken(response.accessToken);
+      console.log('📥 [AuthContext.signUp] Respuesta recibida:', {
+        hasUser: !!response.user,
+        hasSession: !!response.session,
+        hasAccessToken: !!response.accessToken,
+        hasRefreshToken: !!response.refreshToken,
+        sessionAccessToken: !!response.session?.access_token,
+        sessionRefreshToken: !!response.session?.refresh_token,
+        fullResponse: response,
+      });
+      
+      // Asegurar que tenemos accessToken y refreshToken
+      const accessToken = response.accessToken || response.session?.access_token;
+      const refreshToken = response.refreshToken || response.session?.refresh_token;
+      
+      // Si no hay token pero tenemos usuario, intentar iniciar sesión automáticamente
+      if (!accessToken && response.user) {
+        console.warn('⚠️ [AuthContext.signUp] No hay token en la respuesta, intentando iniciar sesión automáticamente...');
+        try {
+          const signInResponse = await authService.signIn({
+            email: data.email,
+            password: data.password,
+          });
+          if (signInResponse.accessToken) {
+            setToken(signInResponse.accessToken);
+            setUser(signInResponse.user);
+            setAuthToken(signInResponse.accessToken);
+            if (signInResponse.refreshToken) {
+              setRefreshToken(signInResponse.refreshToken);
+            }
+            setUserInStorage(signInResponse.user);
+            console.log('✅ [AuthContext.signUp] Sesión creada mediante signIn automático');
+            return;
+          }
+        } catch (signInError: any) {
+          console.error('❌ [AuthContext.signUp] Error al intentar iniciar sesión automáticamente:', signInError);
+        }
+      }
+      
+      if (!accessToken) {
+        console.error('❌ [AuthContext.signUp] No se recibió accessToken en la respuesta:', response);
+        throw new Error('No se pudo crear la sesión. Por favor, intenta iniciar sesión manualmente.');
+      }
+      
+      setToken(accessToken);
       setUser(response.user);
       
-      setAuthToken(response.accessToken);
-      if (response.refreshToken) {
-        setRefreshToken(response.refreshToken);
+      setAuthToken(accessToken);
+      if (refreshToken) {
+        setRefreshToken(refreshToken);
       }
       setUserInStorage(response.user);
+      
+      console.log('✅ [AuthContext.signUp] Sesión guardada correctamente:', {
+        hasToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        userId: response.user?.id,
+      });
       
       // Sincronizar vehículo de localStorage a la base de datos si existe
       try {

@@ -59,6 +59,9 @@ export default function Header() {
   const [isClient, setIsClient] = useState(false);
   const [showCartPreview, setShowCartPreview] = useState(false);
   const [branding, setBranding] = useState<Branding | null>(null);
+  // CRÍTICO: Siempre inicializar como true para garantizar consistencia entre servidor y cliente
+  // El branding se carga en useEffect, así que en el servidor y en la primera renderización del cliente
+  // siempre será true, garantizando que el HTML inicial sea idéntico
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
   
   // Función helper para obtener el color guardado
@@ -389,10 +392,24 @@ export default function Header() {
   }, [contextType, groupId, branchId]);
 
   // Determinar qué logo usar
-  // Solo mostrar logo cuando el branding haya terminado de cargar (o si es contexto global)
-  const shouldShowLogo = !isBrandingLoading || contextType === 'global';
-  const logoUrl = branding?.logo_url || agoraLogo;
-  const logoAlt = branding?.logo_url ? getStoreName() || 'AGORA PARTS' : 'AGORA PARTS';
+  // CRÍTICO: El servidor y el cliente DEBEN renderizar EXACTAMENTE lo mismo inicialmente
+  // El problema es que isBrandingLoading puede ser diferente entre servidor y cliente
+  // Solución: Usar un estado que solo se actualiza después de la hidratación
+  const [isHydrated, setIsHydrated] = useState(false);
+  
+  useEffect(() => {
+    // Solo marcar como hidratado después de que el componente esté montado
+    setIsHydrated(true);
+  }, []);
+  
+  // CRÍTICO: En el servidor (isHydrated = false): SIEMPRE mostrar logo por defecto
+  // En el cliente inicialmente (isHydrated = false): SIEMPRE mostrar logo por defecto
+  // Esto garantiza que el HTML inicial sea idéntico
+  // Solo después de la hidratación (isHydrated = true) considerar el estado de branding
+  const shouldShowLogo = isHydrated ? (!isBrandingLoading || contextType === 'global') : true;
+  const useCustomLogo = isHydrated && !isBrandingLoading && !!branding?.logo_url;
+  const logoUrl = useCustomLogo ? branding.logo_url : agoraLogo;
+  const logoAlt = useCustomLogo ? (getStoreName() || 'AGORA PARTS') : 'AGORA PARTS';
   
   // Función para calcular la luminosidad de un color hexadecimal
   const getLuminance = (hex: string): number => {
@@ -441,8 +458,9 @@ export default function Header() {
   };
   
   // Obtener color primario del branding, o usar color por defecto
-  // Solo usar color personalizado si no estamos en contexto global y el branding está cargado
-  const shouldUseBrandingColor = !isBrandingLoading && (contextType === 'grupo' || contextType === 'sucursal');
+  // CRÍTICO: Solo usar color personalizado DESPUÉS de la hidratación para evitar diferencias
+  // entre servidor y cliente causadas por datos en localStorage
+  const shouldUseBrandingColor = isHydrated && !isBrandingLoading && (contextType === 'grupo' || contextType === 'sucursal');
   const primaryColor = shouldUseBrandingColor && branding?.colors?.primary 
     ? branding.colors.primary 
     : '#254639'; // Verde oliva complementario al logo (#433835) por defecto
@@ -501,43 +519,55 @@ export default function Header() {
             <div className="flex items-center justify-between">
               {/* Logo y nombre de tienda */}
               <div className="flex items-center gap-4 flex-shrink-0">
-                <ContextualLink href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity">
+                <ContextualLink href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity" style={{}}>
                   <div className="relative" style={{ width: '128px', height: '38px' }}>
+                    {/* CRÍTICO: El servidor y el cliente deben renderizar EXACTAMENTE lo mismo */}
+                    {/* En el servidor y en la primera renderización del cliente: SIEMPRE logo por defecto */}
+                    {/* Solo después de la hidratación se puede cambiar */}
                     {shouldShowLogo ? (
-                      <>
-                        {branding?.logo_url ? (
-                          <img
-                            src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
-                            alt={logoAlt}
-                            width={128}
-                            height={38}
-                            className="object-contain"
-                            style={{ maxWidth: '128px', maxHeight: '38px' }}
-                          />
-                        ) : (
-                          <Image
-                            src={agoraLogo}
-                            alt="AGORA PARTS"
-                            width={128}
-                            height={38}
-                            className="object-contain"
-                            priority
-                          />
-                        )}
-                        {!branding?.logo_url && (
-                          <span className="absolute text-[6px] text-white uppercase tracking-wide whitespace-nowrap" style={{ left: '48px', top: '33px', fontWeight: 600 }}>
-                            EL CENTRO DE TUS REFACCIONES.
-                          </span>
-                        )}
-                      </>
+                      useCustomLogo ? (
+                        <img
+                          src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
+                          alt={logoAlt}
+                          width={128}
+                          height={38}
+                          className="object-contain"
+                          style={{ maxWidth: '128px', maxHeight: '38px', width: 'auto', height: 'auto' }}
+                        />
+                      ) : (
+                        <img
+                          src={typeof agoraLogo === 'string' ? agoraLogo : agoraLogo.src}
+                          alt="AGORA PARTS"
+                          width={128}
+                          height={38}
+                          className="object-contain"
+                          style={{ maxWidth: '128px', maxHeight: '38px', width: 'auto', height: 'auto' }}
+                        />
+                      )
                     ) : (
-                      // Placeholder mientras carga el branding (mismo tamaño para evitar layout shift)
+                      // Placeholder - solo se muestra después de la hidratación si está cargando
                       <div 
                         className="bg-transparent"
                         style={{ width: '128px', height: '38px' }}
                         aria-hidden="true"
                       />
                     )}
+                    {/* Span - SIEMPRE presente en el DOM sin condiciones para mantener estructura consistente */}
+                    {/* Solo cambia su visibilidad después de la hidratación */}
+                    <span 
+                      className="absolute text-[6px] text-white uppercase tracking-wide whitespace-nowrap" 
+                      style={{ 
+                        left: '48px', 
+                        top: '33px', 
+                        fontWeight: 600,
+                        // En servidor y primera renderización: visible (useCustomLogo = false, shouldShowLogo = true)
+                        // Después de hidratación: oculto solo si hay branding o si no se muestra el logo
+                        visibility: (shouldShowLogo && !useCustomLogo) ? 'visible' : 'hidden'
+                      }}
+                      suppressHydrationWarning
+                    >
+                      EL CENTRO DE TUS REFACCIONES.
+                    </span>
                   </div>
                 </ContextualLink>
               </div>
@@ -864,7 +894,7 @@ export default function Header() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar palabras clave, números de parte o VIN"
+                    placeholder="Buscar por nombre o número de parte"
                     className="w-full pl-6 pr-14 py-3 border border-gray-300 rounded-full bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-base shadow-inner font-sans"
                     style={{
                       boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)',

@@ -380,14 +380,78 @@ export class AuthService {
             session = signUpData.session;
             console.log('✅ Usuario client creado con signUp normal:', userId);
 
-            // Confirmar email usando admin client
+            // Confirmar email usando SQL directo (más confiable que admin client)
             try {
-              await supabaseAdmin.auth.admin.updateUserById(userId, {
-                email_confirm: true,
-              });
-              console.log('✅ Email confirmado automáticamente');
+              if (dbPool) {
+                // Confirmar email directamente en la base de datos
+                // Nota: confirmed_at es una columna generada, no se puede actualizar directamente
+                await dbPool.query(
+                  `UPDATE auth.users 
+                   SET email_confirmed_at = CURRENT_TIMESTAMP,
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $1`,
+                  [userId]
+                );
+                console.log('✅ Email confirmado automáticamente usando SQL directo');
+              } else if (supabaseAdmin) {
+                // Fallback: intentar con admin client (puede fallar si no tiene permisos)
+                try {
+                  await supabaseAdmin.auth.admin.updateUserById(userId, {
+                    email_confirm: true,
+                  });
+                  console.log('✅ Email confirmado automáticamente usando admin client');
+                } catch (adminError: any) {
+                  console.warn('⚠️  No se pudo confirmar email con admin client (puede ser problema de permisos):', adminError.message);
+                  // Continuar de todas formas - el usuario puede confirmar manualmente más tarde
+                }
+              }
+              
+              // Esperar un momento para asegurar que la confirmación se procese
+              await new Promise(resolve => setTimeout(resolve, 1500));
+              
+              // Después de confirmar el email, crear sesión automáticamente
+              try {
+                const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                  email: signUpDto.email,
+                  password: signUpDto.password,
+                });
+                if (signInError) {
+                  console.error('❌ Error al iniciar sesión después de confirmar email:', {
+                    message: signInError.message,
+                    status: signInError.status,
+                  });
+                  // Intentar una vez más después de esperar más tiempo
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                  const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+                    email: signUpDto.email,
+                    password: signUpDto.password,
+                  });
+                  if (!retrySignInError && retrySignInData?.session) {
+                    session = retrySignInData.session;
+                    authData = { user: retrySignInData.user };
+                    console.log('✅ Sesión creada automáticamente en el segundo intento después de confirmar email');
+                  } else {
+                    console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+                  }
+                } else if (signInData?.session) {
+                  session = signInData.session;
+                  authData = { user: signInData.user };
+                  console.log('✅ Sesión creada automáticamente después de confirmar email:', {
+                    hasSession: !!session,
+                    hasAccessToken: !!session?.access_token,
+                    hasRefreshToken: !!session?.refresh_token,
+                  });
+                } else {
+                  console.warn('⚠️  No se pudo crear sesión después de confirmar email: signInData no tiene session');
+                }
+              } catch (sessionErr: any) {
+                console.error('❌ Excepción creando sesión después de confirmar email:', {
+                  message: sessionErr.message,
+                  stack: sessionErr.stack,
+                });
+              }
             } catch (confirmError: any) {
-              console.warn('⚠️  No se pudo confirmar email automáticamente:', confirmError.message);
+              console.error('❌ Error al confirmar email automáticamente:', confirmError);
               // Continuar de todas formas, el usuario puede confirmar manualmente
             }
           }
@@ -398,8 +462,54 @@ export class AuthService {
       } else if (adminData.user) {
         authData = { user: adminData.user };
         // Para usuarios creados con admin, necesitamos crear una sesión manualmente
-        // o el usuario puede iniciar sesión normalmente después
-        console.log('✅ Usuario client creado con email confirmado');
+        // Iniciar sesión automáticamente para crear la sesión
+        console.log('✅ Usuario client creado con email confirmado, creando sesión...');
+        console.log('📧 Email del usuario:', signUpDto.email);
+        
+        // Esperar un momento para asegurar que el usuario esté completamente creado
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        try {
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: signUpDto.email,
+            password: signUpDto.password,
+          });
+          
+          if (signInError) {
+            console.error('❌ Error al iniciar sesión después de crear usuario:', {
+              message: signInError.message,
+              status: signInError.status,
+            });
+            // Si falla, intentar una vez más después de esperar
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+              email: signUpDto.email,
+              password: signUpDto.password,
+            });
+            if (!retrySignInError && retrySignInData?.session) {
+              session = retrySignInData.session;
+              authData = { user: retrySignInData.user };
+              console.log('✅ Sesión creada automáticamente en el segundo intento');
+            } else {
+              console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+            }
+          } else if (signInData?.session) {
+            session = signInData.session;
+            authData = { user: signInData.user };
+            console.log('✅ Sesión creada automáticamente para el cliente:', {
+              hasSession: !!session,
+              hasAccessToken: !!session?.access_token,
+              hasRefreshToken: !!session?.refresh_token,
+            });
+          } else {
+            console.warn('⚠️  No se pudo crear sesión automática: signInData no tiene session');
+          }
+        } catch (sessionErr: any) {
+          console.error('❌ Excepción creando sesión automática:', {
+            message: sessionErr.message,
+            stack: sessionErr.stack,
+          });
+        }
       }
     } else {
       // Para otros roles, usar signUp normal
@@ -512,6 +622,16 @@ export class AuthService {
     // Para usuarios 'client', el email ya está confirmado, así que pueden iniciar sesión inmediatamente
     // Para otros roles, pueden necesitar confirmar email
     const needsEmailConfirmation = platformRole !== 'client' && !session;
+
+    // Log final de la respuesta
+    console.log('📤 [signUp] Respuesta final:', {
+      hasUser: !!authData.user,
+      hasSession: !!session,
+      hasAccessToken: !!session?.access_token,
+      hasRefreshToken: !!session?.refresh_token,
+      platformRole,
+      needsEmailConfirmation,
+    });
 
     return {
       user: authData.user,
@@ -793,10 +913,19 @@ export class AuthService {
             if (!user.email_confirmed_at && profile?.role === 'client') {
               console.log('📧 Confirmando email automáticamente para cliente...');
               try {
-                await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
                   email_confirm: true,
                 });
-                console.log('✅ Email confirmado automáticamente');
+                if (updateError) {
+                  console.error('❌ Error al confirmar email:', updateError);
+                } else {
+                  console.log('✅ Email confirmado automáticamente:', {
+                    userId: user.id,
+                    emailConfirmed: updatedUser?.user?.email_confirmed_at ? 'Sí' : 'No',
+                  });
+                  // Esperar más tiempo para que se propague la confirmación
+                  await new Promise(resolve => setTimeout(resolve, 1500));
+                }
               } catch (confirmError: any) {
                 console.error('⚠️  Error confirmando email:', confirmError);
               }
@@ -809,6 +938,44 @@ export class AuthService {
       }
     }
 
+    // Verificar si el usuario es cliente y confirmar email automáticamente si no está confirmado
+    if (supabaseAdmin && dbPool) {
+      try {
+        const { data: usersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
+        
+        if (!usersError && usersData?.users && Array.isArray(usersData.users)) {
+          const user = usersData.users.find((u: any) => u.email === signInDto.email);
+          
+          if (user) {
+            // Obtener perfil del usuario
+            const profileResult = await dbPool.query(
+              'SELECT role, is_active FROM core.user_profiles WHERE id = $1',
+              [user.id]
+            );
+            const profile = profileResult.rows[0];
+            
+            // Si es cliente y el email no está confirmado, confirmarlo automáticamente
+            if (profile?.role === 'client' && !user.email_confirmed_at) {
+              console.log('📧 Confirmando email automáticamente para cliente durante signIn...');
+              try {
+                await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                  email_confirm: true,
+                });
+                console.log('✅ Email confirmado automáticamente durante signIn');
+                // Esperar un momento para que se procese
+                await new Promise(resolve => setTimeout(resolve, 500));
+              } catch (confirmError: any) {
+                console.warn('⚠️  No se pudo confirmar email durante signIn:', confirmError.message);
+              }
+            }
+          }
+        }
+      } catch (checkError: any) {
+        console.warn('⚠️  Error verificando usuario durante signIn:', checkError);
+        // Continuar con el intento de login normal
+      }
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email: signInDto.email,
       password: signInDto.password,
@@ -817,13 +984,132 @@ export class AuthService {
     if (error) {
       console.error('❌ Error en signIn:', error.message);
       
+      // Si el error es "Email not confirmed" para un cliente, confirmar automáticamente usando SQL
+      if ((error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) && dbPool) {
+        console.log('🔄 Error de email no confirmado detectado, intentando confirmar automáticamente usando SQL...');
+        
+        try {
+          // Buscar usuario por email usando SQL directo (más confiable que admin client)
+          const userResult = await dbPool.query(
+            `SELECT id, email, email_confirmed_at 
+             FROM auth.users 
+             WHERE email = $1`,
+            [signInDto.email.toLowerCase()]
+          );
+          
+          if (userResult.rows.length > 0) {
+            const user = userResult.rows[0];
+            console.log('✅ Usuario encontrado en BD:', {
+              id: user.id,
+              email: user.email,
+              emailConfirmed: !!user.email_confirmed_at,
+            });
+            
+            // Obtener perfil del usuario
+            const profileResult = await dbPool.query(
+              'SELECT role FROM core.user_profiles WHERE id = $1',
+              [user.id]
+            );
+            const profile = profileResult.rows[0];
+            
+            console.log('📋 Perfil del usuario:', {
+              role: profile?.role,
+              hasProfile: !!profile,
+            });
+            
+            // Si es cliente y el email no está confirmado, confirmarlo usando SQL
+            if (profile?.role === 'client' && !user.email_confirmed_at) {
+              console.log('🔄 Cliente detectado - confirmando email automáticamente usando SQL...');
+              
+              try {
+                await dbPool.query(
+                  `UPDATE auth.users 
+                   SET email_confirmed_at = CURRENT_TIMESTAMP,
+                       updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $1`,
+                  [user.id]
+                );
+                console.log('✅ Email confirmado automáticamente usando SQL directo');
+                
+                // Esperar más tiempo para que Supabase propague la confirmación
+                console.log('⏳ Esperando 3 segundos para que se propague la confirmación...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Reintentar signIn
+                console.log('🔄 Reintentando signIn después de confirmar email...');
+                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
+                  email: signInDto.email,
+                  password: signInDto.password,
+                });
+                
+                if (!retryError && retryData?.session) {
+                  console.log('✅ SignIn exitoso después de confirmar email automáticamente');
+                  
+                  // Obtener perfil
+                  let userProfile = null;
+                  try {
+                    const profileResult = await dbPool.query(
+                      'SELECT * FROM core.user_profiles WHERE id = $1',
+                      [retryData.user.id]
+                    );
+                    userProfile = profileResult.rows[0] || null;
+                  } catch (e) {
+                    console.error('Error obteniendo perfil:', e);
+                  }
+                  
+                  return {
+                    user: {
+                      ...retryData.user,
+                      profile: userProfile,
+                    },
+                    session: retryData.session,
+                    accessToken: retryData.session.access_token,
+                    refreshToken: retryData.session.refresh_token,
+                  };
+                } else {
+                  console.error('❌ SignIn aún falla después de confirmar email:', retryError?.message);
+                  // Si aún falla, lanzar error especial para que el frontend reintente
+                  throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
+                }
+              } catch (sqlError: any) {
+                console.error('❌ Error al confirmar email con SQL:', sqlError);
+                // Si es un error especial que lanzamos, re-lanzarlo
+                if (sqlError instanceof UnauthorizedException && sqlError.message.includes('EMAIL_CONFIRMED')) {
+                  throw sqlError;
+                }
+                // Lanzar error especial para que el frontend reintente
+                throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
+              }
+            } else {
+              console.log('⚠️  Usuario no es cliente o email ya está confirmado');
+            }
+          } else {
+            console.log('⚠️  Usuario no encontrado en la base de datos');
+          }
+        } catch (sqlError: any) {
+          console.error('❌ Error al buscar usuario en BD:', sqlError);
+          // Si es un error especial que lanzamos, re-lanzarlo
+          if (sqlError instanceof UnauthorizedException && sqlError.message.includes('EMAIL_CONFIRMED')) {
+            throw sqlError;
+          }
+          // Continuar con el flujo normal
+        }
+      } else {
+        console.log('⚠️  dbPool no está disponible, no se puede confirmar email automáticamente');
+      }
+      
       // Mensajes personalizados según el tipo de error
       if (error.message.includes('Invalid login credentials') || error.message.includes('invalid')) {
         throw new UnauthorizedException('Las credenciales proporcionadas son incorrectas. Por favor, verifica tu email y contraseña.');
       }
       
+      // Este bloque solo se ejecuta si el primer bloque no pudo manejar el error
+      // (por ejemplo, si no se encontró al usuario o no es cliente)
+      // Para CUALQUIER caso de email no confirmado, lanzar error especial
+      // El frontend puede manejar esto permitiendo continuar o reintentando
       if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
-        throw new UnauthorizedException('Tu cuenta requiere verificación de email. Por favor, revisa tu bandeja de entrada y haz clic en el enlace de confirmación antes de iniciar sesión.');
+        console.log('⚠️  Email not confirmed - lanzando error especial para reintento en frontend');
+        throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
       }
       
       if (error.message.includes('User not found') || error.message.includes('user_not_found')) {

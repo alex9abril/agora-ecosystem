@@ -222,7 +222,7 @@ export default function CartPage() {
         <title>Carrito - Agora</title>
       </Head>
       <StoreLayout>
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto pt-6">
           <h1 className="text-3xl font-medium text-gray-900 mb-8">Carrito de Compras</h1>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

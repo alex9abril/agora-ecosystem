@@ -183,17 +183,26 @@ export default function CheckoutPage() {
     };
   } | null>(null);
 
-  // Redirigir si no hay carrito (pero no si estamos en confirmación)
+  // Redirigir si no hay carrito (pero no si estamos en confirmación o en proceso de autenticación)
   useEffect(() => {
+    // No redirigir si estamos en el paso de autenticación o si estamos cargando (proceso de autenticación)
+    if (currentStep === 'auth' || loading) {
+      return;
+    }
+    
     if (!cartLoading && (!cart || !cart.items || cart.items.length === 0) && currentStep !== 'confirmation' && !orderId) {
       // Mantener el contexto de tienda al redirigir al carrito
       const cartUrl = getContextualUrl('/cart');
       router.push(cartUrl);
     }
-  }, [cart, cartLoading, router, currentStep, orderId, getContextualUrl]);
+  }, [cart, cartLoading, router, currentStep, orderId, getContextualUrl, loading]);
 
   // Determinar paso inicial
+  // IMPORTANTE: No cambiar el paso automáticamente si estamos en proceso de autenticación
   useEffect(() => {
+    // Solo cambiar el paso si no estamos cargando (para evitar cambios durante el registro)
+    if (loading) return;
+    
     if (isAuthenticated) {
       if (currentStep === 'auth') {
         setCurrentStep('shipping');
@@ -201,9 +210,13 @@ export default function CheckoutPage() {
         loadWalletBalance();
       }
     } else {
-      setCurrentStep('auth');
+      // Solo cambiar a 'auth' si no estamos en un paso avanzado del checkout
+      // Esto previene que se resetee el paso durante el proceso de registro
+      if (currentStep !== 'confirmation' && !orderId) {
+        setCurrentStep('auth');
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loading]);
 
   // Cargar saldo del wallet cuando se llega al paso de pago
   useEffect(() => {
@@ -574,18 +587,45 @@ export default function CheckoutPage() {
 
     try {
       if (authMode === 'login') {
-        await signIn(authEmail, authPassword);
+        try {
+          await signIn(authEmail, authPassword);
+        } catch (error: any) {
+          // Si el error es que el email está confirmado pero necesita reintentar,
+          // esperar y reintentar automáticamente
+          if (error.message?.includes('EMAIL_CONFIRMED_PLEASE_RETRY') || 
+              error.message?.includes('Tu email ha sido confirmado automáticamente')) {
+            console.log('✅ Email confirmado automáticamente, reintentando inicio de sesión...');
+            // Esperar más tiempo para que Supabase propague la confirmación
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            try {
+              await signIn(authEmail, authPassword);
+              console.log('✅ Inicio de sesión exitoso después de confirmar email');
+            } catch (retryError: any) {
+              // Si aún falla después de 3 segundos, permitir continuar de todas formas
+              // para no bloquear el checkout - el email está confirmado
+              console.warn('⚠️  No se pudo crear sesión completa después de confirmar email, pero permitiendo continuar con checkout');
+              // No lanzar error - permitir que continúe
+            }
+          } else {
+            throw error;
+          }
+        }
+        
         // Esperar a que el estado de autenticación se actualice
         // Verificar que el token esté disponible antes de continuar
         let attempts = 0;
-        while (attempts < 10) {
+        while (attempts < 20) {
           const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
           if (token || isAuthenticated) {
             break;
           }
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
         }
+        
+        // Esperar un poco más para asegurar que todos los estados se actualicen
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         // No redirigir - quedarse en el checkout y avanzar al siguiente paso
         setCurrentStep('shipping');
         await loadAddresses();
@@ -599,19 +639,36 @@ export default function CheckoutPage() {
           role: 'client',
         });
         // Esperar a que el estado de autenticación se actualice
-        // Verificar que el token esté disponible antes de continuar
+        // Aumentar el número de intentos y el tiempo de espera para dar más tiempo a la sesión
         let attempts = 0;
-        while (attempts < 10) {
+        const maxAttempts = 20;
+        while (attempts < maxAttempts) {
           const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-          if (token || isAuthenticated) {
+          const user = typeof window !== 'undefined' ? localStorage.getItem('auth_user') : null;
+          // Verificar tanto el token como el estado de autenticación
+          if (token && user) {
+            console.log('✅ Token y usuario disponibles después del registro');
             break;
           }
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
         }
-        // No redirigir - quedarse en el checkout y avanzar al siguiente paso
-        setCurrentStep('shipping');
-        await loadAddresses();
+        
+        // Esperar un poco más para asegurar que todos los estados se actualicen
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Verificar nuevamente antes de avanzar
+        const finalToken = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        if (finalToken) {
+          // No redirigir - quedarse en el checkout y avanzar al siguiente paso
+          setCurrentStep('shipping');
+          await loadAddresses();
+        } else {
+          console.warn('⚠️ Token no disponible después del registro, pero continuando...');
+          // Continuar de todas formas para no bloquear al usuario
+          setCurrentStep('shipping');
+          await loadAddresses();
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Error en la autenticación');

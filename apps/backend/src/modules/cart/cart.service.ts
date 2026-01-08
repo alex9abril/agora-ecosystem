@@ -117,8 +117,17 @@ export class CartService {
       const processedItems = itemsResult.rows.map((item) => {
         let productImageUrl = item.product_image_url_fallback || null;
         
+        // Log para debugging
+        console.log('🖼️ [CartService.getCart] Procesando imagen para item:', {
+          product_id: item.product_id,
+          product_name: item.product_name,
+          primary_image_path: item.primary_image_path,
+          product_image_url_fallback: item.product_image_url_fallback,
+          hasSupabaseAdmin: !!supabaseAdmin,
+        });
+        
         // Si hay una imagen principal de product_images, generar su URL pública
-        // Usar la misma lógica que products.service.ts
+        // Usar la misma lógica que products.service.ts para generar primary_image_url
         if (item.primary_image_path && supabaseAdmin) {
           try {
             const originalPath = item.primary_image_path;
@@ -155,11 +164,29 @@ export class CartService {
                     .from(this.BUCKET_NAME)
                     .getPublicUrl(finalPath);
                   productImageUrl = urlData.publicUrl;
+                  console.log('✅ [CartService.getCart] URL de imagen generada:', {
+                    product_id: item.product_id,
+                    finalPath,
+                    productImageUrl,
+                  });
+                } else {
+                  console.warn('⚠️ [CartService.getCart] finalPath contiene caracteres de URL, omitiendo:', finalPath);
                 }
+              } else {
+                console.warn('⚠️ [CartService.getCart] finalPath no tiene formato UUID/filename:', finalPath);
               }
+            } else {
+              console.warn('⚠️ [CartService.getCart] finalPath inválido o vacío:', finalPath);
             }
           } catch (error) {
-            console.error(`Error generando URL de imagen para producto ${item.product_id}:`, error);
+            console.error(`❌ [CartService.getCart] Error generando URL de imagen para producto ${item.product_id}:`, error);
+          }
+        } else {
+          if (!item.primary_image_path) {
+            console.warn('⚠️ [CartService.getCart] No hay primary_image_path para producto:', item.product_id);
+          }
+          if (!supabaseAdmin) {
+            console.warn('⚠️ [CartService.getCart] supabaseAdmin no está disponible');
           }
         }
 

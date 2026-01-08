@@ -343,9 +343,11 @@ export class ProductsService {
     }
 
     if (search) {
-      whereConditions.push(`(p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex})`);
-      queryParams.push(`%${search}%`, `%${search}%`);
-      paramIndex += 2;
+      // Buscar por nombre, descripción o SKU (número de parte)
+      const searchParam = `%${search}%`;
+      whereConditions.push(`(p.name ILIKE $${paramIndex} OR p.description ILIKE $${paramIndex} OR p.sku ILIKE $${paramIndex})`);
+      queryParams.push(searchParam);
+      paramIndex++;
     }
 
     // Filtrado por compatibilidad de vehículos
@@ -402,6 +404,8 @@ export class ProductsService {
       : '';
 
     // Obtener total para paginación (usar queryParams antes de agregar limit/offset)
+    // IMPORTANTE: Crear una copia de queryParams para el countQuery para evitar problemas
+    const countQueryParams = [...queryParams];
     const countQuery = `
       ${categoryCTE}
       SELECT COUNT(DISTINCT p.id) as total 
@@ -411,7 +415,7 @@ export class ProductsService {
       ${compatibilityJoin}
       ${whereClause}
     `;
-    const countResult = await pool.query(countQuery, queryParams);
+    const countResult = await pool.query(countQuery, countQueryParams);
     const total = parseInt(countResult.rows[0].total, 10);
 
     // Query principal
@@ -427,6 +431,9 @@ export class ProductsService {
     const orderByColumn = sortByMap[orderBy] || 'p.display_order';
     
     // Agregar limit y offset al final para la query principal
+    // Usar los índices correctos para LIMIT y OFFSET
+    const limitParamIndex = paramIndex;
+    const offsetParamIndex = paramIndex + 1;
     queryParams.push(limit, offset);
 
     const sqlQuery = `
@@ -490,7 +497,7 @@ export class ProductsService {
                p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
                b.name, pc.name, pc.business_id, pc.display_order
       ORDER BY COALESCE(pc.display_order, 999) ASC, ${orderByColumn} ${orderDirection}
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
 
     try {
