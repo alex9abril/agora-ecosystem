@@ -70,7 +70,7 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
 
   if (loading) {
     return (
-      <div className="bg-gray-50 rounded-lg p-6 mb-6">
+      <div className="p-6 mb-6">
         <div className="animate-pulse">
           <div className="h-6 bg-gray-200 rounded w-1/3 mb-2"></div>
           <div className="h-4 bg-gray-200 rounded w-2/3"></div>
@@ -93,74 +93,30 @@ export default function CategoryInfo({ categoryId, onCategoryLoaded }: CategoryI
   }
 
   return (
-    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 sticky top-4">
-      {/* Información de la categoría actual */}
+    <div className="sticky top-4">
+      {/* Header simple */}
       <div className="mb-4">
-        <div className="flex items-center gap-2 mb-2">
-          {category.icon_url && (
-            <img 
-              src={category.icon_url} 
-              alt={category.name}
-              className="w-6 h-6 object-contain"
-            />
-          )}
-          {!category.icon_url && (
-            <CategoryIcon className="w-6 h-6 text-toyota-red" />
-          )}
-          <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
-        </div>
-        {/* Solo mostrar total_products en contexto global, ya que en grupo/sucursal puede no ser preciso */}
-        {contextType === 'global' && category.total_products !== undefined && category.total_products > 0 && (
-          <p className="text-xs text-gray-500 mb-3">
-            {category.total_products} {category.total_products === 1 ? 'producto' : 'productos'} disponible{category.total_products === 1 ? '' : 's'}
-          </p>
-        )}
-        {contextType !== 'global' && (
-          <p className="text-xs text-gray-500 mb-3 italic">
-            Productos disponibles según filtros aplicados
-          </p>
-        )}
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+          Browse Categories
+        </h3>
       </div>
 
-      {/* Subcategorías */}
+      {/* Subcategorías - Lista simple */}
       {subcategories.length > 0 && (
-        <div className="border-t border-gray-200 pt-4">
-          <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">
-            Subcategorías
-          </h4>
-          <div className="space-y-2">
+        <div>
+          <div className="space-y-0">
             {subcategories.map((subcat) => (
               <ContextualLink
                 key={subcat.id}
                 href={getContextualUrl(`/products?categoryId=${subcat.id}`)}
-                className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200 hover:border-toyota-red hover:shadow-sm transition-all group"
+                className="block py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors"
               >
-                <div className="text-gray-400 group-hover:text-toyota-red transition-colors flex-shrink-0">
-                  {getCategoryIconFromData({
-                    name: subcat.name,
-                    icon_url: subcat.icon_url || undefined,
-                    mui_icon_name: undefined,
-                  })}
-                </div>
-                <span className="text-sm font-medium text-gray-700 group-hover:text-toyota-red transition-colors flex-1">
-                  {subcat.name}
-                </span>
+                {subcat.name}
               </ContextualLink>
             ))}
           </div>
         </div>
       )}
-
-      {/* Link para ver todos los productos de esta categoría */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <ContextualLink
-          href={getContextualUrl(`/products?categoryId=${categoryId}`)}
-          className="inline-flex items-center gap-1 text-xs font-medium text-toyota-red hover:text-toyota-red-dark transition-colors"
-        >
-          Ver todos
-          <ArrowForwardIcon className="w-3 h-3" />
-        </ContextualLink>
-      </div>
     </div>
   );
 }
