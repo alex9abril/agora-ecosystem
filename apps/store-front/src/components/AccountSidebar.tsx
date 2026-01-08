@@ -54,12 +54,12 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
 
   return (
     <aside className="w-64 flex-shrink-0">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Mi Cuenta</h2>
+      <div className="bg-transparent">
+        <div className="mb-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-4">Administrar Cuenta</h2>
         </div>
         
-        <nav className="p-2">
+        <nav>
           <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
@@ -74,14 +74,13 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
                 <li key={item.id}>
                   <ContextualLink
                     href={item.href}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    className={`block py-2 text-sm transition-colors ${
                       isActive
-                        ? 'bg-toyota-red text-white'
-                        : 'text-gray-700 hover:bg-gray-50'
+                        ? 'text-gray-900 font-medium'
+                        : 'text-gray-700 hover:text-gray-900'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />
-                    <span>{item.label}</span>
+                    {item.label}
                   </ContextualLink>
                 </li>
               );
