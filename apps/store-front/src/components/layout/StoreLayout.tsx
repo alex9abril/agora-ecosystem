@@ -13,6 +13,7 @@ import FacebookIcon from '@mui/icons-material/Facebook';
 import InstagramIcon from '@mui/icons-material/Instagram';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import BrandingLoader from '../BrandingLoader';
 
 interface StoreLayoutProps {
   children: ReactNode;
@@ -30,22 +31,145 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
     branchId,
   } = useStoreContext();
   const [branding, setBranding] = useState<Branding | null>(null);
+  const [isBrandingLoading, setIsBrandingLoading] = useState(true);
+  const [initialBackgroundColor, setInitialBackgroundColor] = useState<string | undefined>(undefined);
 
-  // Cargar branding para mostrar redes sociales
-  useEffect(() => {
-    const loadBranding = async () => {
+  // Función helper para guardar el color en localStorage
+  const saveBackgroundColor = (color: string, branchId?: string | null, groupId?: string | null) => {
+    if (typeof window === 'undefined') return;
+    try {
       if (branchId) {
-        const branchBranding = await brandingService.getBusinessBranding(branchId);
-        setBranding(branchBranding);
+        localStorage.setItem(`branding_bg_${branchId}`, color);
       } else if (groupId) {
-        const groupBranding = await brandingService.getGroupBranding(groupId);
-        setBranding(groupBranding);
+        localStorage.setItem(`branding_bg_group_${groupId}`, color);
+      }
+    } catch (error) {
+      console.error('Error guardando color:', error);
+    }
+  };
+
+  // Función helper para obtener el color guardado
+  const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | null): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      if (branchId) {
+        const stored = localStorage.getItem(`branding_bg_${branchId}`);
+        if (stored) return stored;
+      }
+      if (groupId) {
+        const stored = localStorage.getItem(`branding_bg_group_${groupId}`);
+        if (stored) return stored;
+      }
+    } catch (error) {
+      console.error('Error leyendo color guardado:', error);
+    }
+    return null;
+  };
+
+  // Aplicar color de fondo inmediatamente cuando se detecta el contexto
+  useEffect(() => {
+    // Intentar obtener el color guardado primero
+    const storedColor = getStoredBackgroundColor(branchId, groupId);
+    const colorToApply = storedColor || '#f9fafb'; // gray-50 por defecto
+    
+    if (typeof document !== 'undefined') {
+      document.body.style.backgroundColor = colorToApply;
+      setInitialBackgroundColor(colorToApply);
+    }
+  }, [branchId, groupId]);
+
+  // Cargar branding para mostrar redes sociales y aplicar colores
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadBranding = async () => {
+      setIsBrandingLoading(true);
+      
+      try {
+        let brandingData: Branding | null = null;
+        
+        if (branchId) {
+          brandingData = await brandingService.getBusinessBranding(branchId);
+          
+          // Si no tiene colores pero tiene grupo, intentar obtener colores del grupo
+          if (brandingData && !brandingData.colors?.background && groupId) {
+            try {
+              const groupBranding = await brandingService.getGroupBranding(groupId);
+              if (groupBranding?.colors?.background) {
+                brandingData = {
+                  ...brandingData,
+                  colors: {
+                    ...brandingData.colors,
+                    background: groupBranding.colors.background,
+                  },
+                };
+              }
+            } catch (error) {
+              console.error('Error cargando branding del grupo para colores:', error);
+            }
+          }
+        } else if (groupId) {
+          brandingData = await brandingService.getGroupBranding(groupId);
+        }
+        
+        if (isMounted) {
+          setBranding(brandingData);
+          
+          // Aplicar color de fondo inmediatamente si existe
+          if (brandingData?.colors?.background) {
+            const bgColor = brandingData.colors.background;
+            setInitialBackgroundColor(bgColor);
+            // Aplicar al body también para evitar flash
+            if (typeof document !== 'undefined') {
+              document.body.style.backgroundColor = bgColor;
+            }
+            // Guardar el color en localStorage para uso futuro
+            saveBackgroundColor(bgColor, branchId, groupId);
+          } else {
+            // Color por defecto
+            const defaultColor = '#f9fafb'; // gray-50
+            setInitialBackgroundColor(defaultColor);
+            if (typeof document !== 'undefined') {
+              document.body.style.backgroundColor = defaultColor;
+            }
+            // Guardar el color por defecto también
+            saveBackgroundColor(defaultColor, branchId, groupId);
+          }
+        }
+      } catch (error) {
+        console.error('Error cargando branding:', error);
+        if (isMounted) {
+          setBranding(null);
+          const defaultColor = '#f9fafb';
+          setInitialBackgroundColor(defaultColor);
+          if (typeof document !== 'undefined') {
+            document.body.style.backgroundColor = defaultColor;
+          }
+          // Guardar el color por defecto en caso de error
+          saveBackgroundColor(defaultColor, branchId, groupId);
+        }
+      } finally {
+        if (isMounted) {
+          setIsBrandingLoading(false);
+        }
       }
     };
 
     if (branchId || groupId) {
       loadBranding();
+    } else {
+      // Si no hay contexto de tienda, usar color por defecto
+      setIsBrandingLoading(false);
+      const defaultColor = '#f9fafb';
+      setInitialBackgroundColor(defaultColor);
+      if (typeof document !== 'undefined') {
+        document.body.style.backgroundColor = defaultColor;
+      }
     }
+    
+    return () => {
+      isMounted = false;
+    };
   }, [branchId, groupId]);
 
   // Función helper para detectar si una URL es una imagen
@@ -59,10 +183,30 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
            lowerUrl.includes('logo');
   };
 
+  // Obtener color de fondo del branding o usar el por defecto
+  const backgroundColor = branding?.colors?.background || initialBackgroundColor || '#f9fafb';
+  
+  // También considerar el loading del contexto de la tienda
+  const isFullyLoading = isBrandingLoading || isLoading;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header principal con diseño AutoZone */}
-      <Header />
+    <>
+      {/* Loading overlay mientras se carga el branding */}
+      <BrandingLoader 
+        isLoading={isFullyLoading} 
+        backgroundColor={backgroundColor}
+        branchId={branchId}
+        groupId={groupId}
+      />
+      
+      <div 
+        className="min-h-screen transition-colors duration-200"
+        style={{
+          backgroundColor: backgroundColor,
+        }}
+      >
+        {/* Header principal con diseño AutoZone */}
+        <Header />
 
 
       {/* Mensaje de error si el slug no existe */}
@@ -364,7 +508,8 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
           </div>
         </div>
       </footer>
-    </div>
+      </div>
+    </>
   );
 }
 

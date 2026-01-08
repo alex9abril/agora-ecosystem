@@ -60,6 +60,38 @@ export default function Header() {
   const [showCartPreview, setShowCartPreview] = useState(false);
   const [branding, setBranding] = useState<Branding | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
+  
+  // Función helper para obtener el color guardado
+  const getStoredPrimaryColor = (branchId?: string | null, groupId?: string | null): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      if (branchId) {
+        const stored = localStorage.getItem(`branding_primary_${branchId}`);
+        if (stored) return stored;
+      }
+      if (groupId) {
+        const stored = localStorage.getItem(`branding_primary_group_${groupId}`);
+        if (stored) return stored;
+      }
+    } catch (error) {
+      console.error('Error leyendo color primario guardado:', error);
+    }
+    return null;
+  };
+
+  // Función helper para guardar el color primario
+  const savePrimaryColor = (color: string, branchId?: string | null, groupId?: string | null) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (branchId) {
+        localStorage.setItem(`branding_primary_${branchId}`, color);
+      } else if (groupId) {
+        localStorage.setItem(`branding_primary_group_${groupId}`, color);
+      }
+    } catch (error) {
+      console.error('Error guardando color primario:', error);
+    }
+  };
   const [currentVehicle, setCurrentVehicle] = useState<UserVehicle | any | null>(null);
   const [isVehicleLoaded, setIsVehicleLoaded] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
@@ -249,6 +281,10 @@ export default function Header() {
           console.log('🎨 [Header] Branding del grupo cargado:', brandingData);
           if (isMounted) {
             setBranding(brandingData);
+            // Guardar color primario si existe
+            if (brandingData?.colors?.primary) {
+              savePrimaryColor(brandingData.colors.primary, null, groupId);
+            }
           }
         } catch (error) {
           console.error('Error cargando branding del grupo:', error);
@@ -276,16 +312,29 @@ export default function Header() {
                 const groupBranding = await brandingService.getGroupBranding(groupId);
                 console.log('🎨 [Header] Branding del grupo (para colores):', groupBranding);
                 // Combinar: logo de sucursal, colores del grupo si no hay en sucursal
-                setBranding({
+                const combinedBranding = {
                   ...brandingData,
                   colors: brandingData.colors || groupBranding?.colors || undefined,
-                });
+                };
+                setBranding(combinedBranding);
+                // Guardar color primario si existe
+                if (combinedBranding.colors?.primary) {
+                  savePrimaryColor(combinedBranding.colors.primary, branchId, groupId);
+                }
               } catch (groupError) {
                 console.error('Error cargando branding del grupo para colores:', groupError);
                 setBranding(brandingData);
+                // Guardar color primario si existe
+                if (brandingData?.colors?.primary) {
+                  savePrimaryColor(brandingData.colors.primary, branchId, groupId);
+                }
               }
             } else {
               setBranding(brandingData);
+              // Guardar color primario si existe
+              if (brandingData?.colors?.primary) {
+                savePrimaryColor(brandingData.colors.primary, branchId, groupId);
+              }
             }
             setIsBrandingLoading(false);
           } else if (groupId) {
@@ -293,6 +342,10 @@ export default function Header() {
             const groupBranding = await brandingService.getGroupBranding(groupId);
             console.log('🎨 [Header] Branding del grupo (fallback):', groupBranding);
             setBranding(groupBranding);
+            // Guardar color primario si existe
+            if (groupBranding?.colors?.primary) {
+              savePrimaryColor(groupBranding.colors.primary, branchId, groupId);
+            }
             setIsBrandingLoading(false);
           } else {
             setBranding(null);
@@ -306,6 +359,10 @@ export default function Header() {
               const groupBranding = await brandingService.getGroupBranding(groupId);
               console.log('🎨 [Header] Branding del grupo (error fallback):', groupBranding);
               setBranding(groupBranding);
+              // Guardar color primario si existe
+              if (groupBranding?.colors?.primary) {
+                savePrimaryColor(groupBranding.colors.primary, branchId, groupId);
+              }
             } catch (groupError) {
               console.error('Error cargando branding del grupo:', groupError);
               setBranding(null);
