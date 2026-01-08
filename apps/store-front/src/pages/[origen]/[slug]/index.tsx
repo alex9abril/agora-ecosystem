@@ -73,8 +73,9 @@ export default function StoreHomePage() {
       setLoadingSliders(true);
       
       // Obtener sliders según el contexto
-      const businessGroupId = contextType === 'grupo' ? groupId : undefined;
-      const businessId = contextType === 'sucursal' ? branchId : undefined;
+      // Convertir null a undefined para cumplir con el tipo esperado por getActiveSliders
+      const businessGroupId = contextType === 'grupo' ? (groupId ?? undefined) : undefined;
+      const businessId = contextType === 'sucursal' ? (branchId ?? undefined) : undefined;
 
       // Validar que tengamos el ID necesario
       if (contextType === 'grupo' && !businessGroupId) {
