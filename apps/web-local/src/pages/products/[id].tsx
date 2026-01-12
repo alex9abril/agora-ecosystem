@@ -108,21 +108,43 @@ export default function ProductDetailPage() {
   }, []);
 
   // Función para cargar imágenes del producto
-  const loadProductImages = useCallback(async (productId: string) => {
+  const loadProductImages = useCallback(async (productId: string, fallbackImageUrl?: string) => {
     try {
       setLoadingImages(true);
       const images = await productsService.getProductImages(productId);
-      console.log('🖼️ Imágenes cargadas del producto:', images);
-      setProductImages(images.map((img: any) => ({
+      const mappedImages = images.map((img: any) => ({
         id: img.id,
-        public_url: img.public_url || img.url,
+        public_url: img.public_url || img.url || img.image_url,
         alt_text: img.alt_text || null,
         is_primary: img.is_primary || false,
         display_order: img.display_order || 0,
-      })));
+      }));
+
+      const validImages = mappedImages.filter(img => !!img.public_url);
+
+      if (validImages.length > 0) {
+        setProductImages(validImages);
+      } else if (fallbackImageUrl) {
+        setProductImages([{
+          id: 'primary-image',
+          public_url: fallbackImageUrl,
+          is_primary: true,
+          display_order: 0,
+        }]);
+      } else {
+        setProductImages([]);
+      }
     } catch (err: any) {
-      console.error('Error cargando imágenes del producto:', err);
-      setProductImages([]);
+      if (fallbackImageUrl) {
+        setProductImages([{
+          id: 'primary-image',
+          public_url: fallbackImageUrl,
+          is_primary: true,
+          display_order: 0,
+        }]);
+      } else {
+        setProductImages([]);
+      }
     } finally {
       setLoadingImages(false);
     }
@@ -143,13 +165,13 @@ export default function ProductDetailPage() {
     if (product?.id) {
       loadProductTaxes(product.id);
       loadBranchAvailabilities(product.id);
-      loadProductImages(product.id);
+      loadProductImages(product.id, product.image_url || undefined);
       // Solo cargar compatibilidades si es refaccion o accesorio
       if (product.product_type === 'refaccion' || product.product_type === 'accesorio') {
         loadProductCompatibilities(product.id);
       }
     }
-  }, [product?.id, product?.product_type, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities, loadProductImages]);
+  }, [product?.id, product?.product_type, product?.image_url, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities, loadProductImages]);
 
   const loadProduct = async (productId: string) => {
     try {
@@ -528,7 +550,7 @@ export default function ProductDetailPage() {
           productImages={productImages}
           setProductImages={setProductImages}
           loadingImages={loadingImages}
-          onLoadProductImages={product?.id ? () => loadProductImages(product.id) : undefined}
+          onLoadProductImages={product?.id ? () => loadProductImages(product.id, product.image_url || undefined) : undefined}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
         />
