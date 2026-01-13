@@ -189,7 +189,7 @@ export default function SettingsPage() {
 
           {/* Contenido: Vista previa */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-4xl mx-auto px-8 py-8">
+            <div className="max-w-7xl mx-auto px-6 py-8">
                 <div className="text-center py-12">
                   <p className="text-sm text-gray-500 mb-4">
                     Selecciona una categoría del menú lateral para comenzar
@@ -208,7 +208,7 @@ export default function SettingsPage() {
                             </div>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                            <h3 className="text-base font-normal text-gray-900 group-hover:text-indigo-600 transition-colors">
                               {category.name}
                             </h3>
                             <p className="mt-1.5 text-sm text-gray-600 leading-relaxed">

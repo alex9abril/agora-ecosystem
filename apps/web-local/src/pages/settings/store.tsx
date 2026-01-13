@@ -256,10 +256,10 @@ export default function StoreSettingsPage() {
 
           {/* Contenido principal */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-4xl mx-auto px-8 py-8">
+            <div className="max-w-7xl mx-auto px-6 py-8">
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-2xl font-semibold text-gray-900 mb-2">Configuración de Grupo Empresarial</h1>
+                <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración de Grupo Empresarial</h1>
                 <p className="text-sm text-gray-600">
                   Gestiona la información de tu grupo empresarial
                 </p>
@@ -267,7 +267,7 @@ export default function StoreSettingsPage() {
 
                 {/* Business Group Information Card */}
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-lg font-normal text-gray-900">
                 {businessGroup ? 'Información del Grupo Empresarial' : 'Crear Grupo Empresarial'}
               </h2>
               {!isEditing && businessGroup && (
@@ -284,7 +284,7 @@ export default function StoreSettingsPage() {
               // Vista de solo lectura
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 mb-2">
                     Nombre del Grupo
                   </label>
                   <p className="text-gray-900">{businessGroup.name}</p>
@@ -292,7 +292,7 @@ export default function StoreSettingsPage() {
 
                 {businessGroup.legal_name && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Razón Social
                     </label>
                     <p className="text-gray-900">{businessGroup.legal_name}</p>
@@ -301,7 +301,7 @@ export default function StoreSettingsPage() {
 
                 {businessGroup.description && (
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Descripción
                     </label>
                     <p className="text-gray-900">{businessGroup.description}</p>
@@ -309,7 +309,7 @@ export default function StoreSettingsPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 mb-2">
                     Slug (URL)
                   </label>
                   <p className="text-gray-900 font-mono text-sm">{businessGroup.slug}</p>
@@ -317,7 +317,7 @@ export default function StoreSettingsPage() {
 
                 {businessGroup.tax_id && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       RFC / Tax ID
                     </label>
                     <p className="text-gray-900">{businessGroup.tax_id}</p>
@@ -326,7 +326,7 @@ export default function StoreSettingsPage() {
 
                 {businessGroup.website_url && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Sitio Web
                     </label>
                     <a 
@@ -341,11 +341,11 @@ export default function StoreSettingsPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 mb-2">
                     Estado
                   </label>
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal ${
                       businessGroup.is_active
                         ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
@@ -368,7 +368,7 @@ export default function StoreSettingsPage() {
                         </svg>
                       </div>
                       <div className="ml-3 flex-1">
-                        <p className="text-sm font-medium text-blue-900 mb-2">
+                        <p className="text-sm font-normal text-blue-900 mb-2">
                           Al crear este grupo, se asignarán automáticamente <strong>{branchesWithoutGroup.length} sucursal{branchesWithoutGroup.length > 1 ? 'es' : ''}</strong> sin grupo:
                         </p>
                         <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
@@ -390,7 +390,7 @@ export default function StoreSettingsPage() {
                 <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Nombre del Grupo <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -404,7 +404,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Razón Social
                     </label>
                     <input
@@ -417,7 +417,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Descripción
                     </label>
                     <textarea
@@ -430,7 +430,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Slug (URL amigable) <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -455,7 +455,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       RFC / Tax ID
                     </label>
                     <input
@@ -469,7 +469,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       URL del Logo
                     </label>
                     <input
@@ -482,7 +482,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Sitio Web
                     </label>
                     <input
@@ -495,7 +495,7 @@ export default function StoreSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Estado
                     </label>
                     <div className="space-y-2">
@@ -529,7 +529,7 @@ export default function StoreSettingsPage() {
                       type="button"
                       onClick={handleCancel}
                       disabled={saving}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
                     >
                       Cancelar
                     </button>
@@ -537,7 +537,7 @@ export default function StoreSettingsPage() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-normal text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
                   >
                     {saving ? 'Guardando...' : businessGroup ? 'Guardar Cambios' : 'Crear Grupo'}
                   </button>

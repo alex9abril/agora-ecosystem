@@ -12,9 +12,9 @@ export default function PermissionsSettingsPage() {
         <title>Grupos de Permisos - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="p-6">
+        <div className="p-6 max-w-7xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-2xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
             <p className="text-sm text-gray-600">
               Gestiona la configuración de tu tienda y personal
             </p>
@@ -29,7 +29,7 @@ export default function PermissionsSettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 {/* Header */}
                 <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Grupos de Permisos</h2>
+                  <h2 className="text-lg font-normal text-gray-900">Grupos de Permisos</h2>
                   <p className="mt-1 text-sm text-gray-600">
                     Administra tus grupos de permisos y los permisos
                   </p>
@@ -50,7 +50,7 @@ export default function PermissionsSettingsPage() {
                   d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                 />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Grupos de Permisos</h3>
+              <h3 className="mt-2 text-sm font-normal text-gray-900">Grupos de Permisos</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Esta funcionalidad estará disponible próximamente.
               </p>

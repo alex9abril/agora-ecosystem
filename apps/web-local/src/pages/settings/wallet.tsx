@@ -153,9 +153,9 @@ export default function WalletSettingsPage() {
         <title>Monedero Electrónico - AGORA Local</title>
       </Head>
       <LocalLayout>
-        <div className="p-6">
+        <div className="p-6 max-w-7xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-2xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
             <p className="text-sm text-gray-600">
               Gestiona la configuración de tu tienda y personal
             </p>
@@ -170,7 +170,7 @@ export default function WalletSettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 {/* Header */}
                 <div className="mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">Monedero Electrónico</h2>
+                  <h2 className="text-lg font-normal text-gray-900">Monedero Electrónico</h2>
                   <p className="mt-1 text-sm text-gray-600">
                     Consulta tu saldo y el historial de transacciones
                   </p>
@@ -187,8 +187,8 @@ export default function WalletSettingsPage() {
                   <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 mb-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Saldo Actual</h3>
-                        <p className="text-4xl font-bold text-indigo-600">
+                        <h3 className="text-base font-normal text-gray-900 mb-2">Saldo Actual</h3>
+                        <p className="text-3xl font-normal text-indigo-600">
                           {formatCurrency(wallet.balance)}
                         </p>
                         {wallet.is_blocked && (
@@ -213,7 +213,7 @@ export default function WalletSettingsPage() {
                 {/* Historial de Transacciones */}
                 <div>
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900">Historial de Transacciones</h3>
+                    <h3 className="text-base font-normal text-gray-900">Historial de Transacciones</h3>
               
                     {/* Filtro por tipo */}
                     <select
@@ -247,25 +247,25 @@ export default function WalletSettingsPage() {
                         <table className="min-w-full divide-y divide-gray-200">
                           <thead className="bg-gray-50">
                             <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Fecha
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Tipo
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Monto
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Saldo Antes
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Saldo Después
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Estado
                               </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
                                 Razón
                               </th>
                             </tr>
@@ -281,11 +281,11 @@ export default function WalletSettingsPage() {
                                   {formatDate(transaction.created_at)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTransactionTypeColor(transaction.transaction_type)}`}>
+                                  <span className={`inline-flex px-2 py-1 text-xs font-normal rounded-full ${getTransactionTypeColor(transaction.transaction_type)}`}>
                                     {getTransactionTypeLabel(transaction.transaction_type)}
                                   </span>
                                 </td>
-                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-normal ${
                                   transaction.transaction_type === 'credit' || transaction.transaction_type === 'refund'
                                     ? 'text-green-600'
                                     : 'text-red-600'
@@ -296,11 +296,11 @@ export default function WalletSettingsPage() {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                   {formatCurrency(transaction.balance_before)}
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-normal">
                                   {formatCurrency(transaction.balance_after)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(transaction.status)}`}>
+                                  <span className={`inline-flex px-2 py-1 text-xs font-normal rounded-full ${getStatusColor(transaction.status)}`}>
                                     {getStatusLabel(transaction.status)}
                                   </span>
                                 </td>

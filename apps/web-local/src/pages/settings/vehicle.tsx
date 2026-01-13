@@ -191,9 +191,9 @@ export default function VehicleSettingsPage() {
         <title>Mi Vehículo - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="p-6">
+        <div className="p-6 max-w-7xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-2xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
             <p className="text-sm text-gray-600">
               Gestiona la configuración de tu tienda y personal
             </p>
@@ -208,7 +208,7 @@ export default function VehicleSettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 {/* Header */}
                 <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Mi Vehículo</h2>
+            <h2 className="text-lg font-normal text-gray-900">Mi Vehículo</h2>
             <p className="mt-2 text-sm text-gray-600">
               Selecciona tu vehículo para ver solo productos compatibles
             </p>
@@ -224,7 +224,7 @@ export default function VehicleSettingsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
             {/* Marca */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-normal text-gray-700 mb-2">
                 Marca <span className="text-red-500">*</span>
               </label>
               <select
@@ -245,7 +245,7 @@ export default function VehicleSettingsPage() {
             {/* Modelo */}
             {selectedVehicle.brand_id && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Modelo
                 </label>
                 <select
@@ -266,7 +266,7 @@ export default function VehicleSettingsPage() {
             {/* Año/Generación */}
             {selectedVehicle.model_id && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Año/Generación
                 </label>
                 <select
@@ -289,7 +289,7 @@ export default function VehicleSettingsPage() {
             {/* Especificaciones (Motor/Transmisión) */}
             {selectedVehicle.year_id && specs.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Motor/Transmisión (Opcional)
                 </label>
                 <select
@@ -312,7 +312,7 @@ export default function VehicleSettingsPage() {
             {/* Información del vehículo seleccionado */}
             {selectedVehicle.brand_id && (
               <div className="p-4 bg-gray-50 rounded-md">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Vehículo Seleccionado:</h3>
+                <h3 className="text-sm font-normal text-gray-700 mb-2">Vehículo Seleccionado:</h3>
                 <p className="text-sm text-gray-600">
                   {selectedVehicle.brand_name}
                   {selectedVehicle.model_name && ` ${selectedVehicle.model_name}`}
@@ -345,7 +345,7 @@ export default function VehicleSettingsPage() {
 
           {/* Información adicional */}
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <h3 className="text-sm font-medium text-blue-900 mb-2">💡 Información</h3>
+            <h3 className="text-sm font-normal text-blue-900 mb-2">💡 Información</h3>
             <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
               <li>Al seleccionar tu vehículo, los productos se filtrarán automáticamente por compatibilidad</li>
               <li>Puedes seleccionar solo la marca, o ser más específico con modelo, año y motor</li>

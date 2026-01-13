@@ -209,11 +209,11 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
   return (
     <div className="w-64 flex-shrink-0 bg-white border-r border-gray-200">
       <div className="sticky top-0 p-4">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Settings</h2>
+        <h2 className="text-xs font-normal text-gray-500 uppercase tracking-wider mb-4">Settings</h2>
         <nav className="space-y-6">
           {settingsSections.map((section) => (
             <div key={section.title}>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-3">
+              <h3 className="text-xs font-normal text-gray-500 uppercase tracking-wider mb-2 px-3">
                 {section.title}
               </h3>
               <div className="space-y-0.5">
@@ -226,7 +226,7 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
                       onClick={() => router.push(category.href)}
                       className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center space-x-2 transition-colors ${
                         isActive
-                          ? 'bg-gray-100 text-gray-900 font-medium'
+                          ? 'bg-gray-100 text-gray-900 font-normal'
                           : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                       }`}
                     >
