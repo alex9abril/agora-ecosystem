@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { walletService, Wallet, WalletTransaction } from '@/lib/wallet';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function WalletSettingsPage() {
   const router = useRouter();
@@ -152,196 +153,204 @@ export default function WalletSettingsPage() {
         <title>Monedero Electrónico - AGORA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <button
-              onClick={() => router.back()}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a Configuración
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Monedero Electrónico</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Consulta tu saldo y el historial de transacciones
+        <div className="p-6 max-w-7xl mx-auto">
+          <div className="mb-6">
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <p className="text-sm text-gray-600">
+              Gestiona la configuración de tu tienda y personal
             </p>
           </div>
 
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-800 text-sm">{error}</p>
-            </div>
-          )}
+          <div className="flex gap-6">
+            {/* Sidebar: Categorías */}
+            <SettingsSidebar />
 
-          {/* Saldo Actual */}
-          {wallet && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900 mb-2">Saldo Actual</h2>
-                  <p className="text-4xl font-bold text-indigo-600">
-                    {formatCurrency(wallet.balance)}
+            {/* Contenido principal */}
+            <div className="flex-1">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                {/* Header */}
+                <div className="mb-6">
+                  <h2 className="text-lg font-normal text-gray-900">Monedero Electrónico</h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Consulta tu saldo y el historial de transacciones
                   </p>
-                  {wallet.is_blocked && (
-                    <p className="mt-2 text-sm text-red-600">⚠️ Wallet bloqueado</p>
-                  )}
-                  {!wallet.is_active && (
-                    <p className="mt-2 text-sm text-yellow-600">⚠️ Wallet inactivo</p>
-                  )}
                 </div>
-                <div className="text-right">
-                  <button
-                    onClick={loadWallet}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
-                  >
-                    Actualizar
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* Historial de Transacciones */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Historial de Transacciones</h2>
-              
-              {/* Filtro por tipo */}
-              <select
-                value={filterType}
-                onChange={(e) => {
-                  setFilterType(e.target.value);
-                  setPage(1);
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="all">Todos los tipos</option>
-                <option value="credit">Acreditaciones</option>
-                <option value="debit">Débitos</option>
-                <option value="refund">Reembolsos</option>
-                <option value="payment">Pagos</option>
-                <option value="adjustment">Ajustes</option>
-              </select>
-            </div>
+                {error && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-800 text-sm">{error}</p>
+                  </div>
+                )}
 
-            {loadingTransactions ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-              </div>
-            ) : transactions.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No hay transacciones registradas</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Fecha
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Tipo
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Monto
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Saldo Antes
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Saldo Después
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Estado
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Razón
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {transactions.map((transaction) => (
-                        <tr 
-                          key={transaction.id} 
-                          id={`transaction-${transaction.id}`}
-                          className="hover:bg-gray-50 transition-all"
+                {/* Saldo Actual */}
+                {wallet && (
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 mb-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base font-normal text-gray-900 mb-2">Saldo Actual</h3>
+                        <p className="text-3xl font-normal text-indigo-600">
+                          {formatCurrency(wallet.balance)}
+                        </p>
+                        {wallet.is_blocked && (
+                          <p className="mt-2 text-sm text-red-600">⚠️ Wallet bloqueado</p>
+                        )}
+                        {!wallet.is_active && (
+                          <p className="mt-2 text-sm text-yellow-600">⚠️ Wallet inactivo</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <button
+                          onClick={loadWallet}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatDate(transaction.created_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getTransactionTypeColor(transaction.transaction_type)}`}>
-                              {getTransactionTypeLabel(transaction.transaction_type)}
-                            </span>
-                          </td>
-                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                            transaction.transaction_type === 'credit' || transaction.transaction_type === 'refund'
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                          }`}>
-                            {transaction.transaction_type === 'credit' || transaction.transaction_type === 'refund' ? '+' : '-'}
-                            {formatCurrency(transaction.amount)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {formatCurrency(transaction.balance_before)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                            {formatCurrency(transaction.balance_after)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(transaction.status)}`}>
-                              {getStatusLabel(transaction.status)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">
-                            <div className="max-w-xs">
-                              <p className="truncate" title={transaction.reason || transaction.description || '-'}>
-                                {transaction.reason || transaction.description || '-'}
-                              </p>
-                              {transaction.created_by_name && (
-                                <p className="text-xs text-gray-400 mt-1">
-                                  Por: {transaction.created_by_name}
-                                </p>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Paginación */}
-                {totalPages > 1 && (
-                  <div className="mt-6 flex items-center justify-between">
-                    <div className="text-sm text-gray-700">
-                      Página {page} de {totalPages}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                        disabled={page === totalPages}
-                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Siguiente
-                      </button>
+                          Actualizar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
-              </>
-            )}
+
+                {/* Historial de Transacciones */}
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-base font-normal text-gray-900">Historial de Transacciones</h3>
+              
+                    {/* Filtro por tipo */}
+                    <select
+                      value={filterType}
+                      onChange={(e) => {
+                        setFilterType(e.target.value);
+                        setPage(1);
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="all">Todos los tipos</option>
+                      <option value="credit">Acreditaciones</option>
+                      <option value="debit">Débitos</option>
+                      <option value="refund">Reembolsos</option>
+                      <option value="payment">Pagos</option>
+                      <option value="adjustment">Ajustes</option>
+                    </select>
+                  </div>
+
+                  {loadingTransactions ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                    </div>
+                  ) : transactions.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No hay transacciones registradas</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Fecha
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Tipo
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Monto
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Saldo Antes
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Saldo Después
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Estado
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-normal text-gray-500 uppercase tracking-wider">
+                                Razón
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {transactions.map((transaction) => (
+                              <tr 
+                                key={transaction.id} 
+                                id={`transaction-${transaction.id}`}
+                                className="hover:bg-gray-50 transition-all"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {formatDate(transaction.created_at)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-normal rounded-full ${getTransactionTypeColor(transaction.transaction_type)}`}>
+                                    {getTransactionTypeLabel(transaction.transaction_type)}
+                                  </span>
+                                </td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm font-normal ${
+                                  transaction.transaction_type === 'credit' || transaction.transaction_type === 'refund'
+                                    ? 'text-green-600'
+                                    : 'text-red-600'
+                                }`}>
+                                  {transaction.transaction_type === 'credit' || transaction.transaction_type === 'refund' ? '+' : '-'}
+                                  {formatCurrency(transaction.amount)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                  {formatCurrency(transaction.balance_before)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-normal">
+                                  {formatCurrency(transaction.balance_after)}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-normal rounded-full ${getStatusColor(transaction.status)}`}>
+                                    {getStatusLabel(transaction.status)}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-600">
+                                  <div className="max-w-xs">
+                                    <p className="truncate" title={transaction.reason || transaction.description || '-'}>
+                                      {transaction.reason || transaction.description || '-'}
+                                    </p>
+                                    {transaction.created_by_name && (
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Por: {transaction.created_by_name}
+                                      </p>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Paginación */}
+                      {totalPages > 1 && (
+                        <div className="mt-6 flex items-center justify-between">
+                          <div className="text-sm text-gray-700">
+                            Página {page} de {totalPages}
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setPage(p => Math.max(1, p - 1))}
+                              disabled={page === 1}
+                              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Anterior
+                            </button>
+                            <button
+                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                              disabled={page === totalPages}
+                              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Siguiente
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </LocalLayout>

@@ -5,6 +5,7 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { usePermission } from '@/lib/role-guards';
 import { canAccessRoute } from '@/lib/permissions';
 import { BusinessRole } from '@/lib/users';
+import { useState, useEffect } from 'react';
 
 interface MenuItem {
   name: string;
@@ -102,6 +103,27 @@ export default function Sidebar() {
   const { user } = useAuth();
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   
+  // Estado para sidebar colapsado (persistido en localStorage)
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    // Cargar estado desde localStorage
+    const savedState = localStorage.getItem('sidebar_collapsed');
+    if (savedState !== null) {
+      setIsCollapsed(savedState === 'true');
+    }
+  }, []);
+
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebar_collapsed', String(newState));
+  };
+
+  // Determinar si el sidebar debe mostrarse expandido (por hover o estado normal)
+  const isExpanded = !isCollapsed || isHovered;
+  
   // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
   const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
   const userRole = (selectedBusiness?.role || (hasSuperadminRole ? 'superadmin' : 'operations_staff')) as BusinessRole;
@@ -147,58 +169,173 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">
-      {/* Logo */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-sm font-normal text-gray-900">LOCALIA Local</h2>
+    <>
+      {/* Sidebar base (siempre visible, mantiene su ancho para no afectar el layout) */}
+      <aside 
+        className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-200 relative z-40 ${
+          isCollapsed && isHovered ? 'opacity-0 pointer-events-none' : ''
+        }`}
+        onMouseEnter={() => isCollapsed && setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+      {/* Logo y botón de colapsar */}
+      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        {!isCollapsed && (
+          <h2 className="text-sm font-normal text-gray-900">LOCALIA Local</h2>
+        )}
+        <button
+          onClick={toggleSidebar}
+          className={`${isCollapsed ? 'mx-auto' : ''} p-1.5 rounded-md hover:bg-gray-100 transition-colors`}
+          title={isCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+        >
+          <svg 
+            className="w-4 h-4 text-gray-600" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            {isCollapsed ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            )}
+          </svg>
+        </button>
       </div>
 
-      {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto py-4">
-        <ul className="space-y-1 px-3">
-          {menuItems
-            .filter(shouldShowItem)
-            .map((item) => {
-              const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
-              
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-normal transition-colors ${
-                      isActive
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                  >
-                    {item.icon}
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
-                      <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
-                        {item.badge}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-        </ul>
-      </nav>
+      {/* Navegación - ocultar cuando está colapsado y se hace hover */}
+      {!(isCollapsed && isHovered) && (
+        <nav className="flex-1 overflow-y-auto py-4">
+          <ul className="space-y-1 px-3">
+            {menuItems
+              .filter(shouldShowItem)
+              .map((item) => {
+                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+                
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2 rounded-md text-xs font-normal transition-colors ${
+                        isActive
+                          ? 'bg-gray-100 text-gray-900'
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className={isActive ? 'text-gray-900' : 'text-gray-600'}>{item.icon}</span>
+                      {!isCollapsed && (
+                        <>
+                          <span className="flex-1">{item.name}</span>
+                          {item.badge && (
+                            <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
+                              {item.badge}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        </nav>
+      )}
 
-      {/* Usuario en la parte inferior */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal">
-            {getUserInitials()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-normal text-gray-900 truncate">
-              {getUserEmail()}
-            </p>
+      {/* Usuario en la parte inferior - ocultar cuando está colapsado y se hace hover */}
+      {!(isCollapsed && isHovered) && (
+        <div className="p-4 border-t border-gray-200">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
+            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal flex-shrink-0">
+              {getUserInitials()}
+            </div>
+            {!isCollapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-normal text-gray-900 truncate">
+                  {getUserEmail()}
+                </p>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </aside>
+
+    {/* Sidebar expandido por hover (se superpone sobre el contenido) */}
+    {isCollapsed && (
+      <aside 
+        className={`fixed top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col transition-opacity duration-200 z-50 shadow-2xl ${
+          isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Logo y botón de colapsar */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-sm font-normal text-gray-900">LOCALIA Local</h2>
+          <button
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
+            title="Colapsar menú"
+          >
+            <svg 
+              className="w-4 h-4 text-gray-600" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navegación */}
+        <nav className="flex-1 overflow-y-auto py-4">
+          <ul className="space-y-1 px-3">
+            {menuItems
+              .filter(shouldShowItem)
+              .map((item) => {
+                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+                
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-normal transition-colors ${
+                        isActive
+                          ? 'bg-gray-100 text-gray-900'
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className={isActive ? 'text-gray-900' : 'text-gray-600'}>{item.icon}</span>
+                      <span className="flex-1">{item.name}</span>
+                      {item.badge && (
+                        <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        </nav>
+
+        {/* Usuario en la parte inferior */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal flex-shrink-0">
+              {getUserInitials()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-normal text-gray-900 truncate">
+                {getUserEmail()}
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    )}
+    </>
   );
 }
 

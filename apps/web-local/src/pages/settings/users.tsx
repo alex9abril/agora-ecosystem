@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 interface Business {
   business_id: string;
@@ -335,21 +336,26 @@ export default function UsersSettingsPage() {
         <title>Usuarios y Permisos - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
+        <div className="p-6 max-w-7xl mx-auto">
           <div className="mb-6">
-            <button
-              onClick={() => router.back()}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a Configuración
-            </button>
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <p className="text-sm text-gray-600">
+              Gestiona la configuración de tu tienda y personal
+            </p>
+          </div>
+
+          <div className="flex gap-6">
+            {/* Sidebar: Categorías */}
+            <SettingsSidebar />
+
+            {/* Contenido principal */}
+            <div className="flex-1">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                {/* Header */}
+                <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Usuarios y Permisos</h1>
+                <h2 className="text-lg font-normal text-gray-900">Usuarios y Permisos</h2>
                 <p className="mt-2 text-sm text-gray-600">
                   Administra a tus empleados y sus permisos de acceso
                 </p>
@@ -387,7 +393,7 @@ export default function UsersSettingsPage() {
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Filtrar por Tienda
                 </label>
                 <select
@@ -409,7 +415,7 @@ export default function UsersSettingsPage() {
           {/* Current Users */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Miembros del Personal</h2>
+              <h2 className="text-lg font-normal text-gray-900">Miembros del Personal</h2>
               <span className="text-sm text-gray-500">
                 {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
               </span>
@@ -430,7 +436,7 @@ export default function UsersSettingsPage() {
                     d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
                   />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No hay usuarios asignados</h3>
+                <h3 className="mt-2 text-sm font-normal text-gray-900">No hay usuarios asignados</h3>
                 <p className="mt-1 text-sm text-gray-500">
                   Asigna usuarios a tus tiendas para comenzar a gestionar tu equipo.
                 </p>
@@ -446,7 +452,7 @@ export default function UsersSettingsPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
+                            <h3 className="text-base font-normal text-gray-900">
                               {user.first_name || user.last_name
                                 ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
                                 : 'Sin nombre'}
@@ -457,7 +463,7 @@ export default function UsersSettingsPage() {
 
                         {/* Tiendas y Roles */}
                         <div className="mt-4">
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">Tiendas y Roles:</h4>
+                          <h4 className="text-sm font-normal text-gray-700 mb-2">Tiendas y Roles:</h4>
                           <div className="space-y-2">
                             {user.businesses && user.businesses.length > 0 ? (
                               user.businesses
@@ -471,11 +477,11 @@ export default function UsersSettingsPage() {
                                   >
                                     <div className="flex items-center gap-3">
                                       <div>
-                                        <p className="text-sm font-medium text-gray-900">
+                                        <p className="text-sm font-normal text-gray-900">
                                           {business.business_name}
                                         </p>
                                         <span
-                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${getRoleColor(
+                                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal mt-1 ${getRoleColor(
                                             business.role
                                           )}`}
                                         >
@@ -528,11 +534,11 @@ export default function UsersSettingsPage() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Asignar Usuario</h2>
+                  <h2 className="text-xl font-normal text-gray-900 mb-4">Asignar Usuario</h2>
 
                   {/* Search */}
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Buscar Usuario
                     </label>
                     <div className="flex gap-2">
@@ -600,7 +606,7 @@ export default function UsersSettingsPage() {
                   {/* Business Selection */}
                   {selectedUser && (
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Seleccionar Tienda(s)
                       </label>
                       <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
@@ -640,7 +646,7 @@ export default function UsersSettingsPage() {
                   {/* Role Selection */}
                   {selectedUser && selectedBusinesses.length > 0 && (
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Rol para las tiendas seleccionadas
                       </label>
                       <select
@@ -689,7 +695,7 @@ export default function UsersSettingsPage() {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-4">Crear Nuevo Usuario</h2>
+                  <h2 className="text-xl font-normal text-gray-900 mb-4">Crear Nuevo Usuario</h2>
 
                   <form
                     onSubmit={async (e) => {
@@ -764,7 +770,7 @@ export default function UsersSettingsPage() {
                   >
                     {/* Email */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Email <span className="text-red-500">*</span>
                       </label>
                       <input
@@ -834,7 +840,7 @@ export default function UsersSettingsPage() {
 
                     {/* Password */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Contraseña <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -868,7 +874,7 @@ export default function UsersSettingsPage() {
 
                     {/* Confirm Password */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Confirmar Contraseña <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
@@ -901,7 +907,7 @@ export default function UsersSettingsPage() {
 
                     {/* First Name */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Nombre
                       </label>
                       <input
@@ -915,7 +921,7 @@ export default function UsersSettingsPage() {
 
                     {/* Last Name */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Apellido
                       </label>
                       <input
@@ -929,7 +935,7 @@ export default function UsersSettingsPage() {
 
                     {/* Phone */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Teléfono
                       </label>
                       <input
@@ -943,7 +949,7 @@ export default function UsersSettingsPage() {
 
                     {/* Business Selection */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Seleccionar Tienda(s) (opcional - si no seleccionas, se asignará a todas)
                       </label>
                       <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
@@ -985,7 +991,7 @@ export default function UsersSettingsPage() {
 
                     {/* Role Selection */}
                     <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Rol <span className="text-red-500">*</span>
                       </label>
                       <select
@@ -1050,6 +1056,9 @@ export default function UsersSettingsPage() {
               </div>
             </div>
           )}
+              </div>
+            </div>
+          </div>
         </div>
       </LocalLayout>
     </>

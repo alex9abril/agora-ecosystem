@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { vehiclesService, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec, UserVehicle } from '@/lib/vehicles';
 import { setUserVehicle, getUserVehicle } from '@/lib/storage';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function VehicleSettingsPage() {
   const router = useRouter();
@@ -190,19 +191,24 @@ export default function VehicleSettingsPage() {
         <title>Mi Vehículo - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
+        <div className="p-6 max-w-7xl mx-auto">
           <div className="mb-6">
-            <button
-              onClick={() => router.back()}
-              className="mb-4 text-sm text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Mi Vehículo</h1>
+            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <p className="text-sm text-gray-600">
+              Gestiona la configuración de tu tienda y personal
+            </p>
+          </div>
+
+          <div className="flex gap-6">
+            {/* Sidebar: Categorías */}
+            <SettingsSidebar />
+
+            {/* Contenido principal */}
+            <div className="flex-1">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                {/* Header */}
+                <div className="mb-6">
+            <h2 className="text-lg font-normal text-gray-900">Mi Vehículo</h2>
             <p className="mt-2 text-sm text-gray-600">
               Selecciona tu vehículo para ver solo productos compatibles
             </p>
@@ -218,7 +224,7 @@ export default function VehicleSettingsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
             {/* Marca */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-normal text-gray-700 mb-2">
                 Marca <span className="text-red-500">*</span>
               </label>
               <select
@@ -239,7 +245,7 @@ export default function VehicleSettingsPage() {
             {/* Modelo */}
             {selectedVehicle.brand_id && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Modelo
                 </label>
                 <select
@@ -260,7 +266,7 @@ export default function VehicleSettingsPage() {
             {/* Año/Generación */}
             {selectedVehicle.model_id && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Año/Generación
                 </label>
                 <select
@@ -283,7 +289,7 @@ export default function VehicleSettingsPage() {
             {/* Especificaciones (Motor/Transmisión) */}
             {selectedVehicle.year_id && specs.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Motor/Transmisión (Opcional)
                 </label>
                 <select
@@ -306,7 +312,7 @@ export default function VehicleSettingsPage() {
             {/* Información del vehículo seleccionado */}
             {selectedVehicle.brand_id && (
               <div className="p-4 bg-gray-50 rounded-md">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">Vehículo Seleccionado:</h3>
+                <h3 className="text-sm font-normal text-gray-700 mb-2">Vehículo Seleccionado:</h3>
                 <p className="text-sm text-gray-600">
                   {selectedVehicle.brand_name}
                   {selectedVehicle.model_name && ` ${selectedVehicle.model_name}`}
@@ -339,13 +345,16 @@ export default function VehicleSettingsPage() {
 
           {/* Información adicional */}
           <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <h3 className="text-sm font-medium text-blue-900 mb-2">💡 Información</h3>
+            <h3 className="text-sm font-normal text-blue-900 mb-2">💡 Información</h3>
             <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
               <li>Al seleccionar tu vehículo, los productos se filtrarán automáticamente por compatibilidad</li>
               <li>Puedes seleccionar solo la marca, o ser más específico con modelo, año y motor</li>
               <li>Mientras más específico seas, más precisos serán los resultados</li>
               <li>Puedes cambiar o eliminar tu vehículo en cualquier momento</li>
             </ul>
+          </div>
+              </div>
+            </div>
           </div>
         </div>
       </LocalLayout>

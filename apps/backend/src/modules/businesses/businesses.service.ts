@@ -2769,11 +2769,16 @@ export class BusinessesService {
         const groupName = groupCheck.rows[0].group_name;
 
         console.log(`[checkBusinessPermissions] Sucursal pertenece al grupo ${groupId} (${groupName}), owner_id: ${groupOwnerId}`);
+        console.log(`[checkBusinessPermissions] Comparando groupOwnerId (${groupOwnerId}) con userId (${userId}): ${groupOwnerId === userId}`);
 
         // Si es el propietario del grupo
-        if (groupOwnerId === userId) {
-          console.log(`[checkBusinessPermissions] Usuario ${userId} es propietario del grupo ${groupId} de la sucursal ${businessId}`);
+        if (groupOwnerId && groupOwnerId === userId) {
+          console.log(`[checkBusinessPermissions] ✅ Usuario ${userId} es propietario del grupo ${groupId} de la sucursal ${businessId}`);
           return true;
+        } else if (groupOwnerId) {
+          console.log(`[checkBusinessPermissions] ⚠️ Usuario ${userId} NO es propietario del grupo (owner: ${groupOwnerId})`);
+        } else {
+          console.log(`[checkBusinessPermissions] ⚠️ El grupo ${groupId} no tiene owner_id asignado`);
         }
 
         // Verificar si tiene permisos a través de business_users en cualquier sucursal del grupo
@@ -2826,9 +2831,12 @@ export class BusinessesService {
       );
       
       if (debugCheck.rows.length > 0) {
-        console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en la sucursal:`, debugCheck.rows);
+        console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en la sucursal:`, JSON.stringify(debugCheck.rows, null, 2));
+        console.log(`[checkBusinessPermissions] Debug - Roles encontrados: ${debugCheck.rows.map(r => `${r.role} (is_active: ${r.is_active})`).join(', ')}`);
+        console.log(`[checkBusinessPermissions] Debug - El usuario necesita rol 'superadmin' o 'admin' con is_active = TRUE`);
       } else {
         console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en la sucursal`);
+        console.log(`[checkBusinessPermissions] Debug - El usuario necesita ser owner de la sucursal o tener rol 'superadmin'/'admin' en business_users`);
       }
 
       return false;
@@ -2849,6 +2857,14 @@ export class BusinessesService {
     const pool = dbPool;
 
     try {
+      console.log(`[updateBusinessBranding] Iniciando actualización de branding - businessId: ${businessId}, userId: ${userId}`);
+      
+      // Validar que userId esté presente
+      if (!userId) {
+        console.error(`[updateBusinessBranding] ❌ userId no proporcionado o está vacío`);
+        throw new ForbiddenException('Usuario no autenticado o información de usuario no disponible');
+      }
+      
       // Verificar que la sucursal existe
       const businessCheck = await pool.query(
         `SELECT id, owner_id FROM core.businesses WHERE id = $1`,
@@ -2859,11 +2875,66 @@ export class BusinessesService {
         throw new NotFoundException('Sucursal no encontrada');
       }
 
+      console.log(`[updateBusinessBranding] Sucursal encontrada - owner_id: ${businessCheck.rows[0].owner_id}, userId solicitante: ${userId}`);
+
       // Verificar permisos (owner o superadmin/admin a través de business_users)
       const hasPermission = await this.checkBusinessPermissions(businessId, userId);
       if (!hasPermission) {
-        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+        console.error(`[updateBusinessBranding] ❌ Permisos denegados - businessId: ${businessId}, userId: ${userId}`);
+        console.error(`[updateBusinessBranding] ❌ Revisa los logs anteriores para ver detalles de la validación de permisos`);
+        
+        // Obtener información adicional para el mensaje de error
+        const businessInfo = businessCheck.rows[0];
+        const ownerId = businessInfo.owner_id;
+        
+        // Obtener información del grupo si existe
+        const groupInfo = await pool.query(
+          `SELECT bg.id, bg.name, bg.owner_id as group_owner_id
+           FROM core.businesses b
+           LEFT JOIN core.business_groups bg ON b.business_group_id = bg.id
+           WHERE b.id = $1`,
+          [businessId]
+        );
+        
+        const userRoleCheck = await pool.query(
+          `SELECT role, is_active FROM core.business_users 
+           WHERE business_id = $1 AND user_id = $2`,
+          [businessId, userId]
+        );
+        
+        let errorMessage = 'No tienes permisos para actualizar esta sucursal.\n\n';
+        errorMessage += `Usuario autenticado: ${userId}\n`;
+        errorMessage += `Propietario de la sucursal: ${ownerId}\n`;
+        
+        if (groupInfo.rows.length > 0 && groupInfo.rows[0].id) {
+          const groupOwnerId = groupInfo.rows[0].group_owner_id;
+          errorMessage += `Propietario del grupo empresarial: ${groupOwnerId || 'No asignado'}\n`;
+        }
+        
+        errorMessage += '\n';
+        
+        if (userId !== ownerId) {
+          errorMessage += `⚠️ El usuario autenticado NO es el propietario de la sucursal.\n`;
+        }
+        
+        if (userRoleCheck.rows.length > 0) {
+          const role = userRoleCheck.rows[0].role;
+          const isActive = userRoleCheck.rows[0].is_active;
+          errorMessage += `Tu rol actual es '${role}' y está ${isActive ? 'activo' : 'inactivo'}.\n`;
+          if (role !== 'superadmin' && role !== 'admin') {
+            errorMessage += `Necesitas tener rol 'superadmin' o 'admin' para actualizar el branding.\n`;
+          } else if (!isActive) {
+            errorMessage += `Tu rol está inactivo. Contacta al administrador para activarlo.\n`;
+          }
+        } else {
+          errorMessage += `No tienes ningún rol asignado en esta sucursal.\n`;
+          errorMessage += `Necesitas ser el propietario de la sucursal o tener rol 'superadmin'/'admin' asignado.\n`;
+        }
+        
+        throw new ForbiddenException(errorMessage);
       }
+      
+      console.log(`[updateBusinessBranding] ✅ Permisos verificados correctamente`);
 
       // Obtener settings actuales
       const currentSettings = await pool.query(

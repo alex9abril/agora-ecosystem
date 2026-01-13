@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { businessService, Business, CreateBusinessData, BusinessCategory } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function BranchesPage() {
   const router = useRouter();
@@ -126,93 +127,93 @@ export default function BranchesPage() {
         <title>Sucursales - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="w-full h-full flex flex-col p-6">
-          {/* Header */}
-          <div className="mb-8 flex items-center justify-between">
-            <div>
-              <button
-                onClick={() => router.push('/settings')}
-                className="text-sm text-gray-600 hover:text-gray-900 mb-2 flex items-center"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Volver a Configuración
-              </button>
-              <h1 className="text-3xl font-bold text-gray-900">Sucursales</h1>
-              <p className="mt-2 text-sm text-gray-600">
-                Gestiona las sucursales de tu tienda y agrega nuevas ubicaciones
-              </p>
-            </div>
-            {!showAddForm && !editingBranch && !brandingBranch && (
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Agregar Sucursal
-              </button>
-            )}
-          </div>
+        <div className="flex h-full bg-gray-50">
+          {/* Sidebar: Categorías */}
+          <SettingsSidebar />
 
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-800">{error}</p>
-            </div>
-          )}
-
-          {showAddForm ? (
-            <AddBranchForm
-              onSave={handleAddBranch}
-              onCancel={() => setShowAddForm(false)}
-              saving={saving}
-            />
-          ) : editingBranch ? (
-            <EditBranchForm
-              branch={editingBranch}
-              onSave={(formData) => handleUpdateBranch(editingBranch.id, formData)}
-              onCancel={() => setEditingBranch(null)}
-              saving={saving}
-            />
-          ) : brandingBranch ? (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <button
-                    onClick={() => setBrandingBranch(null)}
-                    className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
-                  >
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    Volver a sucursales
-                  </button>
-                  <h2 className="text-2xl font-semibold text-gray-900">Personalizacion</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Ajusta logos, colores y mensajes para la sucursal: <strong>{brandingBranch.name}</strong>
-                  </p>
-                </div>
+          {/* Contenido principal */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="max-w-7xl mx-auto px-6 py-8">
+              {/* Header */}
+              <div className="mb-8">
+                <h1 className="text-xl font-normal text-gray-900 mb-2">Sucursales</h1>
+                <p className="text-sm text-gray-600">
+                  Gestiona las sucursales de tu tienda y agrega nuevas ubicaciones
+                </p>
               </div>
-              <BrandingManager type="business" id={brandingBranch.id} name={brandingBranch.name} />
+
+              {!showAddForm && !editingBranch && !brandingBranch && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Agregar Sucursal
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              {showAddForm ? (
+                <AddBranchForm
+                  onSave={handleAddBranch}
+                  onCancel={() => setShowAddForm(false)}
+                  saving={saving}
+                />
+              ) : editingBranch ? (
+                <EditBranchForm
+                  branch={editingBranch}
+                  onSave={(formData) => handleUpdateBranch(editingBranch.id, formData)}
+                  onCancel={() => setEditingBranch(null)}
+                  saving={saving}
+                />
+              ) : brandingBranch ? (
+                <div>
+                  <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                      <button
+                        onClick={() => setBrandingBranch(null)}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Volver a sucursales
+                      </button>
+                      <h2 className="text-xl font-normal text-gray-900">Personalizacion</h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Ajusta logos, colores y mensajes para la sucursal: <strong>{brandingBranch.name}</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <BrandingManager type="business" id={brandingBranch.id} name={brandingBranch.name} />
+                </div>
+              ) : (
+                <BranchesList 
+                  branches={branches} 
+                  onRefresh={loadBranches}
+                  onEdit={(branch) => {
+                    setBrandingBranch(null);
+                    setShowAddForm(false);
+                    setEditingBranch(branch);
+                  }}
+                  onBranding={(branch) => {
+                    setShowAddForm(false);
+                    setEditingBranch(null);
+                    setBrandingBranch(branch);
+                  }}
+                />
+              )}
             </div>
-          ) : (
-            <BranchesList 
-              branches={branches} 
-              onRefresh={loadBranches}
-              onEdit={(branch) => {
-                setBrandingBranch(null);
-                setShowAddForm(false);
-                setEditingBranch(branch);
-              }}
-              onBranding={(branch) => {
-                setShowAddForm(false);
-                setEditingBranch(null);
-                setBrandingBranch(branch);
-              }}
-            />
-          )}
+          </div>
         </div>
       </LocalLayout>
     </>
@@ -223,7 +224,7 @@ interface BranchesListProps {
   branches: Business[];
   onRefresh: () => void;
   onEdit: (branch: Business) => void;
-  onBranding: (branch: Business) => void;
+  onBranding?: (branch: Business) => void;
 }
 
 function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListProps) {
@@ -243,7 +244,7 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
             d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
           />
         </svg>
-        <h3 className="mt-4 text-lg font-medium text-gray-900">No hay sucursales</h3>
+        <h3 className="mt-4 text-base font-normal text-gray-900">No hay sucursales</h3>
         <p className="mt-2 text-sm text-gray-500">
           Comienza agregando tu primera sucursal adicional.
         </p>
@@ -260,7 +261,7 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900">{branch.name}</h3>
+              <h3 className="text-base font-normal text-gray-900">{branch.name}</h3>
               {branch.legal_name && (
                 <p className="text-sm text-gray-600 mt-1">{branch.legal_name}</p>
               )}
@@ -285,7 +286,7 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
               )}
               <div className="mt-3 flex items-center gap-4 flex-wrap">
                 <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal ${
                     branch.is_active
                       ? 'bg-green-100 text-green-800'
                       : 'bg-gray-100 text-gray-800'
@@ -294,17 +295,17 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
                   {branch.is_active ? 'Activa' : 'Inactiva'}
                 </span>
                 {branch.accepts_orders && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-blue-100 text-blue-800">
                     Acepta pedidos
                   </span>
                 )}
                 {branch.accepts_pickup && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-purple-100 text-purple-800">
                     Acepta recolección
                   </span>
                 )}
                 {branch.slug && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-indigo-100 text-indigo-800">
                     Slug: {branch.slug}
                   </span>
                 )}
@@ -323,6 +324,14 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
               >
                 Editar
               </button>
+              {onBranding && (
+                <button
+                  onClick={() => onBranding(branch)}
+                  className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
+                >
+                  Personalizar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -493,7 +502,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Agregar Nueva Sucursal</h2>
+      <h2 className="text-lg font-normal text-gray-900 mb-6">Agregar Nueva Sucursal</h2>
       {/* Mensaje informativo sobre asignación automática al grupo */}
       {!loadingGroup && (
         businessGroup ? (
@@ -534,7 +543,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
           <div className="lg:col-span-2 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Nombre de la Sucursal <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -557,7 +566,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Razón Social
                 </label>
                 <input
@@ -569,7 +578,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Descripción
                 </label>
                 <textarea
@@ -581,7 +590,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Categoría <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -606,7 +615,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Teléfono
                 </label>
                 <input
@@ -618,7 +627,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Email
                 </label>
                 <input
@@ -631,7 +640,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
               {/* Mapa de selección de ubicación */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Selecciona la ubicación de la sucursal <span className="text-red-500">*</span>
                 </label>
                 <div className="h-96 w-full rounded-lg overflow-hidden border border-gray-300">
@@ -657,7 +666,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Dirección <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -674,7 +683,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Colonia
                 </label>
                 <input
@@ -689,7 +698,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Código Postal
                 </label>
                 <input
@@ -704,7 +713,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Ciudad
                 </label>
                 <input
@@ -716,7 +725,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Estado
                 </label>
                 <input
@@ -729,7 +738,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
               {/* Campos de coordenadas (solo lectura, se actualizan desde el mapa) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Longitud
                 </label>
                 <input
@@ -745,7 +754,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Latitud
                 </label>
                 <input
@@ -763,7 +772,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
             {/* Sección de gestión de marcas de vehículos */}
             <div className="pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Marcas de Vehículos Comercializadas</h3>
+              <h3 className="text-base font-normal text-gray-900 mb-4">Marcas de Vehículos Comercializadas</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Selecciona las marcas de vehículos que esta sucursal comercializará. Solo podrás crear productos para las marcas seleccionadas.
               </p>
@@ -778,14 +787,14 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
                   {/* Marcas seleccionadas */}
                   {selectedBrands.length > 0 && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Marcas Seleccionadas ({selectedBrands.length})
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {selectedBrands.map((brand) => (
                           <span
                             key={brand.id}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-md text-sm font-medium"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-md text-sm font-normal"
                           >
                             {brand.name}
                             <button
@@ -806,7 +815,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
                   {/* Marcas disponibles para agregar */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Agregar Marca
                     </label>
                     <select
@@ -854,7 +863,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
           <div className="lg:col-span-1 space-y-6">
             {/* Configuración Adicional */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
+              <h3 className="text-sm font-normal text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
                 Configuración
               </h3>
 
@@ -1162,14 +1171,14 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Editar Sucursal</h2>
+      <h2 className="text-lg font-normal text-gray-900 mb-6">Editar Sucursal</h2>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMNA IZQUIERDA - Información Principal */}
           <div className="lg:col-span-2 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Nombre de la Sucursal <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1192,7 +1201,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Razón Social
                 </label>
                 <input
@@ -1204,7 +1213,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Descripción
                 </label>
                 <textarea
@@ -1216,7 +1225,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Categoría <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -1241,7 +1250,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Teléfono
                 </label>
                 <input
@@ -1253,7 +1262,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
               Email
                 </label>
                 <input
@@ -1265,7 +1274,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
               Sitio Web
                 </label>
                 <input
@@ -1278,7 +1287,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
 
               {/* Mapa de selección de ubicación */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-normal text-gray-700 mb-2">
                   Selecciona la ubicación de la sucursal <span className="text-red-500">*</span>
                 </label>
                 <div className="h-96 w-full rounded-lg overflow-hidden border border-gray-300">
@@ -1304,7 +1313,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Dirección <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1321,7 +1330,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Colonia
                 </label>
                 <input
@@ -1336,7 +1345,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Código Postal
                 </label>
                 <input
@@ -1351,7 +1360,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Ciudad
                 </label>
                 <input
@@ -1363,7 +1372,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Estado
                 </label>
                 <input
@@ -1376,7 +1385,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
 
               {/* Campos de coordenadas (solo lectura, se actualizan desde el mapa) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Longitud
                 </label>
                 <input
@@ -1392,7 +1401,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-normal text-gray-700 mb-1">
                   Latitud
                 </label>
                 <input
@@ -1410,7 +1419,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
 
             {/* Sección de gestión de marcas de vehículos */}
             <div className="pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Marcas de Vehículos Comercializadas</h3>
+              <h3 className="text-base font-normal text-gray-900 mb-4">Marcas de Vehículos Comercializadas</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Selecciona las marcas de vehículos que esta sucursal comercializará. Solo podrás crear productos para las marcas seleccionadas.
               </p>
@@ -1425,14 +1434,14 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
                   {/* Marcas asignadas */}
                   {assignedBrands.length > 0 && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
                         Marcas Asignadas ({assignedBrands.length})
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {assignedBrands.map((brand) => (
                           <span
                             key={brand.brand_id}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-md text-sm font-medium"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-100 text-indigo-800 rounded-md text-sm font-normal"
                           >
                             {brand.brand_name}
                             <button
@@ -1454,7 +1463,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
 
                   {/* Marcas disponibles para agregar */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">
                       Agregar Marca
                     </label>
                     <select
@@ -1502,7 +1511,7 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
           <div className="lg:col-span-1 space-y-6">
             {/* Configuración Adicional */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
+              <h3 className="text-sm font-normal text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
                 Configuración
               </h3>
 
