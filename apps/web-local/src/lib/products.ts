@@ -175,7 +175,7 @@ export const productsService = {
   async getProducts(
     businessId?: string, 
     vehicle?: { brand_id?: string; model_id?: string; year_id?: string; spec_id?: string },
-    pagination?: { page?: number; limit?: number }
+    options?: { page?: number; limit?: number; search?: string }
   ): Promise<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       // Construir query params
@@ -194,10 +194,11 @@ export const productsService = {
         if (vehicle.spec_id) params.append('vehicleSpecId', vehicle.spec_id);
       }
       
-      // Agregar parámetros de paginación
-      if (pagination) {
-        if (pagination.page) params.append('page', pagination.page.toString());
-        if (pagination.limit) params.append('limit', pagination.limit.toString());
+      // Agregar parámetros de paginación y búsqueda
+      if (options) {
+        if (options.page) params.append('page', options.page.toString());
+        if (options.limit) params.append('limit', options.limit.toString());
+        if (options.search) params.append('search', options.search);
       }
       
       const response = await apiRequest<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/catalog/products?${params.toString()}`, {

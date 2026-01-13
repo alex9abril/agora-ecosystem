@@ -47,6 +47,7 @@ export default function ProductsPage() {
   const [variantGroups, setVariantGroups] = useState<ProductVariantGroup[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'price'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -84,7 +85,7 @@ export default function ProductsPage() {
   const [productTaxes, setProductTaxes] = useState<ProductTax[]>([]);
   const [loadingTaxes, setLoadingTaxes] = useState(false);
 
-  const loadData = async (page: number = currentPage, limit: number = pageSize) => {
+  const loadData = async (page: number = currentPage, limit: number = pageSize, searchValue: string = searchTerm) => {
     try {
       setLoading(true);
       setError(null);
@@ -96,7 +97,7 @@ export default function ProductsPage() {
       // Los productos son GLOBALES - no se filtra por businessId
       // Si se proporciona businessId, solo se usa para crear productos nuevos, pero el listado es global
       const [productsResponse, categoriesData] = await Promise.all([
-        productsService.getProducts(undefined, userVehicle || undefined, { page, limit }), // undefined = todos los productos globales
+        productsService.getProducts(undefined, userVehicle || undefined, { page, limit, search: searchValue }), // undefined = todos los productos globales
         productsService.getCategories(),
       ]);
 
@@ -162,16 +163,23 @@ export default function ProductsPage() {
 
   // Cargar datos iniciales - productos son globales, no requieren tienda
   useEffect(() => {
-    loadData(1, pageSize);
     loadTaxTypes();
   }, []); // Cargar una sola vez al montar
 
-  // Recargar cuando cambie la página o el tamaño de página
+  // Recargar cuando cambie la página, el tamaño de página o el término de búsqueda
   useEffect(() => {
     if (currentPage > 0) {
-      loadData(currentPage, pageSize);
+      loadData(currentPage, pageSize, searchTerm);
     }
-  }, [currentPage, pageSize]); // Recargar cuando cambie la página o el tamaño de página
+  }, [currentPage, pageSize, searchTerm]); // Recargar cuando cambie la página, el tamaño de página o la búsqueda
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    setCurrentPage(1);
+    setSearchTerm(searchInput.trim());
+  };
 
   const loadTaxTypes = async () => {
     try {
@@ -558,17 +566,6 @@ export default function ProductsPage() {
   // Filtrar y ordenar productos
   const filteredAndSortedProducts = products
     .filter((product) => {
-      // Filtro de búsqueda por texto
-      if (searchTerm) {
-        const search = searchTerm.toLowerCase();
-        const matchesSearch = (
-          product.name.toLowerCase().includes(search) ||
-          (product.description && product.description.toLowerCase().includes(search)) ||
-          product.product_type.toLowerCase().includes(search)
-        );
-        if (!matchesSearch) return false;
-      }
-      
       // Filtro por sucursales
       const productBranches = productBranchMap.get(product.id) || new Set<string>();
       const hasAssignments = productBranches.size > 0;
@@ -857,22 +854,35 @@ export default function ProductsPage() {
           /* Lista de productos en tabla */
           <div className="flex-1 flex flex-col min-h-0">
             {/* Barra de búsqueda */}
-            <div className="mb-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+            <form className="mb-4" onSubmit={handleSearchSubmit}>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Buscar Productos..."
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearchSubmit(e);
+                      }
+                    }}
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
+                  />
                 </div>
-                <input
-                  type="text"
-                  placeholder="Buscar Productos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
-                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-normal bg-gray-900 text-white rounded border border-gray-900 hover:bg-gray-800 transition-colors"
+                >
+                  Buscar
+                </button>
               </div>
-            </div>
+            </form>
 
             {/* Tabla de productos */}
             <div className="bg-white rounded border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0">
