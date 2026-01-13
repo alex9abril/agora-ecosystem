@@ -268,6 +268,7 @@ export default function CategorySelector({
                     className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors ${
                       category.id === value ? 'bg-gray-100 font-medium' : ''
                     }`}
+                    style={{ paddingLeft: `${category.level * 12}px` }} // Visual offset by hierarchy level
                   >
                     <div className="flex items-center">
                       {/* Indicador de nivel con indentación */}
