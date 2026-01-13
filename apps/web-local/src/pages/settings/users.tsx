@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 interface Business {
   business_id: string;
@@ -335,21 +336,26 @@ export default function UsersSettingsPage() {
         <title>Usuarios y Permisos - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
+        <div className="p-6">
           <div className="mb-6">
-            <button
-              onClick={() => router.back()}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a Configuración
-            </button>
+            <h1 className="text-2xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <p className="text-sm text-gray-600">
+              Gestiona la configuración de tu tienda y personal
+            </p>
+          </div>
+
+          <div className="flex gap-6">
+            {/* Sidebar: Categorías */}
+            <SettingsSidebar />
+
+            {/* Contenido principal */}
+            <div className="flex-1">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                {/* Header */}
+                <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Usuarios y Permisos</h1>
+                <h2 className="text-xl font-semibold text-gray-900">Usuarios y Permisos</h2>
                 <p className="mt-2 text-sm text-gray-600">
                   Administra a tus empleados y sus permisos de acceso
                 </p>
@@ -1050,6 +1056,9 @@ export default function UsersSettingsPage() {
               </div>
             </div>
           )}
+              </div>
+            </div>
+          </div>
         </div>
       </LocalLayout>
     </>

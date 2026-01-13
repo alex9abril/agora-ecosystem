@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { vehiclesService, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec, UserVehicle } from '@/lib/vehicles';
 import { setUserVehicle, getUserVehicle } from '@/lib/storage';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function VehicleSettingsPage() {
   const router = useRouter();
@@ -190,19 +191,24 @@ export default function VehicleSettingsPage() {
         <title>Mi Vehículo - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
+        <div className="p-6">
           <div className="mb-6">
-            <button
-              onClick={() => router.back()}
-              className="mb-4 text-sm text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Mi Vehículo</h1>
+            <h1 className="text-2xl font-normal text-gray-900 mb-2">Configuración</h1>
+            <p className="text-sm text-gray-600">
+              Gestiona la configuración de tu tienda y personal
+            </p>
+          </div>
+
+          <div className="flex gap-6">
+            {/* Sidebar: Categorías */}
+            <SettingsSidebar />
+
+            {/* Contenido principal */}
+            <div className="flex-1">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                {/* Header */}
+                <div className="mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">Mi Vehículo</h2>
             <p className="mt-2 text-sm text-gray-600">
               Selecciona tu vehículo para ver solo productos compatibles
             </p>
@@ -346,6 +352,9 @@ export default function VehicleSettingsPage() {
               <li>Mientras más específico seas, más precisos serán los resultados</li>
               <li>Puedes cambiar o eliminar tu vehículo en cualquier momento</li>
             </ul>
+          </div>
+              </div>
+            </div>
           </div>
         </div>
       </LocalLayout>

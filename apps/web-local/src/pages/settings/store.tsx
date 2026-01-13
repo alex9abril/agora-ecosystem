@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { businessService, BusinessGroup, CreateBusinessGroupData } from '@/lib/business';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function StoreSettingsPage() {
   const router = useRouter();
@@ -249,26 +250,22 @@ export default function StoreSettingsPage() {
         <title>Configuración de Grupo Empresarial - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <button
-              onClick={() => router.push('/settings')}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a Configuración
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Configuración de Grupo Empresarial</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Gestiona la información de tu grupo empresarial
-            </p>
-          </div>
+        <div className="flex h-full bg-gray-50">
+          {/* Sidebar: Categorías */}
+          <SettingsSidebar />
 
-          {/* Business Group Information Card */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+          {/* Contenido principal */}
+          <div className="flex-1 min-w-0 overflow-y-auto">
+            <div className="max-w-4xl mx-auto px-8 py-8">
+              {/* Header */}
+              <div className="mb-8">
+                <h1 className="text-2xl font-semibold text-gray-900 mb-2">Configuración de Grupo Empresarial</h1>
+                <p className="text-sm text-gray-600">
+                  Gestiona la información de tu grupo empresarial
+                </p>
+              </div>
+
+                {/* Business Group Information Card */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-gray-900">
                 {businessGroup ? 'Información del Grupo Empresarial' : 'Crear Grupo Empresarial'}
@@ -548,6 +545,7 @@ export default function StoreSettingsPage() {
               </form>
               </>
             )}
+            </div>
           </div>
         </div>
       </LocalLayout>
