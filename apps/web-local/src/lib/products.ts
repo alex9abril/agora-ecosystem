@@ -100,12 +100,32 @@ export const productsService = {
    */
   async getCategories(): Promise<ProductCategory[]> {
     try {
-      // Obtener solo categorías globales y activas
-      const response = await apiRequest<{ data: ProductCategory[]; pagination: any }>('/catalog/categories?globalOnly=true&isActive=true&limit=100', {
-        method: 'GET',
-      });
-      // El backend devuelve { data: [...], pagination: {...} }
-      return response?.data || [];
+      // Obtener todas las categorías globales y activas (paginando, límite máximo 100 por página)
+      const allCategories: ProductCategory[] = [];
+      const limit = 100;
+      let page = 1;
+      let totalPages = 1;
+
+      while (page <= totalPages) {
+        const response = await apiRequest<{ data: ProductCategory[]; pagination?: { totalPages?: number } }>(
+          `/catalog/categories?globalOnly=true&isActive=true&page=${page}&limit=${limit}`,
+          { method: 'GET' }
+        );
+
+        const pageData = response?.data || [];
+        allCategories.push(...pageData);
+
+        // Usar totalPages del backend si viene; si no, romper cuando llegue menos del límite
+        if (response?.pagination?.totalPages) {
+          totalPages = response.pagination.totalPages;
+        } else if (pageData.length < limit) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      return allCategories;
     } catch (error: any) {
       console.error('Error obteniendo categorías:', error);
       throw error;

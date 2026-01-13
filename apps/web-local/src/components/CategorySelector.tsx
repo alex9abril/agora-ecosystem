@@ -195,6 +195,7 @@ export default function CategorySelector({
 
   const handleInputFocus = () => {
     setIsOpen(true);
+    // Keep searchTerm as-is so an empty input shows all categories
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,7 +228,8 @@ export default function CategorySelector({
           type="text"
           required={required}
           disabled={disabled}
-          value={selectedCategory ? selectedCategory.fullPath : searchTerm}
+          // When the dropdown is open, show the search term to allow live filtering
+          value={isOpen ? searchTerm : (selectedCategory ? selectedCategory.fullPath : '')}
           onChange={handleInputChange}
           onFocus={handleInputFocus}
           onKeyDown={handleInputKeyDown}
