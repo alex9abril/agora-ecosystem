@@ -4,7 +4,7 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { businessService } from '@/lib/business';
 import { useState, useEffect } from 'react';
 
-type SettingsCategory = 'store' | 'branches' | 'wallet' | 'users' | 'permissions' | 'vehicle';
+type SettingsCategory = 'store' | 'branches' | 'wallet' | 'users' | 'permissions' | 'vehicle' | 'emails';
 
 interface CategoryInfo {
   id: SettingsCategory;
@@ -169,6 +169,19 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
         </svg>
       ),
       href: '/settings/permissions',
+      requiresSuperadmin: true,
+    },
+    {
+      id: 'emails',
+      name: 'Correos',
+      description: 'Gestiona los templates de correos electrónicos automáticos',
+      section: 'CONFIGURATION',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      ),
+      href: '/settings/emails',
       requiresSuperadmin: true,
     },
   ];
