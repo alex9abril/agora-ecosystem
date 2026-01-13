@@ -1,9 +1,15 @@
 # Changelog
 
-## Selector de categorías en web-local (2026-01-14)
-- El selector de categorías en `apps/web-local` ahora pagina hasta obtener todas las categorías globales activas, eliminando el límite efectivo de 100 resultados.
-- La lista muestra todas las categorías al enfocar el campo; al escribir se filtra por nombre, descripción o ruta completa manteniendo padres/hijos visibles.
-- Las subcategorías se indentan visualmente según su nivel para aclarar la jerarquía mientras se busca y selecciona.
+## Persistencia de paginacion en productos web-local (2026-01-13)
+- El listado de productos en `apps/web-local/src/pages/products/index.tsx` ahora recuerda el tamano de pagina y la pagina actual usando `localStorage` (`products_page_size` y `products_current_page`), evitando que al refrescar o volver desde el detalle se reinicie a los valores por defecto.
+- El selector de tamano de pagina sigue ofreciendo 10/20/50/100 (configurado en `PAGE_SIZE_OPTIONS`); al cambiarlo se reinicia a la pagina 1, pero la preferencia queda guardada para futuras visitas.
+- La navegacion de busqueda continua reseteando a pagina 1 como antes, mientras la numeracion estandar se conserva entre visitas para mantener la posicion del usuario en el listado.
+- Las preferencias se limpian automaticamente al navegar fuera de la seccion de productos, de modo que no se aplican en otras paginas (p. ej. pedidos).
+
+## Selector de categorias en web-local (2026-01-14)
+- El selector de categorias en `apps/web-local` ahora pagina hasta obtener todas las categorias globales activas, eliminando el limite efectivo de 100 resultados.
+- La lista muestra todas las categorias al enfocar el campo; al escribir se filtra por nombre, descripcion o ruta completa manteniendo padres/hijos visibles.
+- Las subcategorias se indentan visualmente segun su nivel para aclarar la jerarquia mientras se busca y selecciona.
 
 ## Busqueda de productos en web-local (2026-01-13)
 - El listado de productos en `apps/web-local/src/pages/products/index.tsx` ahora dispara la busqueda solo al enviar (Enter o boton **Buscar**) y pasa el termino al backend; se elimino el filtrado en vivo por cada tecla.

@@ -11,6 +11,12 @@ import ImageUpload from '@/components/ImageUpload';
 import MultipleImageUpload, { ProductImage } from '@/components/MultipleImageUpload';
 import CategorySelector from '@/components/CategorySelector';
 
+const PAGE_SIZE_STORAGE_KEY = 'products_page_size';
+const CURRENT_PAGE_STORAGE_KEY = 'products_current_page';
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
+const PRODUCTS_ROUTE_PREFIX = '/products';
+
 export default function ProductsPage() {
   const router = useRouter();
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
@@ -53,8 +59,26 @@ export default function ProductsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   
   // Estados para paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const storedPage = localStorage.getItem(CURRENT_PAGE_STORAGE_KEY);
+      const parsedPage = storedPage ? parseInt(storedPage, 10) : NaN;
+      if (parsedPage > 0) {
+        return parsedPage;
+      }
+    }
+    return 1;
+  });
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const storedPageSize = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+      const parsedPageSize = storedPageSize ? parseInt(storedPageSize, 10) : NaN;
+      if (PAGE_SIZE_OPTIONS.includes(parsedPageSize)) {
+        return parsedPageSize;
+      }
+    }
+    return DEFAULT_PAGE_SIZE;
+  });
   const [totalProducts, setTotalProducts] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   
@@ -84,6 +108,36 @@ export default function ProductsPage() {
   const [availableTaxTypes, setAvailableTaxTypes] = useState<TaxType[]>([]);
   const [productTaxes, setProductTaxes] = useState<ProductTax[]>([]);
   const [loadingTaxes, setLoadingTaxes] = useState(false);
+
+  // Persist page preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CURRENT_PAGE_STORAGE_KEY, currentPage.toString());
+    }
+  }, [currentPage]);
+
+  // Persist page size preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, pageSize.toString());
+    }
+  }, [pageSize]);
+
+  // Limpiar preferencias si se navega fuera de productos
+  useEffect(() => {
+    const handleRouteChange = (url: string) => {
+      if (typeof window === 'undefined') return;
+      if (!url.startsWith(PRODUCTS_ROUTE_PREFIX)) {
+        localStorage.removeItem(PAGE_SIZE_STORAGE_KEY);
+        localStorage.removeItem(CURRENT_PAGE_STORAGE_KEY);
+      }
+    };
+
+    router.events.on('routeChangeStart', handleRouteChange);
+    return () => {
+      router.events.off('routeChangeStart', handleRouteChange);
+    };
+  }, [router.events]);
 
   const loadData = async (page: number = currentPage, limit: number = pageSize, searchValue: string = searchTerm) => {
     try {
@@ -1070,10 +1124,11 @@ export default function ProductsPage() {
                           }}
                           className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-gray-400"
                         >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={50}>50</option>
-                          <option value={100}>100</option>
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       
