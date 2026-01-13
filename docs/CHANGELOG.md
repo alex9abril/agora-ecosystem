@@ -1,5 +1,10 @@
 # Changelog
 
+## Búsqueda de pedidos por folio en web-local (2026-01-15)
+- `apps/backend/src/modules/orders/orders.service.ts` normaliza el término de búsqueda y permite buscar por UUID limpio o por los últimos 8 caracteres del folio, manteniendo el filtro por sucursal.
+- `apps/web-local/src/pages/orders/index.tsx` ahora dispara la búsqueda solo al enviar el formulario (botón o Enter) y usa el mismo estilo de botón que productos; el término se manda al backend en cada envío.
+- `apps/web-local/src/pages/operations/index.tsx` envía la búsqueda al backend (removiendo `#` inicial) y elimina el filtrado local, asegurando búsqueda en base de datos por sucursal, incluyendo folios, sin depender de la paginación.
+
 ## Persistencia de paginacion en productos web-local (2026-01-13)
 - El listado de productos en `apps/web-local/src/pages/products/index.tsx` ahora recuerda el tamano de pagina y la pagina actual usando `localStorage` (`products_page_size` y `products_current_page`), evitando que al refrescar o volver desde el detalle se reinicie a los valores por defecto.
 - El selector de tamano de pagina sigue ofreciendo 10/20/50/100 (configurado en `PAGE_SIZE_OPTIONS`); al cambiarlo se reinicia a la pagina 1, pero la preferencia queda guardada para futuras visitas.
