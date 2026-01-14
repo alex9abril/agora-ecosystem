@@ -1,5 +1,10 @@
 # Changelog
 
+## Paginacion persistente en clientes web-local (2026-01-15)
+- `apps/web-local/src/pages/clients/index.tsx` ahora usa el mismo sistema de paginacion de productos: selector de tamano de pagina (10/20/50/100), controles primera/anterior/siguiente/ultima y conteo de rango mostrado.
+- Las preferencias de pagina y tamano se guardan en `localStorage` (`clients_current_page`, `clients_page_size`) y se limpian al salir de la seccion de clientes, manteniendo la posicion al volver desde el detalle.
+- La busqueda se dispara al enviar el formulario, reseteando a la pagina 1 y enviando el termino al backend junto con los filtros actuales.
+
 ## Búsqueda de pedidos por folio en web-local (2026-01-15)
 - `apps/backend/src/modules/orders/orders.service.ts` normaliza el término de búsqueda y permite buscar por UUID limpio o por los últimos 8 caracteres del folio, manteniendo el filtro por sucursal.
 - `apps/web-local/src/pages/orders/index.tsx` ahora dispara la búsqueda solo al enviar el formulario (botón o Enter) y usa el mismo estilo de botón que productos; el término se manda al backend en cada envío.
