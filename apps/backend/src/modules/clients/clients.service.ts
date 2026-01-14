@@ -43,14 +43,15 @@ export class ClientsService {
     }
 
     if (search) {
+      const searchParam = `%${search}%`;
       whereConditions.push(`(
         up.first_name ILIKE $${paramIndex} OR 
         up.last_name ILIKE $${paramIndex} OR 
         up.phone ILIKE $${paramIndex} OR
         au.email ILIKE $${paramIndex}
       )`);
-      queryParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
-      paramIndex += 4;
+      queryParams.push(searchParam);
+      paramIndex++;
     }
 
     const whereClause = whereConditions.length > 0

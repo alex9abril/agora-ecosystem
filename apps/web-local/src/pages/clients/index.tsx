@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 const PAGE_SIZE_STORAGE_KEY = 'clients_page_size';
 const CURRENT_PAGE_STORAGE_KEY = 'clients_current_page';
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const PAGE_SIZE_OPTIONS = [1, 10, 20, 50, 100];
 const DEFAULT_PAGE_SIZE = 20;
 const CLIENTS_ROUTE_PREFIX = '/clients';
 
@@ -48,7 +48,7 @@ export default function ClientsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    loadClients(page, pageSize);
+    loadClients(page, pageSize, searchTerm);
   }, [page, pageSize, searchTerm, isActiveFilter, isBlockedFilter, sortBy, sortOrder]);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function ClientsPage() {
     };
   }, [router.events]);
 
-  const loadClients = async (pageToLoad: number = page, limit: number = pageSize) => {
+  const loadClients = async (pageToLoad: number = page, limit: number = pageSize, searchValue: string = searchTerm) => {
     try {
       setLoading(true);
       setError(null);
@@ -90,8 +90,8 @@ export default function ClientsPage() {
         sortOrder,
       };
 
-      if (searchTerm) {
-        filters.search = searchTerm;
+      if (searchValue) {
+        filters.search = searchValue;
       }
 
       if (isActiveFilter !== 'all') {
