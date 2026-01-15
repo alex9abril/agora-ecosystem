@@ -118,7 +118,9 @@ export const landingSlidersService = {
   /**
    * Listar sliders con filtros
    */
-  async list(filters?: ListLandingSlidersFilters): Promise<ListLandingSlidersResponse> {
+  async list(
+    filters?: ListLandingSlidersFilters,
+  ): Promise<ListLandingSlidersResponse | LandingSlider[]> {
     const params = new URLSearchParams();
     if (filters?.business_group_id) params.append('business_group_id', filters.business_group_id);
     if (filters?.business_id) params.append('business_id', filters.business_id);

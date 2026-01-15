@@ -20,6 +20,7 @@ export default function SlidersPage() {
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [sliders, setSliders] = useState<LandingSlider[]>([]);
+  const [slidersLoading, setSlidersLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Estados para contexto (grupo o sucursal)
@@ -83,9 +84,11 @@ export default function SlidersPage() {
     }
   };
 
-  const loadSliders = async () => {
+  const loadSliders = async (options: { withSpinner?: boolean } = {}) => {
     try {
-      setLoading(true);
+      if (options.withSpinner !== false) {
+        setSlidersLoading(true);
+      }
       setError(null);
 
       const filters: any = {};
@@ -96,12 +99,13 @@ export default function SlidersPage() {
       }
 
       const response = await landingSlidersService.list(filters);
-      setSliders(response.data);
+      const items = Array.isArray(response) ? response : response.data;
+      setSliders(items || []);
     } catch (error: any) {
       console.error('Error cargando sliders:', error);
       setError('Error al cargar sliders');
     } finally {
-      setLoading(false);
+      setSlidersLoading(false);
     }
   };
 
@@ -146,13 +150,25 @@ export default function SlidersPage() {
   };
 
   const handleToggleActive = async (slider: LandingSlider) => {
+    // Optimistic update to avoid flicker and keep the card visible
+    setSliders((current) =>
+      current.map((s) =>
+        s.id === slider.id ? { ...s, is_active: !slider.is_active } : s
+      )
+    );
+
     try {
       await landingSlidersService.update(slider.id, {
         is_active: !slider.is_active,
       });
-      await loadSliders();
     } catch (error: any) {
       console.error('Error actualizando estado:', error);
+      // Revertir el cambio local si falla
+      setSliders((current) =>
+        current.map((s) =>
+          s.id === slider.id ? { ...s, is_active: slider.is_active } : s
+        )
+      );
       setError('Error al actualizar estado');
     }
   };
@@ -161,8 +177,11 @@ export default function SlidersPage() {
   const loadGroupSlidersCount = async () => {
     if (!businessGroup) return;
     try {
-      const response = await landingSlidersService.list({ business_group_id: businessGroup.id });
-      setGroupSlidersCount(response.data.length);
+      const response = await landingSlidersService.list({
+        business_group_id: businessGroup.id,
+      });
+      const items = Array.isArray(response) ? response : response.data;
+      setGroupSlidersCount(items?.length || 0);
     } catch (error) {
       console.error('Error cargando conteo de sliders del grupo:', error);
       setGroupSlidersCount(0);
@@ -174,8 +193,11 @@ export default function SlidersPage() {
     const counts: Record<string, number> = {};
     for (const branch of branches) {
       try {
-        const response = await landingSlidersService.list({ business_id: branch.id });
-        counts[branch.id] = response.data.length;
+        const response = await landingSlidersService.list({
+          business_id: branch.id,
+        });
+        const items = Array.isArray(response) ? response : response.data;
+        counts[branch.id] = items?.length || 0;
       } catch (error) {
         console.error(`Error cargando conteo de sliders de ${branch.name}:`, error);
         counts[branch.id] = 0;
@@ -311,7 +333,7 @@ export default function SlidersPage() {
             </div>
 
             {/* Lista de sliders */}
-            {loading ? (
+            {slidersLoading ? (
               <div className="text-center py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
                 <p className="mt-4 text-gray-500">Cargando sliders...</p>

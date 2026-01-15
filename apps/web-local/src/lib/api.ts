@@ -5,7 +5,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
 
 export interface ApiResponse<T = any> {
-  success: boolean;
+  success?: boolean;
   data?: T;
   message?: string;
   statusCode?: number;
@@ -25,7 +25,7 @@ export class ApiError extends Error {
 }
 
 /**
- * Obtener token de autenticación desde storage
+ * Obtener token de autenticacion desde storage
  */
 function getAuthTokenFromStorage(): string | null {
   if (typeof window !== 'undefined') {
@@ -35,7 +35,7 @@ function getAuthTokenFromStorage(): string | null {
       if (token) {
         console.log('[API] Token encontrado en localStorage, longitud:', token.length);
       } else {
-        console.warn('[API] No se encontró token en localStorage');
+        console.warn('[API] No se encontro token en localStorage');
       }
       return token;
     } catch (e) {
@@ -55,7 +55,7 @@ export async function apiRequest<T = any>(
 ): Promise<T> {
   const url = `${API_URL}${endpoint}`;
   
-  // Agregar token de autenticación si está disponible y no se especificó explícitamente
+  // Agregar token de autenticacion si esta disponible y no se especifico explicitamente
   const authToken = getAuthTokenFromStorage();
   
   // Construir headers como objeto mutable
@@ -66,12 +66,12 @@ export async function apiRequest<T = any>(
     Object.assign(headersObj, options.headers);
   }
   
-  // Solo establecer Content-Type si no es FormData (el navegador lo establece automáticamente para FormData)
+  // Solo establecer Content-Type si no es FormData (el navegador lo establece automaticamente para FormData)
   if (!(options.body instanceof FormData)) {
     headersObj['Content-Type'] = 'application/json';
   }
 
-  // Si hay token y no se especificó Authorization en headers, agregarlo
+  // Si hay token y no se especifico Authorization en headers, agregarlo
   const existingHeaders = options.headers;
   let hasExistingAuth = false;
   if (existingHeaders instanceof Headers) {
@@ -86,12 +86,12 @@ export async function apiRequest<T = any>(
     headersObj['Authorization'] = `Bearer ${authToken}`;
     console.log('[API] Token agregado al header Authorization');
   } else if (!authToken) {
-    console.warn('[API] No hay token disponible para la petición a:', endpoint);
+    console.warn('[API] No hay token disponible para la peticion a:', endpoint);
   }
   
   const headers: HeadersInit = headersObj;
   
-  console.log('[API] Realizando petición:', {
+  console.log('[API] Realizando peticion:', {
     url,
     method: options.method || 'GET',
     hasAuth: !!authToken,
@@ -103,21 +103,24 @@ export async function apiRequest<T = any>(
     headers,
   });
 
-  let data: ApiResponse<T>;
+  let parsed: any = null;
   
   try {
     const text = await response.text();
-    if (!text) {
-      // Respuesta vacía
+    if (text) {
+      parsed = JSON.parse(text);
+    } else if (response.ok) {
+      // Respuestas 204/empty exitosas (p. ej. DELETE) se consideran correctas
+      return undefined as T;
+    } else {
       throw new ApiError(
-        'Respuesta vacía del servidor',
+        'Respuesta vacia del servidor',
         response.status,
         { rawResponse: response }
       );
     }
-    data = JSON.parse(text);
   } catch (jsonError) {
-    // Si no se puede parsear JSON, puede ser un error de red o respuesta vacía
+    // Si no se puede parsear JSON, puede ser un error de red o respuesta vacia
     console.error('[API] Error parseando respuesta:', jsonError);
     throw new ApiError(
       'Error al procesar la respuesta del servidor',
@@ -126,11 +129,12 @@ export async function apiRequest<T = any>(
     );
   }
 
-  if (!response.ok || !data.success) {
+  const hasSuccessFlag = parsed && Object.prototype.hasOwnProperty.call(parsed, 'success');
+  if (!response.ok || (hasSuccessFlag && parsed?.success === false)) {
     const error = new ApiError(
-      data.message || 'Error en la petición',
-      data.statusCode || response.status,
-      data
+      parsed?.message || 'Error en la peticion',
+      parsed?.statusCode || response.status,
+      parsed
     );
     
     // Endpoints donde 404 es un caso esperado y no debe loguearse como error
@@ -146,7 +150,7 @@ export async function apiRequest<T = any>(
       });
     } else {
       // Otros errores se loguean normalmente
-      console.error('[API] Error en petición:', {
+      console.error('[API] Error en peticion:', {
         endpoint,
         status: error.statusCode,
         message: error.message,
@@ -157,13 +161,13 @@ export async function apiRequest<T = any>(
     
     // Si es un error 401, limpiar el token y redirigir al login
     if (error.statusCode === 401) {
-      console.warn('[API] Error 401 - Token inválido o expirado, limpiando sesión');
+      console.warn('[API] Error 401 - Token invalido o expirado, limpiando sesion');
       if (typeof window !== 'undefined') {
         try {
           const { clearAuth } = require('./storage');
           clearAuth();
           
-          // Disparar evento personalizado para que AuthContext maneje la redirección
+          // Disparar evento personalizado para que AuthContext maneje la redireccion
           window.dispatchEvent(new CustomEvent('auth:session-expired'));
         } catch (e) {
           console.error('[API] Error limpiando auth:', e);
@@ -174,11 +178,21 @@ export async function apiRequest<T = any>(
     throw error;
   }
 
-  return data.data as T;
+  const envelopeKeys = ['success', 'data', 'message', 'statusCode', 'timestamp'];
+  const isEnvelopeOnly =
+    parsed &&
+    typeof parsed === 'object' &&
+    Object.keys(parsed).every((k) => envelopeKeys.includes(k));
+
+  if (isEnvelopeOnly && Object.prototype.hasOwnProperty.call(parsed, 'data')) {
+    return parsed.data as T;
+  }
+
+  return parsed as T;
 }
 
 /**
- * Cliente HTTP con autenticación
+ * Cliente HTTP con autenticacion
  */
 export async function authenticatedRequest<T = any>(
   endpoint: string,
@@ -193,4 +207,3 @@ export async function authenticatedRequest<T = any>(
     },
   });
 }
-

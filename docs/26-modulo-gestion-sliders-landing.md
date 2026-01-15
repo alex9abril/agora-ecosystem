@@ -93,6 +93,7 @@ Content-Type: application/json
 GET /landing-sliders?business_group_id={uuid}&business_id={uuid}&only_active=true&page=1&limit=20
 Authorization: Bearer {token}
 ```
+- `only_active` es opcional y por defecto es `false`, por lo que el endpoint retorna activos e inactivos a menos que se envíe `only_active=true`.
 
 #### Obtener Slider por ID
 ```http
@@ -158,6 +159,7 @@ apps/web-local/src/lib/landing-sliders.ts
    - Vista en grid con preview visual
    - Muestra orden, estado (activo/inactivo), y tipo de redirección
    - Acciones: Editar, Activar/Desactivar, Eliminar
+   - La vista de gestión siempre muestra activos e inactivos; desactivar no elimina ni oculta el slider en la lista, solo lo desactiva para el store
 
 3. **Formulario de Creación/Edición**
    - Campos principales:
