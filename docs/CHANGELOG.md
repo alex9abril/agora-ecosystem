@@ -1,5 +1,8 @@
 # Changelog
 
+## Normalizacion de slugs en sucursales web-local (2026-01-16)
+- `apps/web-local/src/pages/settings/branches.tsx` ahora normaliza acentos/diacriticos al generar slugs (NFD + sin marcas), evitando que caracteres como `á`, `é`, `í`, `ó`, `ú` o `ñ` se eliminen y garantizando URLs limpias.
+
 ## Sliders muestran activos e inactivos en web-local (2026-01-16)
 - La gestión de sliders en `apps/web-local/src/pages/sliders/index.tsx` deja de filtrar por `only_active`; siempre lista todos los sliders y muestra su estado activo/inactivo.
 - El DTO `ListLandingSlidersDto` ahora interpreta `only_active` con valor por defecto `false`, de modo que el backend devuelve activos e inactivos a menos que se solicite explícitamente `only_active=true`.
