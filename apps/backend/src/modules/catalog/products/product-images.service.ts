@@ -37,10 +37,6 @@ export class ProductImagesService {
 
   constructor() {
     // Log de configuración del bucket (siempre, para debugging)
-    console.log('🔍 [ProductImagesService] Constructor inicializado');
-    console.log('🔍 [ProductImagesService] Bucket configurado:', this.BUCKET_NAME);
-    console.log('🔍 [ProductImagesService] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS (raw):', process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'no configurada (usando default: products)');
-    console.log('🔍 [ProductImagesService] Bucket normalizado:', this.BUCKET_NAME);
   }
 
 
@@ -121,11 +117,6 @@ export class ProductImagesService {
         throw new ServiceUnavailableException('Supabase Storage no está configurado');
       }
 
-      console.log('🔍 [uploadImage] Iniciando subida de imagen...');
-      console.log('🔍 [uploadImage] Bucket configurado (normalizado):', this.BUCKET_NAME);
-      console.log('🔍 [uploadImage] Variable SUPABASE_STORAGE_BUCKET_PRODUCTS (raw):', process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'no configurada');
-      console.log('🔍 [uploadImage] SUPABASE_URL:', process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.substring(0, 40)}...` : 'NO CONFIGURADO');
-      console.log('🔍 [uploadImage] SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Configurado' : '❌ NO CONFIGURADO');
       
       // Validar que el nombre del bucket sea válido (no una URL)
       if (this.BUCKET_NAME.includes('://') || this.BUCKET_NAME.includes('/storage/') || this.BUCKET_NAME.startsWith('http')) {
@@ -140,14 +131,6 @@ export class ProductImagesService {
       const filePath = this.generateFilePath(productId, imageId, file.originalname);
 
       // Debug antes de subir (igual que BrandingImagesService - no verificamos el bucket, solo intentamos subir)
-      console.log('🔍 [uploadImage] Intentando subir:', {
-        bucket: this.BUCKET_NAME,
-        filePath,
-        fileSize: file.buffer.length,
-        contentType: file.mimetype,
-        supabaseUrl: process.env.SUPABASE_URL?.substring(0, 40) + '...',
-        hasSupabaseAdmin: !!supabaseAdmin,
-      });
 
       // Subir archivo a Supabase Storage (igual que BrandingImagesService)
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -165,7 +148,6 @@ export class ProductImagesService {
           statusCode: errorStatus,
           bucket: this.BUCKET_NAME,
           filePath,
-          errorDetails: JSON.stringify(uploadError, null, 2),
         });
         
         // Si el error es "Bucket not found", dar más contexto

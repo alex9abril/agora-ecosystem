@@ -29,14 +29,8 @@ export class BusinessUsersService {
       );
       
       // Log para depuración detallada
-      console.log('=== DEBUG: Tiendas del superadmin ===');
-      console.log('Número de tiendas:', result.rows.length);
       if (result.rows.length > 0) {
-        console.log('Primera tienda completa:', JSON.stringify(result.rows[0], null, 2));
-        console.log('business_address:', result.rows[0].business_address);
-        console.log('Todas las claves:', Object.keys(result.rows[0]));
       }
-      console.log('=====================================');
       
       return result.rows;
     } catch (error: any) {

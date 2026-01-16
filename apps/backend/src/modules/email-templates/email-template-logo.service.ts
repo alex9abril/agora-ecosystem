@@ -3,62 +3,55 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { supabaseAdmin } from '../../../config/supabase.config';
+import { supabaseAdmin } from '../../config/supabase.config';
 
 @Injectable()
-export class SliderImagesService {
+export class EmailTemplateLogoService {
   private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET || 'personalizacion';
-  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (sliders pueden ser más grandes)
-  private readonly ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
-
-  constructor() {
-    if (process.env.NODE_ENV !== 'production') {
-    }
-  }
 
   /**
-   * Valida el archivo de imagen
+   * Valida que el archivo sea una imagen válida
    */
   private validateImageFile(file: Express.Multer.File): void {
     if (!file) {
       throw new BadRequestException('No se proporcionó ningún archivo');
     }
 
-    if (!this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Tipo de archivo no permitido. Tipos permitidos: ${this.ALLOWED_MIME_TYPES.join(', ')}`
+        `Tipo de archivo no permitido. Tipos permitidos: ${allowedMimeTypes.join(', ')}`
       );
     }
 
-    if (file.size > this.MAX_FILE_SIZE) {
-      throw new BadRequestException(
-        `El archivo es demasiado grande. Tamaño máximo: ${this.MAX_FILE_SIZE / 1024 / 1024}MB`
-      );
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSizeBytes) {
+      throw new BadRequestException('El archivo es demasiado grande. Tamaño máximo: 5MB');
     }
   }
 
   /**
-   * Genera la ruta del archivo en el bucket
-   * Estructura: sliders/{type}/{id}/{fileName}
+   * Genera la ruta del archivo para el logo del template
    */
   private generateFilePath(
-    type: 'group' | 'branch',
-    id: string,
+    level: 'global' | 'group' | 'business',
+    templateId: string,
     originalName: string
   ): string {
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 9);
     const ext = originalName.split('.').pop() || 'png';
-    const fileName = `slider-${timestamp}-${randomStr}.${ext}`;
-    return `sliders/${type}/${id}/${fileName}`;
+    const fileName = `logo-${timestamp}-${randomStr}.${ext}`;
+
+    return `email-templates/${level}/${templateId}/${fileName}`;
   }
 
   /**
-   * Sube una imagen de slider
+   * Sube un logo para un template de email
    */
-  async uploadImage(
-    type: 'group' | 'branch',
-    id: string,
+  async uploadLogo(
+    level: 'global' | 'group' | 'business',
+    templateId: string,
     file: Express.Multer.File
   ): Promise<{ url: string; path: string }> {
     if (!supabaseAdmin) {
@@ -69,7 +62,7 @@ export class SliderImagesService {
 
     try {
       // Generar ruta del archivo
-      const filePath = this.generateFilePath(type, id, file.originalname);
+      const filePath = this.generateFilePath(level, templateId, file.originalname);
 
       // Subir archivo a Supabase Storage
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -80,14 +73,7 @@ export class SliderImagesService {
         });
 
       if (uploadError) {
-        console.error('❌ Error subiendo archivo a Storage:', {
-          error: uploadError,
-          message: uploadError.message,
-          statusCode: (uploadError as any).statusCode,
-          status: (uploadError as any).status,
-          bucket: this.BUCKET_NAME,
-          filePath,
-        });
+        console.error('❌ Error subiendo archivo a Storage:', uploadError);
         throw new ServiceUnavailableException(`Error al subir archivo: ${uploadError.message}`);
       }
 
@@ -104,15 +90,15 @@ export class SliderImagesService {
       if (error instanceof BadRequestException || error instanceof ServiceUnavailableException) {
         throw error;
       }
-      console.error('❌ Error procesando imagen de slider:', error);
-      throw new ServiceUnavailableException(`Error al procesar imagen: ${error.message}`);
+      console.error('❌ Error procesando logo de template:', error);
+      throw new ServiceUnavailableException(`Error al procesar logo: ${error.message}`);
     }
   }
 
   /**
-   * Elimina una imagen de slider
+   * Elimina un logo de template
    */
-  async deleteImage(filePath: string): Promise<void> {
+  async deleteLogo(filePath: string): Promise<void> {
     if (!supabaseAdmin) {
       throw new ServiceUnavailableException('Supabase Storage no está configurado');
     }
@@ -123,16 +109,16 @@ export class SliderImagesService {
         .remove([filePath]);
 
       if (error) {
-        console.error('❌ Error eliminando archivo de Storage:', error);
-        throw new ServiceUnavailableException(`Error al eliminar archivo: ${error.message}`);
+        console.error('❌ Error eliminando logo:', error);
+        throw new ServiceUnavailableException(`Error al eliminar logo: ${error.message}`);
       }
 
     } catch (error: any) {
       if (error instanceof ServiceUnavailableException) {
         throw error;
       }
-      console.error('❌ Error eliminando imagen de slider:', error);
-      throw new ServiceUnavailableException(`Error al eliminar imagen: ${error.message}`);
+      console.error('❌ Error eliminando logo:', error);
+      throw new ServiceUnavailableException(`Error al eliminar logo: ${error.message}`);
     }
   }
 }

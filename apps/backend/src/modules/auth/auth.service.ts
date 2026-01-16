@@ -4,6 +4,8 @@ import {
   ServiceUnavailableException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { SupabaseClient, User, AuthResponse } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin } from '../../config/supabase.config';
@@ -11,12 +13,15 @@ import { dbPool } from '../../config/database.config';
 import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
 import { AdminSignUpDto } from './dto/admin-signup.dto';
+import { EmailService } from '../email/email.service';
 
 /**
  * Servicio de autenticación usando Supabase
  */
 @Injectable()
 export class AuthService {
+  constructor(private readonly emailService: EmailService) {}
+
   /**
    * Obtiene el usuario actual desde el token
    */
@@ -132,22 +137,16 @@ export class AuthService {
     }
 
     try {
-      console.log('🔍 Buscando perfil para userId:', userId);
       let result = await dbPool.query(
         'SELECT * FROM core.user_profiles WHERE id = $1',
         [userId]
       );
 
-      console.log('📊 Resultado de la consulta:', {
-        rowCount: result.rows.length,
-        hasData: result.rows.length > 0,
-      });
 
       // Si no existe el perfil, intentar obtener información del usuario desde auth.users
       // y crear el perfil automáticamente
       if (result.rows.length === 0) {
         console.warn('⚠️  No se encontró perfil para userId:', userId);
-        console.log('🔄 Intentando crear perfil automáticamente...');
         
         // Obtener información del usuario desde Supabase Auth
         if (!supabaseAdmin) {
@@ -162,7 +161,6 @@ export class AuthService {
         }
 
         const user = authUser.user;
-        console.log('✅ Usuario encontrado en auth.users:', user.email);
 
         // Crear perfil con información básica
         // Intentar extraer nombre del user_metadata
@@ -193,13 +191,15 @@ export class AuthService {
         }
 
         try {
-          console.log('📝 Intentando insertar perfil con datos:', {
-            userId,
-            role,
-            firstName,
-            lastName,
-            phone,
-          });
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[AuthService.getUserProfile] Creando perfil:', {
+              userId,
+              role,
+              firstName,
+              lastName,
+              phone,
+            });
+          }
 
           const insertResult = await dbPool.query(
             `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
@@ -216,7 +216,6 @@ export class AuthService {
             ]
           );
 
-          console.log('✅ Perfil creado automáticamente para userId:', userId);
           return insertResult.rows[0];
         } catch (insertError: any) {
           console.error('❌ Error al crear perfil automáticamente:', {
@@ -225,9 +224,6 @@ export class AuthService {
             detail: insertError.detail,
             hint: insertError.hint,
             constraint: insertError.constraint,
-            table: insertError.table,
-            column: insertError.column,
-            stack: insertError.stack,
           });
           
           // Si es un error de constraint (por ejemplo, foreign key), proporcionar más información
@@ -240,13 +236,11 @@ export class AuthService {
           // Si es un error de constraint único (duplicado)
           if (insertError.code === '23505') {
             // El perfil ya existe, intentar obtenerlo nuevamente
-            console.log('⚠️  Perfil ya existe (posible race condition), obteniendo nuevamente...');
             const retryResult = await dbPool.query(
               'SELECT * FROM core.user_profiles WHERE id = $1',
               [userId]
             );
             if (retryResult.rows.length > 0) {
-              console.log('✅ Perfil encontrado después de retry');
               return retryResult.rows[0];
             }
           }
@@ -298,9 +292,6 @@ export class AuthService {
    */
   async signUp(signUpDto: SignUpDto) {
     // Debug: Verificar estado de Supabase
-    console.log('🔍 Debug signUp:');
-    console.log('  supabase client:', supabase ? '✅ Inicializado' : '❌ NULL');
-    console.log('  supabaseAdmin client:', supabaseAdmin ? '✅ Inicializado' : '❌ NULL');
     
     if (!supabase) {
       console.error('❌ ERROR: supabase client es NULL');
@@ -309,24 +300,35 @@ export class AuthService {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
-    console.log('✅ Cliente Supabase disponible, intentando registro...');
 
     // Determinar el rol del usuario (default: 'client')
     const platformRole = signUpDto.role || 'client';
+    const requiresEmailConfirmation = !!signUpDto.requiresEmailConfirmation;
+
+    // Validar duplicados antes de crear el usuario en Auth
+    if (dbPool && signUpDto.phone) {
+      const phoneCheck = await dbPool.query(
+        'SELECT id FROM core.user_profiles WHERE phone = $1',
+        [signUpDto.phone]
+      );
+      if (phoneCheck.rows.length > 0) {
+        throw new ConflictException('Este teléfono ya está registrado. Usa otro número.');
+      }
+    }
 
     // Para usuarios 'client', usar admin client para confirmar email automáticamente
     // Para otros roles (local, admin, repartidor), usar signUp normal (requiere confirmación)
     let authData: any;
     let authError: any = null;
     let session: any = null;
+    let confirmationLink: string | null = null;
 
     if (platformRole === 'client' && supabaseAdmin) {
-      // Intentar usar admin client para crear usuario con email confirmado automáticamente
-      console.log('📧 Intentando crear usuario client con email confirmado automáticamente...');
+      // Intentar usar admin client para crear usuario client
       const { data: adminData, error: adminError } = await supabaseAdmin.auth.admin.createUser({
         email: signUpDto.email,
         password: signUpDto.password,
-        email_confirm: true, // Confirmar email automáticamente
+        email_confirm: !requiresEmailConfirmation,
         user_metadata: {
           first_name: signUpDto.firstName,
           last_name: signUpDto.lastName,
@@ -337,7 +339,6 @@ export class AuthService {
       if (adminError) {
         // Si falla con "User not allowed" o similar, usar enfoque alternativo
         if (adminError.message.includes('not allowed') || adminError.message.includes('User not allowed') || adminError.code === 'not_admin') {
-          console.log('🔄 Admin client falló, usando enfoque alternativo: signUp normal + confirmación...');
           
           // Verificar si el usuario ya existe
           try {
@@ -378,81 +379,109 @@ export class AuthService {
             const userId = signUpData.user.id;
             authData = { user: signUpData.user };
             session = signUpData.session;
-            console.log('✅ Usuario client creado con signUp normal:', userId);
+            if (requiresEmailConfirmation) {
+              session = null;
+            }
 
-            // Confirmar email usando SQL directo (más confiable que admin client)
-            try {
-              if (dbPool) {
-                // Confirmar email directamente en la base de datos
-                // Nota: confirmed_at es una columna generada, no se puede actualizar directamente
-                await dbPool.query(
-                  `UPDATE auth.users 
-                   SET email_confirmed_at = CURRENT_TIMESTAMP,
-                       updated_at = CURRENT_TIMESTAMP
-                   WHERE id = $1`,
-                  [userId]
-                );
-                console.log('✅ Email confirmado automáticamente usando SQL directo');
-              } else if (supabaseAdmin) {
-                // Fallback: intentar con admin client (puede fallar si no tiene permisos)
-                try {
-                  await supabaseAdmin.auth.admin.updateUserById(userId, {
-                    email_confirm: true,
-                  });
-                  console.log('✅ Email confirmado automáticamente usando admin client');
-                } catch (adminError: any) {
-                  console.warn('⚠️  No se pudo confirmar email con admin client (puede ser problema de permisos):', adminError.message);
-                  // Continuar de todas formas - el usuario puede confirmar manualmente más tarde
-                }
-              }
-              
-              // Esperar un momento para asegurar que la confirmación se procese
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              
-              // Después de confirmar el email, crear sesión automáticamente
+            if (requiresEmailConfirmation && supabaseAdmin) {
               try {
-                const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+                  type: 'signup',
                   email: signUpDto.email,
                   password: signUpDto.password,
+                  options: {
+                    data: {
+                      first_name: signUpDto.firstName,
+                      last_name: signUpDto.lastName,
+                      phone: signUpDto.phone,
+                    },
+                  },
                 });
-                if (signInError) {
-                  console.error('❌ Error al iniciar sesión después de confirmar email:', {
-                    message: signInError.message,
-                    status: signInError.status,
-                  });
-                  // Intentar una vez más después de esperar más tiempo
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+
+                if (linkError) {
+                  console.warn('⚠️  No se pudo generar link de confirmación:', linkError.message);
+                } else {
+                  confirmationLink = linkData?.properties?.action_link || null;
+                }
+              } catch (linkErr: any) {
+                console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
+              }
+            }
+
+            if (!requiresEmailConfirmation) {
+              // Confirmar email usando SQL directo (más confiable que admin client)
+              try {
+                if (dbPool) {
+                  // Confirmar email directamente en la base de datos
+                  // Nota: confirmed_at es una columna generada, no se puede actualizar directamente
+                  await dbPool.query(
+                    `UPDATE auth.users 
+                     SET email_confirmed_at = CURRENT_TIMESTAMP,
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $1`,
+                    [userId]
+                  );
+                } else if (supabaseAdmin) {
+                  // Fallback: intentar con admin client (puede fallar si no tiene permisos)
+                  try {
+                    await supabaseAdmin.auth.admin.updateUserById(userId, {
+                      email_confirm: true,
+                    });
+                  } catch (adminError: any) {
+                    console.warn('⚠️  No se pudo confirmar email con admin client (puede ser problema de permisos):', adminError.message);
+                    // Continuar de todas formas - el usuario puede confirmar manualmente más tarde
+                  }
+                }
+                
+                // Esperar un momento para asegurar que la confirmación se procese
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                
+                // Después de confirmar el email, crear sesión automáticamente
+                try {
+                  const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
                     email: signUpDto.email,
                     password: signUpDto.password,
                   });
-                  if (!retrySignInError && retrySignInData?.session) {
-                    session = retrySignInData.session;
-                    authData = { user: retrySignInData.user };
-                    console.log('✅ Sesión creada automáticamente en el segundo intento después de confirmar email');
+                  if (signInError) {
+                    console.error('❌ Error al iniciar sesión después de confirmar email:', {
+                      message: signInError.message,
+                      status: signInError.status,
+                    });
+                    // Intentar una vez más después de esperar más tiempo
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+                      email: signUpDto.email,
+                      password: signUpDto.password,
+                    });
+                    if (!retrySignInError && retrySignInData?.session) {
+                      session = retrySignInData.session;
+                      authData = { user: retrySignInData.user };
+                    } else {
+                      console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+                    }
+                  } else if (signInData?.session) {
+                    session = signInData.session;
+                    authData = { user: signInData.user };
+                    if (process.env.NODE_ENV !== 'production') {
+                      console.debug('[AuthService.signUp] Sesión creada (confirm email):', {
+                        hasSession: !!session,
+                        hasAccessToken: !!session?.access_token,
+                        hasRefreshToken: !!session?.refresh_token,
+                      });
+                    }
                   } else {
-                    console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+                    console.warn('⚠️  No se pudo crear sesión después de confirmar email: signInData no tiene session');
                   }
-                } else if (signInData?.session) {
-                  session = signInData.session;
-                  authData = { user: signInData.user };
-                  console.log('✅ Sesión creada automáticamente después de confirmar email:', {
-                    hasSession: !!session,
-                    hasAccessToken: !!session?.access_token,
-                    hasRefreshToken: !!session?.refresh_token,
+                } catch (sessionErr: any) {
+                  console.error('❌ Excepción creando sesión después de confirmar email:', {
+                    message: sessionErr.message,
+                    stack: sessionErr.stack,
                   });
-                } else {
-                  console.warn('⚠️  No se pudo crear sesión después de confirmar email: signInData no tiene session');
                 }
-              } catch (sessionErr: any) {
-                console.error('❌ Excepción creando sesión después de confirmar email:', {
-                  message: sessionErr.message,
-                  stack: sessionErr.stack,
-                });
+              } catch (confirmError: any) {
+                console.error('❌ Error al confirmar email automáticamente:', confirmError);
+                // Continuar de todas formas, el usuario puede confirmar manualmente
               }
-            } catch (confirmError: any) {
-              console.error('❌ Error al confirmar email automáticamente:', confirmError);
-              // Continuar de todas formas, el usuario puede confirmar manualmente
             }
           }
         } else {
@@ -461,54 +490,80 @@ export class AuthService {
         }
       } else if (adminData.user) {
         authData = { user: adminData.user };
-        // Para usuarios creados con admin, necesitamos crear una sesión manualmente
-        // Iniciar sesión automáticamente para crear la sesión
-        console.log('✅ Usuario client creado con email confirmado, creando sesión...');
-        console.log('📧 Email del usuario:', signUpDto.email);
-        
-        // Esperar un momento para asegurar que el usuario esté completamente creado
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        try {
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: signUpDto.email,
-            password: signUpDto.password,
-          });
-          
-          if (signInError) {
-            console.error('❌ Error al iniciar sesión después de crear usuario:', {
-              message: signInError.message,
-              status: signInError.status,
+        if (requiresEmailConfirmation && supabaseAdmin) {
+          try {
+            const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+              type: 'signup',
+              email: signUpDto.email,
+              password: signUpDto.password,
+              options: {
+                data: {
+                  first_name: signUpDto.firstName,
+                  last_name: signUpDto.lastName,
+                  phone: signUpDto.phone,
+                },
+              },
             });
-            // Si falla, intentar una vez más después de esperar
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+
+            if (linkError) {
+              console.warn('⚠️  No se pudo generar link de confirmación:', linkError.message);
+            } else {
+              confirmationLink = linkData?.properties?.action_link || null;
+            }
+          } catch (linkErr: any) {
+            console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
+          }
+        }
+
+        if (!requiresEmailConfirmation) {
+          // Para usuarios creados con admin, necesitamos crear una sesión manualmente
+          // Iniciar sesión automáticamente para crear la sesión
+          
+          // Esperar un momento para asegurar que el usuario esté completamente creado
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          try {
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
               email: signUpDto.email,
               password: signUpDto.password,
             });
-            if (!retrySignInError && retrySignInData?.session) {
-              session = retrySignInData.session;
-              authData = { user: retrySignInData.user };
-              console.log('✅ Sesión creada automáticamente en el segundo intento');
+            
+            if (signInError) {
+              console.error('❌ Error al iniciar sesión después de crear usuario:', {
+                message: signInError.message,
+                status: signInError.status,
+              });
+              // Si falla, intentar una vez más después de esperar
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              const { data: retrySignInData, error: retrySignInError } = await supabase.auth.signInWithPassword({
+                email: signUpDto.email,
+                password: signUpDto.password,
+              });
+              if (!retrySignInError && retrySignInData?.session) {
+                session = retrySignInData.session;
+                authData = { user: retrySignInData.user };
+              } else {
+                console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+              }
+            } else if (signInData?.session) {
+              session = signInData.session;
+              authData = { user: signInData.user };
+              if (process.env.NODE_ENV !== 'production') {
+                console.debug('[AuthService.signUp] Sesión creada (admin):', {
+                  hasSession: !!session,
+                  hasAccessToken: !!session?.access_token,
+                  hasRefreshToken: !!session?.refresh_token,
+                });
+              }
             } else {
-              console.error('❌ Error en segundo intento de crear sesión:', retrySignInError?.message);
+              console.warn('⚠️  No se pudo crear sesión automática: signInData no tiene session');
             }
-          } else if (signInData?.session) {
-            session = signInData.session;
-            authData = { user: signInData.user };
-            console.log('✅ Sesión creada automáticamente para el cliente:', {
-              hasSession: !!session,
-              hasAccessToken: !!session?.access_token,
-              hasRefreshToken: !!session?.refresh_token,
+          } catch (sessionErr: any) {
+            console.error('❌ Excepción creando sesión automática:', {
+              message: sessionErr.message,
+              stack: sessionErr.stack,
             });
-          } else {
-            console.warn('⚠️  No se pudo crear sesión automática: signInData no tiene session');
           }
-        } catch (sessionErr: any) {
-          console.error('❌ Excepción creando sesión automática:', {
-            message: sessionErr.message,
-            stack: sessionErr.stack,
-          });
         }
       }
     } else {
@@ -555,25 +610,10 @@ export class AuthService {
       throw new BadRequestException('No se pudo crear el usuario');
     }
 
-    console.log('✅ Usuario creado en Supabase Auth:', authData.user.id);
 
     // Crear perfil en core.user_profiles usando conexión directa
     if (dbPool) {
-      console.log('✅ Creando perfil en core.user_profiles...');
       try {
-        // Verificar si el teléfono ya existe antes de insertar
-        let phoneToInsert = signUpDto.phone || null;
-        if (phoneToInsert) {
-          const phoneCheck = await dbPool.query(
-            'SELECT id FROM core.user_profiles WHERE phone = $1',
-            [phoneToInsert]
-          );
-          if (phoneCheck.rows.length > 0) {
-            console.warn(`⚠️  El teléfono ${phoneToInsert} ya está en uso, se creará el perfil sin teléfono`);
-            phoneToInsert = null; // No insertar teléfono si ya existe
-          }
-        }
-
         await dbPool.query(
           `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -582,56 +622,60 @@ export class AuthService {
             platformRole,
             signUpDto.firstName,
             signUpDto.lastName,
-            phoneToInsert, // NULL si el teléfono ya existe o no se proporcionó
+            signUpDto.phone || null,
             false,
             true,
           ]
         );
-        console.log(`✅ Perfil creado exitosamente en core.user_profiles con rol: ${platformRole}`);
       } catch (profileError: any) {
         console.error('❌ Error creando perfil de usuario:', profileError);
         console.error('  Detalles:', profileError.message);
-        // Si el error es por teléfono duplicado, intentar sin teléfono
-        if (profileError.code === '23505' && profileError.constraint === 'user_profiles_phone_key') {
-          console.log('🔄 Reintentando crear perfil sin teléfono...');
-          try {
-            await dbPool.query(
-              `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
-               VALUES ($1, $2, $3, $4, NULL, $5, $6)`,
-              [
-                authData.user.id,
-                platformRole,
-                signUpDto.firstName,
-                signUpDto.lastName,
-                false,
-                true,
-              ]
-            );
-            console.log(`✅ Perfil creado exitosamente sin teléfono (duplicado) con rol: ${platformRole}`);
-          } catch (retryError: any) {
-            console.error('❌ Error en reintento de creación de perfil:', retryError);
-            // No lanzamos error aquí para no bloquear el registro
+        if (profileError.code === '23505') {
+          if (profileError.constraint === 'user_profiles_phone_key') {
+            throw new ConflictException('Este teléfono ya está registrado. Usa otro número.');
+          }
+          if (profileError.constraint === 'user_profiles_pkey') {
+            throw new ConflictException('Este usuario ya tiene un perfil asociado. Inicia sesión.');
           }
         }
-        // No lanzamos error aquí para no bloquear el registro
+        throw new BadRequestException('No se pudo crear el perfil del usuario.');
       }
     } else {
       console.warn('⚠️  dbPool no está disponible, no se creará perfil en core.user_profiles');
     }
 
-    // Para usuarios 'client', el email ya está confirmado, así que pueden iniciar sesión inmediatamente
-    // Para otros roles, pueden necesitar confirmar email
-    const needsEmailConfirmation = platformRole !== 'client' && !session;
+    // Para usuarios que requieren confirmación, no se genera sesión automáticamente
+    const needsEmailConfirmation = requiresEmailConfirmation || (!session && platformRole !== 'client');
 
     // Log final de la respuesta
-    console.log('📤 [signUp] Respuesta final:', {
-      hasUser: !!authData.user,
-      hasSession: !!session,
-      hasAccessToken: !!session?.access_token,
-      hasRefreshToken: !!session?.refresh_token,
-      platformRole,
-      needsEmailConfirmation,
-    });
+
+    // Enviar correo de bienvenida (no bloquea el flujo si falla)
+    if (authData.user && authData.user.email) {
+      const userName = `${signUpDto.firstName} ${signUpDto.lastName}`.trim() || signUpDto.email;
+      const fallbackUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/dashboard`;
+      const dashboardUrl = signUpDto.appUrl || confirmationLink || fallbackUrl;
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[AuthService.signUp] Enviando welcome email:', {
+          email: authData.user.email,
+          userName,
+          dashboardUrl,
+          requiresEmailConfirmation,
+          hasConfirmationLink: Boolean(confirmationLink),
+          appUrl: signUpDto.appUrl,
+        });
+      }
+      
+      this.emailService.sendWelcomeEmail(
+        authData.user.email,
+        userName,
+        dashboardUrl,
+        signUpDto.businessId,
+        signUpDto.businessGroupId
+      ).catch((error) => {
+        console.error('❌ Error enviando correo de bienvenida (no crítico):', error);
+      });
+    }
 
     return {
       user: authData.user,
@@ -642,6 +686,76 @@ export class AuthService {
         ? 'Usuario registrado exitosamente. Por favor, verifica tu email para confirmar tu cuenta.'
         : 'Usuario registrado exitosamente. Ya puedes iniciar sesión.',
       needsEmailConfirmation,
+    };
+  }
+
+  /**
+   * Liberar email en desarrollo (no elimina el usuario, solo cambia el email)
+   */
+  async releaseEmailForDev(email: string) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Acción no permitida en producción');
+    }
+    if (!supabaseAdmin) {
+      throw new ServiceUnavailableException('Servicio de autenticación admin no configurado');
+    }
+
+    let userId: string | null = null;
+    let originalEmail = email;
+
+    if (dbPool) {
+      const result = await dbPool.query(
+        'SELECT id, email FROM auth.users WHERE lower(email) = lower($1)',
+        [email]
+      );
+      if (result.rows.length > 0) {
+        userId = result.rows[0].id;
+        originalEmail = result.rows[0].email;
+      }
+    }
+
+    if (!userId) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers();
+      if (!error && data?.users) {
+        const user = data.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+        if (user) {
+          userId = user.id;
+          originalEmail = user.email || email;
+        }
+      }
+    }
+
+    if (!userId) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const newEmail = `deleted+${userId.slice(0, 8)}-${Date.now()}@agoramp.mx`;
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      email: newEmail,
+      email_confirm: true,
+    });
+
+    if (updateError) {
+      throw new BadRequestException(`No se pudo liberar el email: ${updateError.message}`);
+    }
+
+    if (dbPool) {
+      await dbPool.query(
+        `UPDATE core.user_profiles
+         SET is_active = FALSE,
+             is_blocked = TRUE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [userId]
+      );
+    }
+
+    return {
+      success: true,
+      userId,
+      originalEmail,
+      newEmail,
+      message: 'Email liberado para pruebas',
     };
   }
 
@@ -658,7 +772,6 @@ export class AuthService {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
-    console.log('🔍 Registrando nuevo administrador:', adminSignUpDto.email);
 
     let adminData: any = null;
     let adminError: any = null;
@@ -684,7 +797,6 @@ export class AuthService {
       } else if (data?.user) {
         adminData = data;
         userId = data.user.id;
-        console.log('✅ Administrador creado con admin client:', userId);
       }
     } catch (err: any) {
       console.warn('⚠️  Excepción al usar admin client:', err.message);
@@ -693,7 +805,6 @@ export class AuthService {
 
     // Si falla con "User not allowed" o similar, usar enfoque alternativo
     if (adminError && (adminError.message.includes('not allowed') || adminError.message.includes('User not allowed'))) {
-      console.log('🔄 Intentando enfoque alternativo: signUp normal + confirmación...');
       
       // Verificar si el usuario ya existe
       const { data: existingUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
@@ -744,14 +855,12 @@ export class AuthService {
 
       userId = signUpData.user.id;
       adminData = { user: signUpData.user };
-      console.log('✅ Administrador creado con signUp normal:', userId);
 
       // Confirmar email usando admin client
       try {
         await supabaseAdmin.auth.admin.updateUserById(userId, {
           email_confirm: true,
         });
-        console.log('✅ Email confirmado automáticamente');
       } catch (confirmError: any) {
         console.warn('⚠️  No se pudo confirmar email automáticamente:', confirmError.message);
         // Continuar de todas formas, el usuario puede confirmar manualmente
@@ -780,11 +889,9 @@ export class AuthService {
       throw new BadRequestException('No se pudo crear el administrador');
     }
 
-    console.log('✅ Administrador creado en Supabase Auth:', userId);
 
     // Crear perfil en core.user_profiles con rol 'admin'
     if (dbPool) {
-      console.log('✅ Creando perfil de administrador en core.user_profiles...');
       try {
         // Verificar si el teléfono ya existe antes de insertar
         let phoneToInsert = adminSignUpDto.phone || null;
@@ -812,12 +919,10 @@ export class AuthService {
             true,
           ]
         );
-        console.log('✅ Perfil de administrador creado exitosamente en core.user_profiles');
       } catch (profileError: any) {
         console.error('❌ Error creando perfil de administrador:', profileError);
         // Si el error es por teléfono duplicado, intentar sin teléfono
         if (profileError.code === '23505' && profileError.constraint === 'user_profiles_phone_key') {
-          console.log('🔄 Reintentando crear perfil sin teléfono...');
           try {
             await dbPool.query(
               `INSERT INTO core.user_profiles (id, role, first_name, last_name, phone, phone_verified, is_active)
@@ -831,7 +936,6 @@ export class AuthService {
                 true,
               ]
             );
-            console.log('✅ Perfil de administrador creado exitosamente sin teléfono');
           } catch (retryError: any) {
             console.error('❌ Error en reintento de creación de perfil:', retryError);
             // No lanzamos error aquí para no bloquear el registro
@@ -855,7 +959,6 @@ export class AuthService {
 
         if (!signInError && signInData?.session) {
           session = signInData.session;
-          console.log('✅ Sesión creada automáticamente para el administrador');
         } else {
           console.warn('⚠️  No se pudo crear sesión automática:', signInError?.message);
         }
@@ -882,99 +985,7 @@ export class AuthService {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
-    console.log('🔍 Intentando iniciar sesión para:', signInDto.email);
-
-    // Verificar si el usuario existe y confirmar email si es necesario
-    if (supabaseAdmin && dbPool) {
-      try {
-        // Buscar usuario por email usando Supabase Admin
-        const { data: usersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
-        
-        if (!usersError && usersData?.users && Array.isArray(usersData.users)) {
-          const user = usersData.users.find((u: any) => u.email === signInDto.email);
-          
-          if (user) {
-            // Obtener perfil del usuario
-            const profileResult = await dbPool.query(
-              'SELECT role, is_active FROM core.user_profiles WHERE id = $1',
-              [user.id]
-            );
-            const profile = profileResult.rows[0];
-            
-            console.log('📋 Usuario encontrado:', {
-              id: user.id,
-              email: user.email,
-              email_confirmed: !!user.email_confirmed_at,
-              role: profile?.role,
-              is_active: profile?.is_active,
-            });
-            
-            // Si el email no está confirmado, intentar confirmarlo automáticamente para clientes
-            if (!user.email_confirmed_at && profile?.role === 'client') {
-              console.log('📧 Confirmando email automáticamente para cliente...');
-              try {
-                const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-                  email_confirm: true,
-                });
-                if (updateError) {
-                  console.error('❌ Error al confirmar email:', updateError);
-                } else {
-                  console.log('✅ Email confirmado automáticamente:', {
-                    userId: user.id,
-                    emailConfirmed: updatedUser?.user?.email_confirmed_at ? 'Sí' : 'No',
-                  });
-                  // Esperar más tiempo para que se propague la confirmación
-                  await new Promise(resolve => setTimeout(resolve, 1500));
-                }
-              } catch (confirmError: any) {
-                console.error('⚠️  Error confirmando email:', confirmError);
-              }
-            }
-          }
-        }
-      } catch (checkError: any) {
-        console.error('⚠️  Error verificando usuario:', checkError);
-        // Continuar con el intento de login normal
-      }
-    }
-
-    // Verificar si el usuario es cliente y confirmar email automáticamente si no está confirmado
-    if (supabaseAdmin && dbPool) {
-      try {
-        const { data: usersData, error: usersError } = await supabaseAdmin.auth.admin.listUsers();
-        
-        if (!usersError && usersData?.users && Array.isArray(usersData.users)) {
-          const user = usersData.users.find((u: any) => u.email === signInDto.email);
-          
-          if (user) {
-            // Obtener perfil del usuario
-            const profileResult = await dbPool.query(
-              'SELECT role, is_active FROM core.user_profiles WHERE id = $1',
-              [user.id]
-            );
-            const profile = profileResult.rows[0];
-            
-            // Si es cliente y el email no está confirmado, confirmarlo automáticamente
-            if (profile?.role === 'client' && !user.email_confirmed_at) {
-              console.log('📧 Confirmando email automáticamente para cliente durante signIn...');
-              try {
-                await supabaseAdmin.auth.admin.updateUserById(user.id, {
-                  email_confirm: true,
-                });
-                console.log('✅ Email confirmado automáticamente durante signIn');
-                // Esperar un momento para que se procese
-                await new Promise(resolve => setTimeout(resolve, 500));
-              } catch (confirmError: any) {
-                console.warn('⚠️  No se pudo confirmar email durante signIn:', confirmError.message);
-              }
-            }
-          }
-        }
-      } catch (checkError: any) {
-        console.warn('⚠️  Error verificando usuario durante signIn:', checkError);
-        // Continuar con el intento de login normal
-      }
-    }
+    // No confirmar email automáticamente durante signIn
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: signInDto.email,
@@ -983,119 +994,8 @@ export class AuthService {
 
     if (error) {
       console.error('❌ Error en signIn:', error.message);
-      
-      // Si el error es "Email not confirmed" para un cliente, confirmar automáticamente usando SQL
-      if ((error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) && dbPool) {
-        console.log('🔄 Error de email no confirmado detectado, intentando confirmar automáticamente usando SQL...');
-        
-        try {
-          // Buscar usuario por email usando SQL directo (más confiable que admin client)
-          const userResult = await dbPool.query(
-            `SELECT id, email, email_confirmed_at 
-             FROM auth.users 
-             WHERE email = $1`,
-            [signInDto.email.toLowerCase()]
-          );
-          
-          if (userResult.rows.length > 0) {
-            const user = userResult.rows[0];
-            console.log('✅ Usuario encontrado en BD:', {
-              id: user.id,
-              email: user.email,
-              emailConfirmed: !!user.email_confirmed_at,
-            });
-            
-            // Obtener perfil del usuario
-            const profileResult = await dbPool.query(
-              'SELECT role FROM core.user_profiles WHERE id = $1',
-              [user.id]
-            );
-            const profile = profileResult.rows[0];
-            
-            console.log('📋 Perfil del usuario:', {
-              role: profile?.role,
-              hasProfile: !!profile,
-            });
-            
-            // Si es cliente y el email no está confirmado, confirmarlo usando SQL
-            if (profile?.role === 'client' && !user.email_confirmed_at) {
-              console.log('🔄 Cliente detectado - confirmando email automáticamente usando SQL...');
-              
-              try {
-                await dbPool.query(
-                  `UPDATE auth.users 
-                   SET email_confirmed_at = CURRENT_TIMESTAMP,
-                       updated_at = CURRENT_TIMESTAMP
-                   WHERE id = $1`,
-                  [user.id]
-                );
-                console.log('✅ Email confirmado automáticamente usando SQL directo');
-                
-                // Esperar más tiempo para que Supabase propague la confirmación
-                console.log('⏳ Esperando 3 segundos para que se propague la confirmación...');
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                
-                // Reintentar signIn
-                console.log('🔄 Reintentando signIn después de confirmar email...');
-                const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({
-                  email: signInDto.email,
-                  password: signInDto.password,
-                });
-                
-                if (!retryError && retryData?.session) {
-                  console.log('✅ SignIn exitoso después de confirmar email automáticamente');
-                  
-                  // Obtener perfil
-                  let userProfile = null;
-                  try {
-                    const profileResult = await dbPool.query(
-                      'SELECT * FROM core.user_profiles WHERE id = $1',
-                      [retryData.user.id]
-                    );
-                    userProfile = profileResult.rows[0] || null;
-                  } catch (e) {
-                    console.error('Error obteniendo perfil:', e);
-                  }
-                  
-                  return {
-                    user: {
-                      ...retryData.user,
-                      profile: userProfile,
-                    },
-                    session: retryData.session,
-                    accessToken: retryData.session.access_token,
-                    refreshToken: retryData.session.refresh_token,
-                  };
-                } else {
-                  console.error('❌ SignIn aún falla después de confirmar email:', retryError?.message);
-                  // Si aún falla, lanzar error especial para que el frontend reintente
-                  throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
-                }
-              } catch (sqlError: any) {
-                console.error('❌ Error al confirmar email con SQL:', sqlError);
-                // Si es un error especial que lanzamos, re-lanzarlo
-                if (sqlError instanceof UnauthorizedException && sqlError.message.includes('EMAIL_CONFIRMED')) {
-                  throw sqlError;
-                }
-                // Lanzar error especial para que el frontend reintente
-                throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
-              }
-            } else {
-              console.log('⚠️  Usuario no es cliente o email ya está confirmado');
-            }
-          } else {
-            console.log('⚠️  Usuario no encontrado en la base de datos');
-          }
-        } catch (sqlError: any) {
-          console.error('❌ Error al buscar usuario en BD:', sqlError);
-          // Si es un error especial que lanzamos, re-lanzarlo
-          if (sqlError instanceof UnauthorizedException && sqlError.message.includes('EMAIL_CONFIRMED')) {
-            throw sqlError;
-          }
-          // Continuar con el flujo normal
-        }
-      } else {
-        console.log('⚠️  dbPool no está disponible, no se puede confirmar email automáticamente');
+      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+        throw new UnauthorizedException('Tu correo no ha sido confirmado. Revisa tu bandeja de entrada.');
       }
       
       // Mensajes personalizados según el tipo de error
@@ -1103,13 +1003,8 @@ export class AuthService {
         throw new UnauthorizedException('Las credenciales proporcionadas son incorrectas. Por favor, verifica tu email y contraseña.');
       }
       
-      // Este bloque solo se ejecuta si el primer bloque no pudo manejar el error
-      // (por ejemplo, si no se encontró al usuario o no es cliente)
-      // Para CUALQUIER caso de email no confirmado, lanzar error especial
-      // El frontend puede manejar esto permitiendo continuar o reintentando
       if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
-        console.log('⚠️  Email not confirmed - lanzando error especial para reintento en frontend');
-        throw new UnauthorizedException('EMAIL_CONFIRMED_PLEASE_RETRY');
+        throw new UnauthorizedException('Tu correo no ha sido confirmado. Revisa tu bandeja de entrada.');
       }
       
       if (error.message.includes('User not found') || error.message.includes('user_not_found')) {
@@ -1129,7 +1024,6 @@ export class AuthService {
       throw new UnauthorizedException('No se pudo completar el inicio de sesión. Por favor, intenta nuevamente.');
     }
 
-    console.log('✅ Sesión iniciada exitosamente para:', data.user.email);
 
     // Obtener perfil del usuario usando conexión directa
     let profile = null;

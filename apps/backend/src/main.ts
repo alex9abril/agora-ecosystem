@@ -86,8 +86,6 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
   
-  console.log(`🚀 LOCALIA Backend running on http://localhost:${port}/api`);
-  console.log(`📚 Swagger documentation available at http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

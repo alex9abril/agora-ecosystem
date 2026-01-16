@@ -493,7 +493,6 @@ export class LogisticsService {
         quotationId,
         shippingCarrier,
         shippingService,
-        itemsCount: itemsResult.rows.length,
       });
 
       let trackingNumber: string;

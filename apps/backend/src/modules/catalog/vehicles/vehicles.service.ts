@@ -366,7 +366,6 @@ export class VehiclesService {
 
       if (result.rows.length === 0) {
         // Ya estaba desactivada, pero no es un error crítico
-        console.log(`⚠️ Compatibilidad ${compatibilityId} ya estaba desactivada`);
       }
     } catch (error: any) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {

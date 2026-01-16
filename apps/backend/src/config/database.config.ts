@@ -30,12 +30,6 @@ if (databaseUrl && databaseUrl.includes('[') && databaseUrl.includes(']')) {
     
     // Reconstruir URL sin corchetes
     databaseUrl = `postgresql://${user}:${password}@${host}:${port}/${database}`;
-    console.log('✅ Corregida DATABASE_URL: removidos corchetes de la contraseña');
-    console.log('   Usuario:', user);
-    console.log('   Host:', host);
-    console.log('   Puerto:', port);
-    console.log('   Base de datos:', database);
-    console.log('   Contraseña:', password ? '***' + password.slice(-2) : 'NO HAY');
   } else if (databaseUrl.includes('[password]')) {
     // Si tiene el placeholder [password], intentar construir desde otras variables
     console.warn('⚠️  DATABASE_URL tiene placeholder [password], intentando construir desde variables...');
@@ -72,8 +66,6 @@ if (!dbConfig.connectionString && process.env.SUPABASE_URL) {
       // El formato del pooler es: postgres.[PROJECT_REF]@aws-0-[REGION].pooler.supabase.com:6543
       // Pero necesitamos la región. Por ahora, usemos el formato directo que debería funcionar
       dbConfig.connectionString = `postgresql://postgres:${dbPassword}@db.${projectRef}.supabase.co:5432/postgres`;
-      console.log('✅ Construida DATABASE_URL desde SUPABASE_URL y SUPABASE_DB_PASSWORD');
-      console.log('   Host:', `db.${projectRef}.supabase.co`);
     }
   }
 }
@@ -90,14 +82,11 @@ export const dbPool: Pool | null = dbConfig.connectionString
 // Logs de debug
 if (process.env.NODE_ENV !== 'production') {
   if (dbPool) {
-    console.log('✅ Pool de PostgreSQL creado exitosamente');
     const maskedUrl = dbConfig.connectionString?.replace(/:[^:@]+@/, ':****@') || 'N/A';
-    console.log('   Connection string:', maskedUrl);
     
     // Extraer y mostrar el hostname para verificación
     const hostMatch = dbConfig.connectionString?.match(/@([^:]+):/);
     if (hostMatch) {
-      console.log('   Hostname:', hostMatch[1]);
     }
   } else {
     console.warn('⚠️  Pool de PostgreSQL NO creado');
@@ -122,7 +111,6 @@ if (dbPool) {
   // Probar conexión al iniciar
   dbPool.query('SELECT NOW()')
     .then(() => {
-      console.log('✅ Conexión a PostgreSQL verificada exitosamente');
     })
     .catch((err) => {
       console.error('❌ Error al verificar conexión a PostgreSQL:', err.message);

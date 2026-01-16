@@ -311,14 +311,6 @@ export class ApiKeysService {
         method: data.method,
         endpoint: data.endpoint,
         status_code: data.statusCode,
-        response_time_ms: data.responseTimeMs,
-        request_size_bytes: data.requestSizeBytes,
-        response_size_bytes: data.responseSizeBytes,
-        ip_address: data.ipAddress,
-        user_agent: data.userAgent,
-        request_body: data.requestBody,
-        response_body: data.responseBody,
-        error_message: data.errorMessage,
       });
     } catch (error) {
       // Log el error pero no lanzar excepción

@@ -169,6 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionRefreshToken: !!response.session?.refresh_token,
         fullResponse: response,
       });
+
+      if (response.needsEmailConfirmation) {
+        return;
+      }
       
       // Asegurar que tenemos accessToken y refreshToken
       const accessToken = response.accessToken || response.session?.access_token;

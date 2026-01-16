@@ -31,10 +31,8 @@ export class SupabaseAuthGuard implements CanActivate {
     const handler = context.getHandler();
     const className = context.getClass().name;
     const handlerName = handler?.name || 'unknown';
-    console.log(`[SupabaseAuthGuard] Checking: ${className}.${handlerName}, isPublic: ${isPublic}`);
 
     if (isPublic) {
-      console.log(`[SupabaseAuthGuard] ✅ Endpoint is public, allowing access`);
       return true;
     }
 

@@ -12,6 +12,7 @@ export interface SignUpData {
   lastName?: string;
   phone?: string;
   role?: 'client' | 'repartidor' | 'local' | 'admin';
+  requiresEmailConfirmation?: boolean;
 }
 
 export interface SignInData {
@@ -25,12 +26,14 @@ export interface AuthResponse {
     email: string;
     profile?: any;
   };
-  session: {
+  session?: {
     access_token: string;
     refresh_token: string;
-  };
-  accessToken: string;
-  refreshToken: string;
+  } | null;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  needsEmailConfirmation?: boolean;
+  message?: string;
 }
 
 export interface PasswordResetRequest {

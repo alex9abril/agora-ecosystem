@@ -5,6 +5,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { IntegrationsService, KarlopayCredentials } from '../../settings/integrations.service';
+import { EmailService } from '../../email/email.service';
+import { supabaseAdmin } from '../../../config/supabase.config';
 import axios, { AxiosInstance } from 'axios';
 import { CreateKarlopayOrderDto } from './dto/create-karlopay-order.dto';
 import { KarlopayPaymentWebhookDto } from './dto/karlopay-payment-webhook.dto';
@@ -31,7 +33,10 @@ export class KarlopayService {
   private tokenCache: Map<string, { token: string; expiresAt: number }> = new Map();
   private readonly TOKEN_CACHE_TTL = 50 * 60 * 1000; // 50 minutos (tokens suelen expirar en 1 hora)
 
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly emailService: EmailService
+  ) {}
 
   /**
    * Obtener credenciales de Karlopay según el modo activo
@@ -292,7 +297,6 @@ export class KarlopayService {
         hasPaymentInfo,
         totalPayment: webhookDto.paymentInformation?.totalPayment,
         totalToDepositBusiness: webhookDto.paymentInformation?.totalToDepositBusiness,
-        originalAmount: webhookDto.paymentInformation?.originalAmount,
       });
 
       // Procesar cada orden encontrada
@@ -422,7 +426,6 @@ export class KarlopayService {
             totalCompletedAmount: totalCompleted,
             orderTotal,
             allCompleted: parseInt(completed) === parseInt(total) && parseInt(total) > 0,
-            amountMatches: Math.abs(totalCompleted - orderTotal) < 0.01, // Tolerancia de centavos
           });
           
           // Si todas las transacciones están completadas Y el monto coincide, marcar la orden como pagada
@@ -438,6 +441,11 @@ export class KarlopayService {
                 [order.id]
               );
               this.logger.log(`✅ Orden ${order.id} marcada como pagada (todas las transacciones completadas)`);
+              
+              // Enviar correo de confirmación de pedido (no bloquea el flujo si falla)
+              this.sendOrderConfirmationEmail(order.id, order.business_id).catch((error) => {
+                this.logger.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, error);
+              });
             } else {
               this.logger.warn(`⚠️ Orden ${order.id} no marcada como pagada: monto completado (${totalCompleted}) < total orden (${orderTotal})`);
             }
@@ -466,6 +474,96 @@ export class KarlopayService {
   clearTokenCache(): void {
     this.tokenCache.clear();
     this.logger.log('🗑️ Caché de tokens de Karlopay limpiado');
+  }
+
+  /**
+   * Obtener email del usuario desde auth.users
+   */
+  private async getUserEmail(userId: string): Promise<string | null> {
+    if (!supabaseAdmin) {
+      return null;
+    }
+
+    try {
+      const { data: authUser, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (error || !authUser?.user?.email) {
+        this.logger.warn(`⚠️ No se pudo obtener email para usuario ${userId}:`, error?.message);
+        return null;
+      }
+      return authUser.user.email;
+    } catch (error: any) {
+      this.logger.error(`❌ Error obteniendo email del usuario ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Enviar correo de confirmación de pedido
+   */
+  private async sendOrderConfirmationEmail(orderId: string, businessId: string): Promise<void> {
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) {
+      return;
+    }
+
+    try {
+      // Obtener datos del pedido
+      const orderResult = await dbPool.query(
+        `SELECT 
+          o.id,
+          o.client_id,
+          o.total_amount,
+          o.payment_method,
+          o.created_at,
+          o.business_id,
+          b.business_group_id
+        FROM orders.orders o
+        LEFT JOIN core.businesses b ON o.business_id = b.id
+        WHERE o.id = $1`,
+        [orderId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        this.logger.warn(`⚠️ No se encontró pedido ${orderId} para enviar correo`);
+        return;
+      }
+
+      const order = orderResult.rows[0];
+      const userEmail = await this.getUserEmail(order.client_id);
+
+      if (!userEmail) {
+        this.logger.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de confirmación`);
+        return;
+      }
+
+      // Formatear datos
+      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const orderTotal = `$${parseFloat(order.total_amount).toFixed(2)}`;
+      const paymentMethod = order.payment_method || 'No especificado';
+      const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
+
+      // Enviar correo
+      await this.emailService.sendOrderConfirmationEmail(
+        userEmail,
+        orderNumber,
+        orderDate,
+        orderTotal,
+        paymentMethod,
+        orderUrl,
+        order.business_id,
+        order.business_group_id
+      );
+    } catch (error: any) {
+      this.logger.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
+      // No lanzar error para no interrumpir el flujo
+    }
   }
 }
 

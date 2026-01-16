@@ -468,27 +468,10 @@ export class LandingSlidersService {
     }
 
     try {
-      console.log('🔍 [getActiveSlidersByContext] Parámetros:', {
-        businessGroupId,
-        businessId,
-        businessGroupIdNull: businessGroupId || null,
-        businessIdNull: businessId || null,
-      });
-
       const result = await dbPool.query(
         `SELECT * FROM commerce.get_landing_sliders_by_context($1, $2, $3)`,
         [businessGroupId || null, businessId || null, true]
       );
-
-      console.log('🔍 [getActiveSlidersByContext] Resultados de la BD:', {
-        rowCount: result.rows.length,
-        rows: result.rows.map(r => ({
-          id: r.id,
-          business_group_id: r.business_group_id,
-          business_id: r.business_id,
-          is_active: r.is_active,
-        })),
-      });
 
       return result.rows.map((row: any) => ({
         ...row,

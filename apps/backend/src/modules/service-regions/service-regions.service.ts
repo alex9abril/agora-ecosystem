@@ -267,9 +267,7 @@ export class ServiceRegionsService {
       const result = await dbPool.query(sqlQuery, [regionId]);
       
       // Log para debugging
-      console.log(`[getBusinessesByRegion] Zona ID: ${regionId}, Tiendas encontradas: ${result.rows.length}`);
       if (result.rows.length > 0) {
-        console.log('[getBusinessesByRegion] Tiendas:', result.rows.map(r => r.name));
       }
       
       return result.rows;

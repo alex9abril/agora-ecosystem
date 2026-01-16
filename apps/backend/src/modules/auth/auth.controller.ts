@@ -27,6 +27,7 @@ import { SignInDto } from './dto/signin.dto';
 import { AdminSignUpDto } from './dto/admin-signup.dto';
 import { RequestPasswordResetDto, UpdatePasswordDto } from './dto/reset-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ReleaseEmailDto } from './dto/release-email.dto';
 
 /**
  * Controlador de autenticación
@@ -294,6 +295,20 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async signOut(@CurrentUser() user: User) {
     return this.authService.signOut();
+  }
+
+  /**
+   * Endpoint dev: Liberar email para pruebas (no elimina usuario)
+   */
+  @Public()
+  @Post('dev/release-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Liberar email para pruebas (solo desarrollo)' })
+  @ApiBody({ type: ReleaseEmailDto })
+  @ApiResponse({ status: 200, description: 'Email liberado exitosamente' })
+  @ApiResponse({ status: 403, description: 'No permitido en producción' })
+  async releaseEmail(@Body() dto: ReleaseEmailDto) {
+    return this.authService.releaseEmailForDev(dto.email);
   }
 }
 

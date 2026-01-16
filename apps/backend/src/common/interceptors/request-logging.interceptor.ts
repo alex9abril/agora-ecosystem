@@ -19,16 +19,18 @@ export class RequestLoggingInterceptor implements NestInterceptor {
 
     // Solo loguear requests POST/PATCH que tengan body
     if ((method === 'POST' || method === 'PATCH') && body) {
-      console.log('📥 [RequestLoggingInterceptor] Request recibido:', {
-        method,
-        url,
-        body: JSON.stringify(body, null, 2),
-        bodyType: typeof body,
-        productId: body.productId,
-        productIdType: typeof body.productId,
-        productIdLength: body.productId?.length,
-        productIdValue: body.productId ? `"${body.productId}"` : 'undefined',
-      });
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[RequestLoggingInterceptor] Body recibido:', {
+          method,
+          url,
+          body: JSON.stringify(body, null, 2),
+          bodyType: typeof body,
+          productId: body.productId,
+          productIdType: typeof body.productId,
+          productIdLength: body.productId?.length,
+          productIdValue: body.productId ? `"${body.productId}"` : 'undefined',
+        });
+      }
     }
 
     return next.handle().pipe(

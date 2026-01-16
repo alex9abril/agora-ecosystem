@@ -117,15 +117,6 @@ export class CartService {
       const processedItems = itemsResult.rows.map((item) => {
         let productImageUrl = item.product_image_url_fallback || null;
         
-        // Log para debugging
-        console.log('🖼️ [CartService.getCart] Procesando imagen para item:', {
-          product_id: item.product_id,
-          product_name: item.product_name,
-          primary_image_path: item.primary_image_path,
-          product_image_url_fallback: item.product_image_url_fallback,
-          hasSupabaseAdmin: !!supabaseAdmin,
-        });
-        
         // Si hay una imagen principal de product_images, generar su URL pública
         // Usar la misma lógica que products.service.ts para generar primary_image_url
         if (item.primary_image_path && supabaseAdmin) {
@@ -164,11 +155,6 @@ export class CartService {
                     .from(this.BUCKET_NAME)
                     .getPublicUrl(finalPath);
                   productImageUrl = urlData.publicUrl;
-                  console.log('✅ [CartService.getCart] URL de imagen generada:', {
-                    product_id: item.product_id,
-                    finalPath,
-                    productImageUrl,
-                  });
                 } else {
                   console.warn('⚠️ [CartService.getCart] finalPath contiene caracteres de URL, omitiendo:', finalPath);
                 }
@@ -347,7 +333,6 @@ export class CartService {
         } else {
           // Si no hay UUIDs válidos, las variantes son legacy y no tienen precio adicional
           // El precio será el precio base del producto
-          console.log('⚠️  Variantes legacy detectadas, usando precio base del producto');
         }
       }
 

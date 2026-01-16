@@ -132,16 +132,18 @@ export class BusinessesService {
     // IMPORTANTE: Si las tablas están en el schema 'core', Supabase PostgREST necesita
     // estar configurado para exponer ese schema, o usar el formato 'core.table'
     // Por ahora, intentamos primero sin schema prefix, luego con 'core.'
-    console.log('🔍 Querying businesses with filters:', {
-      page,
-      limit,
-      isActive,
-      category,
-      search,
-      businessGroupId,
-      sortBy,
-      sortOrder,
-    });
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[BusinessesService.findAll] Params:', {
+        page,
+        limit,
+        isActive,
+        category,
+        search,
+        businessGroupId,
+        sortBy,
+        sortOrder,
+      });
+    }
 
     // IMPORTANTE: Las tablas están en el schema 'core'
     // PostgREST no expone schemas personalizados por defecto, así que usamos conexión directa a PostgreSQL
@@ -179,7 +181,6 @@ export class BusinessesService {
       whereConditions.push(`business_group_id = $${paramIndex}`);
       queryParams.push(businessGroupId);
       paramIndex++;
-      console.log('🔍 Filtrando por businessGroupId:', businessGroupId);
     }
 
     const whereClause = whereConditions.length > 0 
@@ -226,7 +227,6 @@ export class BusinessesService {
       });
       
       // Si falla, intentar sin extraer coordenadas y hacerlo manualmente
-      console.log('🔄 Reintentando sin extraer coordenadas en SQL...');
       const fallbackQuery = `
         SELECT * FROM core.businesses 
         ${whereClause}
@@ -238,7 +238,6 @@ export class BusinessesService {
       
       // Extraer coordenadas manualmente del campo location (POINT)
       if (data.length > 0 && data[0].location) {
-        console.log('⚠️  Extrayendo coordenadas manualmente del campo location');
         for (const row of data) {
           if (row.location && typeof row.location === 'object') {
             // Si location es un objeto Point de PostgreSQL
@@ -258,17 +257,19 @@ export class BusinessesService {
       }
     }
 
-    console.log('✅ Businesses query result:', {
-      count: total,
-      dataLength: data?.length || 0,
-      firstItem: data?.[0] ? { 
-        id: data[0].id, 
-        name: data[0].name,
-        business_group_id: data[0].business_group_id 
-      } : null,
-      businessGroupId: businessGroupId || 'none',
-      whereClause,
-    });
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[BusinessesService.findAll] Resultado:', {
+        count: total,
+        dataLength: data?.length || 0,
+        firstItem: data?.[0] ? {
+          id: data[0].id,
+          name: data[0].name,
+          business_group_id: data[0].business_group_id,
+        } : null,
+        businessGroupId: businessGroupId || 'none',
+        whereClause,
+      });
+    }
 
     // Enriquecer datos con información del propietario usando conexión directa a PostgreSQL
     const enrichedData = await Promise.all(
@@ -337,7 +338,6 @@ export class BusinessesService {
       });
       
       // Si falla, intentar sin extraer coordenadas y hacerlo manualmente
-      console.log('🔄 Reintentando findOne sin extraer coordenadas en SQL...');
       result = await pool.query(
         'SELECT * FROM core.businesses WHERE id = $1',
         [id]
@@ -698,11 +698,6 @@ export class BusinessesService {
     }
 
     // Log de diagnóstico antes de actualizar
-    console.log('[BusinessesService.updateAddress] Actualizando coordenadas:', {
-      business_id: id,
-      input_longitude: updateDto.longitude,
-      input_latitude: updateDto.latitude,
-    });
 
     // Actualizar el negocio con la nueva ubicación y address_id
     // También obtener la dirección formateada con un JOIN
@@ -787,14 +782,6 @@ export class BusinessesService {
     }
 
     // Log de diagnóstico después de actualizar
-    console.log('[BusinessesService.updateAddress] Negocio actualizado:', {
-      stored_location: businessResult.rows[0].location,
-      extracted_longitude: updatedBusiness.longitude,
-      extracted_latitude: updatedBusiness.latitude,
-      formatted_location: updatedBusiness.location,
-      business_address: updatedBusiness.business_address,
-      address_id: addressId,
-    });
 
     return updatedBusiness;
   }
@@ -922,7 +909,6 @@ export class BusinessesService {
       );
       if (groupResult.rows.length > 0) {
         businessGroupId = groupResult.rows[0].id;
-        console.log(`[BusinessesService.create] Grupo empresarial encontrado para owner ${ownerId}: ${businessGroupId}`);
       }
     } catch (groupError: any) {
       console.warn('[BusinessesService.create] Error al buscar grupo empresarial (continuando sin grupo):', groupError);
@@ -992,14 +978,15 @@ export class BusinessesService {
       );
       
       if (roleResult.rows.length > 0) {
-        console.log('[BusinessesService.create] ✅ Rol superadmin asignado correctamente:', {
-          business_id: business.id,
-          business_name: business.name,
-          user_id: ownerId,
-          role_assignment_id: roleResult.rows[0].id,
-          role: roleResult.rows[0].role,
-          is_active: roleResult.rows[0].is_active
-        });
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[BusinessesService.create] ✅ Rol asignado:', {
+            business_id: business.id,
+            business_name: business.name,
+            user_id: ownerId,
+            role_assignment_id: roleResult.rows[0].id,
+            role: roleResult.rows[0].role,
+          });
+        }
       } else {
         console.warn('[BusinessesService.create] ⚠️ No se pudo asignar rol (pero la sucursal se creó)');
       }
@@ -1016,34 +1003,29 @@ export class BusinessesService {
     }
 
     // Log de diagnóstico para verificar coordenadas guardadas
-    console.log('[BusinessesService.create] Coordenadas guardadas:', {
-      input_longitude: createDto.longitude,
-      input_latitude: createDto.latitude,
-      stored_location: business.location,
-      extracted_longitude: business.longitude,
-      extracted_latitude: business.latitude,
-      location_type: typeof business.location,
-    });
 
     // Extraer coordenadas del POINT si no se extrajeron en SQL
     if (business.location && (!business.longitude || !business.latitude)) {
-      console.log('[BusinessesService.create] Extrayendo coordenadas manualmente...');
       if (typeof business.location === 'object' && business.location.x !== undefined) {
         business.longitude = business.location.x;
         business.latitude = business.location.y;
-        console.log('[BusinessesService.create] Coordenadas extraídas desde objeto:', {
-          longitude: business.longitude,
-          latitude: business.latitude,
-        });
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('[BusinessesService.create] 📍 Coordenadas extraídas (obj):', {
+            longitude: business.longitude,
+            latitude: business.latitude,
+          });
+        }
       } else if (typeof business.location === 'string') {
         const match = business.location.match(/POINT\(([^ ]+) ([^ ]+)\)/);
         if (match) {
           business.longitude = parseFloat(match[1]);
           business.latitude = parseFloat(match[2]);
-          console.log('[BusinessesService.create] Coordenadas extraídas desde string:', {
-            longitude: business.longitude,
-            latitude: business.latitude,
-          });
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('[BusinessesService.create] 📍 Coordenadas extraídas (string):', {
+              longitude: business.longitude,
+              latitude: business.latitude,
+            });
+          }
         }
       }
     }
@@ -1135,34 +1117,30 @@ export class BusinessesService {
       const business = result.rows[0];
       
       // Debug: Verificar coordenadas extraídas
-      console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas del POINT:', {
-        business_id: business.id,
-        location_raw: business.location,
-        extracted_longitude: business.longitude,
-        extracted_latitude: business.latitude,
-        location_type: typeof business.location,
-      });
       
       // Si no se pudieron extraer las coordenadas en SQL, hacerlo manualmente
       if (!business.longitude || !business.latitude) {
         if (business.location) {
-          console.log('[BusinessesService.findByOwnerId] Extrayendo coordenadas manualmente...');
           if (typeof business.location === 'object' && business.location.x !== undefined) {
             business.longitude = business.location.x;
             business.latitude = business.location.y;
-            console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde objeto:', {
-              longitude: business.longitude,
-              latitude: business.latitude,
-            });
+            if (process.env.NODE_ENV !== 'production') {
+              console.debug('[BusinessesService.findByOwnerId] 📍 Coordenadas extraídas (obj):', {
+                longitude: business.longitude,
+                latitude: business.latitude,
+              });
+            }
           } else if (typeof business.location === 'string') {
             const match = business.location.match(/POINT\(([^ ]+) ([^ ]+)\)/);
             if (match) {
               business.longitude = parseFloat(match[1]);
               business.latitude = parseFloat(match[2]);
-              console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde string:', {
-                longitude: business.longitude,
-                latitude: business.latitude,
-              });
+              if (process.env.NODE_ENV !== 'production') {
+                console.debug('[BusinessesService.findByOwnerId] 📍 Coordenadas extraídas (string):', {
+                  longitude: business.longitude,
+                  latitude: business.latitude,
+                });
+              }
             }
           }
         }
@@ -1176,11 +1154,6 @@ export class BusinessesService {
         };
       }
       
-      console.log('[BusinessesService.findByOwnerId] Negocio formateado:', {
-        longitude: business.longitude,
-        latitude: business.latitude,
-        formatted_location: business.location,
-      });
       
       return business;
     }
@@ -1236,33 +1209,36 @@ export class BusinessesService {
     const business = result.rows[0];
 
     // Log de diagnóstico para verificar coordenadas recuperadas
-    console.log('[BusinessesService.findByOwnerId] Coordenadas recuperadas:', {
-      stored_location: business.location,
-      extracted_longitude: business.longitude,
-      extracted_latitude: business.latitude,
-      location_type: typeof business.location,
-    });
-
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('📍 Coordenadas recuperadas (raw):', {
+        longitude: business.longitude,
+        latitude: business.latitude,
+        location: business.location,
+      });
+    }
     // Si no se pudieron extraer las coordenadas en SQL, hacerlo manualmente
     if (!business.longitude || !business.latitude) {
       if (business.location) {
-        console.log('[BusinessesService.findByOwnerId] Extrayendo coordenadas manualmente...');
         if (typeof business.location === 'object' && business.location.x !== undefined) {
           business.longitude = business.location.x;
           business.latitude = business.location.y;
-          console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde objeto:', {
-            longitude: business.longitude,
-            latitude: business.latitude,
-          });
+          if (process.env.NODE_ENV !== 'production') {
+            console.debug('📍 Coordenadas extraídas (obj):', {
+              longitude: business.longitude,
+              latitude: business.latitude,
+            });
+          }
         } else if (typeof business.location === 'string') {
           const match = business.location.match(/POINT\(([^ ]+) ([^ ]+)\)/);
           if (match) {
             business.longitude = parseFloat(match[1]);
             business.latitude = parseFloat(match[2]);
-            console.log('[BusinessesService.findByOwnerId] Coordenadas extraídas desde string:', {
-              longitude: business.longitude,
-              latitude: business.latitude,
-            });
+            if (process.env.NODE_ENV !== 'production') {
+              console.debug('📍 Coordenadas extraídas (string):', {
+                longitude: business.longitude,
+                latitude: business.latitude,
+              });
+            }
           }
         }
       }
@@ -1276,11 +1252,6 @@ export class BusinessesService {
       };
     }
 
-    console.log('[BusinessesService.findByOwnerId] Negocio formateado:', {
-      longitude: business.longitude,
-      latitude: business.latitude,
-      formatted_location: business.location,
-    });
 
     return business;
   }
@@ -1351,7 +1322,6 @@ export class BusinessesService {
     } catch (error: any) {
       // Si la función no existe (error 42883), intentar consulta directa
       if (error.code === '42883' || error.message?.includes('does not exist') || error.message?.includes('function')) {
-        console.log('⚠️  Función get_active_region() no existe, usando consulta directa');
         
         try {
           // Consulta directa como fallback
@@ -1381,7 +1351,6 @@ export class BusinessesService {
         } catch (fallbackError: any) {
           // Si la tabla tampoco existe, retornar null
           if (fallbackError.code === '42P01' || fallbackError.message?.includes('does not exist')) {
-            console.log('⚠️  Tabla service_regions no existe. Ejecuta el script database/service_regions.sql');
             return null;
           }
           
@@ -1462,7 +1431,6 @@ export class BusinessesService {
       } catch (funcError: any) {
         // Si la función no existe, usar validación con la función anterior
         if (funcError.code === '42883' || funcError.message?.includes('does not exist')) {
-          console.log('⚠️  Función get_location_region() no existe, usando validación con is_location_in_region()');
           
           // Obtener la región activa por defecto
           const region = await this.getActiveRegion();
@@ -1493,7 +1461,6 @@ export class BusinessesService {
           } catch (innerError: any) {
             // Si la función is_location_in_region tampoco existe, usar validación directa con PostGIS
             if (innerError.code === '42883' || innerError.message?.includes('does not exist')) {
-              console.log('⚠️  Función is_location_in_region() no existe, usando validación directa con PostGIS');
           
               try {
                 // Validación directa usando ST_Within
@@ -1608,7 +1575,6 @@ export class BusinessesService {
       }
     } catch (error: any) {
       // Si la tabla no existe, retornar categorías por defecto
-      console.log('⚠️  Tabla business_categories no existe, usando categorías por defecto');
     }
 
     // Categorías por defecto si no existe el catálogo
@@ -1674,9 +1640,7 @@ export class BusinessesService {
 
       query += ` ORDER BY distance_km ASC LIMIT 1`;
 
-      console.log('🔍 Buscando negocio más cercano:', { latitude, longitude, businessId });
       const result = await dbPool.query(query, params);
-      console.log('✅ Negocio más cercano encontrado:', result.rows[0]?.name || 'Ninguno');
 
       if (result.rows.length === 0) {
         throw new NotFoundException('No se encontró ningún negocio cercano');
@@ -1701,7 +1665,6 @@ export class BusinessesService {
     }
 
     try {
-      console.log('[BusinessesService] Obteniendo marcas disponibles...');
       const result = await dbPool.query(
         `SELECT id, name, code, display_order, is_active
          FROM catalog.vehicle_brands
@@ -1709,7 +1672,6 @@ export class BusinessesService {
          ORDER BY display_order, name ASC`
       );
 
-      console.log('[BusinessesService] Marcas disponibles encontradas:', result.rows.length);
       return result.rows;
     } catch (error: any) {
       console.error('❌ Error obteniendo marcas de vehículos:', error);
@@ -1780,7 +1742,6 @@ export class BusinessesService {
     }
 
     try {
-      console.log('[BusinessesService] Obteniendo marcas de la sucursal:', businessId);
       
       // Intentar usar la función SQL primero
       let result;
@@ -1789,7 +1750,6 @@ export class BusinessesService {
           `SELECT * FROM catalog.get_business_vehicle_brands($1)`,
           [businessId]
         );
-        console.log('[BusinessesService] Marcas obtenidas usando función SQL:', result.rows.length);
       } catch (funcError: any) {
         // Si la función no existe, usar consulta directa
         console.warn('[BusinessesService] Función SQL no encontrada, usando consulta directa:', funcError.message);
@@ -1809,7 +1769,6 @@ export class BusinessesService {
           ORDER BY vb.display_order ASC, vb.name ASC`,
           [businessId]
         );
-        console.log('[BusinessesService] Marcas obtenidas usando consulta directa:', result.rows.length);
       }
 
       return result.rows;
@@ -2124,22 +2083,22 @@ export class BusinessesService {
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       // Debug: Log de la query para depuración
-      console.log('🔍 [getBranches] Query params:', {
-        whereClause,
-        queryParams,
-        query: {
-          groupId: query.groupId,
-          isActive: query.isActive,
-          search: query.search,
-        },
-      });
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('🔍 Query sucursales:', {
+          whereClause,
+          queryParams,
+          query: {
+            groupId: query.groupId,
+            isActive: query.isActive,
+            search: query.search,
+          },
+        });
+      }
 
       // Contar total
       const countQuery = `SELECT COUNT(*) as total FROM core.businesses b ${whereClause}`;
-      console.log('🔍 [getBranches] Count query:', countQuery);
       const countResult = await pool.query(countQuery, queryParams);
       const total = parseInt(countResult.rows[0].total);
-      console.log('🔍 [getBranches] Total encontrado:', total);
 
       // Obtener datos con información de ciudad y estado
       queryParams.push(limit, offset);
@@ -2357,10 +2316,7 @@ export class BusinessesService {
         );
 
         if (updateResult.rows.length > 0) {
-          console.log(`[BusinessesService.createBusinessGroup] ✅ ${updateResult.rows.length} sucursal(es) asignada(s) automáticamente al grupo "${newGroup.name}"`);
-          console.log(`[BusinessesService.createBusinessGroup] Sucursales asignadas:`, updateResult.rows.map(r => r.name).join(', '));
         } else {
-          console.log(`[BusinessesService.createBusinessGroup] ℹ️  No hay sucursales sin grupo para asignar al nuevo grupo "${newGroup.name}"`);
         }
       } catch (assignError: any) {
         console.warn('[BusinessesService.createBusinessGroup] ⚠️  Error al asignar sucursales automáticamente (el grupo se creó correctamente):', assignError);
@@ -2502,12 +2458,6 @@ export class BusinessesService {
 
       // get_group_branding devuelve directamente el JSONB del branding
       const branding = result.rows[0].branding || {};
-      
-      console.log('🎨 [Backend] Branding de grupo obtenido:', {
-        groupId,
-        branding,
-        colors: branding?.colors,
-      });
 
       return {
         branding: branding,
@@ -2537,12 +2487,10 @@ export class BusinessesService {
       );
 
       if (ownerCheck.rows.length === 0) {
-        console.log(`[checkGroupPermissions] Grupo ${groupId} no encontrado`);
         return false;
       }
 
       if (ownerCheck.rows[0].owner_id === userId) {
-        console.log(`[checkGroupPermissions] Usuario ${userId} es propietario del grupo ${groupId}`);
         return true;
       }
 
@@ -2559,12 +2507,9 @@ export class BusinessesService {
       );
 
       if (userCheck.rows.length > 0) {
-        console.log(`[checkGroupPermissions] Usuario ${userId} tiene rol ${userCheck.rows[0].role} en sucursal ${userCheck.rows[0].business_id} del grupo ${groupId}`);
         return true;
       }
 
-      console.log(`[checkGroupPermissions] Usuario ${userId} NO tiene permisos para el grupo ${groupId}`);
-      console.log(`[checkGroupPermissions] Owner del grupo: ${ownerCheck.rows[0].owner_id}`);
       
       // Debug: verificar qué roles tiene el usuario en las sucursales del grupo
       const debugCheck = await pool.query(
@@ -2577,9 +2522,7 @@ export class BusinessesService {
       );
       
       if (debugCheck.rows.length > 0) {
-        console.log(`[checkGroupPermissions] Debug - Usuario tiene roles en sucursales del grupo:`, debugCheck.rows);
       } else {
-        console.log(`[checkGroupPermissions] Debug - Usuario NO tiene ningún rol en sucursales del grupo`);
       }
 
       return false;
@@ -2616,8 +2559,6 @@ export class BusinessesService {
       const hasPermission = await this.checkGroupPermissions(groupId, userId);
       if (!hasPermission) {
         // Log adicional para debug
-        console.log(`[updateGroupBranding] Usuario ${userId} intentando actualizar grupo ${groupId}`);
-        console.log(`[updateGroupBranding] Verificando permisos...`);
         
         // Por ahora, permitir si el grupo existe (para desarrollo)
         // En producción, descomentar la siguiente línea:
@@ -2690,13 +2631,6 @@ export class BusinessesService {
       // get_business_branding devuelve {"branding": {...}}, así que extraemos el branding interno
       const brandingResult = result.rows[0].branding_result;
       const branding = brandingResult?.branding || brandingResult || {};
-      
-      console.log('🎨 [Backend] Branding de sucursal obtenido:', {
-        businessId,
-        brandingResult,
-        branding,
-        colors: branding?.colors,
-      });
 
       return {
         branding: branding,
@@ -2726,15 +2660,12 @@ export class BusinessesService {
       );
 
       if (ownerCheck.rows.length === 0) {
-        console.log(`[checkBusinessPermissions] Sucursal ${businessId} no encontrada`);
         return false;
       }
 
       const business = ownerCheck.rows[0];
-      console.log(`[checkBusinessPermissions] Sucursal encontrada: ${business.name}, owner_id: ${business.owner_id}, userId: ${userId}`);
 
       if (business.owner_id === userId) {
-        console.log(`[checkBusinessPermissions] Usuario ${userId} es propietario de la sucursal ${businessId}`);
         return true;
       }
 
@@ -2750,7 +2681,6 @@ export class BusinessesService {
       );
 
       if (userCheck.rows.length > 0) {
-        console.log(`[checkBusinessPermissions] Usuario ${userId} tiene rol ${userCheck.rows[0].role} en la sucursal ${businessId}`);
         return true;
       }
 
@@ -2768,17 +2698,12 @@ export class BusinessesService {
         const groupOwnerId = groupCheck.rows[0].group_owner_id;
         const groupName = groupCheck.rows[0].group_name;
 
-        console.log(`[checkBusinessPermissions] Sucursal pertenece al grupo ${groupId} (${groupName}), owner_id: ${groupOwnerId}`);
-        console.log(`[checkBusinessPermissions] Comparando groupOwnerId (${groupOwnerId}) con userId (${userId}): ${groupOwnerId === userId}`);
 
         // Si es el propietario del grupo
         if (groupOwnerId && groupOwnerId === userId) {
-          console.log(`[checkBusinessPermissions] ✅ Usuario ${userId} es propietario del grupo ${groupId} de la sucursal ${businessId}`);
           return true;
         } else if (groupOwnerId) {
-          console.log(`[checkBusinessPermissions] ⚠️ Usuario ${userId} NO es propietario del grupo (owner: ${groupOwnerId})`);
         } else {
-          console.log(`[checkBusinessPermissions] ⚠️ El grupo ${groupId} no tiene owner_id asignado`);
         }
 
         // Verificar si tiene permisos a través de business_users en cualquier sucursal del grupo
@@ -2794,10 +2719,8 @@ export class BusinessesService {
         );
 
         if (groupUserCheck.rows.length > 0) {
-          console.log(`[checkBusinessPermissions] Usuario ${userId} tiene rol ${groupUserCheck.rows[0].role} en sucursal ${groupUserCheck.rows[0].business_id} (${groupUserCheck.rows[0].business_name}) del grupo ${groupId}`);
           return true;
         } else {
-          console.log(`[checkBusinessPermissions] Usuario ${userId} NO tiene roles superadmin/admin en ninguna sucursal del grupo ${groupId}`);
           
           // Debug: verificar qué roles tiene el usuario en las sucursales del grupo
           const debugGroupCheck = await pool.query(
@@ -2810,16 +2733,12 @@ export class BusinessesService {
           );
           
           if (debugGroupCheck.rows.length > 0) {
-            console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en sucursales del grupo:`, debugGroupCheck.rows);
           } else {
-            console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en sucursales del grupo`);
           }
         }
       } else {
-        console.log(`[checkBusinessPermissions] Sucursal ${businessId} NO pertenece a ningún grupo empresarial`);
       }
 
-      console.log(`[checkBusinessPermissions] Usuario ${userId} NO tiene permisos para la sucursal ${businessId}`);
       
       // Debug: verificar qué roles tiene el usuario en esta sucursal
       const debugCheck = await pool.query(
@@ -2831,12 +2750,7 @@ export class BusinessesService {
       );
       
       if (debugCheck.rows.length > 0) {
-        console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en la sucursal:`, JSON.stringify(debugCheck.rows, null, 2));
-        console.log(`[checkBusinessPermissions] Debug - Roles encontrados: ${debugCheck.rows.map(r => `${r.role} (is_active: ${r.is_active})`).join(', ')}`);
-        console.log(`[checkBusinessPermissions] Debug - El usuario necesita rol 'superadmin' o 'admin' con is_active = TRUE`);
       } else {
-        console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en la sucursal`);
-        console.log(`[checkBusinessPermissions] Debug - El usuario necesita ser owner de la sucursal o tener rol 'superadmin'/'admin' en business_users`);
       }
 
       return false;
@@ -2857,7 +2771,6 @@ export class BusinessesService {
     const pool = dbPool;
 
     try {
-      console.log(`[updateBusinessBranding] Iniciando actualización de branding - businessId: ${businessId}, userId: ${userId}`);
       
       // Validar que userId esté presente
       if (!userId) {
@@ -2875,7 +2788,6 @@ export class BusinessesService {
         throw new NotFoundException('Sucursal no encontrada');
       }
 
-      console.log(`[updateBusinessBranding] Sucursal encontrada - owner_id: ${businessCheck.rows[0].owner_id}, userId solicitante: ${userId}`);
 
       // Verificar permisos (owner o superadmin/admin a través de business_users)
       const hasPermission = await this.checkBusinessPermissions(businessId, userId);
@@ -2934,7 +2846,6 @@ export class BusinessesService {
         throw new ForbiddenException(errorMessage);
       }
       
-      console.log(`[updateBusinessBranding] ✅ Permisos verificados correctamente`);
 
       // Obtener settings actuales
       const currentSettings = await pool.query(

@@ -13,7 +13,6 @@ export class BrandingImagesService {
 
   constructor() {
     if (process.env.NODE_ENV !== 'production') {
-      console.log('🔍 [BrandingImagesService] Bucket configurado:', this.BUCKET_NAME);
     }
   }
 
@@ -85,14 +84,14 @@ export class BrandingImagesService {
       const { data: urlData } = supabaseAdmin.storage
         .from(this.BUCKET_NAME)
         .getPublicUrl(filePath);
-
-      console.log('✅ Imagen de branding subida:', {
-        type,
-        id,
-        imageType,
-        filePath,
-        publicUrl: urlData.publicUrl,
-      });
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[BrandingImagesService.uploadImage] Archivo subido:', {
+          type,
+          id,
+          imageType,
+          filePath,
+        });
+      }
 
       return {
         url: urlData.publicUrl,
@@ -125,7 +124,6 @@ export class BrandingImagesService {
         throw new ServiceUnavailableException(`Error al eliminar archivo: ${error.message}`);
       }
 
-      console.log('✅ Imagen de branding eliminada:', filePath);
     } catch (error: any) {
       if (error instanceof ServiceUnavailableException) {
         throw error;

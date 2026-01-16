@@ -97,12 +97,6 @@ export class ProductsService {
         .from(this.BUCKET_NAME)
         .getPublicUrl(filePath);
 
-      console.log('✅ Imagen subida desde data URI:', {
-        productId,
-        filePath,
-        publicUrl: urlData.publicUrl,
-      });
-
       return urlData.publicUrl;
     } catch (error: any) {
       if (error instanceof BadRequestException || error instanceof ServiceUnavailableException) {
@@ -501,32 +495,8 @@ export class ProductsService {
     `;
 
     try {
-      // Log de la consulta SQL para debugging (solo en desarrollo)
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('🔍 [findAll] SQL Query:', sqlQuery.substring(0, 1000));
-        console.log('🔍 [findAll] Query Params:', queryParams);
-      }
-      
       const result = await pool.query(sqlQuery, queryParams);
       const data = result.rows || [];
-
-      // Debug: Verificar qué está devolviendo la query para los primeros productos
-      if (data.length > 0 && process.env.NODE_ENV !== 'production') {
-        const productosConImagen = data.filter(r => r.primary_image_path).length;
-        console.log('🔍 [findAll] Resultado SQL - Primeros productos:', {
-          total: data.length,
-          productosConImagen,
-          productosSinImagen: data.length - productosConImagen,
-          primerosProductos: data.slice(0, 5).map(r => ({
-            id: r.id,
-            name: r.name?.substring(0, 30),
-            primary_image_path: r.primary_image_path, // Mostrar completo, no truncar
-            primary_image_path_length: r.primary_image_path?.length || 0,
-            isUrl: r.primary_image_path?.startsWith('http') || false,
-            image_url: r.image_url,
-          })),
-        });
-      }
 
       const mappedData = data.map((row, index) => {
           // Parsear variant_groups estructuradas
@@ -613,13 +583,6 @@ export class ProductsService {
               }
               
               // Debug logging SIEMPRE (no solo para los primeros 3) para ver qué está pasando
-              console.log('🔍 [findAll] Procesando primary_image_path:', {
-                productId: row.id,
-                originalPath: originalPath?.substring(0, 200),
-                finalPath,
-                isUrl: originalPath?.startsWith('http') || false,
-                finalPathIsUrl: finalPath?.startsWith('http') || false,
-              });
               
               // Solo generar URL si tenemos un path relativo válido (no empieza con http)
               // IMPORTANTE: Verificar que finalPath NO sea una URL completa antes de pasarlo a getPublicUrl
@@ -632,13 +595,6 @@ export class ProductsService {
                       .from(this.BUCKET_NAME)
                       .getPublicUrl(finalPath);
                     primaryImageUrl = urlData.publicUrl;
-                    
-                    console.log('✅ [findAll] URL generada correctamente:', {
-                      productId: row.id,
-                      finalPath,
-                      bucket: this.BUCKET_NAME,
-                      primaryImageUrl: primaryImageUrl?.substring(0, 200),
-                    });
                   } else {
                     console.error('❌ [findAll] finalPath contiene caracteres de URL:', {
                       productId: row.id,
@@ -658,7 +614,6 @@ export class ProductsService {
                   finalPath: finalPath?.substring(0, 200) || null,
                   isUrl: originalPath?.startsWith('http') || false,
                   finalPathIsUrl: finalPath?.startsWith('http') || false,
-                  hasSlash: finalPath?.includes('/') || false,
                 });
               }
             } catch (error) {
@@ -679,16 +634,15 @@ export class ProductsService {
             sku: row.sku || null,
             description: row.description,
             image_url: row.image_url,
-            primary_image_url: primaryImageUrl, // URL de la imagen principal de product_images
+            primary_image_url: primaryImageUrl,
             price: parseFloat(row.price),
             product_type: row.product_type || 'refaccion',
             category_id: row.category_id,
             category_name: row.category_name,
-            category_display_order: row.category_display_order || 999,
             is_available: row.is_available,
             is_featured: row.is_featured,
             variants: variantGroupsLegacy,
-            variant_groups: variantGroups, // Usar variantes estructuradas
+            variant_groups: variantGroups,
             nutritional_info: row.nutritional_info,
             allergens: row.allergens || [],
             requires_prescription: row.requires_prescription || false,
@@ -700,22 +654,6 @@ export class ProductsService {
             updated_at: row.updated_at,
           };
         });
-
-      // Debug: Verificar que primary_image_url se está incluyendo en la respuesta
-      if (mappedData.length > 0 && process.env.NODE_ENV !== 'production') {
-        const productosConImagen = mappedData.filter(p => p.primary_image_url).length;
-        console.log('🔍 [findAll] Resumen de productos con imágenes:', {
-          total: mappedData.length,
-          conImagen: productosConImagen,
-          sinImagen: mappedData.length - productosConImagen,
-          primerosProductos: mappedData.slice(0, 3).map(p => ({
-            id: p.id,
-            name: p.name?.substring(0, 30),
-            hasPrimaryImageUrl: !!p.primary_image_url,
-            primary_image_url: p.primary_image_url?.substring(0, 80) + '...',
-          })),
-        });
-      }
 
       return {
         data: mappedData,
@@ -845,34 +783,22 @@ export class ProductsService {
       // Parsear variant_groups antiguo (JSONB) para compatibilidad
       let variantGroupsLegacy = null;
       if (row.variants) {
-        console.log('🔍 Campo variants encontrado:', {
-          type: typeof row.variants,
-          isArray: Array.isArray(row.variants),
-          value: JSON.stringify(row.variants).substring(0, 200),
-        });
-        
         if (typeof row.variants === 'string') {
           try {
             variantGroupsLegacy = JSON.parse(row.variants);
-            console.log('✅ Variants parseado desde string');
           } catch (e) {
             console.error('❌ Error parseando variants JSON:', e);
             variantGroupsLegacy = null;
           }
         } else {
           variantGroupsLegacy = row.variants;
-          console.log('✅ Variants ya es objeto/array');
         }
-      } else {
-        console.log('⚠️  No hay campo variants en row');
       }
 
       // Convertir formato legacy a formato estructurado si es necesario
       let variantGroups = variantGroupsStructured;
       
       if (variantGroups.length === 0 && variantGroupsLegacy) {
-        console.log('🔄 Convirtiendo formato legacy a estructurado...');
-        
         // El formato legacy puede venir como array de objetos con estructura:
         // [{ name: "Grupo", variants: [{ name: "Variante", ... }], ... }]
         if (Array.isArray(variantGroupsLegacy)) {
@@ -939,14 +865,7 @@ export class ProductsService {
           });
         }
         
-        console.log('✅ Variantes legacy convertidas:', variantGroups.length);
       }
-
-      console.log('🔍 Variantes encontradas:', {
-        structured: variantGroupsStructured.length,
-        legacy: variantGroupsLegacy ? (Array.isArray(variantGroupsLegacy) ? variantGroupsLegacy.length : Object.keys(variantGroupsLegacy).length) : 0,
-        final: variantGroups.length,
-      });
 
       // Generar URL pública de la imagen principal si existe
       let primaryImageUrl: string | undefined = undefined;
@@ -1111,7 +1030,6 @@ export class ProductsService {
           if (createProductDto.variant_groups.length === 0) {
             // Array vacío: guardar como '[]'
             variantsData = '[]';
-            console.log('🔍 [CREATE] variant_groups está vacío, guardando como []');
           } else {
             // Sanitizar grupos para asegurar que cada uno tenga su array de variants
             const sanitizedGroups = createProductDto.variant_groups.map((group: any) => {
@@ -1123,16 +1041,12 @@ export class ProductsService {
               return sanitizedGroup;
             });
             variantsData = JSON.stringify(sanitizedGroups);
-            console.log('🔍 [CREATE] Guardando variant_groups (sanitizado):', variantsData);
-            console.log('🔍 [CREATE] Estructura original:', JSON.stringify(createProductDto.variant_groups, null, 2));
           }
         } else if (createProductDto.variant_groups) {
           variantsData = JSON.stringify(createProductDto.variant_groups);
-          console.log('🔍 [CREATE] Guardando variant_groups (no array):', variantsData);
         }
       } else if (createProductDto.variants) {
         variantsData = JSON.stringify(createProductDto.variants);
-        console.log('🔍 [CREATE] Guardando variants (deprecated):', variantsData);
       }
 
       // Manejar allergens: convertir array a formato PostgreSQL TEXT[]
@@ -1177,31 +1091,10 @@ export class ProductsService {
         createProductDto.requires_pharmacist_validation || false,
       ];
 
-      console.log('🔍 [CREATE] Intentando crear producto con parámetros:', {
-        business_id: queryParams[0],
-        name: queryParams[1],
-        sku: queryParams[2],
-        sku_original: createProductDto.sku,
-        product_type: queryParams[6],
-        allergens: queryParams[12],
-        allergens_type: typeof queryParams[12],
-        allergens_is_array: Array.isArray(queryParams[12]),
-      });
-
       const result = await pool.query(sqlQuery, queryParams);
       
       // Verificar qué se guardó en la base de datos
       const savedRow = result.rows[0];
-      console.log('🔍 [CREATE] Producto guardado:', {
-        id: savedRow.id,
-        name: savedRow.name,
-        sku: savedRow.sku,
-        sku_type: typeof savedRow.sku,
-        variants: savedRow.variants ? 'present' : 'null',
-      });
-      if (savedRow.variants) {
-        console.log('🔍 [CREATE] Variants como string:', JSON.stringify(savedRow.variants));
-      }
 
       return this.findOne(result.rows[0].id);
     } catch (error: any) {
@@ -1211,18 +1104,6 @@ export class ProductsService {
         detail: error.detail,
         hint: error.hint,
         position: error.position,
-        internalPosition: error.internalPosition,
-        internalQuery: error.internalQuery,
-        where: error.where,
-        schema: error.schema,
-        table: error.table,
-        column: error.column,
-        dataType: error.dataType,
-        constraint: error.constraint,
-        file: error.file,
-        line: error.line,
-        routine: error.routine,
-        stack: error.stack,
       });
       // También loguear el error completo
       console.error('❌ Error completo:', error);
@@ -1234,14 +1115,6 @@ export class ProductsService {
    * Actualizar un producto
    */
   async update(id: string, updateProductDto: UpdateProductDto) {
-    console.log('🔵 [UPDATE] ============================================');
-    console.log('🔵 [UPDATE] Iniciando actualización de producto');
-    console.log('🔵 [UPDATE] Product ID:', id);
-    console.log('🔵 [UPDATE] DTO recibido:', JSON.stringify(updateProductDto, null, 2));
-    console.log('🔵 [UPDATE] variant_groups:', updateProductDto.variant_groups);
-    console.log('🔵 [UPDATE] variant_groups type:', typeof updateProductDto.variant_groups);
-    console.log('🔵 [UPDATE] variant_groups isArray:', Array.isArray(updateProductDto.variant_groups));
-    console.log('🔵 [UPDATE] variant_groups length:', Array.isArray(updateProductDto.variant_groups) ? updateProductDto.variant_groups.length : 'N/A');
     
     if (!dbPool) {
       console.error('❌ [UPDATE] No hay conexión a base de datos');
@@ -1258,13 +1131,10 @@ export class ProductsService {
 
     try {
       // Verificar que el producto existe
-      console.log('🔵 [UPDATE] Verificando que el producto existe...');
       const existing = await this.findOne(id);
-      console.log('🔵 [UPDATE] Producto encontrado:', existing.id);
 
       // Validar que la categoría existe si se proporciona
       if (updateProductDto.category_id && updateProductDto.category_id.trim() !== '') {
-        console.log('🔵 [UPDATE] Validando category_id...');
         // Validar formato UUID
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(updateProductDto.category_id)) {
@@ -1278,11 +1148,9 @@ export class ProductsService {
         if (categoryCheck.rows.length === 0) {
           throw new BadRequestException('La categoría especificada no existe');
         }
-        console.log('🔵 [UPDATE] category_id válido');
       }
 
       // Construir query de actualización dinámicamente
-      console.log('🔵 [UPDATE] Construyendo query de actualización...');
 
       // Validar que el SKU sea único dentro del negocio si se proporciona y es diferente al actual
       if (updateProductDto.sku !== undefined) {
@@ -1290,13 +1158,6 @@ export class ProductsService {
         const skuValue = updateProductDto.sku && updateProductDto.sku.trim() !== '' 
           ? updateProductDto.sku.trim() 
           : null;
-        
-        console.log('🔵 [UPDATE] Actualizando SKU:', {
-          product_id: id,
-          sku_original: updateProductDto.sku,
-          sku_normalized: skuValue,
-        });
-        
         if (skuValue) {
           const skuCheck = await pool.query(
             'SELECT id FROM catalog.products WHERE business_id = $1 AND sku = $2 AND id != $3',
@@ -1331,10 +1192,8 @@ export class ProductsService {
 
         // Si es un data URI, subirlo a Supabase Storage y obtener la URL pública
         if (imageUrl && this.isDataUri(imageUrl)) {
-          console.log('🔵 [UPDATE] Detectado data URI, subiendo a Supabase Storage...');
           try {
             imageUrl = await this.uploadImageFromDataUri(id, imageUrl);
-            console.log('✅ [UPDATE] Imagen subida exitosamente, URL pública:', imageUrl);
           } catch (error: any) {
             console.error('❌ [UPDATE] Error subiendo imagen desde data URI:', error);
             // Si falla la subida, mantener la imagen existente del producto
@@ -1342,11 +1201,9 @@ export class ProductsService {
             const existingProduct = await this.findOne(id);
             if (existingProduct.image_url && !this.isDataUri(existingProduct.image_url)) {
               // Si el producto ya tiene una URL válida (no data URI), mantenerla
-              console.log('⚠️ [UPDATE] Manteniendo imagen existente debido a error en subida');
               imageUrl = existingProduct.image_url;
             } else {
               // Si no hay imagen válida, usar null
-              console.log('⚠️ [UPDATE] No se pudo subir imagen y no hay imagen previa, usando null');
               imageUrl = null;
             }
             // No lanzar error, solo loguear y continuar con la imagen existente o null
@@ -1393,14 +1250,12 @@ export class ProductsService {
       }
 
       if (updateProductDto.variant_groups !== undefined) {
-        console.log('🔵 [UPDATE] Procesando variant_groups...');
         // Manejar variant_groups de la misma manera que en create
         let variantGroupsValue: string | null = null;
         if (Array.isArray(updateProductDto.variant_groups)) {
           if (updateProductDto.variant_groups.length === 0) {
             // Array vacío: guardar como '[]'
             variantGroupsValue = '[]';
-            console.log('🔵 [UPDATE] variant_groups está vacío, guardando como []');
           } else {
             // Sanitizar grupos para asegurar que cada uno tenga su array de variants
             const sanitizedGroups = updateProductDto.variant_groups.map((group: any) => {
@@ -1412,20 +1267,16 @@ export class ProductsService {
               return sanitizedGroup;
             });
             variantGroupsValue = JSON.stringify(sanitizedGroups);
-            console.log('🔵 [UPDATE] Guardando variant_groups (sanitizado):', variantGroupsValue);
           }
         } else if (updateProductDto.variant_groups) {
           // Si no es array pero tiene valor, stringificarlo
           variantGroupsValue = JSON.stringify(updateProductDto.variant_groups);
-          console.log('🔵 [UPDATE] Guardando variant_groups (no array):', variantGroupsValue);
         }
         // Usar casting a JSONB solo si el valor no es null
         if (variantGroupsValue !== null) {
           updateFields.push(`variants = $${paramIndex}::jsonb`);
-          console.log('🔵 [UPDATE] Agregando variants con casting JSONB, valor:', variantGroupsValue);
         } else {
           updateFields.push(`variants = $${paramIndex}`);
-          console.log('🔵 [UPDATE] Agregando variants sin casting (null)');
         }
         updateValues.push(variantGroupsValue);
         paramIndex++;
@@ -1493,7 +1344,6 @@ export class ProductsService {
       }
 
       if (updateFields.length === 0) {
-        console.log('🔵 [UPDATE] No hay campos para actualizar, retornando producto existente');
         return existing;
       }
 
@@ -1509,37 +1359,18 @@ export class ProductsService {
         RETURNING *
       `;
 
-      console.log('🔵 [UPDATE] Query SQL construida:');
-      console.log('🔵 [UPDATE] SQL:', sqlQuery);
-      console.log('🔵 [UPDATE] Valores a actualizar:', JSON.stringify(updateValues, null, 2));
-      console.log('🔵 [UPDATE] Número de parámetros:', paramIndex);
-      console.log('🔵 [UPDATE] Campos a actualizar:', updateFields);
       
-      console.log('🔵 [UPDATE] Ejecutando query SQL...');
       const result = await pool.query(sqlQuery, updateValues);
-      console.log('🔵 [UPDATE] Query ejecutada exitosamente');
       
       // Verificar qué se guardó en la base de datos
       if (result.rows.length > 0) {
         const savedRow = result.rows[0];
-        console.log('🔵 [UPDATE] Producto actualizado exitosamente:', {
-          id: savedRow.id,
-          name: savedRow.name,
-          sku: savedRow.sku,
-          sku_type: typeof savedRow.sku,
-          variants: savedRow.variants ? 'present' : 'null',
-        });
-        if (savedRow.variants) {
-          console.log('🔵 [UPDATE] Variants guardados:', JSON.stringify(savedRow.variants, null, 2));
-        }
       } else {
         console.warn('⚠️ [UPDATE] No se actualizó ningún producto. El ID puede no existir:', id);
         throw new NotFoundException(`Producto con ID ${id} no encontrado`);
       }
       
-      console.log('🔵 [UPDATE] Obteniendo producto actualizado...');
       const updatedProduct = await this.findOne(id);
-      console.log('🔵 [UPDATE] ============================================');
       return updatedProduct;
     } catch (error: any) {
       console.error('❌ [UPDATE] ============================================');

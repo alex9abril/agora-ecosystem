@@ -182,18 +182,12 @@ export class AddressesService {
 
     try {
       // Verificar que la dirección existe y pertenece al usuario
-      console.log('🔍 [update] Verificando dirección:', { id, userId });
       
       const existing = await dbPool.query(
         `SELECT id, user_id, is_active FROM core.addresses WHERE id = $1`,
         [id]
       );
 
-      console.log('🔍 [update] Resultado de búsqueda:', {
-        found: existing.rows.length > 0,
-        rows: existing.rows,
-        requestedUserId: userId,
-      });
 
       if (existing.rows.length === 0) {
         console.error('❌ [update] Dirección no encontrada en la base de datos:', id);
@@ -211,7 +205,6 @@ export class AddressesService {
 
       // Si la dirección está inactiva pero el usuario intenta editarla, reactivarla automáticamente
       if (!address.is_active) {
-        console.log('⚠️ [update] La dirección está inactiva, reactivándola automáticamente:', id);
         // Continuar con la actualización, pero asegurarse de que is_active se establezca en true
         if (updateDto.is_active === undefined) {
           updateDto.is_active = true;

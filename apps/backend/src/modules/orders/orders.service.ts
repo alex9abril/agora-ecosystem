@@ -13,6 +13,7 @@ import { TaxesService } from '../catalog/taxes/taxes.service';
 import { WalletService } from '../wallet/wallet.service';
 import { KarlopayService } from '../payments/karlopay/karlopay.service';
 import { IntegrationsService } from '../settings/integrations.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class OrdersService {
@@ -24,6 +25,7 @@ export class OrdersService {
     @Inject(forwardRef(() => KarlopayService))
     private readonly karlopayService: KarlopayService,
     private readonly integrationsService: IntegrationsService,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -399,7 +401,6 @@ export class OrdersService {
             ]
           );
         }
-        console.log(`✅ Transacciones de wallet guardadas en payment_transactions para ${createdOrders.length} órdenes`);
       }
 
       // 13.6. Si todas las transacciones están completadas (solo wallet, sin KarloPay pendiente), actualizar payment_status a 'paid'
@@ -418,7 +419,6 @@ export class OrdersService {
               [order.id]
             );
           }
-          console.log(`✅ Payment status actualizado a 'paid' para ${createdOrders.length} órdenes (todas las transacciones completadas)`);
         }
       }
 
@@ -479,8 +479,6 @@ export class OrdersService {
             storePath: storeContext,
           });
           
-          console.log(`🔗 Redirect URL para Karlopay (desde configuración): ${redirectUrl}`);
-          console.log(`📦 Contexto de tienda: ${storeContext || '(global)'}`);
 
           // Determinar el monto a cobrar en Karlopay
           // Si hay método secundario, usar el monto secundario; si no, usar el total
@@ -514,12 +512,6 @@ export class OrdersService {
           
           // Obtener el numberOfOrder que devuelve Karlopay (puede ser diferente al que enviamos)
           const karlopayNumberOfOrder = karlopayOrder.numberOfOrder || numberOfOrder;
-          
-          console.log(`💰 [CHECKOUT] Karlopay devolvió numberOfOrder:`, {
-            sent: numberOfOrder,
-            received: karlopayNumberOfOrder,
-            match: numberOfOrder === karlopayNumberOfOrder,
-          });
 
           // Guardar la URL de pago y número de orden de Karlopay en la primera orden
           // Guardar tanto el que enviamos como el que recibimos
@@ -532,25 +524,12 @@ export class OrdersService {
 
           // Guardar transacción de KarloPay en payment_transactions para todas las órdenes del grupo
           // Distribuir el monto de KarloPay proporcionalmente entre las órdenes
-          console.log(`💰 [CHECKOUT] Guardando transacciones de KarloPay:`, {
-            numberOfOrderSent: numberOfOrder,
-            numberOfOrderReceived: karlopayNumberOfOrder,
-            karlopayAmount,
-            ordersCount: createdOrders.length,
-          });
           
           const totalOrderAmount = createdOrders.reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
           
           for (const order of createdOrders) {
             const orderRatio = parseFloat(order.total_amount) / totalOrderAmount;
             const karlopayAmountForOrder = Math.round(karlopayAmount * orderRatio * 100) / 100;
-            
-            console.log(`💰 [CHECKOUT] Guardando transacción KarloPay para orden ${order.id}:`, {
-              orderId: order.id,
-              amount: karlopayAmountForOrder,
-              numberOfOrderSent: numberOfOrder,
-              numberOfOrderReceived: karlopayNumberOfOrder,
-            });
             
             // Para pagos con tarjeta (pasarela automática), el pago se procesa inmediatamente
             // Por lo tanto, marcamos la transacción como 'completed' desde el inicio
@@ -588,7 +567,6 @@ export class OrdersService {
               ]
             );
             
-            console.log(`✅ [CHECKOUT] Transacción KarloPay guardada como 'completed':`, insertResult.rows[0].id);
           }
           
           // Verificar si todas las transacciones están completadas y actualizar payment_status
@@ -617,15 +595,17 @@ export class OrdersService {
                    WHERE id = $1`,
                   [order.id]
                 );
-                console.log(`✅ [CHECKOUT] Orden ${order.id} marcada como 'paid' (todas las transacciones completadas)`);
+                
+                // Enviar correo de confirmación de pedido (no bloquea el flujo si falla)
+                this.sendOrderConfirmationEmail(order.id, order.business_id).catch((error) => {
+                  console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, error);
+                });
               } else {
                 console.warn(`⚠️ [CHECKOUT] Orden ${order.id} no marcada como 'paid': monto completado (${totalCompleted}) < total orden (${orderTotal})`);
               }
             }
           }
 
-          console.log(`✅ Orden creada en KarloPay: ${numberOfOrder}, URL de pago: ${karlopayPaymentUrl}`);
-          console.log(`✅ Transacciones de KarloPay guardadas en payment_transactions para ${createdOrders.length} órdenes`);
         } catch (karlopayError: any) {
           console.error('❌ Error creando orden en Karlopay:', karlopayError);
           // No fallar el checkout si hay error con Karlopay, solo loguear
@@ -815,15 +795,6 @@ export class OrdersService {
         [userId]
       );
 
-      console.log('📦 Pedidos encontrados en BD:', result.rows.length);
-      if (result.rows.length > 0) {
-        console.log('📦 Primer pedido (ejemplo):', {
-          id: result.rows[0].id,
-          item_count: result.rows[0].item_count,
-          total_quantity: result.rows[0].total_quantity,
-          status: result.rows[0].status,
-        });
-      }
       return result.rows;
     } catch (error: any) {
       console.error('❌ Error obteniendo pedidos:', error);
@@ -1609,11 +1580,6 @@ export class OrdersService {
     }
 
     try {
-      console.log('🔵 [FIND ONE BY BUSINESS] Buscando pedido:', {
-        orderId,
-        businessId,
-      });
-      
       // Primero verificar si el pedido existe (sin filtro de business_id)
       const orderExistsCheck = await dbPool.query(
         `SELECT id, business_id, status, payment_status 
@@ -1621,11 +1587,6 @@ export class OrdersService {
          WHERE id = $1`,
         [orderId]
       );
-      
-      console.log('🔵 [FIND ONE BY BUSINESS] Pedido encontrado (sin filtro business_id):', {
-        found: orderExistsCheck.rows.length > 0,
-        order: orderExistsCheck.rows[0] || null,
-      });
       
       // Obtener pedido
       const orderResult = await dbPool.query(
@@ -1643,11 +1604,6 @@ export class OrdersService {
         WHERE o.id = $1 AND o.business_id = $2`,
         [orderId, businessId]
       );
-
-      console.log('🔵 [FIND ONE BY BUSINESS] Resultado con filtro business_id:', {
-        found: orderResult.rows.length > 0,
-        order: orderResult.rows[0] || null,
-      });
 
       if (orderResult.rows.length === 0) {
         // Si el pedido existe pero no pertenece al business_id, dar más información
@@ -1776,16 +1732,6 @@ export class OrdersService {
         [order.id]
       );
 
-      console.log(`💰 [FIND ONE BY BUSINESS] Transacciones encontradas para orden ${order.id}:`, paymentTransactionsResult.rows.length);
-      if (paymentTransactionsResult.rows.length > 0) {
-        console.log(`💰 [FIND ONE BY BUSINESS] Detalles de transacciones:`, paymentTransactionsResult.rows.map(tx => ({
-          id: tx.id,
-          payment_method: tx.payment_method,
-          amount: tx.amount,
-          status: tx.status,
-        })));
-      }
-
       // Parsear payment_data si viene como string (JSONB de PostgreSQL)
       const paymentTransactions = paymentTransactionsResult.rows.map(transaction => ({
         ...transaction,
@@ -1868,14 +1814,6 @@ export class OrdersService {
       const currentStatus = order.status;
       const paymentStatus = order.payment_status;
 
-      console.log('🟢 [UPDATE STATUS] Iniciando actualización:', {
-        orderId,
-        businessId,
-        currentStatus,
-        newStatus,
-        paymentStatus,
-      });
-
       // Validar transición de estado usando reglas de negocio (flujo simplificado)
       const validTransitions: { [key: string]: { allowed: string[]; requires?: { payment_status?: string } } } = {
         'pending': { 
@@ -1917,11 +1855,6 @@ export class OrdersService {
 
       // Validar requisitos adicionales
       if (newStatus === 'confirmed' && transitionRules.requires?.payment_status) {
-        console.log('🟢 [UPDATE STATUS] Validando requisito de pago:', {
-          paymentStatus,
-          required: 'paid',
-          isValid: paymentStatus === 'paid',
-        });
         if (paymentStatus !== 'paid') {
           throw new BadRequestException(
             'No se puede confirmar el pedido sin pago verificado'
@@ -1986,10 +1919,6 @@ export class OrdersService {
       }
 
       // Actualizar estado del pedido
-      console.log('🟢 [UPDATE STATUS] Ejecutando UPDATE:', {
-        updateFields: updateFields.join(', '),
-        updateParams: updateParams.length,
-      });
 
       const result = await client.query(
         `UPDATE orders.orders 
@@ -1999,10 +1928,6 @@ export class OrdersService {
         updateParams
       );
 
-      console.log('🟢 [UPDATE STATUS] Resultado del UPDATE:', {
-        rowCount: result.rowCount,
-        newStatus: result.rows[0]?.status,
-      });
 
       if (result.rowCount === 0) {
         throw new Error('No se actualizó ninguna fila');
@@ -2012,7 +1937,6 @@ export class OrdersService {
 
       // Hacer COMMIT PRIMERO para asegurar que el cambio persista
       await client.query('COMMIT');
-      console.log('🟢 [UPDATE STATUS] COMMIT ejecutado. Estado final:', updatedOrder.status);
       
       // Registrar en historial DESPUÉS del COMMIT (no crítico)
       // Usar una nueva conexión para no afectar la transacción principal
@@ -2040,6 +1964,11 @@ export class OrdersService {
         // No crítico, solo loguear - el estado ya se actualizó
         console.warn('⚠️ No se pudo registrar en historial:', historyError);
       }
+      
+      // Enviar correo de cambio de estado (no bloquea el flujo si falla)
+      this.sendOrderStatusChangeEmail(orderId, currentStatus, newStatus, businessId).catch((error) => {
+        console.error(`❌ Error enviando correo de cambio de estado para orden ${orderId} (no crítico):`, error);
+      });
       
       return updatedOrder;
     } catch (error: any) {
@@ -2104,7 +2033,6 @@ export class OrdersService {
       // 1. Actualizar cantidades de items del pedido y calcular diferencias para acreditar al wallet
       const itemsToCredit: Array<{ item_id: string; product_id: string; item_name: string; item_price: number; shortage_quantity: number }> = [];
       
-      console.log('🔵 [PREPARE ORDER] Iniciando actualización de items. Total items:', prepareDto.items.length);
       
       for (const itemUpdate of prepareDto.items) {
         // Obtener el item actual con original_quantity para calcular diferencia
@@ -2123,14 +2051,6 @@ export class OrdersService {
         const newQuantity = itemUpdate.quantity;
         const shortageQuantity = originalQuantity - newQuantity;
 
-        console.log(`🔵 [PREPARE ORDER] Item ${item.item_name}:`, {
-          item_id: item.id,
-          original_quantity: originalQuantity,
-          new_quantity: newQuantity,
-          shortage_quantity: shortageQuantity,
-          product_id: item.product_id,
-        });
-
         // Si hay diferencia, guardar para acreditar al wallet después
         if (shortageQuantity > 0 && item.product_id) {
           itemsToCredit.push({
@@ -2140,7 +2060,6 @@ export class OrdersService {
             item_price: parseFloat(item.item_price),
             shortage_quantity: shortageQuantity,
           });
-          console.log(`💰 [PREPARE ORDER] Item agregado para acreditar al wallet: ${item.item_name}, cantidad faltante: ${shortageQuantity}`);
         }
 
         const newSubtotal = parseFloat(item.item_price) * itemUpdate.quantity;
@@ -2216,7 +2135,6 @@ export class OrdersService {
                     metadata?.changed_by_role || 'admin',
                   );
 
-                  console.log(`💰 Monedero: Acreditados $${amountToCredit.toFixed(2)} al wallet del cliente por ${shortageQuantity} unidad${shortageQuantity > 1 ? 'es' : ''} no surtidas de ${itemName}`);
                 } else {
                   console.warn(`⚠️ No se pudo obtener precio del item para producto ${productId}`);
                 }
@@ -2236,13 +2154,11 @@ export class OrdersService {
                    WHERE product_id = $2 AND branch_id = $3 AND stock IS NOT NULL`,
                   [shortageQuantity, productId, shortageOption.alternative_branch_id]
                 );
-                console.log(`🏪 Otra sucursal: ${shortageQuantity} unidades del producto ${productId} desde sucursal ${shortageOption.alternative_branch_id}`);
               }
               break;
 
             case 'refund':
               // TODO: Procesar devolución de dinero
-              console.log(`💵 Devolución: Devolver dinero por ${shortageQuantity} unidades del producto ${productId}`);
               // Aquí se haría la devolución del dinero al cliente
               break;
           }
@@ -2274,14 +2190,10 @@ export class OrdersService {
         (prepareDto.shortage_options || []).map(opt => opt.product_id)
       );
 
-      console.log(`💰 [AUTO-WALLET] Items para acreditar: ${itemsToCredit.length}`);
-      console.log(`💰 [AUTO-WALLET] Productos procesados en shortage_options:`, Array.from(processedProductIds));
-      console.log(`💰 [AUTO-WALLET] Client ID: ${clientId}`);
 
       for (const itemToCredit of itemsToCredit) {
         // Si este producto ya fue procesado en shortage_options, saltarlo
         if (processedProductIds.has(itemToCredit.product_id)) {
-          console.log(`💰 [AUTO-WALLET] Saltando ${itemToCredit.product_id} porque ya fue procesado en shortage_options`);
           continue;
         }
 
@@ -2289,7 +2201,6 @@ export class OrdersService {
         try {
           const amountToCredit = itemToCredit.item_price * itemToCredit.shortage_quantity;
           
-          console.log(`💰 [AUTO-WALLET] Intentando acreditar $${amountToCredit.toFixed(2)} al wallet del cliente ${clientId}...`);
           
           const transaction = await this.walletService.creditWallet(
             clientId,
@@ -2304,8 +2215,6 @@ export class OrdersService {
             metadata?.changed_by_role || 'admin',
           );
 
-          console.log(`✅ [AUTO-WALLET] Acreditados $${amountToCredit.toFixed(2)} al wallet del cliente por ${itemToCredit.shortage_quantity} unidad${itemToCredit.shortage_quantity > 1 ? 'es' : ''} no surtidas de ${itemToCredit.item_name}`);
-          console.log(`✅ [AUTO-WALLET] Transacción creada:`, transaction.id);
         } catch (walletError: any) {
           console.error('❌ [AUTO-WALLET] Error acreditando saldo al wallet:', walletError);
           console.error('❌ [AUTO-WALLET] Error completo:', JSON.stringify(walletError, null, 2));
@@ -2332,6 +2241,195 @@ export class OrdersService {
       throw new ServiceUnavailableException(`Error al procesar preparación: ${error.message}`);
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * Obtener email del usuario desde auth.users
+   */
+  private async getUserEmail(userId: string): Promise<string | null> {
+    if (!supabaseAdmin) {
+      return null;
+    }
+
+    try {
+      const { data: authUser, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (error || !authUser?.user?.email) {
+        console.warn(`⚠️ No se pudo obtener email para usuario ${userId}:`, error?.message);
+        return null;
+      }
+      return authUser.user.email;
+    } catch (error: any) {
+      console.error(`❌ Error obteniendo email del usuario ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Enviar correo de confirmación de pedido
+   */
+  private async sendOrderConfirmationEmail(orderId: string, businessId: string): Promise<void> {
+    if (!dbPool) {
+      return;
+    }
+
+    try {
+      // Obtener datos del pedido
+      const orderResult = await dbPool.query(
+        `SELECT 
+          o.id,
+          o.client_id,
+          o.total_amount,
+          o.payment_method,
+          o.created_at,
+          o.business_id,
+          b.business_group_id
+        FROM orders.orders o
+        LEFT JOIN core.businesses b ON o.business_id = b.id
+        WHERE o.id = $1`,
+        [orderId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        console.warn(`⚠️ No se encontró pedido ${orderId} para enviar correo`);
+        return;
+      }
+
+      const order = orderResult.rows[0];
+      const userEmail = await this.getUserEmail(order.client_id);
+
+      if (!userEmail) {
+        console.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de confirmación`);
+        return;
+      }
+
+      // Formatear datos
+      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const orderTotal = `$${parseFloat(order.total_amount).toFixed(2)}`;
+      const paymentMethod = order.payment_method || 'No especificado';
+      const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[OrdersService.sendOrderConfirmationEmail] Payload:', {
+          to: userEmail,
+          orderNumber,
+          orderDate,
+          orderTotal,
+          paymentMethod,
+          orderUrl,
+          businessId: order.business_id,
+          businessGroupId: order.business_group_id,
+        });
+      }
+
+      // Enviar correo
+      await this.emailService.sendOrderConfirmationEmail(
+        userEmail,
+        orderNumber,
+        orderDate,
+        orderTotal,
+        paymentMethod,
+        orderUrl,
+        order.business_id,
+        order.business_group_id
+      );
+    } catch (error: any) {
+      console.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
+      // No lanzar error para no interrumpir el flujo
+    }
+  }
+
+  /**
+   * Enviar correo de cambio de estado de pedido
+   */
+  private async sendOrderStatusChangeEmail(
+    orderId: string,
+    oldStatus: string,
+    newStatus: string,
+    businessId: string
+  ): Promise<void> {
+    if (!dbPool) {
+      return;
+    }
+
+    try {
+      // Obtener datos del pedido
+      const orderResult = await dbPool.query(
+        `SELECT 
+          o.id,
+          o.client_id,
+          o.business_id,
+          b.business_group_id
+        FROM orders.orders o
+        LEFT JOIN core.businesses b ON o.business_id = b.id
+        WHERE o.id = $1`,
+        [orderId]
+      );
+
+      if (orderResult.rows.length === 0) {
+        console.warn(`⚠️ No se encontró pedido ${orderId} para enviar correo de cambio de estado`);
+        return;
+      }
+
+      const order = orderResult.rows[0];
+      const userEmail = await this.getUserEmail(order.client_id);
+
+      if (!userEmail) {
+        console.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de cambio de estado`);
+        return;
+      }
+
+      // Mapear estados a mensajes amigables
+      const statusMessages: Record<string, string> = {
+        pending: 'Tu pedido está pendiente de confirmación',
+        confirmed: 'Tu pedido ha sido confirmado',
+        completed: 'Tu pedido está siendo preparado',
+        in_transit: 'Tu pedido está en camino',
+        delivered: 'Tu pedido ha sido entregado',
+        delivery_failed: 'No se pudo entregar tu pedido',
+        cancelled: 'Tu pedido ha sido cancelado',
+        returned: 'Tu pedido ha sido devuelto',
+        refunded: 'Tu pedido ha sido reembolsado',
+      };
+
+      const statusMessage = statusMessages[newStatus] || `Tu pedido cambió de estado: ${oldStatus} → ${newStatus}`;
+      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {
+          to: userEmail,
+          orderNumber,
+          oldStatus,
+          newStatus,
+          statusMessage,
+          orderUrl,
+          businessId: order.business_id,
+          businessGroupId: order.business_group_id,
+        });
+      }
+
+      // Enviar correo
+      await this.emailService.sendOrderStatusChangeEmail(
+        userEmail,
+        orderNumber,
+        oldStatus,
+        newStatus,
+        statusMessage,
+        orderUrl,
+        order.business_id,
+        order.business_group_id
+      );
+    } catch (error: any) {
+      console.error(`❌ Error en sendOrderStatusChangeEmail para orden ${orderId}:`, error);
+      // No lanzar error para no interrumpir el flujo
     }
   }
 }

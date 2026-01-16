@@ -77,7 +77,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, loading: cartLoading, refreshCart } = useCart();
   const { isAuthenticated, signIn, signUp, user } = useAuth();
-  const { contextType, slug, getContextualUrl } = useStoreContext();
+  const { contextType, slug, getContextualUrl, groupId, branchId } = useStoreContext();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -630,6 +630,13 @@ export default function CheckoutPage() {
         setCurrentStep('shipping');
         await loadAddresses();
       } else {
+        const currentPath = router.asPath.split('?')[0];
+        const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://agoramp.mx';
+        const appUrl = contextMatch
+          ? `${origin}/${contextMatch[1]}/${contextMatch[2]}`
+          : `${origin}/`;
+
         await signUp({
           email: authEmail,
           password: authPassword,
@@ -637,6 +644,9 @@ export default function CheckoutPage() {
           lastName: authLastName,
           phone: authPhone,
           role: 'client',
+          appUrl,
+          businessId: branchId || undefined,
+          businessGroupId: groupId || undefined,
         });
         // Esperar a que el estado de autenticación se actualice
         // Aumentar el número de intentos y el tiempo de espera para dar más tiempo a la sesión
