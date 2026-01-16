@@ -85,10 +85,14 @@ export default function SlidersPage() {
   };
 
   const loadSliders = async (options: { withSpinner?: boolean } = {}) => {
+    // Evitar cargas incompletas mientras falta el contexto seleccionado
+    if (selectedContext === 'group' && !businessGroup) return;
+    if (selectedContext === 'branch' && !selectedBranchId) return;
+
     try {
-      if (options.withSpinner !== false) {
-        setSlidersLoading(true);
-      }
+      const showSpinner =
+        options.withSpinner !== undefined ? options.withSpinner : sliders.length === 0;
+      if (showSpinner) setSlidersLoading(true);
       setError(null);
 
       const filters: any = {};
@@ -135,14 +139,17 @@ export default function SlidersPage() {
     router.push(`/sliders/${slider.id}/edit`);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este slider?')) {
+  const handleDelete = async (slider: LandingSlider) => {
+    if (!confirm('Estas seguro de eliminar este slider?')) {
       return;
     }
 
     try {
-      await landingSlidersService.delete(id);
-      await loadSliders();
+      await landingSlidersService.delete(slider.id);
+      setSliders((current) => current.filter((s) => s.id !== slider.id));
+      if (slider.is_active) {
+        adjustActiveCounts(slider, false);
+      }
     } catch (error: any) {
       console.error('Error eliminando slider:', error);
       setError('Error al eliminar slider');
@@ -156,6 +163,7 @@ export default function SlidersPage() {
         s.id === slider.id ? { ...s, is_active: !slider.is_active } : s
       )
     );
+    adjustActiveCounts(slider, !slider.is_active);
 
     try {
       await landingSlidersService.update(slider.id, {
@@ -169,16 +177,32 @@ export default function SlidersPage() {
           s.id === slider.id ? { ...s, is_active: slider.is_active } : s
         )
       );
+      adjustActiveCounts(slider, slider.is_active);
       setError('Error al actualizar estado');
     }
   };
 
+  // Ajusta conteos de sliders activos (solo visual) segun contexto actual
+  const adjustActiveCounts = (slider: LandingSlider, newIsActive: boolean) => {
+    if (selectedContext === 'group' && businessGroup && slider.business_group_id === businessGroup.id) {
+      setGroupSlidersCount((count) => Math.max(0, count + (newIsActive ? 1 : -1)));
+    }
+
+    if (selectedContext === 'branch' && selectedBranchId && slider.business_id === selectedBranchId) {
+      setBranchSlidersCounts((counts) => ({
+        ...counts,
+        [selectedBranchId]: Math.max(0, (counts[selectedBranchId] || 0) + (newIsActive ? 1 : -1)),
+      }));
+    }
+  };
   // Cargar conteo de sliders del grupo
   const loadGroupSlidersCount = async () => {
     if (!businessGroup) return;
     try {
+      // Conteo solo de sliders activos (visual)
       const response = await landingSlidersService.list({
         business_group_id: businessGroup.id,
+        only_active: true,
       });
       const items = Array.isArray(response) ? response : response.data;
       setGroupSlidersCount(items?.length || 0);
@@ -193,8 +217,10 @@ export default function SlidersPage() {
     const counts: Record<string, number> = {};
     for (const branch of branches) {
       try {
+        // Conteo solo de sliders activos (visual)
         const response = await landingSlidersService.list({
           business_id: branch.id,
+          only_active: true,
         });
         const items = Array.isArray(response) ? response : response.data;
         counts[branch.id] = items?.length || 0;
@@ -387,7 +413,7 @@ export default function SlidersPage() {
                               : 'bg-gray-500 text-white'
                           }`}
                         >
-                          {slider.is_active ? 'Activo' : 'Inactivo'}
+                          {slider.is_active ? 'Publicado' : 'Borrador'}
                         </span>
                       </div>
                     </div>
@@ -417,10 +443,10 @@ export default function SlidersPage() {
                           onClick={() => handleToggleActive(slider)}
                           className="px-3 py-2 bg-gray-100 text-gray-700 rounded text-xs font-medium hover:bg-gray-200 transition-colors"
                         >
-                          {slider.is_active ? 'Desactivar' : 'Activar'}
+                          {slider.is_active ? 'Despublicar' : 'Publicar'}
                         </button>
                         <button
-                          onClick={() => handleDelete(slider.id)}
+                          onClick={() => handleDelete(slider)}
                           className="px-3 py-2 bg-red-50 text-red-700 rounded text-xs font-medium hover:bg-red-100 transition-colors"
                         >
                           Eliminar

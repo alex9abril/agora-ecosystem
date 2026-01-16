@@ -7,6 +7,7 @@
 - La gestión de sliders en `apps/web-local/src/pages/sliders/index.tsx` deja de filtrar por `only_active`; siempre lista todos los sliders y muestra su estado activo/inactivo.
 - El DTO `ListLandingSlidersDto` ahora interpreta `only_active` con valor por defecto `false`, de modo que el backend devuelve activos e inactivos a menos que se solicite explícitamente `only_active=true`.
 - El servicio `landing-sliders` en backend mantiene el filtrado únicamente cuando se envía `only_active=true`, evitando que los sliders desactivados “desaparezcan” al recargar la página.
+- La UI cambia el concepto de estado a borrador/publicado: los sliders nuevos se crean como borrador (no visibles en la sucursal) y se publican/despublican con el botón de estado; las etiquetas en el grid muestran “Publicado/Borrador”.
 
 ## Paginacion persistente en clientes web-local (2026-01-15)
 - `apps/web-local/src/pages/clients/index.tsx` ahora usa el mismo sistema de paginacion de productos: selector de tamano de pagina (1/10/20/50/100), controles primera/anterior/siguiente/ultima y conteo de rango mostrado.

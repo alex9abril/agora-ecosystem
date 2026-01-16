@@ -30,7 +30,8 @@ export default function EditSliderPage() {
     },
     redirect_type: RedirectType.NONE,
     display_order: 0,
-    is_active: true,
+    // Los sliders editados cargan el estado real; default a borrador por consistencia
+    is_active: false,
   });
 
   useEffect(() => {
@@ -314,19 +315,24 @@ export default function EditSliderPage() {
                 />
               </div>
 
-              <div className="flex items-center">
+              <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
                 <input
                   type="checkbox"
                   id="is_active"
-                  checked={formData.is_active ?? true}
+                  checked={formData.is_active ?? false}
                   onChange={(e) =>
                     setFormData({ ...formData, is_active: e.target.checked })
                   }
                   className="h-4 w-4 text-black focus:ring-black border-gray-300 rounded"
                 />
-                <label htmlFor="is_active" className="ml-3 block text-sm text-gray-700">
-                  Slider activo
-                </label>
+                <div className="text-sm text-gray-700">
+                  <label htmlFor="is_active" className="font-medium block text-gray-900">
+                    Publicar en la sucursal
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Si esta en borrador no se mostrara en la sucursal. Activa para publicar.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
