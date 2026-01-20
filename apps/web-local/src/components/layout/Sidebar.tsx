@@ -5,7 +5,6 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { usePermission } from '@/lib/role-guards';
 import { canAccessRoute } from '@/lib/permissions';
 import { BusinessRole } from '@/lib/users';
-import { useState, useEffect } from 'react';
 
 interface MenuItem {
   name: string;
@@ -103,27 +102,6 @@ export default function Sidebar() {
   const { user } = useAuth();
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   
-  // Estado para sidebar colapsado (persistido en localStorage)
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  useEffect(() => {
-    // Cargar estado desde localStorage
-    const savedState = localStorage.getItem('sidebar_collapsed');
-    if (savedState !== null) {
-      setIsCollapsed(savedState === 'true');
-    }
-  }, []);
-
-  const toggleSidebar = () => {
-    const newState = !isCollapsed;
-    setIsCollapsed(newState);
-    localStorage.setItem('sidebar_collapsed', String(newState));
-  };
-
-  // Determinar si el sidebar debe mostrarse expandido (por hover o estado normal)
-  const isExpanded = !isCollapsed || isHovered;
-  
   // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
   const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
   const userRole = (selectedBusiness?.role || (hasSuperadminRole ? 'superadmin' : 'operations_staff')) as BusinessRole;
@@ -203,61 +181,51 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Navegación - ocultar cuando está colapsado y se hace hover */}
-      {!(isCollapsed && isHovered) && (
-        <nav className="flex-1 overflow-y-auto py-4">
-          <ul className="space-y-1 px-3">
-            {menuItems
-              .filter(shouldShowItem)
-              .map((item) => {
-                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
-                
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2 rounded-md text-xs font-normal transition-colors ${
-                        isActive
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
-                    >
-                      <span className={isActive ? 'text-gray-900' : 'text-gray-600'}>{item.icon}</span>
-                      {!isCollapsed && (
-                        <>
-                          <span className="flex-1">{item.name}</span>
-                          {item.badge && (
-                            <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
-                              {item.badge}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-          </ul>
-        </nav>
-      )}
+      {/* Navegación */}
+      <nav className="flex-1 overflow-y-auto py-4">
+        <ul className="space-y-1 px-3">
+          {menuItems
+            .filter(shouldShowItem)
+            .map((item) => {
+              const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+              
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-normal transition-colors ${
+                      isActive
+                        ? 'bg-gray-100 text-gray-900'
+                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    {item.icon}
+                    <span className="flex-1">{item.name}</span>
+                    {item.badge && (
+                      <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+        </ul>
+      </nav>
 
-      {/* Usuario en la parte inferior - ocultar cuando está colapsado y se hace hover */}
-      {!(isCollapsed && isHovered) && (
-        <div className="p-4 border-t border-gray-200">
-          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal flex-shrink-0">
-              {getUserInitials()}
-            </div>
-            {!isCollapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-normal text-gray-900 truncate">
-                  {getUserEmail()}
-                </p>
-              </div>
-            )}
+      {/* Usuario en la parte inferior */}
+      <div className="p-4 border-t border-gray-200">
+        <div className="flex items-center space-x-3">
+          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal">
+            {getUserInitials()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-normal text-gray-900 truncate">
+              {getUserEmail()}
+            </p>
           </div>
         </div>
-      )}
+      </div>
     </aside>
 
     {/* Sidebar expandido por hover (se superpone sobre el contenido) */}

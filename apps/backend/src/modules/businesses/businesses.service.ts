@@ -2750,7 +2750,9 @@ export class BusinessesService {
       );
       
       if (debugCheck.rows.length > 0) {
+        console.log(`[checkBusinessPermissions] Debug - Usuario tiene roles en la sucursal:`, debugCheck.rows);
       } else {
+        console.log(`[checkBusinessPermissions] Debug - Usuario NO tiene ningún rol en la sucursal`);
       }
 
       return false;
@@ -2788,62 +2790,10 @@ export class BusinessesService {
         throw new NotFoundException('Sucursal no encontrada');
       }
 
-
       // Verificar permisos (owner o superadmin/admin a través de business_users)
       const hasPermission = await this.checkBusinessPermissions(businessId, userId);
       if (!hasPermission) {
-        console.error(`[updateBusinessBranding] ❌ Permisos denegados - businessId: ${businessId}, userId: ${userId}`);
-        console.error(`[updateBusinessBranding] ❌ Revisa los logs anteriores para ver detalles de la validación de permisos`);
-        
-        // Obtener información adicional para el mensaje de error
-        const businessInfo = businessCheck.rows[0];
-        const ownerId = businessInfo.owner_id;
-        
-        // Obtener información del grupo si existe
-        const groupInfo = await pool.query(
-          `SELECT bg.id, bg.name, bg.owner_id as group_owner_id
-           FROM core.businesses b
-           LEFT JOIN core.business_groups bg ON b.business_group_id = bg.id
-           WHERE b.id = $1`,
-          [businessId]
-        );
-        
-        const userRoleCheck = await pool.query(
-          `SELECT role, is_active FROM core.business_users 
-           WHERE business_id = $1 AND user_id = $2`,
-          [businessId, userId]
-        );
-        
-        let errorMessage = 'No tienes permisos para actualizar esta sucursal.\n\n';
-        errorMessage += `Usuario autenticado: ${userId}\n`;
-        errorMessage += `Propietario de la sucursal: ${ownerId}\n`;
-        
-        if (groupInfo.rows.length > 0 && groupInfo.rows[0].id) {
-          const groupOwnerId = groupInfo.rows[0].group_owner_id;
-          errorMessage += `Propietario del grupo empresarial: ${groupOwnerId || 'No asignado'}\n`;
-        }
-        
-        errorMessage += '\n';
-        
-        if (userId !== ownerId) {
-          errorMessage += `⚠️ El usuario autenticado NO es el propietario de la sucursal.\n`;
-        }
-        
-        if (userRoleCheck.rows.length > 0) {
-          const role = userRoleCheck.rows[0].role;
-          const isActive = userRoleCheck.rows[0].is_active;
-          errorMessage += `Tu rol actual es '${role}' y está ${isActive ? 'activo' : 'inactivo'}.\n`;
-          if (role !== 'superadmin' && role !== 'admin') {
-            errorMessage += `Necesitas tener rol 'superadmin' o 'admin' para actualizar el branding.\n`;
-          } else if (!isActive) {
-            errorMessage += `Tu rol está inactivo. Contacta al administrador para activarlo.\n`;
-          }
-        } else {
-          errorMessage += `No tienes ningún rol asignado en esta sucursal.\n`;
-          errorMessage += `Necesitas ser el propietario de la sucursal o tener rol 'superadmin'/'admin' asignado.\n`;
-        }
-        
-        throw new ForbiddenException(errorMessage);
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
       }
       
 

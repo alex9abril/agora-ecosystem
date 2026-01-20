@@ -478,24 +478,13 @@ export default function ProductsPage() {
       }
 
       await loadData();
-      // Si es un producto nuevo, mantener el formulario abierto para gestionar variantes
       if (!editingProduct) {
-        // Recargar el producto recién creado para obtener su ID
-        // Los productos son globales, no se filtra por businessId
-        const updatedProductsResponse = await productsService.getProducts(undefined);
-        const newProduct = updatedProductsResponse.data.find((p: Product) => p.name === formData.name);
-        if (newProduct) {
-          setEditingProduct(newProduct);
-          setFormData({ ...formData, business_id: newProduct.business_id });
-          // Cargar impuestos y compatibilidades del producto recién creado
-          await loadProductTaxes(newProduct.id);
-          // Solo cargar compatibilidades si es refaccion o accesorio
-          if (newProduct.product_type === 'refaccion' || newProduct.product_type === 'accesorio') {
-            await loadProductCompatibilities(newProduct.id);
-          }
-          // Cargar disponibilidad por sucursal
-          await loadBranchAvailabilities(newProduct.id);
+        if (savedProduct?.id) {
+          router.push(`/products/${savedProduct.id}`);
+        } else {
+          setError('No se pudo redirigir al producto recien creado');
         }
+        return;
       } else {
         // Guardar compatibilidades si es refaccion o accesorio
         if (savedProduct.product_type === 'refaccion' || savedProduct.product_type === 'accesorio') {

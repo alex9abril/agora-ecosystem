@@ -89,4 +89,3 @@ WHERE name = 'Nueva Zona';
 -- Comentario: Para verificar si un punto está dentro de la zona, puedes usar:
 -- SELECT core.is_location_in_region(-99.2500, 19.3900, (SELECT id FROM core.service_regions WHERE name = 'Nueva Zona'));
 
-

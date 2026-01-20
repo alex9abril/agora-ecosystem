@@ -166,10 +166,12 @@ El componente de gestión permite:
    - El sistema obtiene la configuración de campos para ese tipo
    - El formulario se renderiza mostrando solo los campos visibles
    - Los campos requeridos se marcan con asterisco (*)
+   - Al guardar, el flujo redirige automáticamente a la vista de edición (`/products/:id`) para continuar con variantes, impuestos, compatibilidades o disponibilidad por sucursal
 
 2. **Al editar un producto existente:**
    - El sistema carga la configuración según el `product_type` del producto
    - El formulario se adapta automáticamente
+   - Si el servicio de galería no devuelve imágenes, la pantalla usa la `image_url` guardada como fallback para mostrar la foto actual antes de subir una nueva
 
 3. **Lógica de visibilidad:**
 ```typescript

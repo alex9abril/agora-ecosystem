@@ -4,7 +4,6 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
-import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 interface Business {
   business_id: string;
@@ -1056,9 +1055,6 @@ export default function UsersSettingsPage() {
               </div>
             </div>
           )}
-              </div>
-            </div>
-          </div>
         </div>
       </LocalLayout>
     </>

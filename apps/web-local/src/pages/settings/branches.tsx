@@ -6,7 +6,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { businessService, Business, CreateBusinessData, BusinessCategory } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
-import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function BranchesPage() {
   const router = useRouter();
@@ -213,7 +212,75 @@ export default function BranchesPage() {
                 />
               )}
             </div>
+            {!showAddForm && !editingBranch && !brandingBranch && (
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Agregar Sucursal
+              </button>
+            )}
           </div>
+
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
+          {showAddForm ? (
+            <AddBranchForm
+              onSave={handleAddBranch}
+              onCancel={() => setShowAddForm(false)}
+              saving={saving}
+            />
+          ) : editingBranch ? (
+            <EditBranchForm
+              branch={editingBranch}
+              onSave={(formData) => handleUpdateBranch(editingBranch.id, formData)}
+              onCancel={() => setEditingBranch(null)}
+              saving={saving}
+            />
+          ) : brandingBranch ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <button
+                    onClick={() => setBrandingBranch(null)}
+                    className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Volver a sucursales
+                  </button>
+                  <h2 className="text-2xl font-semibold text-gray-900">Personalizacion</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Ajusta logos, colores y mensajes para la sucursal: <strong>{brandingBranch.name}</strong>
+                  </p>
+                </div>
+              </div>
+              <BrandingManager type="business" id={brandingBranch.id} name={brandingBranch.name} />
+            </div>
+          ) : (
+            <BranchesList 
+              branches={branches} 
+              onRefresh={loadBranches}
+              onEdit={(branch) => {
+                setBrandingBranch(null);
+                setShowAddForm(false);
+                setEditingBranch(branch);
+              }}
+              onBranding={(branch) => {
+                setShowAddForm(false);
+                setEditingBranch(null);
+                setBrandingBranch(branch);
+              }}
+            />
+          )}
         </div>
       </LocalLayout>
     </>
@@ -224,7 +291,7 @@ interface BranchesListProps {
   branches: Business[];
   onRefresh: () => void;
   onEdit: (branch: Business) => void;
-  onBranding?: (branch: Business) => void;
+  onBranding: (branch: Business) => void;
 }
 
 function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListProps) {
@@ -313,19 +380,17 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
             </div>
             <div className="ml-4 flex items-center gap-2">
               <button
+                onClick={() => onBranding(branch)}
+                className="px-3 py-1.5 text-sm text-purple-700 bg-purple-50 rounded hover:bg-purple-100 transition-colors"
+              >
+                Personalizar
+              </button>
+              <button
                 onClick={() => onEdit(branch)}
                 className="px-3 py-1.5 text-sm text-gray-700 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
               >
                 Editar
               </button>
-              {onBranding && (
-                <button
-                  onClick={() => onBranding(branch)}
-                  className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
-                >
-                  Personalizar
-                </button>
-              )}
             </div>
           </div>
         </div>

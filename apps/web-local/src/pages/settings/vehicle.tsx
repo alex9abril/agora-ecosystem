@@ -4,7 +4,6 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { vehiclesService, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec, UserVehicle } from '@/lib/vehicles';
 import { setUserVehicle, getUserVehicle } from '@/lib/storage';
-import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function VehicleSettingsPage() {
   const router = useRouter();
@@ -352,9 +351,6 @@ export default function VehicleSettingsPage() {
               <li>Mientras más específico seas, más precisos serán los resultados</li>
               <li>Puedes cambiar o eliminar tu vehículo en cualquier momento</li>
             </ul>
-          </div>
-              </div>
-            </div>
           </div>
         </div>
       </LocalLayout>

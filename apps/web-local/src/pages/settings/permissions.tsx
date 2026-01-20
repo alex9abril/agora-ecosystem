@@ -1,7 +1,6 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
-import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function PermissionsSettingsPage() {
   const router = useRouter();
@@ -57,8 +56,6 @@ export default function PermissionsSettingsPage() {
               <p className="mt-2 text-sm text-gray-500">
                 Los permisos actualmente se gestionan a través de los roles de negocio.
               </p>
-            </div>
-              </div>
             </div>
           </div>
         </div>
