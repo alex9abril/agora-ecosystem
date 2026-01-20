@@ -292,38 +292,29 @@ export default function SettingsPage() {
           {/* Contenido: Vista previa */}
           <div className="flex-1 min-w-0 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-6 py-8">
-                <div className="text-center py-12">
-                  <p className="text-sm text-gray-500 mb-4">
-                    Selecciona una categoría del menú lateral para comenzar
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                    {categories.map((category) => (
-                      <button
-                        key={category.id}
-                        onClick={() => router.push(category.href)}
-                        className="bg-gray-50 rounded-lg border border-gray-200 p-6 text-left hover:border-indigo-300 hover:shadow-sm transition-all duration-200 group"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="flex-shrink-0">
-                            <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
-                              {category.icon}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-base font-normal text-gray-900 group-hover:text-indigo-600 transition-colors">
-                              {category.name}
-                            </h3>
-                            <p className="mt-1.5 text-sm text-gray-600 leading-relaxed">
-                              {category.description}
-                            </p>
+              <div className="text-center py-12">
+                <p className="text-sm text-gray-500 mb-4">
+                  Selecciona una categoría del menú lateral para comenzar
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => router.push(category.href)}
+                      className="bg-gray-50 rounded-lg border border-gray-200 p-6 text-left hover:border-indigo-300 hover:shadow-sm transition-all duration-200 group"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0">
+                          <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
+                            {category.icon}
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                            {card.title}
+                          <h3 className="text-base font-normal text-gray-900 group-hover:text-indigo-600 transition-colors">
+                            {category.name}
                           </h3>
                           <p className="mt-1.5 text-sm text-gray-600 leading-relaxed">
-                            {card.description}
+                            {category.description}
                           </p>
                         </div>
                       </div>
@@ -331,7 +322,7 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </LocalLayout>

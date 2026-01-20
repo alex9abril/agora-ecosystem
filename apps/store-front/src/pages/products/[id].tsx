@@ -27,7 +27,6 @@ import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
 import { checkProductCompatibility } from '@/lib/product-compatibility';
-import VehicleSelectorDialog from '@/components/VehicleSelectorDialog';
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -54,8 +53,9 @@ export default function ProductDetailPage() {
   const [currentVehicle, setCurrentVehicle] = useState<any | null>(null);
   const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
   const [checkingCompatibility, setCheckingCompatibility] = useState(false);
-  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
+  const shouldCheckCompatibility =
+    !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function ProductDetailPage() {
       }
 
       // Solo verificar compatibilidad para productos no alimenticios/medicina (refacciones/accesorios)
-      if (product.product_type !== 'non_food') {
+      if (!shouldCheckCompatibility) {
         setCurrentVehicle(null);
         setIsCompatible(null);
         return;
@@ -153,7 +153,7 @@ export default function ProductDetailPage() {
   // Escuchar cambios en el vehículo seleccionado
   useEffect(() => {
     // Solo reaccionar a cambios de vehículo cuando el producto es no alimenticio (refacción/accesorio)
-    if (!product || product.product_type !== 'non_food') {
+    if (!shouldCheckCompatibility) {
       return;
     }
 
@@ -747,7 +747,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Leyenda de compatibilidad con vehículo - Solo para productos no alimenticios */}
-          {product && product.product_type === 'non_food' && (
+          {shouldCheckCompatibility && (
             <>
               {!currentVehicle ? (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
@@ -759,7 +759,11 @@ export default function ProductDetailPage() {
                 <p className="text-sm text-blue-700">
                   Para verificar si este producto es compatible con tu vehículo,{' '}
                   <button
-                    onClick={() => setShowVehicleSelector(true)}
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('open-vehicle-panel'));
+                      }
+                    }}
                     className="text-blue-600 hover:text-blue-800 underline font-medium"
                   >
                     selecciona un vehículo
@@ -1103,57 +1107,6 @@ export default function ProductDetailPage() {
           </Alert>
         </Snackbar>
 
-        {/* Selector de vehículos */}
-        <VehicleSelectorDialog
-          open={showVehicleSelector}
-          onClose={() => {
-            setShowVehicleSelector(false);
-            // Recargar vehículo actual después de cerrar el modal
-            const vehicle = getSelectedVehicle();
-            setCurrentVehicle(vehicle);
-            
-            // Si hay vehículo y producto, verificar compatibilidad
-            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
-              checkProductCompatibility(product.id, {
-                brandId: vehicle.vehicle_brand_id,
-                modelId: vehicle.vehicle_model_id || undefined,
-                yearId: vehicle.vehicle_year_id || undefined,
-                specId: vehicle.vehicle_spec_id || undefined,
-              }).then((compatible) => {
-                setIsCompatible(compatible);
-              }).catch((error) => {
-                console.error('Error verificando compatibilidad:', error);
-                setIsCompatible(null);
-              });
-            } else {
-              setIsCompatible(null);
-            }
-          }}
-          onVehicleSelected={async (vehicle) => {
-            setCurrentVehicle(vehicle);
-            
-            // Si hay vehículo y producto, verificar compatibilidad
-            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
-              try {
-                setCheckingCompatibility(true);
-                const compatible = await checkProductCompatibility(product.id, {
-                  brandId: vehicle.vehicle_brand_id,
-                  modelId: vehicle.vehicle_model_id || undefined,
-                  yearId: vehicle.vehicle_year_id || undefined,
-                  specId: vehicle.vehicle_spec_id || undefined,
-                });
-                setIsCompatible(compatible);
-              } catch (error) {
-                console.error('Error verificando compatibilidad:', error);
-                setIsCompatible(null);
-              } finally {
-                setCheckingCompatibility(false);
-              }
-            } else {
-              setIsCompatible(null);
-            }
-          }}
-        />
       </>
     );
   }

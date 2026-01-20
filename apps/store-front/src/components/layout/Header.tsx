@@ -135,6 +135,15 @@ export default function Header() {
     setStoreInfo(info);
   }, [contextType, branchData]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleOpenVehiclePanel = () => setShowVehicleSelector(true);
+    window.addEventListener('open-vehicle-panel', handleOpenVehiclePanel);
+    return () => {
+      window.removeEventListener('open-vehicle-panel', handleOpenVehiclePanel);
+    };
+  }, []);
+
   // Cargar vehículo actual
   useEffect(() => {
     const loadCurrentVehicle = async () => {

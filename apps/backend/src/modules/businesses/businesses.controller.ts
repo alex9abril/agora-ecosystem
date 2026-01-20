@@ -352,11 +352,10 @@ export class BusinessesController {
   }
 
   @Get(':id/vehicle-brands')
-  @ApiBearerAuth('JWT-auth')
+  @Public()
   @ApiOperation({ summary: 'Obtener las marcas de vehículos asignadas a una sucursal' })
   @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
   @ApiResponse({ status: 200, description: 'Marcas obtenidas exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autenticado' })
   @ApiResponse({ status: 404, description: 'Negocio no encontrado' })
   async getBusinessVehicleBrands(@Param('id') id: string) {
     return this.businessesService.getBusinessVehicleBrands(id);
