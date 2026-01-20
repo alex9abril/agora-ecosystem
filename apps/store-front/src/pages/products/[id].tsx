@@ -722,16 +722,7 @@ export default function ProductDetailPage() {
       </Head>
       <StoreLayout>
         <div className="max-w-6xl mx-auto">
-          {/* Botón de regresar */}
-          <button
-            onClick={() => router.back()}
-            className="mb-3 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowBackIcon className="w-5 h-5" />
-            <span className="text-sm font-medium">Volver</span>
-          </button>
-
-          <div className="mb-6 text-sm text-gray-500 flex flex-wrap items-center gap-2">
+          <div className="mt-6 mb-6 text-sm text-gray-500 flex flex-wrap items-center gap-2">
             <ContextualLink href="/" className="hover:text-gray-800 transition-colors">
               Inicio
             </ContextualLink>
