@@ -5,7 +5,7 @@
 
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { useRouteGuard } from '@/lib/role-guards';
 import { ordersService, Order, OrderFilters } from '@/lib/orders';
@@ -55,6 +55,10 @@ export default function OperationsPage() {
         const filters: OrderFilters = {};
         if (statusFilter !== 'all') {
           filters.status = statusFilter;
+        }
+        const search = searchTerm.trim().replace(/^#/, '');
+        if (search) {
+          filters.search = search;
         }
 
         const ordersData = await ordersService.getOrders(businessId, filters);
@@ -112,7 +116,7 @@ export default function OperationsPage() {
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedBusiness?.business_id, statusFilter]);
+  }, [selectedBusiness?.business_id, statusFilter, searchTerm]);
 
   const handleOrderClick = (orderId: string) => {
     router.push(`/operations/orders/${orderId}`);
@@ -133,6 +137,10 @@ export default function OperationsPage() {
       if (statusFilter !== 'all') {
         filters.status = statusFilter;
       }
+      const search = searchTerm.trim().replace(/^#/, '');
+      if (search) {
+        filters.search = search;
+      }
       const updatedOrders = await ordersService.getOrders(
         selectedBusiness.business_id,
         filters
@@ -143,18 +151,6 @@ export default function OperationsPage() {
       alert(err.message || 'Error al actualizar estado');
     }
   };
-
-  // Filtrar órdenes por término de búsqueda
-  const filteredOrders = orders.filter(order => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      order.order_number?.toLowerCase().includes(term) ||
-      order.client_first_name?.toLowerCase().includes(term) ||
-      order.client_last_name?.toLowerCase().includes(term) ||
-      order.client_email?.toLowerCase().includes(term)
-    );
-  });
 
   return (
     <>
@@ -217,7 +213,7 @@ export default function OperationsPage() {
               </div>
             ) : (
               <OrdersKanban
-                orders={filteredOrders}
+                orders={orders}
                 onOrderClick={handleOrderClick}
                 onStatusChange={handleStatusChange}
               />

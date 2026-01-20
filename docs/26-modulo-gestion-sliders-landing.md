@@ -93,6 +93,7 @@ Content-Type: application/json
 GET /landing-sliders?business_group_id={uuid}&business_id={uuid}&only_active=true&page=1&limit=20
 Authorization: Bearer {token}
 ```
+- `only_active` es opcional y por defecto es `false`, por lo que el endpoint retorna activos e inactivos a menos que se envie `only_active=true`. En la UI se muestran como `Publicado` (visible en sucursal/grupo) y `Borrador` (solo visible en el panel).
 
 #### Obtener Slider por ID
 ```http
@@ -157,7 +158,8 @@ apps/web-local/src/lib/landing-sliders.ts
 2. **Lista de Sliders**
    - Vista en grid con preview visual
    - Muestra orden, estado (activo/inactivo), y tipo de redirección
-   - Acciones: Editar, Activar/Desactivar, Eliminar
+   - Acciones: Editar, Publicar/Despublicar, Eliminar
+   - La vista de gestin siempre muestra publicados y borradores; despublicar no elimina ni oculta el slider, solo lo marca como borrador y deja de mostrarse en la sucursal/grupo
 
 3. **Formulario de Creación/Edición**
    - Campos principales:
@@ -364,4 +366,8 @@ Cuando un usuario hace clic en un slider:
 - Servicio backend: `apps/backend/src/modules/commerce/landing-sliders/`
 - Servicio frontend: `apps/web-local/src/lib/landing-sliders.ts`
 - Migración SQL: `database/agora/migration_landing_sliders.sql`
+
+
+
+
 

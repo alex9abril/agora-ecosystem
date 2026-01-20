@@ -30,7 +30,8 @@ export default function NewSliderPage() {
     },
     redirect_type: RedirectType.NONE,
     display_order: 0,
-    is_active: true,
+    // Los sliders nuevos inician como borrador
+    is_active: false,
   });
 
   useEffect(() => {
@@ -313,19 +314,24 @@ export default function NewSliderPage() {
                 </p>
               </div>
 
-              <div className="flex items-center">
+              <div className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
                 <input
                   type="checkbox"
                   id="is_active"
-                  checked={formData.is_active ?? true}
+                  checked={formData.is_active ?? false}
                   onChange={(e) =>
                     setFormData({ ...formData, is_active: e.target.checked })
                   }
                   className="h-4 w-4 text-black focus:ring-black border-gray-300 rounded"
                 />
-                <label htmlFor="is_active" className="ml-3 block text-sm text-gray-700">
-                  Slider activo (se mostrará en el landing page)
-                </label>
+                <div className="text-sm text-gray-700">
+                  <label htmlFor="is_active" className="font-medium block text-gray-900">
+                    Publicar en la sucursal
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Los sliders se guardan como borrador por defecto y no se muestran en la sucursal. Marca esta casilla para publicarlo.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

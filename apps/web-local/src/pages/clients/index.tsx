@@ -1,20 +1,46 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { clientsService, Client, ClientFilters } from '@/lib/clients';
 import Link from 'next/link';
+
+const PAGE_SIZE_STORAGE_KEY = 'clients_page_size';
+const CURRENT_PAGE_STORAGE_KEY = 'clients_current_page';
+const PAGE_SIZE_OPTIONS = [1, 10, 20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
+const CLIENTS_ROUTE_PREFIX = '/clients';
 
 export default function ClientsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const storedPage = localStorage.getItem(CURRENT_PAGE_STORAGE_KEY);
+      const parsedPage = storedPage ? parseInt(storedPage, 10) : NaN;
+      if (parsedPage > 0) {
+        return parsedPage;
+      }
+    }
+    return 1;
+  });
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const storedPageSize = localStorage.getItem(PAGE_SIZE_STORAGE_KEY);
+      const parsedPageSize = storedPageSize ? parseInt(storedPageSize, 10) : NaN;
+      if (PAGE_SIZE_OPTIONS.includes(parsedPageSize)) {
+        return parsedPageSize;
+      }
+    }
+    return DEFAULT_PAGE_SIZE;
+  });
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   
   // Filtros
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isActiveFilter, setIsActiveFilter] = useState<string>('all');
   const [isBlockedFilter, setIsBlockedFilter] = useState<string>('all');
@@ -22,23 +48,50 @@ export default function ClientsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
-    loadClients();
-  }, [page, searchTerm, isActiveFilter, isBlockedFilter, sortBy, sortOrder]);
+    loadClients(page, pageSize, searchTerm);
+  }, [page, pageSize, searchTerm, isActiveFilter, isBlockedFilter, sortBy, sortOrder]);
 
-  const loadClients = async () => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CURRENT_PAGE_STORAGE_KEY, page.toString());
+    }
+  }, [page]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(PAGE_SIZE_STORAGE_KEY, pageSize.toString());
+    }
+  }, [pageSize]);
+
+  useEffect(() => {
+    const handleRouteChange = (url: string) => {
+      if (typeof window === 'undefined') return;
+      if (!url.startsWith(CLIENTS_ROUTE_PREFIX)) {
+        localStorage.removeItem(PAGE_SIZE_STORAGE_KEY);
+        localStorage.removeItem(CURRENT_PAGE_STORAGE_KEY);
+      }
+    };
+
+    router.events.on('routeChangeStart', handleRouteChange);
+    return () => {
+      router.events.off('routeChangeStart', handleRouteChange);
+    };
+  }, [router.events]);
+
+  const loadClients = async (pageToLoad: number = page, limit: number = pageSize, searchValue: string = searchTerm) => {
     try {
       setLoading(true);
       setError(null);
       
       const filters: ClientFilters = {
-        page,
-        limit: 20,
+        page: pageToLoad,
+        limit,
         sortBy,
         sortOrder,
       };
 
-      if (searchTerm) {
-        filters.search = searchTerm;
+      if (searchValue) {
+        filters.search = searchValue;
       }
 
       if (isActiveFilter !== 'all') {
@@ -51,8 +104,9 @@ export default function ClientsPage() {
 
       const response = await clientsService.getClients(filters);
       setClients(response.data);
-      setTotalPages(response.pagination.totalPages);
-      setTotal(response.pagination.total);
+      setTotalPages(response.pagination.totalPages || 0);
+      setTotal(response.pagination.total || 0);
+      setPage(response.pagination.page || pageToLoad);
     } catch (err: any) {
       console.error('Error cargando clientes:', err);
       setError(err.message || 'Error al cargar los clientes');
@@ -79,7 +133,7 @@ export default function ClientsPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    loadClients();
+    setSearchTerm(searchInput.trim());
   };
 
   return (
@@ -103,8 +157,8 @@ export default function ClientsPage() {
             <div className="flex-1">
               <input
                 type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Buscar por nombre, email o teléfono..."
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
               />
@@ -287,26 +341,67 @@ export default function ClientsPage() {
             </div>
 
             {/* Paginación */}
-            {totalPages > 1 && (
+            {clients.length > 0 && (
               <div className="mt-6 flex items-center justify-between">
                 <div className="text-sm text-gray-500">
-                  Mostrando página {page} de {totalPages}
+                  Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total} clientes
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Siguiente
-                  </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-500">Mostrar:</label>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setPage(1);
+                      }}
+                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    >
+                      {PAGE_SIZE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(1)}
+                      disabled={page === 1}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Primera página"
+                    >
+                      ««
+                    </button>
+                    <button
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Página anterior"
+                    >
+                      «
+                    </button>
+                    <span className="px-3 py-1 text-sm text-gray-700">
+                      Página {page} de {totalPages || 1}
+                    </span>
+                    <button
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= totalPages}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Página siguiente"
+                    >
+                      »
+                    </button>
+                    <button
+                      onClick={() => setPage(totalPages)}
+                      disabled={page >= totalPages}
+                      className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Última página"
+                    >
+                      »»
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

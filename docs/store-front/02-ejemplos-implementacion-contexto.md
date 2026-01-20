@@ -628,6 +628,12 @@ export const productsService = {
 };
 ```
 
+## Nota de UX para web-local (búsqueda)
+- En `apps/web-local/src/pages/products/index.tsx` la búsqueda ya no se dispara por cada tecla: se envía solo al presionar Enter o dar clic en el botón **Buscar**.
+- El término se pasa como query `search` a `/catalog/products`, por lo que la coincidencia viene desde base de datos (no se filtra solo lo cargado en la página).
+- Los filtros de sucursal/no asignados siguen aplicándose del lado del cliente sobre la página de resultados devuelta por el backend.
+- Si necesitas que los filtros de sucursal impacten la paginación del backend, pasa esos IDs como query params adicionales y deja que el servidor pagine con esos filtros.
+
 ## Flujo de Navegación
 
 ```

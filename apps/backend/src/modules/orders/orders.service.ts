@@ -1371,6 +1371,9 @@ export class OrdersService {
     }
 
     try {
+      const rawSearch = filters?.search?.trim();
+      const normalizedSearch = rawSearch?.replace(/[^a-zA-Z0-9]/g, '');
+
       let whereClause = `WHERE o.business_id = $1`;
       const queryParams: any[] = [businessId];
       let paramIndex = 2;
@@ -1399,18 +1402,23 @@ export class OrdersService {
         paramIndex++;
       }
 
-      if (filters?.search) {
+      if (rawSearch) {
+        const searchParam = `%${rawSearch}%`;
+        const folioSearchParam = `%${normalizedSearch || rawSearch}%`;
+        
         whereClause += ` AND (
           o.delivery_address_text ILIKE $${paramIndex} OR
           o.id::text ILIKE $${paramIndex} OR
+          REPLACE(o.id::text, '-', '') ILIKE $${paramIndex + 1} OR
+          RIGHT(REPLACE(o.id::text, '-', ''), 8) ILIKE $${paramIndex + 1} OR
           EXISTS (
             SELECT 1 FROM orders.order_items oi
             WHERE oi.order_id = o.id
             AND oi.item_name ILIKE $${paramIndex}
           )
         )`;
-        queryParams.push(`%${filters.search}%`);
-        paramIndex++;
+        queryParams.push(searchParam, folioSearchParam);
+        paramIndex += 2;
       }
 
       const result = await dbPool.query(

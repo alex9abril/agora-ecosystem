@@ -6,6 +6,12 @@ Este documento define el ciclo de vida completo de un pedido desde su creación 
 
 ---
 
+## 🔎 Busqueda y folios (operaciones y backoffice)
+
+- La busqueda de pedidos en web-local se ejecuta solo al enviar el formulario (boton/Enter), igual que en productos, evitando llamadas por tecla.
+- El backend normaliza el termino de busqueda y permite localizar pedidos por UUID limpio o por los ultimos 8 caracteres del folio, siempre filtrando por la sucursal/business_id correspondiente.
+- La vista de operaciones consulta directamente a base de datos (sin filtro en memoria) y admite folios con o sin prefijo `#`.
+
 ## 📊 Diagrama de Flujo de Estados del Pedido
 
 ```mermaid

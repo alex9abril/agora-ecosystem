@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { businessService, Business, CreateBusinessData, BusinessCategory } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function BranchesPage() {
   const router = useRouter();
@@ -291,7 +292,7 @@ interface BranchesListProps {
   branches: Business[];
   onRefresh: () => void;
   onEdit: (branch: Business) => void;
-  onBranding: (branch: Business) => void;
+  onBranding?: (branch: Business) => void;
 }
 
 function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListProps) {
@@ -405,9 +406,13 @@ interface AddBranchFormProps {
   saving: boolean;
 }
 
-// Función helper para generar slug desde un texto
+// Función helper para generar slug desde un texto (normaliza acentos/diacríticos)
 const generateSlug = (text: string): string => {
-  return text
+  const normalized = text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return normalized
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -936,12 +941,8 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                   value={formData.slug || ''}
                   onChange={(e) => {
-                    // Convertir a slug automáticamente (solo minúsculas, guiones, números)
-                    const slugValue = e.target.value
-                      .toLowerCase()
-                      .replace(/[^a-z0-9-]/g, '-')
-                      .replace(/-+/g, '-')
-                      .replace(/^-|-$/g, '');
+                    // Convertir a slug automáticamente (normaliza acentos, minúsculas, guiones)
+                    const slugValue = generateSlug(e.target.value);
                     setFormData({ ...formData, slug: slugValue });
                     // Marcar que el slug fue editado manualmente
                     setSlugManuallyEdited(true);
@@ -1584,12 +1585,8 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                   value={formData.slug || ''}
                   onChange={(e) => {
-                    // Convertir a slug automáticamente (solo minúsculas, guiones, números)
-                    const slugValue = e.target.value
-                      .toLowerCase()
-                      .replace(/[^a-z0-9-]/g, '-')
-                      .replace(/-+/g, '-')
-                      .replace(/^-|-$/g, '');
+                    // Convertir a slug automáticamente (normaliza acentos, minúsculas, guiones)
+                    const slugValue = generateSlug(e.target.value);
                     setFormData({ ...formData, slug: slugValue });
                     // Marcar que el slug fue editado manualmente
                     setSlugManuallyEdited(true);

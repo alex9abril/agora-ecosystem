@@ -212,7 +212,8 @@ export class LandingSlidersService {
       const page = query.page || 1;
       const limit = query.limit || 20;
       const offset = (page - 1) * limit;
-      const onlyActive = query.only_active !== false;
+      // Mostrar activos solo cuando se pide expresamente; por defecto incluye inactivos
+      const onlyActive = query.only_active === true;
 
       // Construir condiciones WHERE
       const conditions: string[] = [];

@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID, IsBoolean, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class ListLandingSlidersDto {
   @ApiPropertyOptional({ 
@@ -22,10 +22,16 @@ export class ListLandingSlidersDto {
   @ApiPropertyOptional({ 
     description: 'Solo mostrar sliders activos',
     example: true,
-    default: true
+    default: false
   })
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    // Por defecto incluimos inactivos para que la UI de gestión siempre vea todo
+    if (value === undefined || value === null || value === '') return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value.toLowerCase() === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   only_active?: boolean;
 

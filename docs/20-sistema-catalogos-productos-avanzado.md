@@ -148,6 +148,13 @@ GET /api/catalog/products/field-config/:productType
 ]
 ```
 
+### Selector de categor?as en web-local
+
+- El formulario de productos en `web-local` carga **todas las categor?as globales y activas** paginando en bloques de 100 hasta recorrer `totalPages`; ya no se limita a la primera p?gina.
+- Al enfocar el campo sin teclear nada se muestran **todas las categor?as**; escribir filtra por nombre, descripci?n o ruta completa y mantiene el padre/hijos visibles para conservar el contexto jer?rquico.
+- Las subcategor?as se muestran **indentadas seg?n su nivel** y, al buscar, tambi?n se muestra la ruta completa para aclarar la relaci?n padre-hijo.
+- Se sigue respetando la configuraci?n de campos: `category_id` permanece visible y requerido para todos los tipos de producto.
+
 **Gestión desde Admin (web-admin):**
 
 El componente de gestión permite:
@@ -1263,4 +1270,3 @@ CREATE INDEX idx_suggestion_rules_trigger_type ON catalog.suggestion_rules(trigg
 **Versión:** 1.0  
 **Fecha:** 2024-12-XX  
 **Autor:** Análisis basado en investigación de plataformas de delivery y estructura del sistema Localia
-
