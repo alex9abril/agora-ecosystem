@@ -145,15 +145,11 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
           
           <div className="mt-auto">
             <div>
-              <span className="text-xl font-bold text-black">
-                {formatPrice(displayPrice)}
-              </span>
-              {contextType === 'sucursal' && product.branch_price !== undefined && product.branch_price !== product.price && (
-                <span className="text-sm text-gray-500 line-through ml-2">
-                  {formatPrice(product.price)}
-                </span>
-              )}
+              <span className="font-semibold">Recoger</span>{' '}
+              {branchData?.name ? `en ${branchData.name}` : 'disponible'}
             </div>
+            <div className="font-semibold text-gray-800">Envío a domicilio</div>
+            <div className="text-gray-500">disponible</div>
           </div>
         </div>
       </div>
