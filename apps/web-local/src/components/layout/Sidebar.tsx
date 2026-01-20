@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -101,6 +102,8 @@ export default function Sidebar() {
   const router = useRouter();
   const { user } = useAuth();
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   
   // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
   const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
@@ -144,6 +147,11 @@ export default function Sidebar() {
 
   const getUserEmail = () => {
     return user?.email || 'usuario@example.com';
+  };
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => !prev);
+    setIsHovered(false);
   };
 
   return (
