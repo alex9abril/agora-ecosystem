@@ -26,6 +26,10 @@ import MultipleImageUpload, {
   ProductImage,
 } from "@/components/MultipleImageUpload";
 import CategorySelector from "@/components/CategorySelector";
+import {
+  productClassificationsService,
+  ProductClassification,
+} from "@/lib/product-classifications";
 
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
@@ -137,6 +141,8 @@ export default function ProductsPage() {
       price: number | null;
       stock: number | null;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
+      classification_ids?: string[];
+      classifications?: Array<{ id: string; name: string; slug: string }>;
     }>
   >([]);
   const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] =
@@ -418,6 +424,12 @@ export default function ProductsPage() {
               avail.is_active !== undefined
                 ? avail.is_active
                 : (business?.is_active ?? true),
+            classification_ids: Array.isArray(avail.classification_ids)
+              ? avail.classification_ids
+              : [],
+            classifications: Array.isArray(avail.classifications)
+              ? avail.classifications
+              : [],
           };
         },
       );
@@ -447,6 +459,10 @@ export default function ProductsPage() {
             avail.stock !== null && avail.stock !== undefined
               ? avail.stock
               : null,
+          classification_ids:
+            avail.is_enabled && Array.isArray(avail.classification_ids)
+              ? avail.classification_ids
+              : [],
         }));
 
       if (availabilitiesToSave.length > 0) {
@@ -687,6 +703,10 @@ export default function ProductsPage() {
                   avail.stock !== null && avail.stock !== undefined
                     ? avail.stock
                     : null,
+                classification_ids:
+                  avail.is_enabled && Array.isArray(avail.classification_ids)
+                    ? avail.classification_ids
+                    : [],
               }));
 
             if (availabilitiesToSave.length > 0) {
@@ -1683,6 +1703,8 @@ export interface ProductFormProps {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
+    classification_ids?: string[];
+    classifications?: Array<{ id: string; name: string; slug: string }>;
   }>;
   setBranchAvailabilities: React.Dispatch<
     React.SetStateAction<
@@ -1692,6 +1714,8 @@ export interface ProductFormProps {
         is_enabled: boolean;
         price: number | null;
         stock: number | null;
+        classification_ids?: string[];
+        classifications?: Array<{ id: string; name: string; slug: string }>;
       }>
     >
   >;
@@ -1743,6 +1767,11 @@ export function ProductForm({
   onCancel,
 }: ProductFormProps) {
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
+  const [classificationsByBranch, setClassificationsByBranch] = useState<
+    Record<string, ProductClassification[]>
+  >({});
+  const [loadingClassifications, setLoadingClassifications] =
+    useState<boolean>(false);
   const currentBranchId = selectedBusiness?.business_id || null;
   const [productTypes, setProductTypes] = useState<
     Array<{ value: ProductType; label: string }>
@@ -1788,6 +1817,56 @@ export function ProductForm({
 
     loadProductTypes();
   }, []);
+
+  // Cargar clasificaciones por sucursal
+  useEffect(() => {
+    const businessIds = availableBusinesses
+      .map((b) => b.business_id)
+      .filter((id) => !!id);
+
+    if (businessIds.length === 0) {
+      setClassificationsByBranch({});
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadClassifications = async () => {
+      try {
+        setLoadingClassifications(true);
+        const entries = await Promise.all(
+          businessIds.map(async (businessId) => {
+            try {
+              const response =
+                await productClassificationsService.list(businessId);
+              return [businessId, response.data || []] as const;
+            } catch (err) {
+              console.error("Error cargando clasificaciones:", err);
+              return [businessId, []] as const;
+            }
+          }),
+        );
+
+        if (!isMounted) return;
+
+        const map: Record<string, ProductClassification[]> = {};
+        entries.forEach(([businessId, list]) => {
+          map[businessId] = list;
+        });
+        setClassificationsByBranch(map);
+      } finally {
+        if (isMounted) {
+          setLoadingClassifications(false);
+        }
+      }
+    };
+
+    loadClassifications();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [availableBusinesses.map((b) => b.business_id).join(",")]);
 
   // Cargar impuestos del producto cuando se edita
   useEffect(() => {
@@ -1850,6 +1929,46 @@ export function ProductForm({
   const isFieldRequired = (fieldName: string): boolean => {
     const field = fieldConfig.find((f) => f.fieldName === fieldName);
     return field ? field.isRequired : false; // Por defecto no requerido si no hay configuración
+  };
+
+  const handleClassificationToggle = (
+    branchId: string,
+    branchName: string,
+    classificationId: string,
+    checked: boolean,
+  ) => {
+    setBranchAvailabilities((prev) => {
+      const existing = prev.find((a) => a.branch_id === branchId);
+      const currentIds = new Set(
+        (existing?.classification_ids || []).filter(Boolean),
+      );
+      if (checked) {
+        currentIds.add(classificationId);
+      } else {
+        currentIds.delete(classificationId);
+      }
+
+      const updatedEntry =
+        existing ?? {
+          branch_id: branchId,
+          branch_name: branchName,
+          is_enabled: false,
+          price: null,
+          stock: null,
+          is_active: true,
+        };
+
+      const nextEntry = {
+        ...updatedEntry,
+        classification_ids: Array.from(currentIds),
+      };
+
+      if (existing) {
+        return prev.map((a) => (a.branch_id === branchId ? nextEntry : a));
+      }
+
+      return [...prev, nextEntry];
+    });
   };
 
   // Obtener campos ordenados según display_order
@@ -2931,6 +3050,88 @@ export function ProductForm({
                   />
                 </div>
               )}
+
+              {/* Clasificaciones por sucursal */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+                  <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+                    Clasificaciones por Sucursal
+                  </h4>
+                  {loadingClassifications && (
+                    <span className="text-xs text-gray-500">Cargando...</span>
+                  )}
+                </div>
+                {availableBusinesses.length === 0 ? (
+                  <p className="text-xs text-gray-500">
+                    No hay sucursales disponibles para asignar clasificaciones.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {availableBusinesses.map((branch) => {
+                      const availability = branchAvailabilities.find(
+                        (a) => a.branch_id === branch.business_id,
+                      );
+                      const branchClassifications =
+                        classificationsByBranch[branch.business_id] || [];
+                      const selectedIds =
+                        availability?.classification_ids || [];
+                      const isEnabled = availability?.is_enabled ?? false;
+
+                      return (
+                        <div
+                          key={branch.business_id}
+                          className="p-3 border border-gray-200 rounded"
+                        >
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-900">
+                                {branch.business_name}
+                              </span>
+                              {!isEnabled && (
+                                <span className="text-xs text-gray-500">
+                                  Disponibilidad desactivada
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {branchClassifications.length === 0 ? (
+                            <p className="text-xs text-gray-500">
+                              Sin clasificaciones para esta sucursal.
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-3">
+                              {branchClassifications.map((classification) => (
+                                <label
+                                  key={classification.id}
+                                  className="inline-flex items-center gap-2 text-sm text-gray-700"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                                    checked={selectedIds.includes(
+                                      classification.id,
+                                    )}
+                                    onChange={(e) =>
+                                      handleClassificationToggle(
+                                        branch.business_id,
+                                        branch.business_name,
+                                        classification.id,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    disabled={!isEnabled}
+                                  />
+                                  <span>{classification.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Impuestos */}
@@ -3888,6 +4089,8 @@ function BranchAvailabilitySection({
         price: null,
         stock: null,
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
+        classification_ids: [],
+        classifications: [],
       }));
       setBranchAvailabilities(initialAvailabilities);
     }

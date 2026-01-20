@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException, NotFoundException, BadRequestException } from '@nestjs/common';
+﻿import { Injectable, ServiceUnavailableException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ListProductsDto } from './dto/list-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -1680,7 +1680,7 @@ export class ProductsService {
       // Consulta: obtener TODAS las sucursales (activas e inactivas) con su disponibilidad
       // Usar LEFT JOIN para incluir sucursales sin disponibilidad configurada
       const sqlQuery = `
-        SELECT DISTINCT
+        SELECT
           b.id AS branch_id,
           b.name AS branch_name,
           b.slug AS branch_slug,
@@ -1689,6 +1689,8 @@ export class ProductsService {
           COALESCE(pba.is_enabled, FALSE) AS is_enabled,
           pba.price,
           pba.stock,
+          pca.classification_ids,
+          pca.classification_list,
           -- Construir dirección completa desde core.addresses si existe
           CONCAT_WS(', ',
             NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
@@ -1703,6 +1705,17 @@ export class ProductsService {
           AND pba.product_id = $1
           AND COALESCE(pba.is_active, TRUE) = TRUE
         LEFT JOIN core.addresses a ON b.address_id = a.id
+        LEFT JOIN LATERAL (
+          SELECT 
+            ARRAY_REMOVE(ARRAY_AGG(pca.classification_id ORDER BY pc.name), NULL) AS classification_ids,
+            json_agg(
+              json_build_object('id', pc.id, 'name', pc.name, 'slug', pc.slug)
+              ORDER BY pc.name
+            ) AS classification_list
+          FROM catalog.product_classification_assignments pca
+          JOIN catalog.product_classifications pc ON pc.id = pca.classification_id
+          WHERE pca.product_id = $1 AND pca.business_id = b.id
+        ) pca ON TRUE
         ${whereClause}
         ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.is_active DESC, b.name ASC
       `;
@@ -1720,6 +1733,8 @@ export class ProductsService {
           price: row.price !== null && row.price !== undefined ? parseFloat(row.price.toString()) : null,
           stock: row.stock !== null && row.stock !== undefined ? parseInt(row.stock.toString(), 10) : null,
           is_active: row.branch_is_active !== undefined ? row.branch_is_active : true,
+          classification_ids: Array.isArray(row.classification_ids) ? row.classification_ids : [],
+          classifications: Array.isArray(row.classification_list) ? row.classification_list : [],
         })),
       };
     } catch (error: any) {
@@ -1759,6 +1774,8 @@ export class ProductsService {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
+      classification_id?: string | null;
+      classification_ids?: string[] | null;
     }>
   ) {
     if (!dbPool) {
@@ -1778,15 +1795,39 @@ export class ProductsService {
     try {
       await client.query('BEGIN');
 
-      for (const availability of availabilities) {
+for (const availability of availabilities) {
         // Verificar que la sucursal existe
         const branchCheck = await client.query(
           'SELECT id FROM core.businesses WHERE id = $1 AND is_active = TRUE',
-          [availability.branch_id]
+          [availability.branch_id],
         );
         if (branchCheck.rows.length === 0) {
           console.warn(`⚠️ Sucursal ${availability.branch_id} no encontrada o inactiva, omitiendo...`);
           continue; // Continuar con la siguiente en lugar de fallar
+        }
+
+        const classificationIds: string[] = Array.isArray(availability.classification_ids)
+          ? availability.classification_ids
+          : availability.classification_id
+            ? [availability.classification_id]
+            : [];
+
+        if (classificationIds.length > 0) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          for (const cid of classificationIds) {
+            if (!uuidRegex.test(cid)) {
+              throw new BadRequestException('El classification_id debe ser un UUID válido');
+            }
+
+            const classificationCheck = await client.query(
+              'SELECT id FROM catalog.product_classifications WHERE id = $1 AND business_id = $2',
+              [cid, availability.branch_id],
+            );
+
+            if (classificationCheck.rows.length === 0) {
+              throw new BadRequestException('La clasificación no existe para esta sucursal');
+            }
+          }
         }
 
         if (availability.is_enabled) {
@@ -1812,6 +1853,24 @@ export class ProductsService {
             availability.price ?? null,
             availability.stock ?? null,
           ]);
+
+          // Actualizar clasificación por sucursal (se mantiene una sola por sucursal)
+          const deleteAssignmentsQuery = `
+            DELETE FROM catalog.product_classification_assignments
+            WHERE product_id = $1 AND business_id = $2
+          `;
+          await client.query(deleteAssignmentsQuery, [productId, availability.branch_id]);
+
+          if (classificationIds.length > 0) {
+            const insertAssignmentQuery = `
+              INSERT INTO catalog.product_classification_assignments (product_id, classification_id, business_id)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (product_id, classification_id, business_id) DO NOTHING
+            `;
+            for (const cid of classificationIds) {
+              await client.query(insertAssignmentQuery, [productId, cid, availability.branch_id]);
+            }
+          }
         } else {
           // Si está deshabilitada, eliminar el registro o marcarlo como inactivo
           const deleteQuery = `
@@ -1819,6 +1878,15 @@ export class ProductsService {
             WHERE product_id = $1 AND branch_id = $2
           `;
           await client.query(deleteQuery, [productId, availability.branch_id]);
+
+          // Eliminar también cualquier clasificación asignada en la sucursal
+          await client.query(
+            `
+            DELETE FROM catalog.product_classification_assignments
+            WHERE product_id = $1 AND business_id = $2
+          `,
+            [productId, availability.branch_id],
+          );
         }
       }
 
@@ -1843,4 +1911,5 @@ export class ProductsService {
     }
   }
 }
+
 

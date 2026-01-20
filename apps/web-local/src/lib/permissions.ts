@@ -105,6 +105,11 @@ export function canAccessRoute(role: BusinessRole, route: string): boolean {
     return permissions.canPrepareOrders;
   }
 
+  // Rutas de catЦ­logo
+  if (route.startsWith('/catalog')) {
+    return permissions.canManageProducts;
+  }
+
   // Rutas de productos
   if (route.startsWith('/products')) {
     return permissions.canManageProducts;

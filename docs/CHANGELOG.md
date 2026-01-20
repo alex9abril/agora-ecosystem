@@ -1,5 +1,12 @@
 # Changelog
 
+## Clasificaciones por sucursal en catalogo web-local (2026-01-16)
+- Nuevo submenu Catalogo > Clasificaciones en apps/web-local/src/components/layout/Sidebar.tsx, con rutas de catalogo protegidas por el permiso de productos.
+- Pagina apps/web-local/src/pages/catalog/classifications/index.tsx para crear/editar clasificaciones por sucursal (nombre, slug normalizado, orden y estado) usando la sucursal seleccionada.
+- /catalog redirige al modulo de clasificaciones (apps/web-local/src/pages/catalog/index.tsx) y expone el servicio productClassifications para el panel.
+- Backend migra a catalog.product_classifications (tabla propia de clasificaciones por sucursal) y ajusta endpoints de categorias/productos para usarla; se incluye seed en docs/seeds/product_classifications_seed.sql (con FK de products apuntando a la nueva tabla).
+- El formulario de productos muestra la clasificación (por sucursal) debajo de Disponibilidad y permite asignarla al crear productos.
+
 ## Normalizacion de slugs en sucursales web-local (2026-01-16)
 - `apps/web-local/src/pages/settings/branches.tsx` ahora normaliza acentos/diacriticos al generar slugs (NFD + sin marcas), evitando que caracteres como `á`, `é`, `í`, `ó`, `ú` o `ñ` se eliminen y garantizando URLs limpias.
 
@@ -41,3 +48,4 @@
 - Se agrego la UI de personalizacion (logos, colores, fuentes, textos, redes sociales, CSS/JS personalizado) a `apps/web-local/src/pages/settings/branches.tsx` mediante la accion **Personalizar** por sucursal, usando el `BrandingManager` compartido.
 - `BrandingManager` se copio desde web-admin a `apps/web-local/src/components/branding/BrandingManager.tsx` y se conecto a los endpoints existentes de branding en backend (`/businesses/{id}/branding` y variantes de carga).
 - Nueva dependencia en web-local: `react-color` (y `@types/react-color`) agregada en `apps/web-local/package.json`; instalar con `npm install` dentro de `apps/web-local`.
+
