@@ -287,7 +287,7 @@ export default function OrdersPage() {
     return (
       <LocalLayout>
         <Head>
-          <title>Pedidos - LOCALIA Local</title>
+          <title>Pedidos - AGORA Local</title>
         </Head>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -302,7 +302,7 @@ export default function OrdersPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Pedidos - LOCALIA Local</title>
+        <title>Pedidos - AGORA Local</title>
       </Head>
       
       <div className="w-full h-full flex flex-col p-6">

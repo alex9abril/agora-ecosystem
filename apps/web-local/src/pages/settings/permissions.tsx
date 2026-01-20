@@ -9,7 +9,7 @@ export default function PermissionsSettingsPage() {
   return (
     <>
       <Head>
-        <title>Grupos de Permisos - LOCALIA Local</title>
+        <title>Grupos de Permisos - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">

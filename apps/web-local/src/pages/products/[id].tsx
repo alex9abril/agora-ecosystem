@@ -472,7 +472,7 @@ export default function ProductDetailPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Editar Producto - LOCALIA Local</title>
+        <title>Editar Producto - AGORA Local</title>
       </Head>
 
       <div className="w-full h-full flex flex-col p-6">

@@ -247,7 +247,7 @@ export default function StoreSettingsPage() {
   return (
     <>
       <Head>
-        <title>Configuración de Grupo Empresarial - LOCALIA Local</title>
+        <title>Configuración de Grupo Empresarial - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="flex h-full bg-gray-50">

@@ -993,30 +993,38 @@ export class AuthService {
     });
 
     if (error) {
-      console.error('❌ Error en signIn:', error.message);
+      console.error('❌ Error en signIn:', error);
+
+      const supabaseError = {
+        message: error.message,
+        status: error.status,
+        code: (error as any).code,
+      };
+
+      const withSupabaseDetail = (userMessage: string) => ({
+        message: `${userMessage} (Supabase: ${error.message})`,
+        supabaseError,
+      });
+
       if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
-        throw new UnauthorizedException('Tu correo no ha sido confirmado. Revisa tu bandeja de entrada.');
+        throw new UnauthorizedException(withSupabaseDetail('Tu correo no ha sido confirmado. Revisa tu bandeja de entrada.'));
       }
-      
+
       // Mensajes personalizados según el tipo de error
       if (error.message.includes('Invalid login credentials') || error.message.includes('invalid')) {
-        throw new UnauthorizedException('Las credenciales proporcionadas son incorrectas. Por favor, verifica tu email y contraseña.');
+        throw new UnauthorizedException(withSupabaseDetail('Las credenciales proporcionadas son incorrectas. Por favor, verifica tu email y contraseña.'));
       }
-      
-      if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
-        throw new UnauthorizedException('Tu correo no ha sido confirmado. Revisa tu bandeja de entrada.');
-      }
-      
+
       if (error.message.includes('User not found') || error.message.includes('user_not_found')) {
-        throw new UnauthorizedException('No existe una cuenta asociada a este email. Por favor, verifica tu dirección de correo electrónico.');
+        throw new UnauthorizedException(withSupabaseDetail('No existe una cuenta asociada a este email. Por favor, verifica tu dirección de correo electrónico.'));
       }
-      
+
       if (error.message.includes('Too many requests') || error.message.includes('rate_limit')) {
-        throw new UnauthorizedException('Demasiados intentos de inicio de sesión. Por favor, espera unos minutos e intenta nuevamente.');
+        throw new UnauthorizedException(withSupabaseDetail('Demasiados intentos de inicio de sesión. Por favor, espera unos minutos e intenta nuevamente.'));
       }
-      
-      // Error genérico con mensaje más amigable
-      throw new UnauthorizedException('No se pudo iniciar sesión. Por favor, verifica tus credenciales e intenta nuevamente.');
+
+      // Error genérico con detalle de Supabase
+      throw new UnauthorizedException(withSupabaseDetail('No se pudo iniciar sesión. Por favor, verifica tus credenciales e intenta nuevamente.'));
     }
 
     if (!data.user || !data.session) {
@@ -1056,16 +1064,85 @@ export class AuthService {
   /**
    * Solicita un email de recuperación de contraseña
    */
-  async requestPasswordReset(email: string) {
+  async requestPasswordReset(email: string, redirectTo?: string) {
     if (!supabase) {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
+    if (supabaseAdmin) {
+      const perPage = 1000;
+      let page = 1;
+      let userExists = false;
+      let canValidate = true;
+
+      while (page <= 10 && !userExists) {
+        const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.listUsers({
+          page,
+          perPage,
+        });
+
+        if (lookupError) {
+          console.warn('⚠️  No se pudo validar email en Supabase Admin:', lookupError.message);
+          canValidate = false;
+          break;
+        }
+
+        const users = userLookup?.users || [];
+        userExists = users.some((user) => user.email?.toLowerCase() === email.toLowerCase());
+
+        if (users.length < perPage) {
+          break;
+        }
+
+        page += 1;
+      }
+
+      if (canValidate && !userExists) {
+        throw new BadRequestException('No existe una cuenta asociada a este email.');
+      }
+    }
+
     // Obtener la URL base desde las variables de entorno o usar una por defecto
-    const redirectTo = process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/reset-password';
+    const defaultRedirect =
+      process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/auth/reset-password';
+
+    const allowedRedirects = (process.env.PASSWORD_RESET_ALLOWED_REDIRECTS || '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    const resolvedRedirect = (() => {
+      if (!redirectTo) {
+        return defaultRedirect;
+      }
+
+      try {
+        const target = new URL(redirectTo);
+
+        if (!allowedRedirects.length) {
+          return defaultRedirect;
+        }
+
+        const isAllowed = allowedRedirects.some((allowed) => {
+          try {
+            const allowedUrl = new URL(allowed);
+            return (
+              target.origin === allowedUrl.origin &&
+              target.pathname.startsWith(allowedUrl.pathname || '/')
+            );
+          } catch {
+            return redirectTo.startsWith(allowed);
+          }
+        });
+
+        return isAllowed ? redirectTo : defaultRedirect;
+      } catch {
+        return defaultRedirect;
+      }
+    })();
 
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo,
+      redirectTo: resolvedRedirect,
     });
 
     if (error) {

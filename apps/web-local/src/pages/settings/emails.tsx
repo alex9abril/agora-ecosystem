@@ -139,16 +139,16 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bienvenido a LOCALIA</title>
+  <title>Bienvenido a AGORA</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background-color: #4F46E5; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
-    <h1 style="margin: 0; font-size: 28px;">¡Bienvenido a LOCALIA!</h1>
+    <h1 style="margin: 0; font-size: 28px;">¡Bienvenido a AGORA!</h1>
   </div>
   <div style="background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px;">
     <p style="font-size: 16px; margin-bottom: 20px;">Hola {{user_name}},</p>
     <p style="font-size: 16px; margin-bottom: 20px;">
-      Nos complace darte la bienvenida a LOCALIA. Estamos emocionados de tenerte como parte de nuestra comunidad.
+      Nos complace darte la bienvenida a AGORA. Estamos emocionados de tenerte como parte de nuestra comunidad.
     </p>
     <p style="font-size: 16px; margin-bottom: 20px;">
       Tu cuenta ha sido creada exitosamente. Ahora puedes comenzar a explorar nuestros productos y servicios.
@@ -163,7 +163,7 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
     </p>
     <p style="font-size: 14px; color: #6b7280; margin-top: 10px;">
       Saludos,<br>
-      El equipo de LOCALIA
+      El equipo de AGORA
     </p>
   </div>
 </body>
@@ -234,7 +234,7 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
       </a>
     </div>
     <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
-      Gracias por confiar en LOCALIA.
+      Gracias por confiar en AGORA.
     </p>
   </div>
 </body>
@@ -832,7 +832,7 @@ export default function EmailsPage() {
     return (
       <>
         <Head>
-          <title>Correos - LOCALIA Local</title>
+          <title>Correos - AGORA Local</title>
         </Head>
         <LocalLayout>
           <div className="flex h-full bg-gray-50">
@@ -853,7 +853,7 @@ export default function EmailsPage() {
   return (
     <>
       <Head>
-        <title>Correos - LOCALIA Local</title>
+        <title>Correos - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="flex h-full bg-gray-50">

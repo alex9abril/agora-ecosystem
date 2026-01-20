@@ -197,7 +197,7 @@ export default function SlidersPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Gestión de Sliders - LOCALIA</title>
+        <title>Gestión de Sliders - AGORA</title>
       </Head>
 
       <div className="p-6 max-w-7xl mx-auto">

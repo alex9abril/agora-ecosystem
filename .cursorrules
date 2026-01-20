@@ -2,6 +2,10 @@
 
 ## 🗄️ Reglas para Base de Datos
 
+## 🎨 Reglas UI (Web Admin / Web Local)
+
+- En `web-admin` y `web-local`, los botones principales deben ser negros.
+
 ### IMPORTANTE: Antes de cualquier operación de base de datos
 
 **SIEMPRE** debes revisar los archivos SQL en la carpeta `database/` antes de:

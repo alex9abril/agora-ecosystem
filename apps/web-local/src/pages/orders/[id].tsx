@@ -658,7 +658,7 @@ export default function OrderDetailPage() {
     return (
       <LocalLayout>
         <Head>
-          <title>Detalle de pedido - LOCALIA Local</title>
+          <title>Detalle de pedido - AGORA Local</title>
         </Head>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -674,7 +674,7 @@ export default function OrderDetailPage() {
     return (
       <LocalLayout>
         <Head>
-          <title>Error - LOCALIA Local</title>
+          <title>Error - AGORA Local</title>
         </Head>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -698,7 +698,7 @@ export default function OrderDetailPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Pedido #{order.id.slice(-8).toUpperCase()} - LOCALIA Local</title>
+        <title>Pedido #{order.id.slice(-8).toUpperCase()} - AGORA Local</title>
       </Head>
 
       <div className="w-full h-screen flex flex-col overflow-hidden">

@@ -191,7 +191,7 @@ export default function SettingsPage() {
   return (
     <>
       <Head>
-        <title>Configuración - LOCALIA Local</title>
+        <title>Configuración - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="flex h-full bg-gray-50">

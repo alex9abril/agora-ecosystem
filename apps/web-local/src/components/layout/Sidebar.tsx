@@ -181,7 +181,7 @@ export default function Sidebar() {
       {/* Logo y botón de colapsar */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         {!isCollapsed && (
-          <h2 className="text-sm font-normal text-gray-900">LOCALIA Local</h2>
+          <h2 className="text-sm font-normal text-gray-900">AGORA Local</h2>
         )}
         <button
           onClick={toggleSidebar}
@@ -271,7 +271,7 @@ export default function Sidebar() {
       >
         {/* Logo y botón de colapsar */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-sm font-normal text-gray-900">LOCALIA Local</h2>
+          <h2 className="text-sm font-normal text-gray-900">AGORA Local</h2>
           <button
             onClick={toggleSidebar}
             className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"

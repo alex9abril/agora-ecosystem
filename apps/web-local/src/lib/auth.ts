@@ -37,6 +37,7 @@ export interface AuthResponse {
 
 export interface PasswordResetRequest {
   email: string;
+  redirectTo?: string;
 }
 
 export interface PasswordUpdate {
@@ -75,9 +76,11 @@ export const authService = {
    * Solicitar recuperación de contraseña
    */
   async requestPasswordReset(data: PasswordResetRequest): Promise<{ message: string; success: boolean }> {
+    const redirectTo =
+      data.redirectTo || (typeof window !== 'undefined' ? `${window.location.origin}/auth/reset-password` : undefined);
     return apiRequest('/auth/password/reset', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, redirectTo }),
     });
   },
 

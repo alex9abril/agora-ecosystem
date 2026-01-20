@@ -156,7 +156,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 400, description: 'Email inválido' })
   async requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
-    return this.authService.requestPasswordReset(dto.email);
+    return this.authService.requestPasswordReset(dto.email, dto.redirectTo);
   }
 
   /**

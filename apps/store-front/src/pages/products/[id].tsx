@@ -13,6 +13,7 @@ import BranchAvailabilityGrid from '@/components/BranchAvailabilityGrid';
 import { productsService, Product, ProductBranchAvailability, ProductImage } from '@/lib/products';
 import ProductImageGallery from '@/components/ProductImageGallery';
 import { branchesService } from '@/lib/branches';
+import { categoriesService, ProductCategory } from '@/lib/categories';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStoreContext } from '@/contexts/StoreContext';
@@ -54,6 +55,7 @@ export default function ProductDetailPage() {
   const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
   const [checkingCompatibility, setCheckingCompatibility] = useState(false);
   const [showVehicleSelector, setShowVehicleSelector] = useState(false);
+  const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -118,6 +120,35 @@ export default function ProductDetailPage() {
 
     loadVehicleAndCheckCompatibility();
   }, [product]);
+
+  useEffect(() => {
+    const loadCategoryTrail = async () => {
+      if (!product?.category_id) {
+        setCategoryTrail([]);
+        return;
+      }
+
+      try {
+        const trail: ProductCategory[] = [];
+        let currentId: string | null | undefined = product.category_id;
+        let guard = 0;
+
+        while (currentId && guard < 10) {
+          const category = await categoriesService.getCategoryById(currentId);
+          trail.unshift(category);
+          currentId = category.parent_category_id || null;
+          guard += 1;
+        }
+
+        setCategoryTrail(trail);
+      } catch (error) {
+        console.error('Error cargando ruta de categorías:', error);
+        setCategoryTrail([]);
+      }
+    };
+
+    loadCategoryTrail();
+  }, [product?.category_id]);
 
   // Escuchar cambios en el vehículo seleccionado
   useEffect(() => {
@@ -694,11 +725,35 @@ export default function ProductDetailPage() {
           {/* Botón de regresar */}
           <button
             onClick={() => router.back()}
-            className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+            className="mb-3 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
           >
             <ArrowBackIcon className="w-5 h-5" />
             <span className="text-sm font-medium">Volver</span>
           </button>
+
+          <div className="mb-6 text-sm text-gray-500 flex flex-wrap items-center gap-2">
+            <ContextualLink href="/" className="hover:text-gray-800 transition-colors">
+              Inicio
+            </ContextualLink>
+            <span className="text-gray-400">›</span>
+            {categoryTrail.length > 0 ? (
+              categoryTrail.map((category, index) => (
+                <React.Fragment key={category.id}>
+                  <ContextualLink
+                    href={`/products?categoryId=${category.id}`}
+                    className="hover:text-gray-800 transition-colors"
+                  >
+                    {category.name}
+                  </ContextualLink>
+                  {index < categoryTrail.length - 1 && <span className="text-gray-400">›</span>}
+                </React.Fragment>
+              ))
+            ) : product.category_name ? (
+              <span>{product.category_name}</span>
+            ) : (
+              <span>Sin categoría asignada</span>
+            )}
+          </div>
 
           {/* Leyenda de compatibilidad con vehículo - Solo para productos no alimenticios */}
           {product && product.product_type === 'non_food' && (
@@ -777,7 +832,11 @@ export default function ProductDetailPage() {
 
             {/* Información */}
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+              {product.sku && (
+                <p className="text-sm text-gray-500 mb-4">SKU: {product.sku}</p>
+              )}
+
               
               {/* Precio */}
               <div className="mb-4">

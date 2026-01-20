@@ -124,7 +124,7 @@ export default function BranchesPage() {
   return (
     <>
       <Head>
-        <title>Sucursales - LOCALIA Local</title>
+        <title>Sucursales - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="flex h-full bg-gray-50">

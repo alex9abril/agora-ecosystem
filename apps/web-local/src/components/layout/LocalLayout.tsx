@@ -22,6 +22,14 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
   const [userRole, setUserRole] = useState<'superadmin' | 'admin' | 'operations_staff' | 'kitchen_staff' | null>(null);
   const isValidatingRef = useRef(false);
 
+  const isGlobalModeSelected = () => {
+    if (typeof window === 'undefined') return false;
+    return (
+      localStorage.getItem('agora_global_mode') === 'true' ||
+      localStorage.getItem('localia_global_mode') === 'true'
+    );
+  };
+
   // Si no está autenticado Y ya terminó de cargar completamente, redirigir al login
   // Esto evita redirecciones prematuras mientras se carga desde localStorage
   // IMPORTANTE: useEffect debe llamarse antes de cualquier return condicional
@@ -224,7 +232,7 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
     // Si tiene múltiples tiendas y no hay una seleccionada, mostrar selector
     // PERO solo si el usuario no eligió modo global previamente
     if (availableBusinesses.length > 1 && !selectedBusiness) {
-      const globalMode = typeof window !== 'undefined' ? localStorage.getItem('localia_global_mode') === 'true' : false;
+      const globalMode = isGlobalModeSelected();
       if (!globalMode) {
         return <BusinessSelector />;
       }
@@ -260,7 +268,7 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
   // Si es superadmin y tiene múltiples tiendas sin seleccionar, mostrar selector
   // PERO solo si el usuario no eligió modo global previamente
   if (userRole === 'superadmin' && availableBusinesses.length > 1 && !selectedBusiness) {
-    const globalMode = typeof window !== 'undefined' ? localStorage.getItem('localia_global_mode') === 'true' : false;
+    const globalMode = isGlobalModeSelected();
     if (!globalMode) {
       return <BusinessSelector />;
     }

@@ -46,8 +46,8 @@ export default function UsersSettingsPage() {
   // Form data para crear usuario
   const [createUserData, setCreateUserData] = useState({
     email: '',
-    password: 'Localia1*',
-    confirmPassword: 'Localia1*',
+    password: 'AGORA1*',
+    confirmPassword: 'AGORA1*',
     firstName: '',
     lastName: '',
     phone: '',
@@ -333,7 +333,7 @@ export default function UsersSettingsPage() {
   return (
     <>
       <Head>
-        <title>Usuarios y Permisos - LOCALIA Local</title>
+        <title>Usuarios y Permisos - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">
@@ -748,8 +748,8 @@ export default function UsersSettingsPage() {
                         setShowCreateModal(false);
                         setCreateUserData({
                           email: '',
-                          password: 'Localia1*',
-                          confirmPassword: 'Localia1*',
+                          password: 'AGORA1*',
+                          confirmPassword: 'AGORA1*',
                           firstName: '',
                           lastName: '',
                           phone: '',
@@ -1014,8 +1014,8 @@ export default function UsersSettingsPage() {
                           setShowCreateModal(false);
                           setCreateUserData({
                             email: '',
-                            password: 'Localia1*',
-                            confirmPassword: 'Localia1*',
+                            password: 'AGORA1*',
+                            confirmPassword: 'AGORA1*',
                             firstName: '',
                             lastName: '',
                             phone: '',

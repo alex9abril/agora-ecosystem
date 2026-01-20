@@ -61,7 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Esto requiere acceso al contexto, pero lo hacemos de forma segura
     try {
       // Intentar obtener el negocio seleccionado del localStorage
-      const businessDataStr = localStorage.getItem('localia_selected_business_data');
+      const businessDataStr =
+        localStorage.getItem('agora_selected_business_data') ||
+        localStorage.getItem('localia_selected_business_data');
       if (businessDataStr) {
         const businessData = JSON.parse(businessDataStr);
         // El rol no está en businessData, pero podemos inferir por la ruta

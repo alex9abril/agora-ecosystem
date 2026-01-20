@@ -188,7 +188,7 @@ export default function VehicleSettingsPage() {
   return (
     <>
       <Head>
-        <title>Mi Vehículo - LOCALIA Local</title>
+        <title>Mi Vehículo - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">

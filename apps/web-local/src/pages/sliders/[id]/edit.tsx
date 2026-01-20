@@ -122,7 +122,7 @@ export default function EditSliderPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Editar Slider - LOCALIA</title>
+        <title>Editar Slider - AGORA</title>
       </Head>
 
       <div className="p-6 w-full">
