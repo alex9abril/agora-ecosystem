@@ -1,128 +1,86 @@
-# Marco de Políticas de Seguridad (Agora)
+# Politica Marco de Seguridad de la Informacion (Agora)
 
-## 1) Estrategia de Seguridad de la Información
-- **Objetivo:** Proteger los activos de información y datos de clientes, habilitando los objetivos del negocio.
-- **Alineación:** La estrategia se revisa al menos una vez al año contra objetivos del negocio.
-- **Responsable:** Dirección General con un Responsable de Seguridad delegado (tiempo parcial).
-- **Evidencia:** Este documento y notas de revisión anual.
+## 1. Proposito
+Definir los requisitos minimos de seguridad que aplican a Agora y a sus
+proveedores, considerando que la infraestructura y servicios son subcontratados.
 
-## 2) Políticas de Seguridad (Base)
-- **Objetivo:** Definir requisitos mínimos de seguridad para personas, procesos y tecnología.
-- **Alcance:** Todo el personal, contratistas, proveedores y sistemas usados por Agora.
-- **Aprobación:** Dirección General.
-- **Periodicidad de revisión:** Anual o tras cambios mayores.
+## 2. Alcance
+Todo el personal, contratistas, proveedores y sistemas utilizados por Agora,
+incluyendo entornos de desarrollo, pruebas y produccion.
 
-## 3) Roles y Responsabilidades
-- **Responsable de Seguridad (tiempo parcial):** Dueño de la política, gestión de riesgos, coordinación de incidentes.
-- **Tech Lead:** Requisitos de seguridad en desarrollo y supervisión de proveedores.
-- **Todo el personal/contratistas:** Cumplir políticas y reportar incidentes.
-- **Proveedores:** Cumplir controles de seguridad acordados.
+## 3. Referencias
+- `docs/securitypolicy/estrategia-seguridad.md`
+- `docs/securitypolicy/roles-responsabilidades.md`
+- `docs/securitypolicy/gestion-riesgos.md`
+- `docs/securitypolicy/gestion-vulnerabilidades.md`
+- `docs/securitypolicy/plan-respuesta-incidentes.md`
+- `docs/securitypolicy/politica-respaldos-continuidad.md`
+- `docs/securitypolicy/clasificacion-datos.md`
+- `docs/securitypolicy/monitoreo-logs.md`
+- `docs/securitypolicy/gestion-parches.md`
+- `docs/securitypolicy/control-accesos-identidad.md`
+- `docs/securitypolicy/gestion-proveedores.md`
+- `docs/securitypolicy/plantillas-registros.md`
+- `docs/securitypolicy/glosario.md`
 
-## 4) KPIs de Seguridad
-- **Ejemplos:** % de cumplimiento de parches, tasa de respaldo exitoso, MTTR de incidentes, cobertura de MFA.
-- **Periodicidad:** Revisión trimestral.
-- **Responsable:** Responsable de Seguridad.
+## 4. Gobierno y cumplimiento
+- **Aprobacion:** Direccion General.
+- **Responsable:** Responsable de Seguridad (tiempo parcial).
+- **Revision:** Anual o cuando exista un cambio mayor.
+- **Cumplimiento:** Obligatorio para personal y proveedores con acceso a datos o sistemas.
+- **Excepciones:** Deben documentarse con justificacion y fecha de expiracion.
 
-## 5) Evaluación de Madurez
-- **Objetivo:** Autoevaluación anual contra este cuestionario.
-- **Resultado:** Brechas y plan de mejora.
+## 5. Requisitos minimos por dominio
+### 5.1 Estrategia y madurez
+- Existe estrategia documentada y evaluacion anual de madurez.
+- Evidencia: estrategia y resultados del cuestionario.
 
-## 6) Identificación y Priorización de Riesgos
-- **Método:** Registro de riesgos con probabilidad e impacto.
-- **Periodicidad:** Trimestral o tras cambios mayores.
-- **Responsable:** Responsable de Seguridad con Tech Lead.
+### 5.2 Roles y responsabilidades
+- RACI definido y responsabilidades formales.
+- Evidencia: documento de roles y matriz RACI.
 
-## 7) Plan de Remediación
-- **Objetivo:** Dar seguimiento a acciones, responsables y fechas objetivo.
-- **Periodicidad:** Seguimiento mensual hasta cierre.
+### 5.3 Gestion de riesgos
+- Registro de riesgos con probabilidad, impacto y plan de tratamiento.
+- Evidencia: registro y planes de remediacion.
 
-## 8) Gestión de Vulnerabilidades y Pentesting
-- **Pruebas internas:** Al menos anual o en releases mayores (con proveedor o servicio externo).
-- **Pruebas externas:** Al menos anual para activos públicos.
-- **Seguimiento:** Hallazgos documentados y remediados.
+### 5.4 Gestion de vulnerabilidades
+- Proceso de identificacion, priorizacion y remediacion.
+- Evidencia: registro de hallazgos y fechas objetivo.
 
-## 9) Inventario de Activos Públicos y Superficie de Ataque
-- **Inventario:** Dominios, subdominios, IP públicas y servicios expuestos.
-- **Monitoreo:** Revisión mensual o con herramienta de proveedor.
+### 5.5 Inventario de activos
+- Inventario de activos publicos y activos TI internos.
+- Evidencia: inventarios actualizados y fechas de revision.
 
-## 10) Gestión de Configuración Segura
-- **Objetivo:** Detectar y corregir configuraciones inseguras en activos públicos.
-- **Método:** Guías de hardening del proveedor y revisiones periódicas.
+### 5.6 Control de accesos e identidad
+- Accesos por rol, MFA para cuentas con datos confidenciales y rotacion de credenciales.
+- Evidencia: configuraciones de proveedores y lista de cuentas con MFA.
 
-## 11) Documentación de Hallazgos Externos
-- **Objetivo:** Registrar hallazgos de exposición externa y su remediación.
-- **Responsable:** Responsable de Seguridad.
+### 5.7 Monitoreo y logs
+- Logs de seguridad basicos habilitados y alertas minimas.
+- Evidencia: configuraciones y reportes de alertas.
 
-## 12) Métricas de Reducción de Riesgo Externo
-- **Métrica:** Conteo y severidad de servicios expuestos en el tiempo.
-- **Periodicidad:** Trimestral.
+### 5.8 Incidentes de seguridad
+- Plan de respuesta y bitacora de incidentes.
+- Evidencia: plan y registros de incidentes.
 
-## 13) Programa de Concientización en Seguridad
-- **Objetivo:** Capacitación anual mínima para personal/contratistas.
-- **Temas:** Phishing, higiene de credenciales, manejo de datos.
+### 5.9 Respaldos y continuidad
+- Politica de respaldos con RPO/RTO y pruebas de restauracion.
+- Evidencia: reportes de backups y pruebas.
 
-## 14) Simulaciones de Phishing
-- **Enfoque:** Simulación anual cuando sea viable; alternativa de capacitación si hay limitaciones de presupuesto.
+### 5.10 Concientizacion
+- Programa anual de concientizacion y registro de asistencia.
+- Evidencia: materiales y lista de participantes.
 
-## 15) Clasificación de Datos
-- **Categorías:** Público, Interno, Confidencial (incluye datos de clientes y pagos).
-- **Manejo:** Acceso restringido por rol; almacenamiento solo en proveedores aprobados.
+## 6. Evidencia minima
+Los documentos y registros deben conservarse por al menos 12 meses y estar
+disponibles para auditorias internas o requerimientos de clientes.
 
-## 16) Prevención de Fuga de Información (DLP)
-- **Controles:** MFA, mínimo privilegio, compartición restringida, registro de accesos.
-- **Proveedores:** Preferir proveedores con DLP integrado.
+## 7. Excepciones
+Toda excepcion debe incluir:
+- Justificacion de negocio.
+- Analisis de riesgo.
+- Controles compensatorios.
+- Fecha de expiracion y responsable.
 
-## 17) Monitoreo de Exfiltración
-- **Objetivo:** Monitorear transferencias anómalas con logs del proveedor cuando existan.
-- **Alcance:** Proveedores cloud, repositorios de código, almacenamiento.
-
-## 18) Gestión de Incidentes de Fuga de Información
-- **Proceso:** Registrar, clasificar, contener, notificar y revisar post-incidente.
-- **Responsable:** Responsable de Seguridad con Dirección General.
-
-## 19) Protección de Endpoints
-- **Requisito:** Antivirus/EDR o equivalente en todos los endpoints gestionados.
-- **Responsabilidad:** Cada miembro del equipo y dispositivos administrados por proveedor.
-
-## 20) Visibilidad Centralizada de Seguridad
-- **Objetivo:** Centralizar logs críticos de seguridad cuando sea posible (logs de proveedor cloud).
-- **Responsable:** Tech Lead.
-
-## 21) Alertas por Comportamientos Anómalos
-- **Enfoque:** Uso de alertas del proveedor y notificaciones mínimas automatizadas.
-
-## 22) Oportunidad de Respuesta a Incidentes
-- **Objetivo:** Definir tiempos de respuesta por severidad (ej. críticos <24h).
-- **Seguimiento:** Bitácora de incidentes.
-
-## 23) Documentación de Respuesta a Incidentes
-- **Requisito:** Documentar acciones, decisiones y resultados.
-
-## 24) Medición de Reducción de Impacto
-- **Métrica:** Tiempo de detección/contención e impacto del negocio comparado en el tiempo.
-
-## 25) Inventario de Activos y Monitoreo Centralizado
-- **Inventario:** Sistemas, herramientas SaaS y dispositivos críticos.
-- **Monitoreo:** Disponibilidad básica cuando sea viable.
-
-## 26) Detección Proactiva de Fallas
-- **Enfoque:** Alertas del proveedor cloud y monitoreo de disponibilidad.
-
-## 27) Gestión de Parches y Actualizaciones
-- **Enfoque:** Gestionado por proveedores y actualizaciones automáticas del SO; seguimiento trimestral.
-
-## 28) Evidencia de Mejoras Operativas
-- **Método:** Registrar cambios que redujeron caídas o incidentes.
-
-## 29) Política de Respaldos
-- **Alcance:** Bases de datos, configuración y datos críticos del negocio.
-- **Almacenamiento:** Nube cifrada con control de acceso.
-
-## 30) Respaldos Automáticos
-- **Requisito:** Respaldos automáticos con proveedores cuando exista soporte.
-
-## 31) Pruebas de Restauración
-- **Periodicidad:** Al menos anual o tras cambios mayores.
-
-## 32) Medición de Mejora en Recuperación
-- **Métrica:** Objetivos RPO/RTO y resultados reales de restauración.
+## 8. Revision
+Revision anual o ante cambios significativos en proveedores, tecnologia o riesgos.
