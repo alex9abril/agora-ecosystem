@@ -27,6 +27,18 @@ export class ProductBranchAvailabilityDto {
   @Min(0)
   @Type(() => Number)
   stock?: number | null;
+
+  @ApiPropertyOptional({ description: 'Permite vender sin stock (backorder)', example: true })
+  @IsOptional()
+  @IsBoolean()
+  allow_backorder?: boolean;
+
+  @ApiPropertyOptional({ description: 'Días estimados de surtido cuando no hay stock', example: 2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  backorder_lead_time_days?: number | null;
 }
 
 export class UpdateProductBranchAvailabilityDto {
@@ -51,6 +63,18 @@ export class UpdateProductBranchAvailabilityDto {
   @Min(0)
   @Type(() => Number)
   stock?: number | null;
+
+  @ApiPropertyOptional({ description: 'Permite vender sin stock (backorder)', example: true })
+  @IsOptional()
+  @IsBoolean()
+  allow_backorder?: boolean;
+
+  @ApiPropertyOptional({ description: 'Días estimados de surtido cuando no hay stock', example: 2 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  backorder_lead_time_days?: number | null;
 }
 
 export class BulkUpdateProductBranchAvailabilityDto {

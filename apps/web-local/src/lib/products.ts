@@ -288,6 +288,8 @@ export const productsService = {
       is_enabled: boolean;
       price: number | null;
       stock: number | null;
+      allow_backorder?: boolean;
+      backorder_lead_time_days?: number | null;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
     }>;
   }> {
@@ -299,6 +301,8 @@ export const productsService = {
           is_enabled: boolean;
           price: number | null;
           stock: number | null;
+          allow_backorder?: boolean;
+          backorder_lead_time_days?: number | null;
           is_active?: boolean;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {
@@ -321,6 +325,8 @@ export const productsService = {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
+      allow_backorder?: boolean;
+      backorder_lead_time_days?: number | null;
     }>
   ): Promise<{
     product_id: string;
@@ -330,6 +336,8 @@ export const productsService = {
       is_enabled: boolean;
       price: number | null;
       stock: number | null;
+      allow_backorder?: boolean;
+      backorder_lead_time_days?: number | null;
       is_active: boolean;
     }>;
   }> {
@@ -342,6 +350,8 @@ export const productsService = {
           is_enabled: boolean;
           price: number | null;
           stock: number | null;
+          allow_backorder?: boolean;
+          backorder_lead_time_days?: number | null;
           is_active: boolean;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {

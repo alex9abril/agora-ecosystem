@@ -380,7 +380,18 @@ export default function ProductDetailPage() {
         filterGroupId,
         filterBrandId
       );
-      const availabilities = response.availabilities || [];
+      const availabilities = (response.availabilities || []).map((availability) => ({
+        ...availability,
+        allow_backorder: availability.allow_backorder ?? false,
+        backorder_lead_time_days:
+          availability.backorder_lead_time_days !== undefined
+            ? availability.backorder_lead_time_days
+            : null,
+        backorder_notes:
+          availability.backorder_notes !== undefined
+            ? availability.backorder_notes
+            : null,
+      }));
       console.log('✅ [loadBranchAvailabilities] Availabilities loaded:', {
         count: availabilities.length,
         branches: availabilities.map(a => ({
@@ -500,16 +511,30 @@ export default function ProductDetailPage() {
       );
       if (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined) {
         if (selectedBranch.stock < quantity) {
+          const canBackorder =
+            selectedBranch.allow_backorder &&
+            selectedBranch.stock <= 0;
+          if (canBackorder) {
+            console.log('✅ [handleAddToCart] Stock en 0, backorder permitido');
+          } else {
           console.warn('⚠️ [handleAddToCart] Stock insuficiente:', selectedBranch.stock, 'solicitado:', quantity);
           alert(`Solo hay ${selectedBranch.stock} unidades disponibles en ${selectedBranch.branch_name}`);
           return;
+          }
         }
       }
     } else if (contextType === 'sucursal' && product.branch_stock !== null && product.branch_stock !== undefined) {
       if (product.branch_stock < quantity) {
+        const canBackorder =
+          product.branch_allow_backorder &&
+          product.branch_stock <= 0;
+        if (canBackorder) {
+          console.log('✅ [handleAddToCart] Stock en 0, backorder permitido');
+        } else {
         console.warn('⚠️ [handleAddToCart] Stock insuficiente en sucursal:', product.branch_stock, 'solicitado:', quantity);
         alert(`Solo hay ${product.branch_stock} unidades disponibles`);
         return;
+        }
       }
     }
 
@@ -664,6 +689,9 @@ export default function ProductDetailPage() {
       is_enabled: product.branch_is_enabled ?? true,
       price: product.branch_price ?? product.price ?? 0,
       stock: product.branch_stock ?? null,
+      allow_backorder: product.branch_allow_backorder ?? false,
+      backorder_lead_time_days: product.branch_backorder_lead_time_days ?? null,
+      backorder_notes: product.branch_backorder_notes ?? null,
       is_active: true,
     } as ProductBranchAvailability;
   } else if (contextType !== 'sucursal' && selectedBranchId) {
@@ -872,6 +900,8 @@ export default function ProductDetailPage() {
                 <div className="mb-4">
                   <StockIndicator
                     stock={selectedBranch.stock}
+                    allowBackorder={selectedBranch.allow_backorder}
+                    backorderLeadTimeDays={selectedBranch.backorder_lead_time_days}
                     isEnabled={selectedBranch.is_enabled}
                   />
                 </div>
@@ -880,6 +910,8 @@ export default function ProductDetailPage() {
                 <div className="mb-4">
                   <StockIndicator 
                     stock={product.branch_stock} 
+                    allowBackorder={product.branch_allow_backorder}
+                    backorderLeadTimeDays={product.branch_backorder_lead_time_days}
                     isEnabled={product.branch_is_enabled}
                   />
                 </div>
@@ -1065,9 +1097,17 @@ export default function ProductDetailPage() {
                 }
                 
                 // Hay sucursal seleccionada
+                const hasInsufficientStock = !!(
+                  selectedBranch &&
+                  selectedBranch.stock !== null &&
+                  selectedBranch.stock !== undefined &&
+                  selectedBranch.stock < quantity &&
+                  !(selectedBranch.allow_backorder && selectedBranch.stock <= 0)
+                );
+
                 return (
                   <>
-                    {selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity && (
+                    {hasInsufficientStock && selectedBranch && (
                       <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
                         Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
                       </div>
@@ -1078,7 +1118,7 @@ export default function ProductDetailPage() {
                       disabled={
                         product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
                         addingToCart ||
-                        !!(selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
+                        hasInsufficientStock
                       }
                     >
                       {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}

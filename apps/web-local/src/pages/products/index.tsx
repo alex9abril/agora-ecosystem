@@ -414,6 +414,11 @@ export default function ProductsPage() {
           );
           return {
             ...avail,
+            allow_backorder: avail.allow_backorder ?? false,
+            backorder_lead_time_days:
+              avail.backorder_lead_time_days !== undefined
+                ? avail.backorder_lead_time_days
+                : null,
             is_active:
               avail.is_active !== undefined
                 ? avail.is_active
@@ -446,6 +451,12 @@ export default function ProductsPage() {
           stock:
             avail.stock !== null && avail.stock !== undefined
               ? avail.stock
+              : null,
+          allow_backorder: avail.allow_backorder || false,
+          backorder_lead_time_days:
+            avail.backorder_lead_time_days !== null &&
+            avail.backorder_lead_time_days !== undefined
+              ? avail.backorder_lead_time_days
               : null,
         }));
 
@@ -686,6 +697,12 @@ export default function ProductsPage() {
                 stock:
                   avail.stock !== null && avail.stock !== undefined
                     ? avail.stock
+                    : null,
+                allow_backorder: avail.allow_backorder || false,
+                backorder_lead_time_days:
+                  avail.backorder_lead_time_days !== null &&
+                  avail.backorder_lead_time_days !== undefined
+                    ? avail.backorder_lead_time_days
                     : null,
               }));
 
@@ -1683,6 +1700,8 @@ export interface ProductFormProps {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
+    allow_backorder?: boolean;
+    backorder_lead_time_days?: number | null;
   }>;
   setBranchAvailabilities: React.Dispatch<
     React.SetStateAction<
@@ -1692,6 +1711,8 @@ export interface ProductFormProps {
         is_enabled: boolean;
         price: number | null;
         stock: number | null;
+        allow_backorder?: boolean;
+        backorder_lead_time_days?: number | null;
       }>
     >
   >;
@@ -3842,6 +3863,8 @@ interface BranchAvailabilitySectionProps {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
+    allow_backorder?: boolean;
+    backorder_lead_time_days?: number | null;
     is_active?: boolean; // Estado activo/inactivo de la sucursal
   }>;
   setBranchAvailabilities: React.Dispatch<
@@ -3852,6 +3875,8 @@ interface BranchAvailabilitySectionProps {
         is_enabled: boolean;
         price: number | null;
         stock: number | null;
+        allow_backorder?: boolean;
+        backorder_lead_time_days?: number | null;
         is_active?: boolean;
       }>
     >
@@ -3887,6 +3912,8 @@ function BranchAvailabilitySection({
         is_enabled: false,
         price: null,
         stock: null,
+        allow_backorder: false,
+        backorder_lead_time_days: null,
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
       }));
       setBranchAvailabilities(initialAvailabilities);
@@ -3923,6 +3950,30 @@ function BranchAvailabilitySection({
     );
   };
 
+  const handleBackorderToggle = (branchId: string) => {
+    setBranchAvailabilities((prev) =>
+      prev.map((avail) =>
+        avail.branch_id === branchId
+          ? { ...avail, allow_backorder: !avail.allow_backorder }
+          : avail,
+      ),
+    );
+  };
+
+  const handleBackorderLeadTimeChange = (branchId: string, value: string) => {
+    const numDays = value === "" ? null : parseInt(value, 10);
+    setBranchAvailabilities((prev) =>
+      prev.map((avail) =>
+        avail.branch_id === branchId
+          ? {
+              ...avail,
+              backorder_lead_time_days: isNaN(numDays!) ? null : numDays,
+            }
+          : avail,
+      ),
+    );
+  };
+
   // Asegurar que todas las sucursales estén en la lista
   // Sincronizar branchAvailabilities con availableBusinesses
   useEffect(() => {
@@ -3940,6 +3991,8 @@ function BranchAvailabilitySection({
             is_enabled: false,
             price: null,
             stock: null,
+            allow_backorder: false,
+            backorder_lead_time_days: null,
             is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
           }));
 
@@ -3969,6 +4022,8 @@ function BranchAvailabilitySection({
         is_enabled: false,
         price: null,
         stock: null,
+        allow_backorder: false,
+        backorder_lead_time_days: null,
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
       }
     );
@@ -4002,6 +4057,12 @@ function BranchAvailabilitySection({
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
                     Stock
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Backorder
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
+                    Días estimados
                   </th>
                 </tr>
               </thead>
@@ -4093,6 +4154,48 @@ function BranchAvailabilitySection({
                           }
                           placeholder="Sin límite"
                           disabled={!availability.is_enabled || !isBranchActive}
+                          className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                          title={
+                            !isBranchActive ? "La sucursal está inactiva" : ""
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={availability.allow_backorder || false}
+                          onChange={() =>
+                            handleBackorderToggle(availability.branch_id)
+                          }
+                          disabled={!availability.is_enabled || !isBranchActive}
+                          className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={
+                            !isBranchActive ? "La sucursal está inactiva" : ""
+                          }
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <input
+                          type="number"
+                          min="0"
+                          value={
+                            availability.backorder_lead_time_days !== null &&
+                            availability.backorder_lead_time_days !== undefined
+                              ? availability.backorder_lead_time_days
+                              : ""
+                          }
+                          onChange={(e) =>
+                            handleBackorderLeadTimeChange(
+                              availability.branch_id,
+                              e.target.value,
+                            )
+                          }
+                          placeholder="Días"
+                          disabled={
+                            !availability.is_enabled ||
+                            !availability.allow_backorder ||
+                            !isBranchActive
+                          }
                           className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
                           title={
                             !isBranchActive ? "La sucursal está inactiva" : ""

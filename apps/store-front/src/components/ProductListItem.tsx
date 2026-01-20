@@ -26,6 +26,12 @@ export default function ProductListItem({ product, onAddToCart }: ProductListIte
   const isAvailable = contextType === 'sucursal' 
     ? (product.branch_is_enabled !== false && product.is_available)
     : product.is_available;
+  const isBackorder = contextType === 'sucursal'
+    && product.branch_is_enabled !== false
+    && product.branch_allow_backorder
+    && product.branch_stock !== null
+    && product.branch_stock !== undefined
+    && product.branch_stock <= 0;
 
   // Usar primary_image_url si existe, sino usar image_url como fallback
   const displayImageUrl = product.primary_image_url || product.image_url;
@@ -63,7 +69,7 @@ export default function ProductListItem({ product, onAddToCart }: ProductListIte
                 )}
                 {isAvailable && contextType === 'sucursal' && product.branch_stock !== null && product.branch_stock !== undefined && (
                   <div className="absolute bottom-2 right-2 bg-green-500 text-white px-2 py-1 rounded-md text-xs font-semibold shadow-md z-10">
-                    {product.branch_stock > 0 ? `${product.branch_stock} disponibles` : 'Agotado'}
+                    {isBackorder ? 'backorder' : product.branch_stock > 0 ? `${product.branch_stock} disponibles` : 'Agotado'}
                   </div>
                 )}
               </>
@@ -118,6 +124,11 @@ export default function ProductListItem({ product, onAddToCart }: ProductListIte
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
                     Disponible
+                  </span>
+                )}
+                {isBackorder && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                    backorder
                   </span>
                 )}
                 {isAvailable && contextType === 'sucursal' && product.branch_stock !== null && product.branch_stock !== undefined && product.branch_stock > 0 && product.branch_stock <= 5 && (

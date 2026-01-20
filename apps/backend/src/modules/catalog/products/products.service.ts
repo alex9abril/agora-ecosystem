@@ -1520,6 +1520,8 @@ export class ProductsService {
           COALESCE(pba.is_enabled, FALSE) AS is_enabled,
           pba.price,
           pba.stock,
+          COALESCE(pba.allow_backorder, FALSE) AS allow_backorder,
+          pba.backorder_lead_time_days,
           -- Construir dirección completa desde core.addresses si existe
           CONCAT_WS(', ',
             NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
@@ -1550,6 +1552,11 @@ export class ProductsService {
           is_enabled: row.is_enabled || false,
           price: row.price !== null && row.price !== undefined ? parseFloat(row.price.toString()) : null,
           stock: row.stock !== null && row.stock !== undefined ? parseInt(row.stock.toString(), 10) : null,
+          allow_backorder: row.allow_backorder === true,
+          backorder_lead_time_days:
+            row.backorder_lead_time_days !== null && row.backorder_lead_time_days !== undefined
+              ? parseInt(row.backorder_lead_time_days.toString(), 10)
+              : null,
           is_active: row.branch_is_active !== undefined ? row.branch_is_active : true,
         })),
       };
@@ -1590,6 +1597,8 @@ export class ProductsService {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
+      allow_backorder?: boolean;
+      backorder_lead_time_days?: number | null;
     }>
   ) {
     if (!dbPool) {
@@ -1624,14 +1633,16 @@ export class ProductsService {
           // Si está habilitada, insertar o actualizar
           const upsertQuery = `
             INSERT INTO catalog.product_branch_availability (
-              product_id, branch_id, is_enabled, price, stock, is_active, updated_at
+              product_id, branch_id, is_enabled, price, stock, allow_backorder, backorder_lead_time_days, is_active, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, CURRENT_TIMESTAMP)
             ON CONFLICT (product_id, branch_id)
             DO UPDATE SET
               is_enabled = EXCLUDED.is_enabled,
               price = EXCLUDED.price,
               stock = EXCLUDED.stock,
+              allow_backorder = EXCLUDED.allow_backorder,
+              backorder_lead_time_days = EXCLUDED.backorder_lead_time_days,
               is_active = TRUE,
               updated_at = CURRENT_TIMESTAMP
           `;
@@ -1642,6 +1653,8 @@ export class ProductsService {
             true, // Siempre true cuando está habilitada
             availability.price ?? null,
             availability.stock ?? null,
+            availability.allow_backorder ?? false,
+            availability.backorder_lead_time_days ?? null,
           ]);
         } else {
           // Si está deshabilitada, eliminar el registro o marcarlo como inactivo

@@ -57,6 +57,8 @@ export default function ProductDetailPage() {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
+    allow_backorder?: boolean;
+    backorder_lead_time_days?: number | null;
   }>>([]);
   const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] = useState(false);
   
@@ -98,7 +100,16 @@ export default function ProductDetailPage() {
     try {
       setLoadingBranchAvailabilities(true);
       const response = await productsService.getProductBranchAvailability(productId);
-      setBranchAvailabilities(response.availabilities || []);
+      setBranchAvailabilities(
+        (response.availabilities || []).map((availability) => ({
+          ...availability,
+          allow_backorder: availability.allow_backorder ?? false,
+          backorder_lead_time_days:
+            availability.backorder_lead_time_days !== undefined
+              ? availability.backorder_lead_time_days
+              : null,
+        })),
+      );
     } catch (err: any) {
       console.error('Error cargando disponibilidad por sucursal:', err);
       setBranchAvailabilities([]);
@@ -379,6 +390,12 @@ export default function ProductDetailPage() {
               is_enabled: avail.is_enabled || false,
               price: avail.price !== null && avail.price !== undefined ? avail.price : null,
               stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
+              allow_backorder: avail.allow_backorder || false,
+              backorder_lead_time_days:
+                avail.backorder_lead_time_days !== null &&
+                avail.backorder_lead_time_days !== undefined
+                  ? avail.backorder_lead_time_days
+                  : null,
             }));
           
           if (availabilitiesToSave.length > 0) {

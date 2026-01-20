@@ -26,6 +26,13 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
   const isAvailable = contextType === 'sucursal' 
     ? (product.branch_is_enabled !== false && product.is_available)
     : product.is_available;
+  const isBackorder = contextType === 'sucursal'
+    && product.branch_is_enabled !== false
+    && product.branch_allow_backorder
+    && product.branch_stock !== null
+    && product.branch_stock !== undefined
+    && product.branch_stock <= 0;
+  const availabilityLabel = isBackorder ? 'backorder' : 'disponible';
 
   // Usar primary_image_url si existe, sino usar image_url como fallback
   const displayImageUrl = product.primary_image_url || product.image_url;
@@ -101,10 +108,15 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
           <div className="text-xs text-gray-600">
             <div>
               <span className="font-semibold">Recoger</span>{' '}
-              {branchData?.name ? `en ${branchData.name}` : 'disponible'}
+              {branchData?.name ? `en ${branchData.name}` : availabilityLabel}
+              {branchData?.name && isBackorder && (
+                <span className="text-gray-500">{` ${availabilityLabel}`}</span>
+              )}
             </div>
-            <div className="font-semibold text-gray-800">Envío a domicilio</div>
-            <div className="text-gray-500">disponible</div>
+            <div className="text-gray-800">
+              <span className="font-semibold">Envío a domicilio</span>{' '}
+              <span className="text-gray-500">{availabilityLabel}</span>
+            </div>
           </div>
         </div>
       </div>
