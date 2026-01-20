@@ -116,7 +116,7 @@ export default function NewSliderPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Crear Slider - AGORA</title>
+        <title>Crear Slider - LOCALIA</title>
       </Head>
 
       <div className="p-6 w-full">

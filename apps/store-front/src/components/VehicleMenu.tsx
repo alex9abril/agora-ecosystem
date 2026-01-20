@@ -10,8 +10,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { vehicleBrandsService, VehicleBrand } from '@/lib/vehicle-brands';
 import { userVehiclesService, UserVehicle, CreateUserVehicleDto } from '@/lib/user-vehicles';
 import { apiRequest } from '@/lib/api';
-import { branchesService } from '@/lib/branches';
-import { useStoreContext } from '@/contexts/StoreContext';
 import CloseIcon from '@mui/icons-material/Close';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import AddIcon from '@mui/icons-material/Add';
@@ -72,14 +70,12 @@ interface VehicleSpec {
 
 export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: VehicleMenuProps) {
   const { isAuthenticated } = useAuth();
-  const { contextType, branchId } = useStoreContext();
   const [view, setView] = useState<'list' | 'form'>('list'); // 'list' para lista de vehículos, 'form' para formulario
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Datos de catálogo
   const [brands, setBrands] = useState<VehicleBrand[]>([]);
-  const [allowedBrandIds, setAllowedBrandIds] = useState<string[] | null>(null);
   const [models, setModels] = useState<VehicleModel[]>([]);
   const [years, setYears] = useState<VehicleYear[]>([]);
   const [specs, setSpecs] = useState<VehicleSpec[]>([]);
@@ -95,10 +91,6 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
     vehicle_brand_id: '',
   });
   const [nickname, setNickname] = useState('');
-  const displayBrands = allowedBrandIds
-    ? brands.filter((brand) => allowedBrandIds.includes(brand.id))
-    : brands;
-  const singleBrandId = displayBrands.length === 1 ? displayBrands[0].id : null;
 
   // Cargar datos al abrir el panel
   useEffect(() => {
@@ -128,23 +120,6 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
       // Cargar marcas
       const brandsData = await vehicleBrandsService.getBrands();
       setBrands(brandsData);
-
-      // Si estamos en contexto de sucursal, limitar marcas a las asignadas
-      if (contextType === 'sucursal' && branchId) {
-        try {
-          const branchBrands = await branchesService.getBranchVehicleBrands(branchId);
-          if (branchBrands.length > 0) {
-            setAllowedBrandIds(branchBrands.map((brand) => brand.brand_id));
-          } else {
-            setAllowedBrandIds(null);
-          }
-        } catch (err: any) {
-          console.warn('Error obteniendo marcas de la sucursal:', err);
-          setAllowedBrandIds(null);
-        }
-      } else {
-        setAllowedBrandIds(null);
-      }
 
       // Cargar vehículos según el estado de autenticación
       if (isAuthenticated) {
@@ -260,12 +235,6 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
       vehicle_spec_id: specId,
     });
   };
-
-  useEffect(() => {
-    if (!singleBrandId) return;
-    if (selectedVehicle.vehicle_brand_id === singleBrandId) return;
-    handleBrandChange(singleBrandId);
-  }, [singleBrandId, selectedVehicle.vehicle_brand_id, handleBrandChange]);
 
   const handleSave = async () => {
     if (!selectedVehicle.vehicle_brand_id) {
@@ -708,11 +677,10 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
                     <select
                       value={selectedVehicle.vehicle_brand_id}
                       onChange={(e) => handleBrandChange(e.target.value)}
-                      disabled={!!singleBrandId}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10 disabled:bg-gray-100 disabled:text-gray-700"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10"
                     >
-                      {!singleBrandId && <option value="">Marca</option>}
-                      {displayBrands.map((brand) => (
+                      <option value="">Marca</option>
+                      {brands.map((brand) => (
                         <option key={brand.id} value={brand.id}>
                           {brand.name}
                         </option>

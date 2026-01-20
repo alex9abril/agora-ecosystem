@@ -101,6 +101,15 @@ export class WalletService {
     }
 
     try {
+      console.log('💰 [WALLET SERVICE] Iniciando acreditación:', {
+        userId,
+        amount: creditDto.amount,
+        reason: creditDto.reason,
+        order_id: creditDto.order_id,
+        order_item_id: creditDto.order_item_id,
+        createdByUserId,
+        createdByRole,
+      });
 
       const result = await dbPool.query(
         `SELECT commerce.credit_wallet(
@@ -124,6 +133,12 @@ export class WalletService {
           createdByRole,
         ]
       );
+
+      console.log('💰 [WALLET SERVICE] Resultado de la función SQL:', {
+        hasResult: !!result.rows[0],
+        resultKeys: result.rows[0] ? Object.keys(result.rows[0]) : [],
+        rawResult: result.rows[0],
+      });
 
       // La función retorna un registro completo de wallet_transactions
       // PostgreSQL puede retornar el tipo compuesto de diferentes formas dependiendo del driver
@@ -164,6 +179,12 @@ export class WalletService {
         console.error('❌ [WALLET SERVICE] Transacción inválida:', transaction);
         throw new ServiceUnavailableException('La función credit_wallet no retornó una transacción válida');
       }
+
+      console.log('✅ [WALLET SERVICE] Transacción creada exitosamente:', {
+        transaction_id: transaction.id,
+        amount: transaction.amount,
+        balance_after: transaction.balance_after,
+      });
 
       return transaction;
     } catch (error: any) {

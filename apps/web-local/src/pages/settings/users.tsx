@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 interface Business {
   business_id: string;
@@ -45,8 +46,8 @@ export default function UsersSettingsPage() {
   // Form data para crear usuario
   const [createUserData, setCreateUserData] = useState({
     email: '',
-    password: 'AGORA1*',
-    confirmPassword: 'AGORA1*',
+    password: 'Localia1*',
+    confirmPassword: 'Localia1*',
     firstName: '',
     lastName: '',
     phone: '',
@@ -332,7 +333,7 @@ export default function UsersSettingsPage() {
   return (
     <>
       <Head>
-        <title>Usuarios y Permisos - AGORA Local</title>
+        <title>Usuarios y Permisos - LOCALIA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">
@@ -747,8 +748,8 @@ export default function UsersSettingsPage() {
                         setShowCreateModal(false);
                         setCreateUserData({
                           email: '',
-                          password: 'AGORA1*',
-                          confirmPassword: 'AGORA1*',
+                          password: 'Localia1*',
+                          confirmPassword: 'Localia1*',
                           firstName: '',
                           lastName: '',
                           phone: '',
@@ -1013,8 +1014,8 @@ export default function UsersSettingsPage() {
                           setShowCreateModal(false);
                           setCreateUserData({
                             email: '',
-                            password: 'AGORA1*',
-                            confirmPassword: 'AGORA1*',
+                            password: 'Localia1*',
+                            confirmPassword: 'Localia1*',
                             firstName: '',
                             lastName: '',
                             phone: '',
@@ -1055,6 +1056,9 @@ export default function UsersSettingsPage() {
               </div>
             </div>
           )}
+              </div>
+            </div>
+          </div>
         </div>
       </LocalLayout>
     </>

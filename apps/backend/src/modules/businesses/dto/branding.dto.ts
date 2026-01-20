@@ -287,6 +287,7 @@ export class BrandingDto {
 
   @ApiPropertyOptional({
     description: 'JavaScript personalizado (opcional)',
+    example: 'console.log("Custom JS");',
   })
   @IsOptional()
   @IsString()

@@ -14,7 +14,6 @@ import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { taxesService } from '@/lib/taxes';
 import { formatPrice } from '@/lib/format';
 import { apiRequest } from '@/lib/api';
-import { productsService } from '@/lib/products';
 import { walletService, Wallet } from '@/lib/wallet';
 import { logisticsService, type Address as LogisticsAddress, type Parcel } from '@/lib/logistics';
 import { branchesService } from '@/lib/branches';
@@ -78,7 +77,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { cart, loading: cartLoading, refreshCart } = useCart();
   const { isAuthenticated, signIn, signUp, user } = useAuth();
-  const { contextType, slug, getContextualUrl, groupId, branchId } = useStoreContext();
+  const { contextType, slug, getContextualUrl } = useStoreContext();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -88,7 +87,6 @@ export default function CheckoutPage() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
-  const [backorderByItemId, setBackorderByItemId] = useState<Record<string, { isBackorder: boolean; leadTimeDays?: number | null }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
@@ -120,52 +118,6 @@ export default function CheckoutPage() {
     receiver_name: '', // Nombre de quien recibe (obligatorio)
     receiver_phone: '', // Teléfono de quien recibe (opcional)
   });
-
-  useEffect(() => {
-    if (!cart?.items || cart.items.length === 0) {
-      setBackorderByItemId({});
-      return;
-    }
-
-    let isCancelled = false;
-    const loadBackorderInfo = async () => {
-      const entries = await Promise.all(
-        cart.items.map(async (item) => {
-          try {
-            const product = await productsService.getProduct(
-              item.product_id,
-              item.business_id || undefined,
-            );
-            const stock = product.branch_stock;
-            const allowBackorder = product.branch_allow_backorder;
-            const isBackorder =
-              !!allowBackorder &&
-              stock !== null &&
-              stock !== undefined &&
-              stock <= 0;
-            return [
-              item.id,
-              {
-                isBackorder,
-                leadTimeDays: product.branch_backorder_lead_time_days ?? null,
-              },
-            ] as const;
-          } catch (err) {
-            return [item.id, { isBackorder: false }] as const;
-          }
-        }),
-      );
-
-      if (!isCancelled) {
-        setBackorderByItemId(Object.fromEntries(entries));
-      }
-    };
-
-    loadBackorderInfo();
-    return () => {
-      isCancelled = true;
-    };
-  }, [cart?.items?.map((item) => `${item.id}:${item.business_id || ''}`).join(',')]);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   
   // Estados para facturación
@@ -678,13 +630,6 @@ export default function CheckoutPage() {
         setCurrentStep('shipping');
         await loadAddresses();
       } else {
-        const currentPath = router.asPath.split('?')[0];
-        const contextMatch = currentPath.match(/^\/(grupo|sucursal|brand)\/([^/]+)/);
-        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://agoramp.mx';
-        const appUrl = contextMatch
-          ? `${origin}/${contextMatch[1]}/${contextMatch[2]}`
-          : `${origin}/`;
-
         await signUp({
           email: authEmail,
           password: authPassword,
@@ -692,9 +637,6 @@ export default function CheckoutPage() {
           lastName: authLastName,
           phone: authPhone,
           role: 'client',
-          appUrl,
-          businessId: branchId || undefined,
-          businessGroupId: groupId || undefined,
         });
         // Esperar a que el estado de autenticación se actualice
         // Aumentar el número de intentos y el tiempo de espera para dar más tiempo a la sesión
@@ -2805,19 +2747,6 @@ export default function CheckoutPage() {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
                               <p className="text-xs text-gray-500 mt-1">Cantidad: {item.quantity}</p>
-                              {backorderByItemId[item.id]?.isBackorder && (
-                                <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-800 mt-1"
-                                  title={
-                                    backorderByItemId[item.id]?.leadTimeDays !== null &&
-                                    backorderByItemId[item.id]?.leadTimeDays !== undefined
-                                      ? `Surtido estimado: ${backorderByItemId[item.id]?.leadTimeDays} días`
-                                      : undefined
-                                  }
-                                >
-                                  backorder
-                                </span>
-                              )}
                               <p className="text-sm font-medium text-gray-900 mt-1">
                                 {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
                               </p>

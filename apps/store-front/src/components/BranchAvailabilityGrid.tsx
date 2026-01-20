@@ -54,11 +54,7 @@ export default function BranchAvailabilityGrid({
           const hasCustomPrice = availability.price !== null && availability.price !== undefined;
           const hasDiscount = hasCustomPrice && displayPrice < globalPrice;
           const stockText = availability.stock !== null && availability.stock !== undefined
-            ? availability.stock === 0 && availability.allow_backorder
-              ? 'backorder'
-              : availability.stock === 0
-              ? 'Agotado'
-              : `${availability.stock} unidades disponibles`
+            ? `${availability.stock} unidades disponibles`
             : 'Disponible';
           
           const isBestOption = index === 0;

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { businessService, BusinessGroup, CreateBusinessGroupData } from '@/lib/business';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function StoreSettingsPage() {
   const router = useRouter();
@@ -246,26 +247,12 @@ export default function StoreSettingsPage() {
   return (
     <>
       <Head>
-        <title>Configuración de Grupo Empresarial - AGORA Local</title>
+        <title>Configuración de Grupo Empresarial - LOCALIA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <button
-              onClick={() => router.push('/settings')}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a Configuración
-            </button>
-            <h1 className="text-3xl font-bold text-gray-900">Configuración de Grupo Empresarial</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Gestiona la información de tu grupo empresarial
-            </p>
-          </div>
+        <div className="flex h-full bg-gray-50">
+          {/* Sidebar: Categorías */}
+          <SettingsSidebar />
 
           {/* Contenido principal */}
           <div className="flex-1 min-w-0 overflow-y-auto">
@@ -558,6 +545,7 @@ export default function StoreSettingsPage() {
               </form>
               </>
             )}
+            </div>
           </div>
         </div>
       </LocalLayout>

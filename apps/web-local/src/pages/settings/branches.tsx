@@ -124,7 +124,7 @@ export default function BranchesPage() {
   return (
     <>
       <Head>
-        <title>Sucursales - AGORA Local</title>
+        <title>Sucursales - LOCALIA Local</title>
       </Head>
       <LocalLayout>
         <div className="flex h-full bg-gray-50">
@@ -312,20 +312,26 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
               </div>
             </div>
             <div className="ml-4 flex items-center gap-2">
-              {onBranding && (
-                <button
-                  onClick={() => onBranding(branch)}
-                  className="px-3 py-1.5 text-sm text-purple-700 bg-purple-50 rounded hover:bg-purple-100 transition-colors"
-                >
-                  Personalizar
-                </button>
-              )}
+              <button
+                onClick={() => onBranding(branch)}
+                className="px-3 py-1.5 text-sm text-purple-700 bg-purple-50 rounded hover:bg-purple-100 transition-colors"
+              >
+                Personalizar
+              </button>
               <button
                 onClick={() => onEdit(branch)}
                 className="px-3 py-1.5 text-sm text-gray-700 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
               >
                 Editar
               </button>
+              {onBranding && (
+                <button
+                  onClick={() => onBranding(branch)}
+                  className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
+                >
+                  Personalizar
+                </button>
+              )}
             </div>
           </div>
         </div>

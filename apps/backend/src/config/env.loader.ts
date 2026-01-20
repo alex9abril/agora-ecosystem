@@ -44,6 +44,10 @@ if (process.env.NODE_ENV !== 'production') {
     console.warn('   Error:', result.error.message);
     console.warn('   Rutas intentadas:', possiblePaths);
   } else {
+    console.log('✅ Variables de entorno cargadas desde:', envPath);
+    console.log('   SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ Configurado' : '❌ Faltante');
+    console.log('   SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Configurado' : '❌ Faltante');
+    console.log('   SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Configurado' : '❌ Faltante');
   }
 }
 

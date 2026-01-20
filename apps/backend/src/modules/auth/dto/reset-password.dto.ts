@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 
 export class RequestPasswordResetDto {
   @ApiProperty({
@@ -8,18 +8,6 @@ export class RequestPasswordResetDto {
   })
   @IsEmail({}, { message: 'Email inválido' })
   email: string;
-
-  @ApiProperty({
-    description: 'URL de redirección después de solicitar reset',
-    example: 'https://admin.tu-dominio.com/auth/reset-password',
-    required: false,
-  })
-  @IsOptional()
-  @IsUrl(
-    { require_tld: false, require_protocol: true },
-    { message: 'redirectTo debe ser una URL válida' }
-  )
-  redirectTo?: string;
 }
 
 export class UpdatePasswordDto {

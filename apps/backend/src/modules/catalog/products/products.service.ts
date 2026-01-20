@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException, NotFoundException, BadRequestException } from '@nestjs/common';
+﻿import { Injectable, ServiceUnavailableException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ListProductsDto } from './dto/list-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -96,6 +96,12 @@ export class ProductsService {
       const { data: urlData } = supabaseAdmin.storage
         .from(this.BUCKET_NAME)
         .getPublicUrl(filePath);
+
+      console.log('✅ Imagen subida desde data URI:', {
+        productId,
+        filePath,
+        publicUrl: urlData.publicUrl,
+      });
 
       return urlData.publicUrl;
     } catch (error: any) {
@@ -495,8 +501,32 @@ export class ProductsService {
     `;
 
     try {
+      // Log de la consulta SQL para debugging (solo en desarrollo)
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔍 [findAll] SQL Query:', sqlQuery.substring(0, 1000));
+        console.log('🔍 [findAll] Query Params:', queryParams);
+      }
+      
       const result = await pool.query(sqlQuery, queryParams);
       const data = result.rows || [];
+
+      // Debug: Verificar qué está devolviendo la query para los primeros productos
+      if (data.length > 0 && process.env.NODE_ENV !== 'production') {
+        const productosConImagen = data.filter(r => r.primary_image_path).length;
+        console.log('🔍 [findAll] Resultado SQL - Primeros productos:', {
+          total: data.length,
+          productosConImagen,
+          productosSinImagen: data.length - productosConImagen,
+          primerosProductos: data.slice(0, 5).map(r => ({
+            id: r.id,
+            name: r.name?.substring(0, 30),
+            primary_image_path: r.primary_image_path, // Mostrar completo, no truncar
+            primary_image_path_length: r.primary_image_path?.length || 0,
+            isUrl: r.primary_image_path?.startsWith('http') || false,
+            image_url: r.image_url,
+          })),
+        });
+      }
 
       const mappedData = data.map((row, index) => {
           // Parsear variant_groups estructuradas
@@ -583,6 +613,13 @@ export class ProductsService {
               }
               
               // Debug logging SIEMPRE (no solo para los primeros 3) para ver qué está pasando
+              console.log('🔍 [findAll] Procesando primary_image_path:', {
+                productId: row.id,
+                originalPath: originalPath?.substring(0, 200),
+                finalPath,
+                isUrl: originalPath?.startsWith('http') || false,
+                finalPathIsUrl: finalPath?.startsWith('http') || false,
+              });
               
               // Solo generar URL si tenemos un path relativo válido (no empieza con http)
               // IMPORTANTE: Verificar que finalPath NO sea una URL completa antes de pasarlo a getPublicUrl
@@ -595,6 +632,13 @@ export class ProductsService {
                       .from(this.BUCKET_NAME)
                       .getPublicUrl(finalPath);
                     primaryImageUrl = urlData.publicUrl;
+                    
+                    console.log('✅ [findAll] URL generada correctamente:', {
+                      productId: row.id,
+                      finalPath,
+                      bucket: this.BUCKET_NAME,
+                      primaryImageUrl: primaryImageUrl?.substring(0, 200),
+                    });
                   } else {
                     console.error('❌ [findAll] finalPath contiene caracteres de URL:', {
                       productId: row.id,
@@ -614,6 +658,7 @@ export class ProductsService {
                   finalPath: finalPath?.substring(0, 200) || null,
                   isUrl: originalPath?.startsWith('http') || false,
                   finalPathIsUrl: finalPath?.startsWith('http') || false,
+                  hasSlash: finalPath?.includes('/') || false,
                 });
               }
             } catch (error) {
@@ -634,15 +679,16 @@ export class ProductsService {
             sku: row.sku || null,
             description: row.description,
             image_url: row.image_url,
-            primary_image_url: primaryImageUrl,
+            primary_image_url: primaryImageUrl, // URL de la imagen principal de product_images
             price: parseFloat(row.price),
             product_type: row.product_type || 'refaccion',
             category_id: row.category_id,
             category_name: row.category_name,
+            category_display_order: row.category_display_order || 999,
             is_available: row.is_available,
             is_featured: row.is_featured,
             variants: variantGroupsLegacy,
-            variant_groups: variantGroups,
+            variant_groups: variantGroups, // Usar variantes estructuradas
             nutritional_info: row.nutritional_info,
             allergens: row.allergens || [],
             requires_prescription: row.requires_prescription || false,
@@ -654,6 +700,22 @@ export class ProductsService {
             updated_at: row.updated_at,
           };
         });
+
+      // Debug: Verificar que primary_image_url se está incluyendo en la respuesta
+      if (mappedData.length > 0 && process.env.NODE_ENV !== 'production') {
+        const productosConImagen = mappedData.filter(p => p.primary_image_url).length;
+        console.log('🔍 [findAll] Resumen de productos con imágenes:', {
+          total: mappedData.length,
+          conImagen: productosConImagen,
+          sinImagen: mappedData.length - productosConImagen,
+          primerosProductos: mappedData.slice(0, 3).map(p => ({
+            id: p.id,
+            name: p.name?.substring(0, 30),
+            hasPrimaryImageUrl: !!p.primary_image_url,
+            primary_image_url: p.primary_image_url?.substring(0, 80) + '...',
+          })),
+        });
+      }
 
       return {
         data: mappedData,
@@ -783,22 +845,34 @@ export class ProductsService {
       // Parsear variant_groups antiguo (JSONB) para compatibilidad
       let variantGroupsLegacy = null;
       if (row.variants) {
+        console.log('🔍 Campo variants encontrado:', {
+          type: typeof row.variants,
+          isArray: Array.isArray(row.variants),
+          value: JSON.stringify(row.variants).substring(0, 200),
+        });
+        
         if (typeof row.variants === 'string') {
           try {
             variantGroupsLegacy = JSON.parse(row.variants);
+            console.log('✅ Variants parseado desde string');
           } catch (e) {
             console.error('❌ Error parseando variants JSON:', e);
             variantGroupsLegacy = null;
           }
         } else {
           variantGroupsLegacy = row.variants;
+          console.log('✅ Variants ya es objeto/array');
         }
+      } else {
+        console.log('⚠️  No hay campo variants en row');
       }
 
       // Convertir formato legacy a formato estructurado si es necesario
       let variantGroups = variantGroupsStructured;
       
       if (variantGroups.length === 0 && variantGroupsLegacy) {
+        console.log('🔄 Convirtiendo formato legacy a estructurado...');
+        
         // El formato legacy puede venir como array de objetos con estructura:
         // [{ name: "Grupo", variants: [{ name: "Variante", ... }], ... }]
         if (Array.isArray(variantGroupsLegacy)) {
@@ -865,7 +939,14 @@ export class ProductsService {
           });
         }
         
+        console.log('✅ Variantes legacy convertidas:', variantGroups.length);
       }
+
+      console.log('🔍 Variantes encontradas:', {
+        structured: variantGroupsStructured.length,
+        legacy: variantGroupsLegacy ? (Array.isArray(variantGroupsLegacy) ? variantGroupsLegacy.length : Object.keys(variantGroupsLegacy).length) : 0,
+        final: variantGroups.length,
+      });
 
       // Generar URL pública de la imagen principal si existe
       let primaryImageUrl: string | undefined = undefined;
@@ -1030,6 +1111,7 @@ export class ProductsService {
           if (createProductDto.variant_groups.length === 0) {
             // Array vacío: guardar como '[]'
             variantsData = '[]';
+            console.log('🔍 [CREATE] variant_groups está vacío, guardando como []');
           } else {
             // Sanitizar grupos para asegurar que cada uno tenga su array de variants
             const sanitizedGroups = createProductDto.variant_groups.map((group: any) => {
@@ -1041,12 +1123,16 @@ export class ProductsService {
               return sanitizedGroup;
             });
             variantsData = JSON.stringify(sanitizedGroups);
+            console.log('🔍 [CREATE] Guardando variant_groups (sanitizado):', variantsData);
+            console.log('🔍 [CREATE] Estructura original:', JSON.stringify(createProductDto.variant_groups, null, 2));
           }
         } else if (createProductDto.variant_groups) {
           variantsData = JSON.stringify(createProductDto.variant_groups);
+          console.log('🔍 [CREATE] Guardando variant_groups (no array):', variantsData);
         }
       } else if (createProductDto.variants) {
         variantsData = JSON.stringify(createProductDto.variants);
+        console.log('🔍 [CREATE] Guardando variants (deprecated):', variantsData);
       }
 
       // Manejar allergens: convertir array a formato PostgreSQL TEXT[]
@@ -1091,10 +1177,31 @@ export class ProductsService {
         createProductDto.requires_pharmacist_validation || false,
       ];
 
+      console.log('🔍 [CREATE] Intentando crear producto con parámetros:', {
+        business_id: queryParams[0],
+        name: queryParams[1],
+        sku: queryParams[2],
+        sku_original: createProductDto.sku,
+        product_type: queryParams[6],
+        allergens: queryParams[12],
+        allergens_type: typeof queryParams[12],
+        allergens_is_array: Array.isArray(queryParams[12]),
+      });
+
       const result = await pool.query(sqlQuery, queryParams);
       
       // Verificar qué se guardó en la base de datos
       const savedRow = result.rows[0];
+      console.log('🔍 [CREATE] Producto guardado:', {
+        id: savedRow.id,
+        name: savedRow.name,
+        sku: savedRow.sku,
+        sku_type: typeof savedRow.sku,
+        variants: savedRow.variants ? 'present' : 'null',
+      });
+      if (savedRow.variants) {
+        console.log('🔍 [CREATE] Variants como string:', JSON.stringify(savedRow.variants));
+      }
 
       return this.findOne(result.rows[0].id);
     } catch (error: any) {
@@ -1104,6 +1211,18 @@ export class ProductsService {
         detail: error.detail,
         hint: error.hint,
         position: error.position,
+        internalPosition: error.internalPosition,
+        internalQuery: error.internalQuery,
+        where: error.where,
+        schema: error.schema,
+        table: error.table,
+        column: error.column,
+        dataType: error.dataType,
+        constraint: error.constraint,
+        file: error.file,
+        line: error.line,
+        routine: error.routine,
+        stack: error.stack,
       });
       // También loguear el error completo
       console.error('❌ Error completo:', error);
@@ -1115,6 +1234,14 @@ export class ProductsService {
    * Actualizar un producto
    */
   async update(id: string, updateProductDto: UpdateProductDto) {
+    console.log('🔵 [UPDATE] ============================================');
+    console.log('🔵 [UPDATE] Iniciando actualización de producto');
+    console.log('🔵 [UPDATE] Product ID:', id);
+    console.log('🔵 [UPDATE] DTO recibido:', JSON.stringify(updateProductDto, null, 2));
+    console.log('🔵 [UPDATE] variant_groups:', updateProductDto.variant_groups);
+    console.log('🔵 [UPDATE] variant_groups type:', typeof updateProductDto.variant_groups);
+    console.log('🔵 [UPDATE] variant_groups isArray:', Array.isArray(updateProductDto.variant_groups));
+    console.log('🔵 [UPDATE] variant_groups length:', Array.isArray(updateProductDto.variant_groups) ? updateProductDto.variant_groups.length : 'N/A');
     
     if (!dbPool) {
       console.error('❌ [UPDATE] No hay conexión a base de datos');
@@ -1131,10 +1258,13 @@ export class ProductsService {
 
     try {
       // Verificar que el producto existe
+      console.log('🔵 [UPDATE] Verificando que el producto existe...');
       const existing = await this.findOne(id);
+      console.log('🔵 [UPDATE] Producto encontrado:', existing.id);
 
       // Validar que la categoría existe si se proporciona
       if (updateProductDto.category_id && updateProductDto.category_id.trim() !== '') {
+        console.log('🔵 [UPDATE] Validando category_id...');
         // Validar formato UUID
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(updateProductDto.category_id)) {
@@ -1148,9 +1278,11 @@ export class ProductsService {
         if (categoryCheck.rows.length === 0) {
           throw new BadRequestException('La categoría especificada no existe');
         }
+        console.log('🔵 [UPDATE] category_id válido');
       }
 
       // Construir query de actualización dinámicamente
+      console.log('🔵 [UPDATE] Construyendo query de actualización...');
 
       // Validar que el SKU sea único dentro del negocio si se proporciona y es diferente al actual
       if (updateProductDto.sku !== undefined) {
@@ -1158,6 +1290,13 @@ export class ProductsService {
         const skuValue = updateProductDto.sku && updateProductDto.sku.trim() !== '' 
           ? updateProductDto.sku.trim() 
           : null;
+        
+        console.log('🔵 [UPDATE] Actualizando SKU:', {
+          product_id: id,
+          sku_original: updateProductDto.sku,
+          sku_normalized: skuValue,
+        });
+        
         if (skuValue) {
           const skuCheck = await pool.query(
             'SELECT id FROM catalog.products WHERE business_id = $1 AND sku = $2 AND id != $3',
@@ -1192,8 +1331,10 @@ export class ProductsService {
 
         // Si es un data URI, subirlo a Supabase Storage y obtener la URL pública
         if (imageUrl && this.isDataUri(imageUrl)) {
+          console.log('🔵 [UPDATE] Detectado data URI, subiendo a Supabase Storage...');
           try {
             imageUrl = await this.uploadImageFromDataUri(id, imageUrl);
+            console.log('✅ [UPDATE] Imagen subida exitosamente, URL pública:', imageUrl);
           } catch (error: any) {
             console.error('❌ [UPDATE] Error subiendo imagen desde data URI:', error);
             // Si falla la subida, mantener la imagen existente del producto
@@ -1201,9 +1342,11 @@ export class ProductsService {
             const existingProduct = await this.findOne(id);
             if (existingProduct.image_url && !this.isDataUri(existingProduct.image_url)) {
               // Si el producto ya tiene una URL válida (no data URI), mantenerla
+              console.log('⚠️ [UPDATE] Manteniendo imagen existente debido a error en subida');
               imageUrl = existingProduct.image_url;
             } else {
               // Si no hay imagen válida, usar null
+              console.log('⚠️ [UPDATE] No se pudo subir imagen y no hay imagen previa, usando null');
               imageUrl = null;
             }
             // No lanzar error, solo loguear y continuar con la imagen existente o null
@@ -1250,12 +1393,14 @@ export class ProductsService {
       }
 
       if (updateProductDto.variant_groups !== undefined) {
+        console.log('🔵 [UPDATE] Procesando variant_groups...');
         // Manejar variant_groups de la misma manera que en create
         let variantGroupsValue: string | null = null;
         if (Array.isArray(updateProductDto.variant_groups)) {
           if (updateProductDto.variant_groups.length === 0) {
             // Array vacío: guardar como '[]'
             variantGroupsValue = '[]';
+            console.log('🔵 [UPDATE] variant_groups está vacío, guardando como []');
           } else {
             // Sanitizar grupos para asegurar que cada uno tenga su array de variants
             const sanitizedGroups = updateProductDto.variant_groups.map((group: any) => {
@@ -1267,16 +1412,20 @@ export class ProductsService {
               return sanitizedGroup;
             });
             variantGroupsValue = JSON.stringify(sanitizedGroups);
+            console.log('🔵 [UPDATE] Guardando variant_groups (sanitizado):', variantGroupsValue);
           }
         } else if (updateProductDto.variant_groups) {
           // Si no es array pero tiene valor, stringificarlo
           variantGroupsValue = JSON.stringify(updateProductDto.variant_groups);
+          console.log('🔵 [UPDATE] Guardando variant_groups (no array):', variantGroupsValue);
         }
         // Usar casting a JSONB solo si el valor no es null
         if (variantGroupsValue !== null) {
           updateFields.push(`variants = $${paramIndex}::jsonb`);
+          console.log('🔵 [UPDATE] Agregando variants con casting JSONB, valor:', variantGroupsValue);
         } else {
           updateFields.push(`variants = $${paramIndex}`);
+          console.log('🔵 [UPDATE] Agregando variants sin casting (null)');
         }
         updateValues.push(variantGroupsValue);
         paramIndex++;
@@ -1344,6 +1493,7 @@ export class ProductsService {
       }
 
       if (updateFields.length === 0) {
+        console.log('🔵 [UPDATE] No hay campos para actualizar, retornando producto existente');
         return existing;
       }
 
@@ -1359,18 +1509,37 @@ export class ProductsService {
         RETURNING *
       `;
 
+      console.log('🔵 [UPDATE] Query SQL construida:');
+      console.log('🔵 [UPDATE] SQL:', sqlQuery);
+      console.log('🔵 [UPDATE] Valores a actualizar:', JSON.stringify(updateValues, null, 2));
+      console.log('🔵 [UPDATE] Número de parámetros:', paramIndex);
+      console.log('🔵 [UPDATE] Campos a actualizar:', updateFields);
       
+      console.log('🔵 [UPDATE] Ejecutando query SQL...');
       const result = await pool.query(sqlQuery, updateValues);
+      console.log('🔵 [UPDATE] Query ejecutada exitosamente');
       
       // Verificar qué se guardó en la base de datos
       if (result.rows.length > 0) {
         const savedRow = result.rows[0];
+        console.log('🔵 [UPDATE] Producto actualizado exitosamente:', {
+          id: savedRow.id,
+          name: savedRow.name,
+          sku: savedRow.sku,
+          sku_type: typeof savedRow.sku,
+          variants: savedRow.variants ? 'present' : 'null',
+        });
+        if (savedRow.variants) {
+          console.log('🔵 [UPDATE] Variants guardados:', JSON.stringify(savedRow.variants, null, 2));
+        }
       } else {
         console.warn('⚠️ [UPDATE] No se actualizó ningún producto. El ID puede no existir:', id);
         throw new NotFoundException(`Producto con ID ${id} no encontrado`);
       }
       
+      console.log('🔵 [UPDATE] Obteniendo producto actualizado...');
       const updatedProduct = await this.findOne(id);
+      console.log('🔵 [UPDATE] ============================================');
       return updatedProduct;
     } catch (error: any) {
       console.error('❌ [UPDATE] ============================================');
@@ -1511,7 +1680,7 @@ export class ProductsService {
       // Consulta: obtener TODAS las sucursales (activas e inactivas) con su disponibilidad
       // Usar LEFT JOIN para incluir sucursales sin disponibilidad configurada
       const sqlQuery = `
-        SELECT DISTINCT
+        SELECT
           b.id AS branch_id,
           b.name AS branch_name,
           b.slug AS branch_slug,
@@ -1520,8 +1689,8 @@ export class ProductsService {
           COALESCE(pba.is_enabled, FALSE) AS is_enabled,
           pba.price,
           pba.stock,
-          COALESCE(pba.allow_backorder, FALSE) AS allow_backorder,
-          pba.backorder_lead_time_days,
+          pca.classification_ids,
+          pca.classification_list,
           -- Construir dirección completa desde core.addresses si existe
           CONCAT_WS(', ',
             NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
@@ -1536,6 +1705,17 @@ export class ProductsService {
           AND pba.product_id = $1
           AND COALESCE(pba.is_active, TRUE) = TRUE
         LEFT JOIN core.addresses a ON b.address_id = a.id
+        LEFT JOIN LATERAL (
+          SELECT 
+            ARRAY_REMOVE(ARRAY_AGG(pca.classification_id ORDER BY pc.name), NULL) AS classification_ids,
+            json_agg(
+              json_build_object('id', pc.id, 'name', pc.name, 'slug', pc.slug)
+              ORDER BY pc.name
+            ) AS classification_list
+          FROM catalog.product_classification_assignments pca
+          JOIN catalog.product_classifications pc ON pc.id = pca.classification_id
+          WHERE pca.product_id = $1 AND pca.business_id = b.id
+        ) pca ON TRUE
         ${whereClause}
         ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.is_active DESC, b.name ASC
       `;
@@ -1552,12 +1732,9 @@ export class ProductsService {
           is_enabled: row.is_enabled || false,
           price: row.price !== null && row.price !== undefined ? parseFloat(row.price.toString()) : null,
           stock: row.stock !== null && row.stock !== undefined ? parseInt(row.stock.toString(), 10) : null,
-          allow_backorder: row.allow_backorder === true,
-          backorder_lead_time_days:
-            row.backorder_lead_time_days !== null && row.backorder_lead_time_days !== undefined
-              ? parseInt(row.backorder_lead_time_days.toString(), 10)
-              : null,
           is_active: row.branch_is_active !== undefined ? row.branch_is_active : true,
+          classification_ids: Array.isArray(row.classification_ids) ? row.classification_ids : [],
+          classifications: Array.isArray(row.classification_list) ? row.classification_list : [],
         })),
       };
     } catch (error: any) {
@@ -1597,8 +1774,8 @@ export class ProductsService {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
-      allow_backorder?: boolean;
-      backorder_lead_time_days?: number | null;
+      classification_id?: string | null;
+      classification_ids?: string[] | null;
     }>
   ) {
     if (!dbPool) {
@@ -1618,31 +1795,53 @@ export class ProductsService {
     try {
       await client.query('BEGIN');
 
-      for (const availability of availabilities) {
+for (const availability of availabilities) {
         // Verificar que la sucursal existe
         const branchCheck = await client.query(
           'SELECT id FROM core.businesses WHERE id = $1 AND is_active = TRUE',
-          [availability.branch_id]
+          [availability.branch_id],
         );
         if (branchCheck.rows.length === 0) {
           console.warn(`⚠️ Sucursal ${availability.branch_id} no encontrada o inactiva, omitiendo...`);
           continue; // Continuar con la siguiente en lugar de fallar
         }
 
+        const classificationIds: string[] = Array.isArray(availability.classification_ids)
+          ? availability.classification_ids
+          : availability.classification_id
+            ? [availability.classification_id]
+            : [];
+
+        if (classificationIds.length > 0) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          for (const cid of classificationIds) {
+            if (!uuidRegex.test(cid)) {
+              throw new BadRequestException('El classification_id debe ser un UUID válido');
+            }
+
+            const classificationCheck = await client.query(
+              'SELECT id FROM catalog.product_classifications WHERE id = $1 AND business_id = $2',
+              [cid, availability.branch_id],
+            );
+
+            if (classificationCheck.rows.length === 0) {
+              throw new BadRequestException('La clasificación no existe para esta sucursal');
+            }
+          }
+        }
+
         if (availability.is_enabled) {
           // Si está habilitada, insertar o actualizar
           const upsertQuery = `
             INSERT INTO catalog.product_branch_availability (
-              product_id, branch_id, is_enabled, price, stock, allow_backorder, backorder_lead_time_days, is_active, updated_at
+              product_id, branch_id, is_enabled, price, stock, is_active, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP)
             ON CONFLICT (product_id, branch_id)
             DO UPDATE SET
               is_enabled = EXCLUDED.is_enabled,
               price = EXCLUDED.price,
               stock = EXCLUDED.stock,
-              allow_backorder = EXCLUDED.allow_backorder,
-              backorder_lead_time_days = EXCLUDED.backorder_lead_time_days,
               is_active = TRUE,
               updated_at = CURRENT_TIMESTAMP
           `;
@@ -1653,9 +1852,25 @@ export class ProductsService {
             true, // Siempre true cuando está habilitada
             availability.price ?? null,
             availability.stock ?? null,
-            availability.allow_backorder ?? false,
-            availability.backorder_lead_time_days ?? null,
           ]);
+
+          // Actualizar clasificación por sucursal (se mantiene una sola por sucursal)
+          const deleteAssignmentsQuery = `
+            DELETE FROM catalog.product_classification_assignments
+            WHERE product_id = $1 AND business_id = $2
+          `;
+          await client.query(deleteAssignmentsQuery, [productId, availability.branch_id]);
+
+          if (classificationIds.length > 0) {
+            const insertAssignmentQuery = `
+              INSERT INTO catalog.product_classification_assignments (product_id, classification_id, business_id)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (product_id, classification_id, business_id) DO NOTHING
+            `;
+            for (const cid of classificationIds) {
+              await client.query(insertAssignmentQuery, [productId, cid, availability.branch_id]);
+            }
+          }
         } else {
           // Si está deshabilitada, eliminar el registro o marcarlo como inactivo
           const deleteQuery = `
@@ -1663,6 +1878,15 @@ export class ProductsService {
             WHERE product_id = $1 AND branch_id = $2
           `;
           await client.query(deleteQuery, [productId, availability.branch_id]);
+
+          // Eliminar también cualquier clasificación asignada en la sucursal
+          await client.query(
+            `
+            DELETE FROM catalog.product_classification_assignments
+            WHERE product_id = $1 AND business_id = $2
+          `,
+            [productId, availability.branch_id],
+          );
         }
       }
 
@@ -1687,4 +1911,5 @@ export class ProductsService {
     }
   }
 }
+
 

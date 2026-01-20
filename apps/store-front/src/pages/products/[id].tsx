@@ -13,7 +13,6 @@ import BranchAvailabilityGrid from '@/components/BranchAvailabilityGrid';
 import { productsService, Product, ProductBranchAvailability, ProductImage } from '@/lib/products';
 import ProductImageGallery from '@/components/ProductImageGallery';
 import { branchesService } from '@/lib/branches';
-import { categoriesService, ProductCategory } from '@/lib/categories';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStoreContext } from '@/contexts/StoreContext';
@@ -27,6 +26,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
 import { checkProductCompatibility } from '@/lib/product-compatibility';
+import VehicleSelectorDialog from '@/components/VehicleSelectorDialog';
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -53,9 +53,7 @@ export default function ProductDetailPage() {
   const [currentVehicle, setCurrentVehicle] = useState<any | null>(null);
   const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
   const [checkingCompatibility, setCheckingCompatibility] = useState(false);
-  const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
-  const shouldCheckCompatibility =
-    !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false);
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -82,7 +80,7 @@ export default function ProductDetailPage() {
       }
 
       // Solo verificar compatibilidad para productos no alimenticios/medicina (refacciones/accesorios)
-      if (!shouldCheckCompatibility) {
+      if (product.product_type !== 'non_food') {
         setCurrentVehicle(null);
         setIsCompatible(null);
         return;
@@ -121,39 +119,10 @@ export default function ProductDetailPage() {
     loadVehicleAndCheckCompatibility();
   }, [product]);
 
-  useEffect(() => {
-    const loadCategoryTrail = async () => {
-      if (!product?.category_id) {
-        setCategoryTrail([]);
-        return;
-      }
-
-      try {
-        const trail: ProductCategory[] = [];
-        let currentId: string | null | undefined = product.category_id;
-        let guard = 0;
-
-        while (currentId && guard < 10) {
-          const category = await categoriesService.getCategoryById(currentId);
-          trail.unshift(category);
-          currentId = category.parent_category_id || null;
-          guard += 1;
-        }
-
-        setCategoryTrail(trail);
-      } catch (error) {
-        console.error('Error cargando ruta de categorías:', error);
-        setCategoryTrail([]);
-      }
-    };
-
-    loadCategoryTrail();
-  }, [product?.category_id]);
-
   // Escuchar cambios en el vehículo seleccionado
   useEffect(() => {
     // Solo reaccionar a cambios de vehículo cuando el producto es no alimenticio (refacción/accesorio)
-    if (!shouldCheckCompatibility) {
+    if (!product || product.product_type !== 'non_food') {
       return;
     }
 
@@ -380,18 +349,7 @@ export default function ProductDetailPage() {
         filterGroupId,
         filterBrandId
       );
-      const availabilities = (response.availabilities || []).map((availability) => ({
-        ...availability,
-        allow_backorder: availability.allow_backorder ?? false,
-        backorder_lead_time_days:
-          availability.backorder_lead_time_days !== undefined
-            ? availability.backorder_lead_time_days
-            : null,
-        backorder_notes:
-          availability.backorder_notes !== undefined
-            ? availability.backorder_notes
-            : null,
-      }));
+      const availabilities = response.availabilities || [];
       console.log('✅ [loadBranchAvailabilities] Availabilities loaded:', {
         count: availabilities.length,
         branches: availabilities.map(a => ({
@@ -511,30 +469,16 @@ export default function ProductDetailPage() {
       );
       if (selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined) {
         if (selectedBranch.stock < quantity) {
-          const canBackorder =
-            selectedBranch.allow_backorder &&
-            selectedBranch.stock <= 0;
-          if (canBackorder) {
-            console.log('✅ [handleAddToCart] Stock en 0, backorder permitido');
-          } else {
           console.warn('⚠️ [handleAddToCart] Stock insuficiente:', selectedBranch.stock, 'solicitado:', quantity);
           alert(`Solo hay ${selectedBranch.stock} unidades disponibles en ${selectedBranch.branch_name}`);
           return;
-          }
         }
       }
     } else if (contextType === 'sucursal' && product.branch_stock !== null && product.branch_stock !== undefined) {
       if (product.branch_stock < quantity) {
-        const canBackorder =
-          product.branch_allow_backorder &&
-          product.branch_stock <= 0;
-        if (canBackorder) {
-          console.log('✅ [handleAddToCart] Stock en 0, backorder permitido');
-        } else {
         console.warn('⚠️ [handleAddToCart] Stock insuficiente en sucursal:', product.branch_stock, 'solicitado:', quantity);
         alert(`Solo hay ${product.branch_stock} unidades disponibles`);
         return;
-        }
       }
     }
 
@@ -689,9 +633,6 @@ export default function ProductDetailPage() {
       is_enabled: product.branch_is_enabled ?? true,
       price: product.branch_price ?? product.price ?? 0,
       stock: product.branch_stock ?? null,
-      allow_backorder: product.branch_allow_backorder ?? false,
-      backorder_lead_time_days: product.branch_backorder_lead_time_days ?? null,
-      backorder_notes: product.branch_backorder_notes ?? null,
       is_active: true,
     } as ProductBranchAvailability;
   } else if (contextType !== 'sucursal' && selectedBranchId) {
@@ -750,32 +691,17 @@ export default function ProductDetailPage() {
       </Head>
       <StoreLayout>
         <div className="max-w-6xl mx-auto">
-          <div className="mt-6 mb-6 text-sm text-gray-500 flex flex-wrap items-center gap-2">
-            <ContextualLink href="/" className="hover:text-gray-800 transition-colors">
-              Inicio
-            </ContextualLink>
-            <span className="text-gray-400">›</span>
-            {categoryTrail.length > 0 ? (
-              categoryTrail.map((category, index) => (
-                <React.Fragment key={category.id}>
-                  <ContextualLink
-                    href={`/products?categoryId=${category.id}`}
-                    className="hover:text-gray-800 transition-colors"
-                  >
-                    {category.name}
-                  </ContextualLink>
-                  {index < categoryTrail.length - 1 && <span className="text-gray-400">›</span>}
-                </React.Fragment>
-              ))
-            ) : product.category_name ? (
-              <span>{product.category_name}</span>
-            ) : (
-              <span>Sin categoría asignada</span>
-            )}
-          </div>
+          {/* Botón de regresar */}
+          <button
+            onClick={() => router.back()}
+            className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowBackIcon className="w-5 h-5" />
+            <span className="text-sm font-medium">Volver</span>
+          </button>
 
           {/* Leyenda de compatibilidad con vehículo - Solo para productos no alimenticios */}
-          {shouldCheckCompatibility && (
+          {product && product.product_type === 'non_food' && (
             <>
               {!currentVehicle ? (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
@@ -787,11 +713,7 @@ export default function ProductDetailPage() {
                 <p className="text-sm text-blue-700">
                   Para verificar si este producto es compatible con tu vehículo,{' '}
                   <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('open-vehicle-panel'));
-                      }
-                    }}
+                    onClick={() => setShowVehicleSelector(true)}
                     className="text-blue-600 hover:text-blue-800 underline font-medium"
                   >
                     selecciona un vehículo
@@ -855,11 +777,7 @@ export default function ProductDetailPage() {
 
             {/* Información */}
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
-              {product.sku && (
-                <p className="text-sm text-gray-500 mb-4">SKU: {product.sku}</p>
-              )}
-
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
               
               {/* Precio */}
               <div className="mb-4">
@@ -900,8 +818,6 @@ export default function ProductDetailPage() {
                 <div className="mb-4">
                   <StockIndicator
                     stock={selectedBranch.stock}
-                    allowBackorder={selectedBranch.allow_backorder}
-                    backorderLeadTimeDays={selectedBranch.backorder_lead_time_days}
                     isEnabled={selectedBranch.is_enabled}
                   />
                 </div>
@@ -910,8 +826,6 @@ export default function ProductDetailPage() {
                 <div className="mb-4">
                   <StockIndicator 
                     stock={product.branch_stock} 
-                    allowBackorder={product.branch_allow_backorder}
-                    backorderLeadTimeDays={product.branch_backorder_lead_time_days}
                     isEnabled={product.branch_is_enabled}
                   />
                 </div>
@@ -1097,17 +1011,9 @@ export default function ProductDetailPage() {
                 }
                 
                 // Hay sucursal seleccionada
-                const hasInsufficientStock = !!(
-                  selectedBranch &&
-                  selectedBranch.stock !== null &&
-                  selectedBranch.stock !== undefined &&
-                  selectedBranch.stock < quantity &&
-                  !(selectedBranch.allow_backorder && selectedBranch.stock <= 0)
-                );
-
                 return (
                   <>
-                    {hasInsufficientStock && selectedBranch && (
+                    {selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity && (
                       <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
                         Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
                       </div>
@@ -1118,7 +1024,7 @@ export default function ProductDetailPage() {
                       disabled={
                         product.variant_groups?.some(g => g.is_required && !selectedVariants[g.variant_group_id]) ||
                         addingToCart ||
-                        hasInsufficientStock
+                        !!(selectedBranch && selectedBranch.stock !== null && selectedBranch.stock !== undefined && selectedBranch.stock < quantity)
                       }
                     >
                       {addingToCart ? 'Agregando...' : 'Agregar al Carrito'}
@@ -1147,6 +1053,57 @@ export default function ProductDetailPage() {
           </Alert>
         </Snackbar>
 
+        {/* Selector de vehículos */}
+        <VehicleSelectorDialog
+          open={showVehicleSelector}
+          onClose={() => {
+            setShowVehicleSelector(false);
+            // Recargar vehículo actual después de cerrar el modal
+            const vehicle = getSelectedVehicle();
+            setCurrentVehicle(vehicle);
+            
+            // Si hay vehículo y producto, verificar compatibilidad
+            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
+              checkProductCompatibility(product.id, {
+                brandId: vehicle.vehicle_brand_id,
+                modelId: vehicle.vehicle_model_id || undefined,
+                yearId: vehicle.vehicle_year_id || undefined,
+                specId: vehicle.vehicle_spec_id || undefined,
+              }).then((compatible) => {
+                setIsCompatible(compatible);
+              }).catch((error) => {
+                console.error('Error verificando compatibilidad:', error);
+                setIsCompatible(null);
+              });
+            } else {
+              setIsCompatible(null);
+            }
+          }}
+          onVehicleSelected={async (vehicle) => {
+            setCurrentVehicle(vehicle);
+            
+            // Si hay vehículo y producto, verificar compatibilidad
+            if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
+              try {
+                setCheckingCompatibility(true);
+                const compatible = await checkProductCompatibility(product.id, {
+                  brandId: vehicle.vehicle_brand_id,
+                  modelId: vehicle.vehicle_model_id || undefined,
+                  yearId: vehicle.vehicle_year_id || undefined,
+                  specId: vehicle.vehicle_spec_id || undefined,
+                });
+                setIsCompatible(compatible);
+              } catch (error) {
+                console.error('Error verificando compatibilidad:', error);
+                setIsCompatible(null);
+              } finally {
+                setCheckingCompatibility(false);
+              }
+            } else {
+              setIsCompatible(null);
+            }
+          }}
+        />
       </>
     );
   }

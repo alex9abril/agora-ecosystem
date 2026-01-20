@@ -443,7 +443,8 @@ export class SkydropxService {
               service: rate.provider_service_name || rate.service || rate.provider_service_code || '',
               price: total,
               currency: rate.currency_code || rate.currency || 'MXN',
-              days,
+              estimated_delivery: rate.estimated_delivery || undefined,
+              estimated_days: days,
             };
           });
       } else {
@@ -572,6 +573,7 @@ export class SkydropxService {
         trackingNumber: attributes.tracking_number || shipmentData.tracking_number || 'NO ENCONTRADO',
         labelUrl: attributes.label_url || shipmentData.label_url || 'NO ENCONTRADO',
         workflowStatus: attributes.workflow_status || shipmentData.workflow_status || 'NO ENCONTRADO',
+        fullResponse: JSON.stringify(response.data, null, 2),
       });
 
       let shipment: SkydropxShipment = {
@@ -997,6 +999,7 @@ export class SkydropxService {
           description: attributes.description || attributes.message || 'Evento de seguimiento',
           location: attributes.location || attributes.city || null,
           timestamp: attributes.date || attributes.timestamp || attributes.created_at || new Date().toISOString(),
+          date: attributes.date || attributes.timestamp || attributes.created_at,
         };
       });
 

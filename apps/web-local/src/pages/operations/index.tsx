@@ -155,7 +155,7 @@ export default function OperationsPage() {
   return (
     <>
       <Head>
-        <title>Operaciones - AGORA</title>
+        <title>Operaciones - Localia</title>
       </Head>
       <OperationsLayout>
         <div className="w-full h-full flex flex-col">

@@ -64,6 +64,17 @@ export class ApiLoggingInterceptor implements NestInterceptor {
       endpoint: request.url.split('?')[0], // Sin query params
       statusCode: response.statusCode,
       responseTimeMs,
+      requestSizeBytes: request.headers['content-length']
+        ? parseInt(request.headers['content-length'] as string)
+        : undefined,
+      responseSizeBytes: responseBody
+        ? JSON.stringify(responseBody).length
+        : undefined,
+      ipAddress: (request.ip || request.headers['x-forwarded-for'] || request.connection.remoteAddress) as string,
+      userAgent: request.headers['user-agent'],
+      requestBody: this.shouldLogBody(request.method) ? request.body : undefined,
+      responseBody: this.shouldLogBody(request.method) ? responseBody : undefined,
+      errorMessage,
     });
   }
 

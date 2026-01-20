@@ -29,8 +29,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { KarlopayModule } from './modules/payments/karlopay/karlopay.module';
 import { LogisticsModule } from './modules/logistics/logistics.module';
 import { LandingSlidersModule } from './modules/commerce/landing-sliders/landing-sliders.module';
-import { EmailTemplatesModule } from './modules/email-templates/email-templates.module';
-import { EmailModule } from './modules/email/email.module';
+import { ProductClassificationsModule } from './modules/catalog/product-classifications/product-classifications.module';
 
 @Module({
   imports: [
@@ -56,8 +55,7 @@ import { EmailModule } from './modules/email/email.module';
     KarlopayModule,
     LogisticsModule,
     LandingSlidersModule,
-    EmailTemplatesModule,
-    EmailModule,
+    ProductClassificationsModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

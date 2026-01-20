@@ -16,6 +16,10 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 // Debug: Verificar variables (solo en desarrollo)
 if (process.env.NODE_ENV !== 'production') {
+  console.log('🔍 Debug Supabase Config:');
+  console.log('  SUPABASE_URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '❌ NO CONFIGURADO');
+  console.log('  SUPABASE_ANON_KEY:', supabaseAnonKey ? '✅ Configurado' : '❌ NO CONFIGURADO');
+  console.log('  SUPABASE_SERVICE_ROLE_KEY:', supabaseServiceRoleKey ? '✅ Configurado' : '❌ NO CONFIGURADO');
 }
 
 // Validación más flexible: solo lanza error si se intenta usar sin configurar

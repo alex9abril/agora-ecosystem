@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
-import agoraLogoBlack from '@/images/agora_logo_black.png';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,13 +36,16 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>Sign In - AGORA Admin</title>
+        <title>Sign In - LOCALIA Admin</title>
       </Head>
 
       <div className="min-h-screen bg-white">
         {/* Logo en la esquina superior izquierda */}
         <div className="absolute top-6 left-6">
-          <Image src={agoraLogoBlack} alt="AGORA" width={140} height={42} priority />
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-sm transform rotate-12"></div>
+            <span className="text-xl font-normal text-gray-900">localia</span>
+          </div>
         </div>
 
         {/* Formulario centrado pero ligeramente hacia la izquierda */}

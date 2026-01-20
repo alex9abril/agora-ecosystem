@@ -25,7 +25,7 @@ export default function UnauthorizedPage() {
   return (
     <>
       <Head>
-        <title>Acceso No Autorizado - AGORA Local</title>
+        <title>Acceso No Autorizado - LOCALIA Local</title>
       </Head>
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="max-w-md w-full bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">

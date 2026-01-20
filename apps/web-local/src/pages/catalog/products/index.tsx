@@ -218,7 +218,7 @@ export default function ProductsPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Productos - AGORA Local</title>
+        <title>Productos - LOCALIA Local</title>
       </Head>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

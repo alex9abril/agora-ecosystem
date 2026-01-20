@@ -288,9 +288,9 @@ export const productsService = {
       is_enabled: boolean;
       price: number | null;
       stock: number | null;
-      allow_backorder?: boolean;
-      backorder_lead_time_days?: number | null;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
+      classification_ids?: string[];
+      classifications?: Array<{ id: string; name: string; slug: string }>;
     }>;
   }> {
     try {
@@ -301,9 +301,9 @@ export const productsService = {
           is_enabled: boolean;
           price: number | null;
           stock: number | null;
-          allow_backorder?: boolean;
-          backorder_lead_time_days?: number | null;
           is_active?: boolean;
+          classification_ids?: string[];
+          classifications?: Array<{ id: string; name: string; slug: string }>;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {
         method: 'GET',
@@ -325,8 +325,7 @@ export const productsService = {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
-      allow_backorder?: boolean;
-      backorder_lead_time_days?: number | null;
+      classification_ids?: string[] | null;
     }>
   ): Promise<{
     product_id: string;
@@ -336,9 +335,9 @@ export const productsService = {
       is_enabled: boolean;
       price: number | null;
       stock: number | null;
-      allow_backorder?: boolean;
-      backorder_lead_time_days?: number | null;
       is_active: boolean;
+      classification_ids?: string[];
+      classifications?: Array<{ id: string; name: string; slug: string }>;
     }>;
   }> {
     try {
@@ -350,8 +349,6 @@ export const productsService = {
           is_enabled: boolean;
           price: number | null;
           stock: number | null;
-          allow_backorder?: boolean;
-          backorder_lead_time_days?: number | null;
           is_active: boolean;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {

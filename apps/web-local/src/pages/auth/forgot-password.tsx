@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import Image from 'next/image';
 import { authService } from '@/lib/auth';
-import agoraLogoBlack from '@/images/agora_logo_black.png';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -30,15 +28,12 @@ export default function ForgotPasswordPage() {
   return (
     <>
       <Head>
-        <title>Recuperar Contraseña - AGORA Local</title>
+        <title>Recuperar Contraseña - LOCALIA Local</title>
       </Head>
 
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div>
-            <div className="flex justify-center">
-              <Image src={agoraLogoBlack} alt="AGORA" width={160} height={48} priority />
-            </div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Recuperar Contraseña
             </h2>
@@ -57,7 +52,7 @@ export default function ForgotPasswordPage() {
             {success && (
               <div className="rounded-md bg-green-50 p-4">
                 <div className="text-sm text-green-800">
-                  Enlace enviado. Revisa tu correo para recuperar tu contraseña.
+                  Si el email existe, recibirás un enlace para recuperar tu contraseña.
                 </div>
               </div>
             )}
@@ -84,7 +79,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading || success}
-                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Enviando...' : success ? 'Email Enviado' : 'Enviar Enlace'}
               </button>

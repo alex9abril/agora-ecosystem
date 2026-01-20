@@ -52,9 +52,6 @@ export interface Product {
   branch_price?: number;
   branch_stock?: number;
   branch_is_enabled?: boolean;
-  branch_allow_backorder?: boolean;
-  branch_backorder_lead_time_days?: number | null;
-  branch_backorder_notes?: string | null;
 }
 
 export interface ProductsResponse {
@@ -92,9 +89,6 @@ export interface ProductBranchAvailability {
   is_enabled: boolean;
   price: number | null;
   stock: number | null;
-  allow_backorder?: boolean;
-  backorder_lead_time_days?: number | null;
-  backorder_notes?: string | null;
   is_active: boolean;
 }
 

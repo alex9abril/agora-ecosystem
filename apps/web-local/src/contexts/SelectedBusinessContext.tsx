@@ -27,16 +27,11 @@ interface SelectedBusinessContextType {
 const SelectedBusinessContext = createContext<SelectedBusinessContextType | undefined>(undefined);
 
 // Clave para guardar solo el UUID (compatibilidad hacia atrás)
-const STORAGE_KEY_ID = 'agora_selected_business_id';
+const STORAGE_KEY_ID = 'localia_selected_business_id';
 // Clave para guardar datos básicos (UUID + nombre + categoría)
-const STORAGE_KEY_DATA = 'agora_selected_business_data';
+const STORAGE_KEY_DATA = 'localia_selected_business_data';
 // Clave para indicar que el usuario eligió modo global (sin tienda seleccionada)
-const STORAGE_KEY_GLOBAL_MODE = 'agora_global_mode';
-
-// Claves legadas de LOCALIA (compatibilidad hacia atrás)
-const LEGACY_STORAGE_KEY_ID = 'localia_selected_business_id';
-const LEGACY_STORAGE_KEY_DATA = 'localia_selected_business_data';
-const LEGACY_STORAGE_KEY_GLOBAL_MODE = 'localia_global_mode';
+const STORAGE_KEY_GLOBAL_MODE = 'localia_global_mode';
 
 interface StoredBusinessData {
   business_id: string;
@@ -63,10 +58,6 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(data));
       // También guardar UUID para compatibilidad
       localStorage.setItem(STORAGE_KEY_ID, businessId);
-      // Limpiar claves legadas para evitar inconsistencias
-      localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_GLOBAL_MODE);
     } catch (e) {
       console.warn('[SelectedBusinessContext] Error guardando datos en localStorage:', e);
     }
@@ -101,28 +92,17 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       let savedBusinessData: StoredBusinessData | null = null;
 
       try {
-        const savedDataStr =
-          localStorage.getItem(STORAGE_KEY_DATA) ||
-          localStorage.getItem(LEGACY_STORAGE_KEY_DATA);
+        const savedDataStr = localStorage.getItem(STORAGE_KEY_DATA);
         if (savedDataStr) {
           savedBusinessData = JSON.parse(savedDataStr);
           savedBusinessId = savedBusinessData?.business_id || null;
-
-          // Migrar datos legados si venían de LOCALIA
-          if (!localStorage.getItem(STORAGE_KEY_DATA)) {
-            localStorage.setItem(STORAGE_KEY_DATA, JSON.stringify(savedBusinessData));
-          }
         } else {
           // Fallback al formato antiguo (solo UUID)
-          savedBusinessId =
-            localStorage.getItem(STORAGE_KEY_ID) ||
-            localStorage.getItem(LEGACY_STORAGE_KEY_ID);
+          savedBusinessId = localStorage.getItem(STORAGE_KEY_ID);
         }
       } catch (e) {
         console.warn('[SelectedBusinessContext] Error parseando datos guardados, usando formato antiguo');
-        savedBusinessId =
-          localStorage.getItem(STORAGE_KEY_ID) ||
-          localStorage.getItem(LEGACY_STORAGE_KEY_ID);
+        savedBusinessId = localStorage.getItem(STORAGE_KEY_ID);
       }
 
       if (savedBusinessId) {
@@ -160,8 +140,6 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
           // La tienda guardada ya no está disponible, limpiar
           localStorage.removeItem(STORAGE_KEY_ID);
           localStorage.removeItem(STORAGE_KEY_DATA);
-          localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
-          localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
         }
       }
 
@@ -218,8 +196,6 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       setSelectedBusiness(null);
       localStorage.removeItem(STORAGE_KEY_ID);
       localStorage.removeItem(STORAGE_KEY_DATA);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
       // Marcar que el usuario eligió modo global
       localStorage.setItem(STORAGE_KEY_GLOBAL_MODE, 'true');
       return;
@@ -227,7 +203,6 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
 
     // Si se selecciona una tienda, desactivar modo global
     localStorage.removeItem(STORAGE_KEY_GLOBAL_MODE);
-    localStorage.removeItem(LEGACY_STORAGE_KEY_GLOBAL_MODE);
 
     const business = availableBusinesses.find(b => b.business_id === businessId);
     if (business && business.can_access && business.is_active) {
@@ -262,8 +237,6 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       setAvailableBusinesses([]);
       localStorage.removeItem(STORAGE_KEY_ID);
       localStorage.removeItem(STORAGE_KEY_DATA);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
     }
   }, [user, token]);
 

@@ -14,7 +14,7 @@ import { ProductForm } from './index';
 export default function ProductDetailPage() {
   const router = useRouter();
   const { id } = router.query;
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -57,8 +57,8 @@ export default function ProductDetailPage() {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
-    allow_backorder?: boolean;
-    backorder_lead_time_days?: number | null;
+    classification_ids?: string[];
+    classifications?: Array<{ id: string; name: string; slug: string }>;
   }>>([]);
   const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] = useState(false);
   
@@ -96,27 +96,29 @@ export default function ProductDetailPage() {
   }, []);
 
   // Función para cargar disponibilidad por sucursal
+  const branchIdsKey = availableBusinesses.map((b) => b.business_id).join(',');
+
   const loadBranchAvailabilities = useCallback(async (productId: string) => {
     try {
       setLoadingBranchAvailabilities(true);
       const response = await productsService.getProductBranchAvailability(productId);
-      setBranchAvailabilities(
-        (response.availabilities || []).map((availability) => ({
-          ...availability,
-          allow_backorder: availability.allow_backorder ?? false,
-          backorder_lead_time_days:
-            availability.backorder_lead_time_days !== undefined
-              ? availability.backorder_lead_time_days
-              : null,
-        })),
-      );
+      const enriched = (response.availabilities || []).map((avail) => {
+        const business = availableBusinesses.find((b) => b.business_id === avail.branch_id);
+        return {
+          ...avail,
+          is_active: avail.is_active !== undefined ? avail.is_active : business?.is_active ?? true,
+          classification_ids: Array.isArray(avail.classification_ids) ? avail.classification_ids : [],
+          classifications: Array.isArray(avail.classifications) ? avail.classifications : [],
+        };
+      });
+      setBranchAvailabilities(enriched);
     } catch (err: any) {
       console.error('Error cargando disponibilidad por sucursal:', err);
       setBranchAvailabilities([]);
     } finally {
       setLoadingBranchAvailabilities(false);
     }
-  }, []);
+  }, [branchIdsKey]);
 
   // Función para cargar imágenes del producto
   const loadProductImages = useCallback(async (productId: string, fallbackImageUrl?: string) => {
@@ -390,12 +392,7 @@ export default function ProductDetailPage() {
               is_enabled: avail.is_enabled || false,
               price: avail.price !== null && avail.price !== undefined ? avail.price : null,
               stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
-              allow_backorder: avail.allow_backorder || false,
-              backorder_lead_time_days:
-                avail.backorder_lead_time_days !== null &&
-                avail.backorder_lead_time_days !== undefined
-                  ? avail.backorder_lead_time_days
-                  : null,
+              classification_ids: avail.is_enabled && Array.isArray(avail.classification_ids) ? avail.classification_ids : [],
             }));
           
           if (availabilitiesToSave.length > 0) {
@@ -511,7 +508,7 @@ export default function ProductDetailPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Editar Producto - AGORA Local</title>
+        <title>Editar Producto - LOCALIA Local</title>
       </Head>
 
       <div className="w-full h-full flex flex-col p-6">

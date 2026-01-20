@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength, IsOptional, IsEnum, IsBoolean, IsUUID } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, MinLength, IsOptional, IsEnum } from 'class-validator';
 
 export enum UserRole {
   CLIENT = 'client',
@@ -62,37 +62,5 @@ export class SignUpDto {
   @IsOptional()
   @IsEnum(UserRole, { message: 'Rol inválido' })
   role?: UserRole;
-
-  @ApiPropertyOptional({
-    description: 'Indica si se requiere confirmación de email al registrarse',
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  requiresEmailConfirmation?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'URL de la tienda o contexto desde el que se registró',
-    example: 'https://agoramp.mx/grupo/mi-grupo',
-  })
-  @IsOptional()
-  @IsString()
-  appUrl?: string;
-
-  @ApiPropertyOptional({
-    description: 'ID de la sucursal asociada al registro',
-    example: '00000000-0000-0000-0000-000000000000',
-  })
-  @IsOptional()
-  @IsUUID()
-  businessId?: string;
-
-  @ApiPropertyOptional({
-    description: 'ID del grupo empresarial asociado al registro',
-    example: '00000000-0000-0000-0000-000000000000',
-  })
-  @IsOptional()
-  @IsUUID()
-  businessGroupId?: string;
 }
 

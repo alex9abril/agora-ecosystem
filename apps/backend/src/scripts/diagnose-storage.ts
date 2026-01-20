@@ -12,8 +12,14 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const bucketName = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
 
 async function diagnoseStorage() {
+  console.log('\n🔍 DIAGNÓSTICO DE SUPABASE STORAGE\n');
+  console.log('='.repeat(60));
 
   // 1. Verificar variables de entorno
+  console.log('\n1️⃣ VERIFICANDO VARIABLES DE ENTORNO:');
+  console.log('   SUPABASE_URL:', supabaseUrl ? `✅ ${supabaseUrl.substring(0, 40)}...` : '❌ NO CONFIGURADO');
+  console.log('   SUPABASE_SERVICE_ROLE_KEY:', supabaseServiceRoleKey ? `✅ Configurado (${supabaseServiceRoleKey.length} caracteres)` : '❌ NO CONFIGURADO');
+  console.log('   SUPABASE_STORAGE_BUCKET_PRODUCTS:', bucketName);
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     console.error('\n❌ ERROR: Faltan variables de entorno necesarias');
@@ -22,6 +28,7 @@ async function diagnoseStorage() {
   }
 
   // 2. Crear cliente de Supabase
+  console.log('\n2️⃣ CREANDO CLIENTE DE SUPABASE...');
   let supabaseAdmin;
   try {
     supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
@@ -30,18 +37,22 @@ async function diagnoseStorage() {
         persistSession: false,
       },
     });
+    console.log('   ✅ Cliente creado exitosamente');
   } catch (error: any) {
     console.error('   ❌ Error creando cliente:', error.message);
     process.exit(1);
   }
 
   // 3. Verificar que el cliente tiene acceso a Storage
+  console.log('\n3️⃣ VERIFICANDO ACCESO A STORAGE...');
   if (!supabaseAdmin.storage) {
     console.error('   ❌ El cliente no tiene acceso a Storage');
     process.exit(1);
   }
+  console.log('   ✅ Cliente tiene acceso a Storage');
 
   // 4. Listar todos los buckets disponibles
+  console.log('\n4️⃣ LISTANDO BUCKETS DISPONIBLES...');
   try {
     const { data: buckets, error: bucketsError } = await supabaseAdmin.storage.listBuckets();
   
@@ -49,8 +60,10 @@ async function diagnoseStorage() {
       console.error('   ❌ Error listando buckets:', bucketsError.message);
       console.error('   Detalles:', JSON.stringify(bucketsError, null, 2));
     } else {
+      console.log(`   ✅ Se encontraron ${buckets?.length || 0} buckets:`);
       buckets?.forEach((bucket: any) => {
         const isTarget = bucket.name === bucketName;
+        console.log(`      ${isTarget ? '🎯' : '  '} ${bucket.name} (${bucket.public ? 'público' : 'privado'})`);
       });
       
       const targetBucket = buckets?.find((b: any) => b.name === bucketName);
@@ -59,6 +72,9 @@ async function diagnoseStorage() {
         console.error('   💡 SOLUCIÓN: Crea el bucket desde el Dashboard de Supabase o ejecuta el script SQL:');
         console.error('      database/create_and_configure_products_bucket.sql');
       } else {
+        console.log(`\n   ✅ El bucket '${bucketName}' existe`);
+        console.log(`      - Público: ${targetBucket.public ? 'Sí' : 'No'}`);
+        console.log(`      - Creado: ${targetBucket.created_at || 'N/A'}`);
       }
     }
   } catch (error: any) {
@@ -66,6 +82,7 @@ async function diagnoseStorage() {
   }
 
   // 5. Intentar acceder al bucket específico
+  console.log(`\n5️⃣ INTENTANDO ACCEDER AL BUCKET '${bucketName}'...`);
   try {
     // Intentar listar archivos (aunque esté vacío)
     const { data: files, error: listError } = await supabaseAdmin.storage
@@ -92,13 +109,21 @@ async function diagnoseStorage() {
         console.error('      Ejecuta el script SQL: database/fix_products_policies_exact_match.sql');
       }
     } else {
+      console.log('   ✅ Acceso al bucket exitoso');
+      console.log(`      - Archivos encontrados: ${files?.length || 0}`);
     }
   } catch (error: any) {
     console.error('   ❌ Error inesperado accediendo al bucket:', error.message);
   }
 
   // 6. Verificar políticas RLS (si es posible)
+  console.log('\n6️⃣ RESUMEN:');
+  console.log('   Para verificar las políticas RLS, ejecuta en SQL:');
+  console.log('   SELECT * FROM storage.buckets WHERE id = \'products\';');
+  console.log('   SELECT * FROM pg_policies WHERE schemaname = \'storage\' AND tablename = \'objects\';');
 
+  console.log('\n' + '='.repeat(60));
+  console.log('✅ DIAGNÓSTICO COMPLETADO\n');
 }
 
 // Ejecutar diagnóstico

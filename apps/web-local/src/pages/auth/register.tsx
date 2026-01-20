@@ -172,7 +172,7 @@ export default function RegisterPage() {
     return (
       <>
         <Head>
-          <title>Confirma tu Email - AGORA Local</title>
+          <title>Confirma tu Email - LOCALIA Local</title>
         </Head>
 
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
@@ -250,7 +250,7 @@ export default function RegisterPage() {
   return (
     <>
       <Head>
-        <title>Registro - AGORA Local</title>
+        <title>Registro - LOCALIA Local</title>
       </Head>
 
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4 sm:px-6 lg:px-8">
@@ -261,7 +261,7 @@ export default function RegisterPage() {
               Crear cuenta
             </h2>
             <p className="text-gray-600">
-              Regístrate en AGORA Local y comienza a gestionar tu negocio
+              Regístrate en LOCALIA Local y comienza a gestionar tu negocio
             </p>
           </div>
 

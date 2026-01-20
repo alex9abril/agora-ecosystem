@@ -15,13 +15,6 @@ export interface BusinessResponse {
   };
 }
 
-export interface BusinessVehicleBrand {
-  brand_id: string;
-  brand_name: string;
-  brand_code: string;
-  display_order: number;
-}
-
 export interface ListBranchesParams {
   page?: number;
   limit?: number;
@@ -70,13 +63,6 @@ export const branchesService = {
    */
   async getBranchById(id: string): Promise<Business> {
     return apiRequest<Business>(`/businesses/branches/id/${id}`, { method: 'GET' });
-  },
-
-  /**
-   * Obtener las marcas de vehículos asignadas a una sucursal
-   */
-  async getBranchVehicleBrands(businessId: string): Promise<BusinessVehicleBrand[]> {
-    return apiRequest<BusinessVehicleBrand[]>(`/businesses/${businessId}/vehicle-brands`, { method: 'GET' });
   },
 
   /**

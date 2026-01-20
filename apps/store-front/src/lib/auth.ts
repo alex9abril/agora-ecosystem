@@ -12,7 +12,6 @@ export interface SignUpData {
   lastName?: string;
   phone?: string;
   role?: 'client' | 'repartidor' | 'local' | 'admin';
-  requiresEmailConfirmation?: boolean;
 }
 
 export interface SignInData {
@@ -26,19 +25,16 @@ export interface AuthResponse {
     email: string;
     profile?: any;
   };
-  session?: {
+  session: {
     access_token: string;
     refresh_token: string;
-  } | null;
-  accessToken?: string | null;
-  refreshToken?: string | null;
-  needsEmailConfirmation?: boolean;
-  message?: string;
+  };
+  accessToken: string;
+  refreshToken: string;
 }
 
 export interface PasswordResetRequest {
   email: string;
-  redirectTo?: string;
 }
 
 export interface PasswordUpdate {
@@ -79,11 +75,9 @@ export const authService = {
    * Solicitar recuperación de contraseña
    */
   async requestPasswordReset(data: PasswordResetRequest): Promise<{ message: string; success: boolean }> {
-    const redirectTo =
-      data.redirectTo || (typeof window !== 'undefined' ? `${window.location.origin}/auth/reset-password` : undefined);
     return apiRequest('/auth/password/reset', {
       method: 'POST',
-      body: JSON.stringify({ ...data, redirectTo }),
+      body: JSON.stringify(data),
     });
   },
 

@@ -564,7 +564,7 @@ export default function KitchenPage() {
   return (
     <>
       <Head>
-        <title>Control de Cocina - AGORA</title>
+        <title>Control de Cocina - Localia</title>
       </Head>
       <KitchenLayout>
         <div className="w-full h-full flex flex-col bg-gray-50">

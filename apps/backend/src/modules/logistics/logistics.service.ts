@@ -493,6 +493,7 @@ export class LogisticsService {
         quotationId,
         shippingCarrier,
         shippingService,
+        itemsCount: itemsResult.rows.length,
       });
 
       let trackingNumber: string;
@@ -596,7 +597,7 @@ export class LogisticsService {
             package_number: '1',
             package_protected: false,
             declared_value: declaredValue,
-            consignment_note: '53102400', // Código aduanal válido de Skydropx (no es código HS)
+            consignment_note: '26121600', // Código aduanal válido de Skydropx (no es código HS)
             package_type: '4G', // Tipo de paquete por defecto
             products: products,
             content: packageContent, // Descripción del contenido del paquete

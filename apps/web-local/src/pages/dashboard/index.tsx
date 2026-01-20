@@ -64,7 +64,7 @@ export default function DashboardPage() {
   return (
     <>
       <Head>
-        <title>Dashboard - AGORA Local</title>
+        <title>Dashboard - LOCALIA Local</title>
       </Head>
       <LocalLayout>
         <div className="max-w-7xl mx-auto px-6 py-8">
@@ -115,7 +115,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            <p className="text-sm text-gray-600">Bienvenido a tu panel de control de AGORA Local.</p>
+            <p className="text-sm text-gray-600">Bienvenido a tu panel de control de LOCALIA Local.</p>
           </div>
 
           {/* Métricas Principales - KPI Cards */}

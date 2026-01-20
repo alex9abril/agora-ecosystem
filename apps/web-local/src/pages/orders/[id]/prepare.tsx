@@ -364,7 +364,7 @@ export default function PrepareOrderPage() {
     return (
       <LocalLayout>
         <Head>
-          <title>Preparar pedido - AGORA Local</title>
+          <title>Preparar pedido - LOCALIA Local</title>
         </Head>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -380,7 +380,7 @@ export default function PrepareOrderPage() {
     return (
       <LocalLayout>
         <Head>
-          <title>Error - AGORA Local</title>
+          <title>Error - LOCALIA Local</title>
         </Head>
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -400,7 +400,7 @@ export default function PrepareOrderPage() {
   return (
     <LocalLayout>
       <Head>
-        <title>Preparar pedido #{order.id.slice(-8).toUpperCase()} - AGORA Local</title>
+        <title>Preparar pedido #{order.id.slice(-8).toUpperCase()} - LOCALIA Local</title>
       </Head>
       <div className="w-full h-full flex flex-col bg-white">
         {/* Header */}

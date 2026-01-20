@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function PermissionsSettingsPage() {
   const router = useRouter();
@@ -8,7 +9,7 @@ export default function PermissionsSettingsPage() {
   return (
     <>
       <Head>
-        <title>Grupos de Permisos - AGORA Local</title>
+        <title>Grupos de Permisos - LOCALIA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">
@@ -56,6 +57,8 @@ export default function PermissionsSettingsPage() {
               <p className="mt-2 text-sm text-gray-500">
                 Los permisos actualmente se gestionan a través de los roles de negocio.
               </p>
+            </div>
+              </div>
             </div>
           </div>
         </div>

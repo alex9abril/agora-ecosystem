@@ -10,18 +10,16 @@ export class RequestBodyLoggerMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     // Solo loguear requests POST/PATCH que tengan body
     if ((req.method === 'POST' || req.method === 'PATCH') && req.body) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[RequestBodyLoggerMiddleware] Body recibido:', {
-          method: req.method,
-          url: req.url,
-          body: JSON.stringify(req.body, null, 2),
-          productId: req.body.productId,
-          productIdType: typeof req.body.productId,
-          productIdLength: req.body.productId?.length,
-          productIdValue: req.body.productId ? `"${req.body.productId}"` : 'undefined',
-          productIdRaw: req.body.productId,
-        });
-      }
+      console.log('📥 [RequestBodyLoggerMiddleware] Request body ANTES de validación:', {
+        method: req.method,
+        url: req.url,
+        body: JSON.stringify(req.body, null, 2),
+        productId: req.body.productId,
+        productIdType: typeof req.body.productId,
+        productIdLength: req.body.productId?.length,
+        productIdValue: req.body.productId ? `"${req.body.productId}"` : 'undefined',
+        productIdRaw: req.body.productId,
+      });
     }
     next();
   }

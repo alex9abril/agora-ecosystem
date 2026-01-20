@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import Image from 'next/image';
 import { authService } from '@/lib/auth';
-import agoraLogoBlack from '@/images/agora_logo_black.png';
 
 /**
  * Página para actualizar contraseña después de hacer clic en el enlace del email
@@ -72,15 +70,12 @@ export default function ResetPasswordPage() {
   return (
     <>
       <Head>
-        <title>Restablecer Contraseña - AGORA Admin</title>
+        <title>Restablecer Contraseña - LOCALIA Admin</title>
       </Head>
 
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div>
-            <div className="flex justify-center">
-              <Image src={agoraLogoBlack} alt="AGORA" width={160} height={48} priority />
-            </div>
             <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Restablecer Contraseña
             </h2>
@@ -143,7 +138,7 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={loading || !token}
-                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Actualizando...' : 'Actualizar Contraseña'}
                 </button>

@@ -1,10 +1,10 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
-import SettingsSidebar from '@/components/settings/SettingsSidebar';
 import { useState, useEffect } from 'react';
 import { vehiclesService, VehicleBrand, VehicleModel, VehicleYear, VehicleSpec, UserVehicle } from '@/lib/vehicles';
 import { setUserVehicle, getUserVehicle } from '@/lib/storage';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
 export default function VehicleSettingsPage() {
   const router = useRouter();
@@ -188,7 +188,7 @@ export default function VehicleSettingsPage() {
   return (
     <>
       <Head>
-        <title>Mi Vehículo - AGORA Local</title>
+        <title>Mi Vehículo - LOCALIA Local</title>
       </Head>
       <LocalLayout>
         <div className="p-6 max-w-7xl mx-auto">
@@ -208,151 +208,151 @@ export default function VehicleSettingsPage() {
               <div className="bg-white rounded-lg border border-gray-200 p-6">
                 {/* Header */}
                 <div className="mb-6">
-                  <h2 className="text-lg font-normal text-gray-900">Mi Vehículo</h2>
-                  <p className="mt-2 text-sm text-gray-600">
-                    Selecciona tu vehículo para ver solo productos compatibles
-                  </p>
-                </div>
+            <h2 className="text-lg font-normal text-gray-900">Mi Vehículo</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Selecciona tu vehículo para ver solo productos compatibles
+            </p>
+          </div>
 
-                {error && (
-                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-800">{error}</p>
-                  </div>
-                )}
+          {error && (
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
 
-                {/* Formulario de selección */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
-                  {/* Marca */}
-                  <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Marca <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={selectedVehicle.brand_id || ''}
-                      onChange={(e) => handleBrandChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                      required
-                    >
-                      <option value="">Selecciona una marca</option>
-                      {brands.map((brand) => (
-                        <option key={brand.id} value={brand.id}>
-                          {brand.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+          {/* Formulario de selección */}
+          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+            {/* Marca */}
+            <div>
+              <label className="block text-sm font-normal text-gray-700 mb-2">
+                Marca <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedVehicle.brand_id || ''}
+                onChange={(e) => handleBrandChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                required
+              >
+                <option value="">Selecciona una marca</option>
+                {brands.map((brand) => (
+                  <option key={brand.id} value={brand.id}>
+                    {brand.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  {/* Modelo */}
-                  {selectedVehicle.brand_id && (
-                    <div>
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Modelo
-                      </label>
-                      <select
-                        value={selectedVehicle.model_id || ''}
-                        onChange={(e) => handleModelChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        <option value="">Selecciona un modelo (opcional)</option>
-                        {models.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+            {/* Modelo */}
+            {selectedVehicle.brand_id && (
+              <div>
+                <label className="block text-sm font-normal text-gray-700 mb-2">
+                  Modelo
+                </label>
+                <select
+                  value={selectedVehicle.model_id || ''}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Selecciona un modelo (opcional)</option>
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-                  {/* Año/Generación */}
-                  {selectedVehicle.model_id && (
-                    <div>
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Año/Generación
-                      </label>
-                      <select
-                        value={selectedVehicle.year_id || ''}
-                        onChange={(e) => handleYearChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        <option value="">Selecciona un año (opcional)</option>
-                        {years.map((year) => (
-                          <option key={year.id} value={year.id}>
-                            {year.year_start}
-                            {year.year_end ? ` - ${year.year_end}` : '+'}
-                            {year.generation ? ` (${year.generation})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+            {/* Año/Generación */}
+            {selectedVehicle.model_id && (
+              <div>
+                <label className="block text-sm font-normal text-gray-700 mb-2">
+                  Año/Generación
+                </label>
+                <select
+                  value={selectedVehicle.year_id || ''}
+                  onChange={(e) => handleYearChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Selecciona un año (opcional)</option>
+                  {years.map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.year_start}
+                      {year.year_end ? ` - ${year.year_end}` : '+'}
+                      {year.generation ? ` (${year.generation})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-                  {/* Especificaciones (Motor/Transmisión) */}
-                  {selectedVehicle.year_id && specs.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Motor/Transmisión (Opcional)
-                      </label>
-                      <select
-                        value={selectedVehicle.spec_id || ''}
-                        onChange={(e) => handleSpecChange(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        <option value="">Selecciona especificación (opcional)</option>
-                        {specs.map((spec) => (
-                          <option key={spec.id} value={spec.id}>
-                            {spec.engine_code || 'Motor'}
-                            {spec.engine_displacement ? ` ${spec.engine_displacement}` : ''}
-                            {spec.transmission_type ? ` - ${spec.transmission_type}` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+            {/* Especificaciones (Motor/Transmisión) */}
+            {selectedVehicle.year_id && specs.length > 0 && (
+              <div>
+                <label className="block text-sm font-normal text-gray-700 mb-2">
+                  Motor/Transmisión (Opcional)
+                </label>
+                <select
+                  value={selectedVehicle.spec_id || ''}
+                  onChange={(e) => handleSpecChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Selecciona especificación (opcional)</option>
+                  {specs.map((spec) => (
+                    <option key={spec.id} value={spec.id}>
+                      {spec.engine_code || 'Motor'}
+                      {spec.engine_displacement ? ` ${spec.engine_displacement}` : ''}
+                      {spec.transmission_type ? ` - ${spec.transmission_type}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-                  {/* Información del vehículo seleccionado */}
-                  {selectedVehicle.brand_id && (
-                    <div className="p-4 bg-gray-50 rounded-md">
-                      <h3 className="text-sm font-normal text-gray-700 mb-2">Vehículo Seleccionado:</h3>
-                      <p className="text-sm text-gray-600">
-                        {selectedVehicle.brand_name}
-                        {selectedVehicle.model_name && ` ${selectedVehicle.model_name}`}
-                        {selectedVehicle.year_start && ` ${selectedVehicle.year_start}`}
-                        {selectedVehicle.engine_code && ` - Motor: ${selectedVehicle.engine_code}`}
-                        {selectedVehicle.transmission_type && ` - Transmisión: ${selectedVehicle.transmission_type}`}
-                      </p>
-                    </div>
-                  )}
+            {/* Información del vehículo seleccionado */}
+            {selectedVehicle.brand_id && (
+              <div className="p-4 bg-gray-50 rounded-md">
+                <h3 className="text-sm font-normal text-gray-700 mb-2">Vehículo Seleccionado:</h3>
+                <p className="text-sm text-gray-600">
+                  {selectedVehicle.brand_name}
+                  {selectedVehicle.model_name && ` ${selectedVehicle.model_name}`}
+                  {selectedVehicle.year_start && ` ${selectedVehicle.year_start}`}
+                  {selectedVehicle.engine_code && ` - Motor: ${selectedVehicle.engine_code}`}
+                  {selectedVehicle.transmission_type && ` - Transmisión: ${selectedVehicle.transmission_type}`}
+                </p>
+              </div>
+            )}
 
-                  {/* Botones */}
-                  <div className="flex gap-4 pt-4">
-                    <button
-                      onClick={handleSave}
-                      disabled={saving || !selectedVehicle.brand_id}
-                      className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {saving ? 'Guardando...' : 'Guardar Vehículo'}
-                    </button>
-                    {selectedVehicle.brand_id && (
-                      <button
-                        onClick={handleClear}
-                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        Limpiar
-                      </button>
-                    )}
-                  </div>
-                </div>
+            {/* Botones */}
+            <div className="flex gap-4 pt-4">
+              <button
+                onClick={handleSave}
+                disabled={saving || !selectedVehicle.brand_id}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                {saving ? 'Guardando...' : 'Guardar Vehículo'}
+              </button>
+              {selectedVehicle.brand_id && (
+                <button
+                  onClick={handleClear}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
 
-                {/* Información adicional */}
-                <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                  <h3 className="text-sm font-normal text-blue-900 mb-2">💡 Información</h3>
-                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-                    <li>Al seleccionar tu vehículo, los productos se filtrarán automáticamente por compatibilidad</li>
-                    <li>Puedes seleccionar solo la marca, o ser más específico con modelo, año y motor</li>
-                    <li>Mientras más específico seas, más precisos serán los resultados</li>
-                    <li>Puedes cambiar o eliminar tu vehículo en cualquier momento</li>
-                  </ul>
-                </div>
+          {/* Información adicional */}
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+            <h3 className="text-sm font-normal text-blue-900 mb-2">💡 Información</h3>
+            <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+              <li>Al seleccionar tu vehículo, los productos se filtrarán automáticamente por compatibilidad</li>
+              <li>Puedes seleccionar solo la marca, o ser más específico con modelo, año y motor</li>
+              <li>Mientras más específico seas, más precisos serán los resultados</li>
+              <li>Puedes cambiar o eliminar tu vehículo en cualquier momento</li>
+            </ul>
+          </div>
               </div>
             </div>
           </div>

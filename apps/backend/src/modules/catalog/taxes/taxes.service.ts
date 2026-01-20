@@ -42,11 +42,14 @@ export class TaxesService {
         ORDER BY is_default DESC, name ASC
       `;
       
+      console.log('[TaxesService] Consultando tipos de impuestos:', { includeInactive, whereClause });
       const result = await dbPool.query(query);
+      console.log('[TaxesService] Tipos de impuestos encontrados:', result.rows.length);
       
       if (result.rows.length === 0) {
         console.warn('[TaxesService] No se encontraron tipos de impuestos activos. Verificando si hay impuestos inactivos...');
         const allResult = await dbPool.query('SELECT COUNT(*) as total FROM catalog.tax_types');
+        console.log('[TaxesService] Total de tipos de impuestos en la base de datos:', allResult.rows[0]?.total || 0);
       }
 
       return result.rows;
@@ -464,7 +467,8 @@ export class TaxesService {
             tax_code: tax.tax_code,
             rate: parseFloat(rate.toString()),
             rate_type: tax.rate_type,
-            amount: Math.round(amount * 100) / 100,
+            amount: Math.round(amount * 100) / 100, // Redondear a 2 decimales
+            applied_to: 'subtotal',
           };
         });
 

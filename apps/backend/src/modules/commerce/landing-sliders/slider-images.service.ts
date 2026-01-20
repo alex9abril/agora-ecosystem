@@ -13,6 +13,7 @@ export class SliderImagesService {
 
   constructor() {
     if (process.env.NODE_ENV !== 'production') {
+      console.log('🔍 [SliderImagesService] Bucket configurado:', this.BUCKET_NAME);
     }
   }
 
@@ -71,6 +72,19 @@ export class SliderImagesService {
       // Generar ruta del archivo
       const filePath = this.generateFilePath(type, id, file.originalname);
 
+      // Debug: Log información antes de subir
+      console.log('🔍 [SliderImagesService] Intentando subir imagen:', {
+        bucket: this.BUCKET_NAME,
+        filePath,
+        fileSize: file.buffer.length,
+        contentType: file.mimetype,
+        type,
+        id,
+        hasSupabaseAdmin: !!supabaseAdmin,
+        supabaseUrl: process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.substring(0, 40)}...` : 'NO CONFIGURADO',
+        hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      });
+
       // Subir archivo a Supabase Storage
       const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
         .from(this.BUCKET_NAME)
@@ -87,6 +101,7 @@ export class SliderImagesService {
           status: (uploadError as any).status,
           bucket: this.BUCKET_NAME,
           filePath,
+          errorDetails: JSON.stringify(uploadError, null, 2),
         });
         throw new ServiceUnavailableException(`Error al subir archivo: ${uploadError.message}`);
       }
@@ -95,6 +110,13 @@ export class SliderImagesService {
       const { data: urlData } = supabaseAdmin.storage
         .from(this.BUCKET_NAME)
         .getPublicUrl(filePath);
+
+      console.log('✅ Imagen de slider subida:', {
+        type,
+        id,
+        filePath,
+        publicUrl: urlData.publicUrl,
+      });
 
       return {
         url: urlData.publicUrl,
@@ -127,6 +149,7 @@ export class SliderImagesService {
         throw new ServiceUnavailableException(`Error al eliminar archivo: ${error.message}`);
       }
 
+      console.log('✅ Imagen de slider eliminada:', filePath);
     } catch (error: any) {
       if (error instanceof ServiceUnavailableException) {
         throw error;

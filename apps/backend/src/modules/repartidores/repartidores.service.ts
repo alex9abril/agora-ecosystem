@@ -123,6 +123,7 @@ export class RepartidoresService {
       });
       
       // Si falla, intentar sin extraer coordenadas y hacerlo manualmente
+      console.log('🔄 Reintentando sin extraer coordenadas en SQL...');
       const fallbackQuery = `
         SELECT 
           r.*,
@@ -140,6 +141,7 @@ export class RepartidoresService {
       
       // Extraer coordenadas manualmente del campo current_location (POINT)
       if (data.length > 0 && data[0].current_location) {
+        console.log('⚠️  Extrayendo coordenadas manualmente del campo current_location');
         for (const row of data) {
           if (row.current_location && typeof row.current_location === 'object') {
             if (row.current_location.x !== undefined && row.current_location.y !== undefined) {
