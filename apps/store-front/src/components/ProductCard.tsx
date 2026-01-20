@@ -15,7 +15,7 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, onAddToCart }: ProductCardProps) {
-  const { contextType, branchId } = useStoreContext();
+  const { contextType, branchData } = useStoreContext();
 
   // Determinar precio a mostrar
   const displayPrice = contextType === 'sucursal' && product.branch_price !== undefined
