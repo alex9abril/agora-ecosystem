@@ -6,6 +6,7 @@ export interface CollectionFormState {
   slug: string;
   status: 'active' | 'inactive';
   image_url?: string;
+  description?: string;
 }
 
 interface CollectionFormProps {
@@ -51,6 +52,7 @@ export default function CollectionForm({
     initialValues.slug,
     initialValues.status,
     initialValues.image_url,
+    initialValues.description,
   ]);
 
   const handleNameChange = (value: string) => {
@@ -116,6 +118,22 @@ export default function CollectionForm({
             required
           />
           <p className="mt-1 text-xs text-gray-500">Solo minúsculas, números y guiones.</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Descripción</label>
+          <textarea
+            value={formState.description || ''}
+            onChange={(e) =>
+              setFormState((prev) => ({
+                ...prev,
+                description: e.target.value,
+              }))
+            }
+            rows={4}
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+            placeholder="Describe la colección para mostrarla en el storefront"
+          />
         </div>
 
         <div>

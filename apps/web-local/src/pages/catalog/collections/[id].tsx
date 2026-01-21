@@ -87,6 +87,7 @@ export default function EditCollectionPage() {
               slug: collection.slug,
               status: (collection.status as 'active' | 'inactive') || 'active',
               image_url: collection.image_url || '',
+              description: collection.description || '',
             }}
             collectionId={collection.id}
             onSubmit={handleSubmit}

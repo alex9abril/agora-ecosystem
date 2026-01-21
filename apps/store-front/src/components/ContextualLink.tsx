@@ -45,19 +45,19 @@ export default function ContextualLink({
     }
   }
   
-  // Siempre renderizar un anchor consistente para evitar diferencias SSR/CSR
-  const { className, style, onMouseEnter, onMouseLeave, ...linkProps } = props;
+  // Separar props de Link de props de anchor
+  const { style, onMouseEnter, onMouseLeave, className, ...linkProps } = props;
 
   return (
-    <Link href={contextualHref} {...linkProps} legacyBehavior>
-      <a
-        className={className}
-        style={style}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-      >
-        {children}
-      </a>
+    <Link
+      href={contextualHref}
+      {...linkProps}
+      className={className}
+      style={style}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {children}
     </Link>
   );
 }

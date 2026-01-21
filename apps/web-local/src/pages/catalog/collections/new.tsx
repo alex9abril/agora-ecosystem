@@ -83,7 +83,7 @@ export default function NewCollectionPage() {
           <CollectionForm
             title="Nueva colección"
             subtitle={`Sucursal ${selectedBusiness.business_name}`}
-            initialValues={{ name: '', slug: '', status: 'active', image_url: '' }}
+            initialValues={{ name: '', slug: '', status: 'active', image_url: '', description: '' }}
             onImageFileChange={setPendingImageFile}
             onSubmit={handleSubmit}
             onCancel={() => router.push('/catalog/collections')}

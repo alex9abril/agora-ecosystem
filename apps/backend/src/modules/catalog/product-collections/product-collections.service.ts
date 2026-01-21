@@ -11,6 +11,7 @@ interface ProductCollectionRow {
   slug: string;
   status: 'active' | 'inactive';
   image_url?: string | null;
+  description?: string | null;
   created_at: string;
   updated_at: string;
   total_products?: number;
@@ -67,6 +68,7 @@ export class ProductCollectionsService {
       slug: row.slug,
       status: row.status,
       image_url: row.image_url || null,
+      description: row.description || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
       total_products: row.total_products !== undefined ? Number(row.total_products) : undefined,
@@ -104,6 +106,7 @@ export class ProductCollectionsService {
         pc.slug,
         pc.status,
         pc.image_url,
+        pc.description,
         pc.created_at,
         pc.updated_at,
         COUNT(DISTINCT pca.product_id) FILTER (WHERE pca.status = 'active') AS total_products
@@ -201,6 +204,7 @@ export class ProductCollectionsService {
         pc.slug,
         pc.status,
         pc.image_url,
+        pc.description,
         pc.created_at,
         pc.updated_at,
         COUNT(DISTINCT pca.product_id) FILTER (WHERE pca.status = 'active') AS total_products
@@ -375,6 +379,7 @@ export class ProductCollectionsService {
     const slug = this.normalizeSlug(dto.slug || dto.name);
     const status = dto.status || 'active';
     const imageUrl = dto.image_url?.trim() || null;
+    const description = dto.description?.trim() || null;
 
     if (!name) {
       throw new BadRequestException('El nombre es obligatorio');
@@ -386,11 +391,11 @@ export class ProductCollectionsService {
     try {
       const result = await dbPool.query(
         `
-          INSERT INTO catalog.product_colecciones (business_id, name, slug, status, image_url)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO catalog.product_colecciones (business_id, name, slug, status, image_url, description)
+          VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING *
         `,
-        [dto.business_id, name, slug, status, imageUrl],
+        [dto.business_id, name, slug, status, imageUrl, description],
       );
 
       return this.findOne(result.rows[0].id);
@@ -449,6 +454,13 @@ export class ProductCollectionsService {
       const imageUrl = dto.image_url?.trim() || null;
       updateFields.push(`image_url = $${index}`);
       values.push(imageUrl);
+      index++;
+    }
+
+    if (dto.description !== undefined) {
+      const description = dto.description?.trim() || null;
+      updateFields.push(`description = $${index}`);
+      values.push(description);
       index++;
     }
 

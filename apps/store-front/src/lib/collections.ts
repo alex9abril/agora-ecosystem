@@ -7,6 +7,7 @@ export interface StoreCollection {
   slug: string;
   status?: 'active' | 'inactive';
   image_url?: string | null;
+  description?: string | null;
 }
 
 export const collectionsService = {
@@ -18,5 +19,8 @@ export const collectionsService = {
       `/catalog/collections?${params.toString()}`,
       { method: 'GET' },
     );
+  },
+  async get(id: string): Promise<StoreCollection> {
+    return apiRequest<StoreCollection>(`/catalog/collections/${id}`, { method: 'GET' });
   },
 };

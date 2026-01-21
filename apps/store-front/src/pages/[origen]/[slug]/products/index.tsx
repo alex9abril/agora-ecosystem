@@ -78,7 +78,7 @@ export default function ContextualProductsPage() {
         const name = match?.name || 'Colección';
         if (!isActive) return;
         setCollectionName(name);
-        setCollectionDescription(`Explora productos seleccionados de ${name}.`);
+        setCollectionDescription(match?.description || `Explora productos seleccionados de ${name}.`);
       } catch (err) {
         console.error('Error cargando colección:', err);
         if (!isActive) return;
@@ -147,7 +147,7 @@ export default function ContextualProductsPage() {
                   {headerTitle}
                 </h1>
                 {headerDescription && (
-                  <p className="text-gray-600 text-base">{headerDescription}</p>
+                  <p className="text-gray-600 text-base max-w-2xl">{headerDescription}</p>
                 )}
               </div>
 
