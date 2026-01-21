@@ -99,6 +99,8 @@ export default function Header() {
   const [currentVehicle, setCurrentVehicle] = useState<UserVehicle | any | null>(null);
   const [isVehicleLoaded, setIsVehicleLoaded] = useState(false);
   const headerRef = useRef<HTMLElement>(null);
+  const compactHeaderRef = useRef(false);
+  const scrollRafRef = useRef<number | null>(null);
 
   // Solo cargar información de localStorage en el cliente para evitar problemas de hidratación
   useEffect(() => {
@@ -139,11 +141,26 @@ export default function Header() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleScroll = () => {
-      setIsCompactHeader(window.scrollY > 60);
+      if (scrollRafRef.current !== null) return;
+      scrollRafRef.current = window.requestAnimationFrame(() => {
+        const scrollY = window.scrollY;
+        const shouldBeCompact = scrollY > 200 ? true : scrollY < 40 ? false : compactHeaderRef.current;
+        if (compactHeaderRef.current !== shouldBeCompact) {
+          compactHeaderRef.current = shouldBeCompact;
+          setIsCompactHeader(shouldBeCompact);
+        }
+        scrollRafRef.current = null;
+      });
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {

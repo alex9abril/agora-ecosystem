@@ -60,6 +60,7 @@ export class ProductCollectionsController {
   }
 
   @Get(':id')
+  @Public()
   @ApiOperation({ summary: 'Obtener una colección' })
   @ApiParam({ name: 'id', description: 'ID de la colección', type: String })
   async findOne(@Param('id') id: string) {

@@ -7,6 +7,7 @@ export interface ProductCollection {
   slug: string;
   status?: 'active' | 'inactive';
   image_url?: string | null;
+  description?: string | null;
   total_products?: number;
   created_at?: string;
   updated_at?: string;
@@ -18,6 +19,7 @@ export interface CreateCollectionData {
   slug: string;
   status?: 'active' | 'inactive';
   image_url?: string;
+  description?: string;
 }
 
 export interface UpdateCollectionData {
@@ -25,6 +27,7 @@ export interface UpdateCollectionData {
   slug?: string;
   status?: 'active' | 'inactive';
   image_url?: string;
+  description?: string;
 }
 
 type CollectionListResponse = {

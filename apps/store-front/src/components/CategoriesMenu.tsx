@@ -8,6 +8,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { ProductCategory, categoriesService } from '@/lib/categories';
+import { collectionsService, StoreCollection } from '@/lib/collections';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { store } from '@/store';
 import {
@@ -38,7 +39,7 @@ interface CategoryWithChildren extends ProductCategory {
 
 export default function CategoriesMenu({ className = '', onCategoryClick, isOpen = true, onClose }: CategoriesMenuProps) {
   const router = useRouter();
-  const { contextType, getContextualUrl } = useStoreContext();
+  const { contextType, getContextualUrl, branchId } = useStoreContext();
   const dispatch = useAppDispatch();
   
   // Obtener categorías desde Redux
@@ -51,6 +52,8 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
   const [subSubcategories, setSubSubcategories] = useState<Record<string, ProductCategory[]>>({});
   const [loadingSubSubcategories, setLoadingSubSubcategories] = useState<Record<string, boolean>>({});
   const [recentCategories, setRecentCategories] = useState<ProductCategory[]>([]);
+  const [collections, setCollections] = useState<StoreCollection[]>([]);
+  const [loadingCollections, setLoadingCollections] = useState(false);
 
   // Convertir categorías de Redux al formato con children
   const rootCategories: CategoryWithChildren[] = useMemo(() => 
@@ -135,6 +138,37 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
       loadAndSaveCategory();
     }
   }, [router.isReady, router.query.categoryId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    if (contextType !== 'sucursal' || !branchId) {
+      setCollections([]);
+      return;
+    }
+    let isActive = true;
+    const loadCollections = async () => {
+      try {
+        setLoadingCollections(true);
+        const response = await collectionsService.list(branchId);
+        if (!isActive) return;
+        setCollections(response.data || []);
+      } catch (error) {
+        console.error('Error cargando colecciones:', error);
+        if (!isActive) return;
+        setCollections([]);
+      } finally {
+        if (isActive) {
+          setLoadingCollections(false);
+        }
+      }
+    };
+    loadCollections();
+    return () => {
+      isActive = false;
+    };
+  }, [isOpen, contextType, branchId]);
 
   // Cargar subcategorías cuando se selecciona una categoría
   useEffect(() => {
@@ -363,6 +397,31 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                       <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   ))}
+
+                  {loadingCollections ? (
+                    <div className="px-6 py-3 text-sm text-gray-500">Cargando colecciones...</div>
+                  ) : collections.length > 0 ? (
+                    <>
+                      <div className="px-6 py-3 border-t border-gray-200 mt-2">
+                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Colecciones</h3>
+                      </div>
+                      {collections.map((collection) => (
+                        <ContextualLink
+                          key={`collection-${collection.id}`}
+                          href={`/products?collectionId=${collection.id}`}
+                          onClick={() => {
+                            if (onCategoryClick) {
+                              onCategoryClick();
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 px-6 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
+                        >
+                          <span className="flex-1 font-medium">{collection.name}</span>
+                          <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </ContextualLink>
+                      ))}
+                    </>
+                  ) : null}
                 </>
               )}
             </nav>

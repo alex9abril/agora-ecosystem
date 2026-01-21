@@ -36,4 +36,13 @@ export class CreateProductCollectionDto {
   @IsString()
   @MaxLength(500)
   image_url?: string;
+
+  @ApiPropertyOptional({
+    description: 'Descripción visible de la colección',
+    example: 'Accesorios seleccionados para el interior del vehículo',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
 }

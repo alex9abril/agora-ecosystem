@@ -10,6 +10,7 @@ import ProductGrid from '@/components/ProductGrid';
 import CategoryBreadcrumbs from '@/components/CategoryBreadcrumbs';
 import CategoryInfo from '@/components/CategoryInfo';
 import { productsService } from '@/lib/products';
+import { collectionsService } from '@/lib/collections';
 import { useStoreContext } from '@/contexts/StoreContext';
 
 export default function ProductsPage() {
@@ -20,6 +21,8 @@ export default function ProductsPage() {
   const [collectionFilter, setCollectionFilter] = useState<string>('');
   const [categoryName, setCategoryName] = useState<string>('');
   const [categoryDescription, setCategoryDescription] = useState<string>('');
+  const [collectionName, setCollectionName] = useState<string>('');
+  const [collectionDescription, setCollectionDescription] = useState<string>('');
   const [filters, setFilters] = useState<any>({
     isAvailable: true,
   });
@@ -58,6 +61,32 @@ export default function ProductsPage() {
     setFilters(newFilters);
   }, [router.isReady, router.query]);
 
+  useEffect(() => {
+    if (!collectionFilter) {
+      setCollectionName('');
+      setCollectionDescription('');
+      return;
+    }
+    let isActive = true;
+    const loadCollection = async () => {
+      try {
+        const data = await collectionsService.get(collectionFilter);
+        if (!isActive) return;
+        setCollectionName(data.name || 'Colección');
+        setCollectionDescription(data.description || '');
+      } catch (error) {
+        console.error('Error cargando colección:', error);
+        if (!isActive) return;
+        setCollectionName('Colección');
+        setCollectionDescription('');
+      }
+    };
+    loadCollection();
+    return () => {
+      isActive = false;
+    };
+  }, [collectionFilter]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const newFilters = { ...filters };
@@ -83,13 +112,17 @@ export default function ProductsPage() {
               <CategoryBreadcrumbs categoryId={categoryFilter} />
             )}
 
-            {/* Título con nombre y descripción de categoría */}
+            {/* Título con nombre y descripción de categoría/colección */}
             <div className="mb-6">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {categoryName || (categoryFilter ? 'Productos' : contextType === 'global' ? 'Todos los Productos' : contextType === 'grupo' ? 'Productos del Grupo' : contextType === 'sucursal' ? 'Productos de la Sucursal' : 'Productos')}
+                {collectionFilter
+                  ? (collectionName || 'Colección')
+                  : categoryName || (categoryFilter ? 'Productos' : contextType === 'global' ? 'Todos los Productos' : contextType === 'grupo' ? 'Productos del Grupo' : contextType === 'sucursal' ? 'Productos de la Sucursal' : 'Productos')}
               </h1>
-              {categoryDescription && (
-                <p className="text-gray-600 text-base">{categoryDescription}</p>
+              {(collectionFilter ? collectionDescription : categoryDescription) && (
+                <p className="text-gray-600 text-base max-w-2xl">
+                  {collectionFilter ? collectionDescription : categoryDescription}
+                </p>
               )}
             </div>
 
