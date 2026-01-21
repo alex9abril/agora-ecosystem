@@ -26,6 +26,10 @@ import MultipleImageUpload, {
   ProductImage,
 } from "@/components/MultipleImageUpload";
 import CategorySelector from "@/components/CategorySelector";
+import {
+  productCollectionsService,
+  ProductCollection,
+} from "@/lib/product-collections";
 
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
@@ -136,11 +140,19 @@ export default function ProductsPage() {
       is_enabled: boolean;
       price: number | null;
       stock: number | null;
+      collection_ids?: string[];
+      collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
+      allow_backorder?: boolean;
+      backorder_lead_time_days?: number | null;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
     }>
   >([]);
   const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] =
     useState(false);
+  const [collectionsByBranch, setCollectionsByBranch] = useState<
+    Record<string, ProductCollection[]>
+  >({});
+  const [loadingCollections, setLoadingCollections] = useState(false);
 
   // Estados para impuestos
   const [availableTaxTypes, setAvailableTaxTypes] = useState<TaxType[]>([]);
@@ -176,6 +188,57 @@ export default function ProductsPage() {
       router.events.off("routeChangeStart", handleRouteChange);
     };
   }, [router.events]);
+
+  useEffect(() => {
+    const businessIds = availableBusinesses
+      .map((b) => b.business_id)
+      .filter((id) => !!id);
+
+    if (businessIds.length === 0) {
+      setCollectionsByBranch({});
+      setLoadingCollections(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadCollections = async () => {
+      try {
+        setLoadingCollections(true);
+        const entries = await Promise.all(
+          businessIds.map(async (businessId) => {
+            try {
+              const response = await productCollectionsService.list(
+                businessId,
+              );
+              return [businessId, response.data || []] as const;
+            } catch (err) {
+              console.error("Error cargando colecciones:", err);
+              return [businessId, []] as const;
+            }
+          }),
+        );
+
+        if (!isMounted) return;
+
+        const map: Record<string, ProductCollection[]> = {};
+        entries.forEach(([businessId, list]) => {
+          map[businessId] = list;
+        });
+        setCollectionsByBranch(map);
+      } finally {
+        if (isMounted) {
+          setLoadingCollections(false);
+        }
+      }
+    };
+
+    loadCollections();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [availableBusinesses.map((b) => b.business_id).join(",")]);
 
   const loadData = async (
     page: number = currentPage,
@@ -414,6 +477,12 @@ export default function ProductsPage() {
           );
           return {
             ...avail,
+            collection_ids: Array.isArray(avail.collection_ids)
+              ? avail.collection_ids.filter(Boolean)
+              : [],
+            collections: Array.isArray(avail.collections)
+              ? avail.collections
+              : [],
             allow_backorder: avail.allow_backorder ?? false,
             backorder_lead_time_days:
               avail.backorder_lead_time_days !== undefined
@@ -443,7 +512,10 @@ export default function ProductsPage() {
         .filter((avail) => avail.branch_id) // Solo las que tienen branch_id
         .map((avail) => ({
           branch_id: avail.branch_id,
-          is_enabled: avail.is_enabled || false,
+          is_enabled:
+            avail.is_enabled ||
+            (Array.isArray(avail.collection_ids) &&
+              avail.collection_ids.length > 0),
           price:
             avail.price !== null && avail.price !== undefined
               ? avail.price
@@ -452,6 +524,9 @@ export default function ProductsPage() {
             avail.stock !== null && avail.stock !== undefined
               ? avail.stock
               : null,
+          collection_ids: Array.isArray(avail.collection_ids)
+            ? avail.collection_ids.filter(Boolean)
+            : [],
           allow_backorder: avail.allow_backorder || false,
           backorder_lead_time_days:
             avail.backorder_lead_time_days !== null &&
@@ -698,6 +773,9 @@ export default function ProductsPage() {
                   avail.stock !== null && avail.stock !== undefined
                     ? avail.stock
                     : null,
+                collection_ids: Array.isArray(avail.collection_ids)
+                  ? avail.collection_ids.filter(Boolean)
+                  : [],
                 allow_backorder: avail.allow_backorder || false,
                 backorder_lead_time_days:
                   avail.backorder_lead_time_days !== null &&
@@ -1110,6 +1188,8 @@ export default function ProductsPage() {
             setBranchAvailabilities={setBranchAvailabilities}
             loadingBranchAvailabilities={loadingBranchAvailabilities}
             onLoadBranchAvailabilities={loadBranchAvailabilities}
+            collectionsByBranch={collectionsByBranch}
+            loadingCollections={loadingCollections}
             onSubmit={handleSubmit}
             onCancel={() => {
               setShowForm(false);
@@ -1702,6 +1782,9 @@ export interface ProductFormProps {
     stock: number | null;
     allow_backorder?: boolean;
     backorder_lead_time_days?: number | null;
+    collection_ids?: string[];
+    collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
+    is_active?: boolean;
   }>;
   setBranchAvailabilities: React.Dispatch<
     React.SetStateAction<
@@ -1713,11 +1796,16 @@ export interface ProductFormProps {
         stock: number | null;
         allow_backorder?: boolean;
         backorder_lead_time_days?: number | null;
+        collection_ids?: string[];
+        collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
+        is_active?: boolean;
       }>
     >
   >;
   loadingBranchAvailabilities: boolean;
   onLoadBranchAvailabilities?: (productId: string) => void;
+  collectionsByBranch: Record<string, ProductCollection[]>;
+  loadingCollections: boolean;
   productImages?: ProductImage[];
   setProductImages?: React.Dispatch<React.SetStateAction<ProductImage[]>>;
   loadingImages?: boolean;
@@ -1756,6 +1844,8 @@ export function ProductForm({
   setBranchAvailabilities,
   loadingBranchAvailabilities,
   onLoadBranchAvailabilities,
+  collectionsByBranch,
+  loadingCollections,
   productImages = [],
   setProductImages,
   loadingImages = false,
@@ -1787,6 +1877,21 @@ export function ProductForm({
     "mariscos",
     "sésamo",
   ];
+  const [collections, setCollections] = useState<ProductCollection[]>([]);
+  const [loadingInlineCollections, setLoadingInlineCollections] =
+    useState(false);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
+  const [collectionForm, setCollectionForm] = useState<{
+    name: string;
+    slug: string;
+    status: "active" | "inactive";
+  }>({
+    name: "",
+    slug: "",
+    status: "active",
+  });
 
   // Cargar tipos de producto al montar el componente
   useEffect(() => {
@@ -1810,6 +1915,42 @@ export function ProductForm({
     loadProductTypes();
   }, []);
 
+  useEffect(() => {
+    const businessId = selectedBusiness?.business_id;
+    if (!businessId) {
+      setCollections([]);
+      setLoadingInlineCollections(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadCollections = async () => {
+      try {
+        setLoadingInlineCollections(true);
+        const response = await productCollectionsService.list(businessId);
+        if (isMounted) {
+          setCollections(response.data || []);
+        }
+      } catch (err) {
+        console.error("Error cargando colecciones:", err);
+        if (isMounted) {
+          setCollections([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingInlineCollections(false);
+        }
+      }
+    };
+
+    loadCollections();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBusiness?.business_id]);
+
   // Cargar impuestos del producto cuando se edita
   useEffect(() => {
     if (editingProduct?.id && onLoadProductTaxes) {
@@ -1822,6 +1963,49 @@ export function ProductForm({
   // Si hay sucursales disponibles, el sistema está activo y las variantes solo pueden usar ajustes relativos
   const hasBranchPrices =
     availableBusinesses.length > 0 || branchAvailabilities.length > 0;
+
+  const handleCollectionToggle = (
+    branchId: string,
+    branchName: string,
+    collectionId: string,
+    checked: boolean,
+  ) => {
+    setBranchAvailabilities((prev) => {
+      const existing = prev.find((a) => a.branch_id === branchId);
+      const currentIds = new Set(
+        (existing?.collection_ids || []).filter(Boolean),
+      );
+
+      if (checked) {
+        currentIds.add(collectionId);
+      } else {
+        currentIds.delete(collectionId);
+      }
+
+      const updatedEntry =
+        existing ?? {
+          branch_id: branchId,
+          branch_name: branchName,
+          is_enabled: false,
+          price: null,
+          stock: null,
+          allow_backorder: false,
+          backorder_lead_time_days: null,
+          is_active: true,
+        };
+
+      const nextEntry = {
+        ...updatedEntry,
+        collection_ids: Array.from(currentIds),
+      };
+
+      if (existing) {
+        return prev.map((a) => (a.branch_id === branchId ? nextEntry : a));
+      }
+
+      return [...prev, nextEntry];
+    });
+  };
 
   useEffect(() => {
     // Si hay precios por sucursal, convertir todos los precios absolutos a ajustes relativos
@@ -1880,6 +2064,15 @@ export function ProductForm({
     );
   };
 
+  const slugifyCollection = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
   const addVariantGroup = () => {
     setVariantGroups([
       ...variantGroups,
@@ -1905,6 +2098,42 @@ export function ProductForm({
     const updated = [...variantGroups];
     updated[index] = { ...updated[index], ...updates };
     setVariantGroups(updated);
+  };
+
+  const openCollectionModal = () => {
+    setCollectionForm({ name: "", slug: "", status: "active" });
+    setCollectionError(null);
+    setShowCollectionModal(true);
+  };
+
+  const handleCollectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBusiness?.business_id) {
+      setCollectionError("Selecciona una sucursal para crear colecciones");
+      return;
+    }
+    const name = collectionForm.name.trim();
+    const slug = slugifyCollection(collectionForm.slug || collectionForm.name);
+    if (!name || !slug) {
+      setCollectionError("Nombre y slug son obligatorios");
+      return;
+    }
+    try {
+      setLoadingInlineCollections(true);
+      const created = await productCollectionsService.create({
+        business_id: selectedBusiness.business_id,
+        name,
+        slug,
+        status: collectionForm.status,
+      });
+      setCollections((prev) => [...prev, created]);
+      setShowCollectionModal(false);
+      setShowCollectionPicker(false);
+    } catch (err: any) {
+      setCollectionError(err?.message || "No se pudo crear la colección");
+    } finally {
+      setLoadingInlineCollections(false);
+    }
   };
 
   const addVariant = (groupIndex: number) => {
@@ -2608,14 +2837,98 @@ export function ProductForm({
 
             {/* Disponibilidad por Sucursal - Entre variantes y compatibilidad */}
             {editingProduct && (
-              <BranchAvailabilitySection
-                branchAvailabilities={branchAvailabilities}
-                setBranchAvailabilities={setBranchAvailabilities}
-                loadingBranchAvailabilities={loadingBranchAvailabilities}
-                onLoadBranchAvailabilities={onLoadBranchAvailabilities}
-                editingProduct={editingProduct}
-                globalPrice={formData.price}
-              />
+              <>
+                <BranchAvailabilitySection
+                  branchAvailabilities={branchAvailabilities}
+                  setBranchAvailabilities={setBranchAvailabilities}
+                  loadingBranchAvailabilities={loadingBranchAvailabilities}
+                  onLoadBranchAvailabilities={onLoadBranchAvailabilities}
+                  editingProduct={editingProduct}
+                  globalPrice={formData.price}
+                />
+
+                {/* Colecciones por sucursal */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+                    <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+                      Colecciones por Sucursal
+                    </h4>
+                    {loadingCollections && (
+                      <span className="text-xs text-gray-500">Cargando...</span>
+                    )}
+                  </div>
+                  {availableBusinesses.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      No hay sucursales disponibles para asignar colecciones.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {availableBusinesses.map((branch) => {
+                        const availability = branchAvailabilities.find(
+                          (a) => a.branch_id === branch.business_id,
+                        );
+                        const branchCollections =
+                          collectionsByBranch[branch.business_id] || [];
+                        const selectedIds =
+                          availability?.collection_ids || [];
+                        const isEnabled = availability?.is_enabled ?? false;
+
+                        return (
+                          <div
+                            key={branch.business_id}
+                            className="p-3 border border-gray-200 rounded"
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-900">
+                                  {branch.business_name}
+                                </span>
+                                {!isEnabled && (
+                                  <span className="text-xs text-gray-500">
+                                    Disponibilidad desactivada
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {branchCollections.length === 0 ? (
+                              <p className="text-xs text-gray-500">
+                                Sin colecciones para esta sucursal.
+                              </p>
+                            ) : (
+                              <div className="flex flex-wrap gap-3">
+                                {branchCollections.map((collection) => (
+                                  <label
+                                    key={collection.id}
+                                    className="inline-flex items-center gap-2 text-sm text-gray-700"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                                      checked={selectedIds.includes(
+                                        collection.id,
+                                      )}
+                                      onChange={(e) =>
+                                        handleCollectionToggle(
+                                          branch.business_id,
+                                          branch.business_name,
+                                          collection.id,
+                                          e.target.checked,
+                                        )
+                                      }
+                                      disabled={!isEnabled}
+                                    />
+                                    <span>{collection.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Compatibilidad de Vehículos - Solo para refacciones y accesorios */}
@@ -2891,16 +3204,90 @@ export function ProductForm({
                     <span className="ml-2 text-sm text-gray-600">
                       Destacado
                     </span>
-                  </label>
-                )}
-              </div>
-            </div>
+              </label>
+            )}
+          </div>
+        </div>
 
-            {/* Precio y Orden */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
-                Precio y Visualización
-              </h3>
+        {/* Colecciones */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+              Colecciones
+            </h3>
+            {loadingInlineCollections && (
+              <span className="text-xs text-gray-500">Cargando...</span>
+            )}
+          </div>
+
+          {collections.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              No hay colecciones creadas para esta sucursal.
+            </p>
+          ) : (
+            <>
+              <div className="border border-gray-200 rounded p-3 space-y-2 bg-white shadow-sm">
+                <p className="text-xs text-gray-600">
+                  Selecciona las colecciones de{" "}
+                  <span className="font-semibold">
+                    {selectedBusiness?.business_name || ""}
+                  </span>
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {collections.map((col) => {
+                    const isSelected = (branchAvailability?.collection_ids || []).includes(col.id);
+                    return (
+                      <label
+                        key={col.id}
+                        className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            className="h-5 w-5 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                            checked={isSelected}
+                            onChange={(e) =>
+                              handleCollectionToggle(
+                                selectedBusiness?.business_id || "",
+                                selectedBusiness?.business_name || "",
+                                col.id,
+                                e.target.checked,
+                              )
+                            }
+                            disabled={!selectedBusiness}
+                          />
+                          <span className="text-gray-800 font-medium">{col.name}</span>
+                        </div>
+                        {col.status === "inactive" && (
+                          <span className="text-[11px] text-gray-500">Inactiva</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                  {collections.length === 0 && (
+                    <p className="text-xs text-gray-500">No hay colecciones disponibles.</p>
+                  )}
+                </div>
+                <div className="pt-3 border-t border-gray-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={openCollectionModal}
+                    className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    disabled={!selectedBusiness}
+                  >
+                    Crear colección
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Precio y Orden */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
+            Precio y Visualización
+          </h3>
 
               {isFieldVisible("price") && (
                 <div>
@@ -3299,6 +3686,126 @@ export function ProductForm({
           </button>
         </div>
       </form>
+
+      {showCollectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 px-4 py-8">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">
+                  Nueva colección
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Para la sucursal {selectedBusiness?.business_name || ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCollectionModal(false)}
+                className="rounded p-1 text-gray-500 hover:bg-gray-100"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleCollectionSubmit}>
+              <div className="space-y-4 px-5 py-4">
+                {collectionError && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {collectionError}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    value={collectionForm.name}
+                    onChange={(e) =>
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                        slug:
+                          prev.slug || slugifyCollection(e.target.value),
+                      }))
+                    }
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="Ej. Accesorios"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Slug
+                  </label>
+                  <input
+                    type="text"
+                    value={collectionForm.slug}
+                    onChange={(e) =>
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        slug: slugifyCollection(e.target.value),
+                      }))
+                    }
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="accesorios"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo minúsculas, números y guiones.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Estado
+                  </label>
+                  <select
+                    value={collectionForm.status}
+                    onChange={(e) =>
+                      setCollectionForm((prev) => ({
+                        ...prev,
+                        status: e.target.value as "active" | "inactive",
+                      }))
+                    }
+                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="active">Activa</option>
+                    <option value="inactive">Inactiva</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCollectionModal(false)}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingInlineCollections}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  {loadingInlineCollections ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3865,6 +4372,8 @@ interface BranchAvailabilitySectionProps {
     stock: number | null;
     allow_backorder?: boolean;
     backorder_lead_time_days?: number | null;
+    collection_ids?: string[];
+    collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
     is_active?: boolean; // Estado activo/inactivo de la sucursal
   }>;
   setBranchAvailabilities: React.Dispatch<
@@ -3877,6 +4386,8 @@ interface BranchAvailabilitySectionProps {
         stock: number | null;
         allow_backorder?: boolean;
         backorder_lead_time_days?: number | null;
+        collection_ids?: string[];
+        collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
         is_active?: boolean;
       }>
     >
@@ -3914,6 +4425,8 @@ function BranchAvailabilitySection({
         stock: null,
         allow_backorder: false,
         backorder_lead_time_days: null,
+        collection_ids: [],
+        collections: [],
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
       }));
       setBranchAvailabilities(initialAvailabilities);
@@ -3993,6 +4506,8 @@ function BranchAvailabilitySection({
             stock: null,
             allow_backorder: false,
             backorder_lead_time_days: null,
+            collection_ids: [],
+            collections: [],
             is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
           }));
 
@@ -4024,6 +4539,8 @@ function BranchAvailabilitySection({
         stock: null,
         allow_backorder: false,
         backorder_lead_time_days: null,
+        collection_ids: [],
+        collections: [],
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
       }
     );

@@ -9,12 +9,13 @@ import { vehiclesService, ProductCompatibility } from '@/lib/vehicles';
 import ImageUpload from '@/components/ImageUpload';
 import MultipleImageUpload, { ProductImage } from '@/components/MultipleImageUpload';
 import CategorySelector from '@/components/CategorySelector';
+import { productCollectionsService, ProductCollection } from '@/lib/product-collections';
 import { ProductForm } from './index';
 
 export default function ProductDetailPage() {
   const router = useRouter();
   const { id } = router.query;
-  const { selectedBusiness } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -59,8 +60,13 @@ export default function ProductDetailPage() {
     stock: number | null;
     allow_backorder?: boolean;
     backorder_lead_time_days?: number | null;
+    collection_ids?: string[];
+    collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
+    is_active?: boolean;
   }>>([]);
   const [loadingBranchAvailabilities, setLoadingBranchAvailabilities] = useState(false);
+  const [collectionsByBranch, setCollectionsByBranch] = useState<Record<string, ProductCollection[]>>({});
+  const [loadingCollections, setLoadingCollections] = useState(false);
   
   // Estados para impuestos
   const [availableTaxTypes, setAvailableTaxTypes] = useState<TaxType[]>([]);
@@ -103,11 +109,21 @@ export default function ProductDetailPage() {
       setBranchAvailabilities(
         (response.availabilities || []).map((availability) => ({
           ...availability,
+          collection_ids: Array.isArray(availability.collection_ids)
+            ? availability.collection_ids.filter(Boolean)
+            : [],
+          collections: Array.isArray(availability.collections)
+            ? availability.collections
+            : [],
           allow_backorder: availability.allow_backorder ?? false,
           backorder_lead_time_days:
             availability.backorder_lead_time_days !== undefined
               ? availability.backorder_lead_time_days
               : null,
+          is_active:
+            availability.is_active !== undefined
+              ? availability.is_active
+              : availableBusinesses.find((b) => b.business_id === availability.branch_id)?.is_active ?? true,
         })),
       );
     } catch (err: any) {
@@ -116,7 +132,7 @@ export default function ProductDetailPage() {
     } finally {
       setLoadingBranchAvailabilities(false);
     }
-  }, []);
+  }, [availableBusinesses]);
 
   // Función para cargar imágenes del producto
   const loadProductImages = useCallback(async (productId: string, fallbackImageUrl?: string) => {
@@ -183,6 +199,55 @@ export default function ProductDetailPage() {
       }
     }
   }, [product?.id, product?.product_type, product?.image_url, loadProductTaxes, loadProductCompatibilities, loadBranchAvailabilities, loadProductImages]);
+
+  useEffect(() => {
+    const businessIds = availableBusinesses
+      .map((b) => b.business_id)
+      .filter((id) => !!id);
+
+    if (businessIds.length === 0) {
+      setCollectionsByBranch({});
+      setLoadingCollections(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadCollections = async () => {
+      try {
+        setLoadingCollections(true);
+        const entries = await Promise.all(
+          businessIds.map(async (businessId) => {
+            try {
+              const response = await productCollectionsService.list(businessId);
+              return [businessId, response.data || []] as const;
+            } catch (err) {
+              console.error('Error cargando colecciones:', err);
+              return [businessId, []] as const;
+            }
+          }),
+        );
+
+        if (!isMounted) return;
+
+        const map: Record<string, ProductCollection[]> = {};
+        entries.forEach(([businessId, list]) => {
+          map[businessId] = list;
+        });
+        setCollectionsByBranch(map);
+      } finally {
+        if (isMounted) {
+          setLoadingCollections(false);
+        }
+      }
+    };
+
+    loadCollections();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [availableBusinesses.map((b) => b.business_id).join(',')]);
 
   const loadProduct = async (productId: string) => {
     try {
@@ -387,9 +452,15 @@ export default function ProductDetailPage() {
             .filter(avail => avail.branch_id) // Solo las que tienen branch_id
             .map(avail => ({
               branch_id: avail.branch_id,
-              is_enabled: avail.is_enabled || false,
+              is_enabled:
+                avail.is_enabled ||
+                (Array.isArray(avail.collection_ids) &&
+                  avail.collection_ids.length > 0),
               price: avail.price !== null && avail.price !== undefined ? avail.price : null,
               stock: avail.stock !== null && avail.stock !== undefined ? avail.stock : null,
+              collection_ids: Array.isArray(avail.collection_ids)
+                ? avail.collection_ids.filter(Boolean)
+                : [],
               allow_backorder: avail.allow_backorder || false,
               backorder_lead_time_days:
                 avail.backorder_lead_time_days !== null &&
@@ -564,6 +635,8 @@ export default function ProductDetailPage() {
           setBranchAvailabilities={setBranchAvailabilities}
           loadingBranchAvailabilities={loadingBranchAvailabilities}
           onLoadBranchAvailabilities={loadBranchAvailabilities}
+          collectionsByBranch={collectionsByBranch}
+          loadingCollections={loadingCollections}
           productImages={productImages}
           setProductImages={setProductImages}
           loadingImages={loadingImages}

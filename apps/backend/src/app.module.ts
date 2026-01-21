@@ -15,6 +15,7 @@ import { RepartidoresModule } from './modules/repartidores/repartidores.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { CategoriesModule } from './modules/catalog/categories/categories.module';
 import { ProductsModule } from './modules/catalog/products/products.module';
+import { ProductCollectionsModule } from './modules/catalog/product-collections/product-collections.module';
 import { ProductTypeFieldConfigModule } from './modules/catalog/product-type-field-config/product-type-field-config.module';
 import { TaxesModule } from './modules/catalog/taxes/taxes.module';
 import { ServiceRegionsModule } from './modules/service-regions/service-regions.module';
@@ -42,6 +43,7 @@ import { EmailModule } from './modules/email/email.module';
     ClientsModule,
     CategoriesModule,
     ProductsModule,
+    ProductCollectionsModule,
     ProductTypeFieldConfigModule,
     TaxesModule,
     ServiceRegionsModule,
