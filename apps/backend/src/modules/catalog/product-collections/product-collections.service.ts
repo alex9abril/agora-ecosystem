@@ -10,6 +10,7 @@ interface ProductCollectionRow {
   name: string;
   slug: string;
   status: 'active' | 'inactive';
+  image_url?: string | null;
   created_at: string;
   updated_at: string;
   total_products?: number;
@@ -38,6 +39,7 @@ export class ProductCollectionsService {
       name: row.name,
       slug: row.slug,
       status: row.status,
+      image_url: row.image_url || null,
       created_at: row.created_at,
       updated_at: row.updated_at,
       total_products: row.total_products !== undefined ? Number(row.total_products) : undefined,
@@ -74,6 +76,7 @@ export class ProductCollectionsService {
         pc.name,
         pc.slug,
         pc.status,
+        pc.image_url,
         pc.created_at,
         pc.updated_at,
         COUNT(DISTINCT pca.product_id) FILTER (WHERE pca.status = 'active') AS total_products
@@ -112,6 +115,7 @@ export class ProductCollectionsService {
         pc.name,
         pc.slug,
         pc.status,
+        pc.image_url,
         pc.created_at,
         pc.updated_at,
         COUNT(DISTINCT pca.product_id) FILTER (WHERE pca.status = 'active') AS total_products
@@ -144,6 +148,7 @@ export class ProductCollectionsService {
     const name = dto.name?.trim();
     const slug = this.normalizeSlug(dto.slug || dto.name);
     const status = dto.status || 'active';
+    const imageUrl = dto.image_url?.trim() || null;
 
     if (!name) {
       throw new BadRequestException('El nombre es obligatorio');
@@ -155,11 +160,11 @@ export class ProductCollectionsService {
     try {
       const result = await dbPool.query(
         `
-          INSERT INTO catalog.product_colecciones (business_id, name, slug, status)
-          VALUES ($1, $2, $3, $4)
+          INSERT INTO catalog.product_colecciones (business_id, name, slug, status, image_url)
+          VALUES ($1, $2, $3, $4, $5)
           RETURNING *
         `,
-        [dto.business_id, name, slug, status],
+        [dto.business_id, name, slug, status, imageUrl],
       );
 
       return this.findOne(result.rows[0].id);
@@ -214,6 +219,13 @@ export class ProductCollectionsService {
       index++;
     }
 
+    if (dto.image_url !== undefined) {
+      const imageUrl = dto.image_url?.trim() || null;
+      updateFields.push(`image_url = $${index}`);
+      values.push(imageUrl);
+      index++;
+    }
+
     if (updateFields.length === 0) {
       return this.findOne(id);
     }
@@ -254,6 +266,36 @@ export class ProductCollectionsService {
         detail: error.detail,
       });
       throw new ServiceUnavailableException('Error al actualizar la colección');
+    }
+  }
+
+  async remove(id: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const sql = `
+      DELETE FROM catalog.product_colecciones
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    try {
+      const result = await dbPool.query(sql, [id]);
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Colección no encontrada');
+      }
+      return { id: result.rows[0].id };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('⚠️ Error eliminando colección:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
+      throw new ServiceUnavailableException('Error al eliminar la colección');
     }
   }
 }

@@ -21,4 +21,13 @@ export class UpdateProductCollectionDto {
   @IsOptional()
   @IsIn(['active', 'inactive'])
   status?: 'active' | 'inactive';
+
+  @ApiPropertyOptional({
+    description: 'URL pública de la imagen de la colección',
+    example: 'https://example.com/collections/image.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  image_url?: string;
 }

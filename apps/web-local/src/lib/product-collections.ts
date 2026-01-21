@@ -6,6 +6,7 @@ export interface ProductCollection {
   name: string;
   slug: string;
   status?: 'active' | 'inactive';
+  image_url?: string | null;
   total_products?: number;
   created_at?: string;
   updated_at?: string;
@@ -16,12 +17,14 @@ export interface CreateCollectionData {
   name: string;
   slug: string;
   status?: 'active' | 'inactive';
+  image_url?: string;
 }
 
 export interface UpdateCollectionData {
   name?: string;
   slug?: string;
   status?: 'active' | 'inactive';
+  image_url?: string;
 }
 
 type CollectionListResponse = {
@@ -58,6 +61,12 @@ export const productCollectionsService = {
     };
   },
 
+  async get(id: string): Promise<ProductCollection> {
+    return apiRequest<ProductCollection>(`/catalog/collections/${id}`, {
+      method: 'GET',
+    });
+  },
+
   async create(data: CreateCollectionData): Promise<ProductCollection> {
     return apiRequest<ProductCollection>('/catalog/collections', {
       method: 'POST',
@@ -69,6 +78,12 @@ export const productCollectionsService = {
     return apiRequest<ProductCollection>(`/catalog/collections/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  },
+
+  async remove(id: string): Promise<{ id: string }> {
+    return apiRequest<{ id: string }>(`/catalog/collections/${id}`, {
+      method: 'DELETE',
     });
   },
 };

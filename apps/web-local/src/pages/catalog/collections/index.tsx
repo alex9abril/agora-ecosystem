@@ -1,39 +1,19 @@
 import Head from 'next/head';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { productCollectionsService, ProductCollection } from '@/lib/product-collections';
 
-interface CollectionFormState {
-  name: string;
-  slug: string;
-  status: 'active' | 'inactive';
-}
-
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
 export default function ProductCollectionsPage() {
+  const router = useRouter();
   const { selectedBusiness } = useSelectedBusiness();
   const [collections, setCollections] = useState<ProductCollection[]>([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<ProductCollection | null>(null);
-  const [formState, setFormState] = useState<CollectionFormState>({
-    name: '',
-    slug: '',
-    status: 'active',
-  });
-  const [isSlugEdited, setIsSlugEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   const branchName = useMemo(() => selectedBusiness?.business_name || 'sucursal', [selectedBusiness?.business_name]);
 
@@ -50,7 +30,9 @@ export default function ProductCollectionsPage() {
     try {
       setLoading(true);
       setPageError(null);
-      const response = await productCollectionsService.list(selectedBusiness.business_id);
+      const response = await productCollectionsService.list(selectedBusiness.business_id, {
+        status: 'all',
+      });
       setCollections(response.data);
     } catch (error: any) {
       setPageError(error?.message || 'No se pudieron cargar las colecciones');
@@ -59,94 +41,91 @@ export default function ProductCollectionsPage() {
     }
   };
 
-  const openCreateModal = () => {
-    setEditing(null);
-    setFormState({
-      name: '',
-      slug: '',
-      status: 'active',
-    });
-    setIsSlugEdited(false);
-    setFormError(null);
-    setShowModal(true);
+  const selectedCollections = collections.filter((item) => selectedIds.has(item.id));
+  const allSelected = collections.length > 0 && selectedIds.size === collections.length;
+  const hasSelection = selectedIds.size > 0;
+  const hasActiveSelected = selectedCollections.some(
+    (item) => (item.status || 'active') === 'active',
+  );
+  const hasInactiveSelected = selectedCollections.some(
+    (item) => item.status === 'inactive',
+  );
+  const deleteLabel = hasSelection
+    ? `Eliminar ${selectedIds.size} elemento${selectedIds.size === 1 ? '' : 's'}`
+    : 'Eliminar';
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate =
+        selectedIds.size > 0 && selectedIds.size < collections.length;
+    }
+  }, [selectedIds, collections.length]);
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(collections.map((item) => item.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
   };
 
-  const openEditModal = (item: ProductCollection) => {
-    setEditing(item);
-    setFormState({
-      name: item.name,
-      slug: item.slug,
-      status: (item.status as 'active' | 'inactive') || 'active',
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
     });
-    setIsSlugEdited(true);
-    setFormError(null);
-    setShowModal(true);
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!selectedBusiness?.business_id) {
-      setFormError('Selecciona una sucursal para guardar la colección');
-      return;
-    }
-
-    const trimmedName = formState.name.trim();
-    const trimmedSlug = formState.slug.trim();
-
-    if (!trimmedName) {
-      setFormError('El nombre es obligatorio');
-      return;
-    }
-    if (!trimmedSlug) {
-      setFormError('El slug es obligatorio');
-      return;
-    }
-
-    const payload = {
-      name: trimmedName,
-      slug: slugify(trimmedSlug),
-      status: formState.status,
-    };
-
+  const applyStatusToSelection = async (
+    status: 'active' | 'inactive',
+    options?: { removeFromList?: boolean },
+  ) => {
+    if (!hasSelection) return;
     try {
       setSaving(true);
-      setFormError(null);
-      if (editing) {
-        await productCollectionsService.update(editing.id, {
-          name: payload.name,
-          slug: payload.slug,
-          status: payload.status,
-        });
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          productCollectionsService.update(id, { status }),
+        ),
+      );
+      const selectedIdsSnapshot = new Set(selectedIds);
+      setSelectedIds(new Set());
+      if (options?.removeFromList) {
+        setCollections((prev) =>
+          prev.filter((item) => !selectedIdsSnapshot.has(item.id)),
+        );
       } else {
-        await productCollectionsService.create({
-          ...payload,
-          business_id: selectedBusiness.business_id,
-        });
+        await loadCollections();
       }
-      setShowModal(false);
-      await loadCollections();
     } catch (error: any) {
-      setFormError(error?.message || 'No se pudo guardar la colección');
+      setPageError(error?.message || 'No se pudo actualizar el estado');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleNameChange = (value: string) => {
-    const nextName = value;
-    setFormState((prev) => ({
-      ...prev,
-      name: nextName,
-      slug: !isSlugEdited ? slugify(nextName) : prev.slug,
-    }));
-  };
-
-  const handleSlugChange = (value: string) => {
-    setIsSlugEdited(true);
-    setFormState((prev) => ({
-      ...prev,
-      slug: slugify(value),
-    }));
+  const handleDeleteSelection = async () => {
+    if (!hasSelection) return;
+    const confirmed = window.confirm(
+      '¿Quieres eliminar las colecciones seleccionadas? Esta acción es irreversible.',
+    );
+    if (!confirmed) return;
+    try {
+      setSaving(true);
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map((id) => productCollectionsService.remove(id)));
+      setSelectedIds(new Set());
+      setCollections((prev) => prev.filter((item) => !ids.includes(item.id)));
+    } catch (error: any) {
+      setPageError(error?.message || 'No se pudo eliminar la colección');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -165,9 +144,9 @@ export default function ProductCollectionsPage() {
           </div>
           <button
             type="button"
-            onClick={openCreateModal}
+            onClick={() => router.push('/catalog/collections/new')}
             disabled={!selectedBusiness}
-            className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            className="inline-flex items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
           >
             Nueva colección
           </button>
@@ -184,10 +163,62 @@ export default function ProductCollectionsPage() {
             Selecciona una sucursal para gestionar las colecciones de productos.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm">
+              <span className="text-sm text-gray-600">
+                {hasSelection
+                  ? `${selectedIds.size} seleccionada(s)`
+                  : 'Selecciona colecciones para gestionar'}
+              </span>
+              <div className="ml-auto flex flex-wrap gap-2">
+                {hasActiveSelected && (
+                  <button
+                    type="button"
+                    disabled={!hasSelection || saving}
+                    onClick={() => applyStatusToSelection('inactive')}
+                    className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    Poner en borrador
+                  </button>
+                )}
+                {hasInactiveSelected && (
+                  <button
+                    type="button"
+                    disabled={!hasSelection || saving}
+                    onClick={() => applyStatusToSelection('active')}
+                    className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    Activar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={!hasSelection || saving}
+                  onClick={handleDeleteSelection}
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5-4h4m-4 0a1 1 0 00-1 1v2h6V4a1 1 0 00-1-1m-4 0h4"
+                    />
+                  </svg>
+                  {deleteLabel}
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent"></div>
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-900 border-t-transparent"></div>
                 <span className="ml-3 text-sm text-gray-600">Cargando colecciones...</span>
               </div>
             ) : collections.length === 0 ? (
@@ -199,6 +230,15 @@ export default function ProductCollectionsPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(e) => toggleSelectAll(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
+                        />
+                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                         Colección
                       </th>
@@ -218,6 +258,14 @@ export default function ProductCollectionsPage() {
                     {collections.map((item) => (
                       <tr key={item.id}>
                         <td className="px-6 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(item.id)}
+                            onChange={() => toggleSelect(item.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
+                          />
+                        </td>
+                        <td className="px-6 py-3">
                           <div className="font-medium text-gray-900">{item.name}</div>
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-600">
@@ -225,22 +273,25 @@ export default function ProductCollectionsPage() {
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-600">{item.total_products ?? 0}</td>
                         <td className="px-6 py-3 text-sm text-gray-600">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
-                              item.status === 'inactive'
-                                ? 'bg-gray-100 text-gray-700'
-                                : 'bg-green-50 text-green-700'
-                            }`}
-                          >
-                            {item.status === 'inactive' ? 'Inactiva' : 'Activa'}
-                          </span>
+                          <div className="flex items-center">
+                            <div
+                              className={`mr-2 h-2 w-2 rounded-full ${
+                                item.status === 'inactive'
+                                  ? 'bg-gray-400'
+                                  : 'bg-green-500'
+                              }`}
+                            ></div>
+                            <span className="text-sm text-gray-600">
+                              {item.status === 'inactive' ? 'Inactiva' : 'Activa'}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-6 py-3 text-right text-sm">
                           <div className="flex items-center justify-end space-x-3">
                             <button
                               type="button"
-                              onClick={() => openEditModal(item)}
-                              className="text-indigo-600 hover:text-indigo-800"
+                              onClick={() => router.push(`/catalog/collections/${item.id}`)}
+                              className="text-gray-900 hover:text-gray-700"
                             >
                               Editar
                             </button>
@@ -253,104 +304,9 @@ export default function ProductCollectionsPage() {
               </div>
             )}
           </div>
+          </div>
         )}
       </div>
-
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 px-4 py-8">
-          <div className="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  {editing ? 'Editar colección' : 'Nueva colección'}
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Para la sucursal {branchName}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-100"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4 px-6 py-5">
-                {formError && (
-                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                    {formError}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Nombre</label>
-                  <input
-                    type="text"
-                    value={formState.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    placeholder="Ej. Accesorios"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Slug</label>
-                  <input
-                    type="text"
-                    value={formState.slug}
-                    onChange={(e) => handleSlugChange(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    placeholder="accesorios"
-                    required
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Solo minúsculas, números y guiones.</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Estado</label>
-                  <select
-                    value={formState.status}
-                    onChange={(e) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        status: e.target.value as 'active' | 'inactive',
-                      }))
-                    }
-                    className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    <option value="active">Activa</option>
-                    <option value="inactive">Inactiva</option>
-                  </select>
-                </div>
-
-              </div>
-
-              <div className="flex items-center justify-end space-x-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-md px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                >
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </LocalLayout>
   );
 }

@@ -1,7 +1,7 @@
 import Head from "next/head";
 import { useRouter } from "next/router";
 import LocalLayout from "@/components/layout/LocalLayout";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSelectedBusiness } from "@/contexts/SelectedBusinessContext";
 import {
   productsService,
@@ -30,6 +30,7 @@ import {
   productCollectionsService,
   ProductCollection,
 } from "@/lib/product-collections";
+import { businessService } from "@/lib/business";
 
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
@@ -211,10 +212,13 @@ export default function ProductsPage() {
               const response = await productCollectionsService.list(
                 businessId,
               );
-              return [businessId, response.data || []] as const;
+              return [
+                businessId,
+                (response.data || []) as ProductCollection[],
+              ] as const;
             } catch (err) {
               console.error("Error cargando colecciones:", err);
-              return [businessId, []] as const;
+              return [businessId, [] as ProductCollection[]] as const;
             }
           }),
         );
@@ -1860,6 +1864,8 @@ export function ProductForm({
   >([]);
   const [showPriceHelp, setShowPriceHelp] = useState(false);
   const [showSelectionTypeHelp, setShowSelectionTypeHelp] = useState(false);
+  const [isFichaEditable, setIsFichaEditable] = useState(!editingProduct);
+  const [selectedFichaImage, setSelectedFichaImage] = useState<ProductImage | null>(null);
   const branchAvailability = currentBranchId
     ? branchAvailabilities.find((a) => a.branch_id === currentBranchId)
     : undefined;
@@ -1883,6 +1889,10 @@ export function ProductForm({
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
   const [collectionError, setCollectionError] = useState<string | null>(null);
+  const [branchGroupMap, setBranchGroupMap] = useState<
+    Record<string, { id?: string | null; name: string }>
+  >({});
+  const [loadingBranchGroups, setLoadingBranchGroups] = useState(false);
   const [collectionForm, setCollectionForm] = useState<{
     name: string;
     slug: string;
@@ -1914,6 +1924,102 @@ export function ProductForm({
 
     loadProductTypes();
   }, []);
+
+  useEffect(() => {
+    setIsFichaEditable(!editingProduct);
+  }, [editingProduct?.id]);
+
+  useEffect(() => {
+    if (productImages.length === 0) {
+      setSelectedFichaImage(null);
+      return;
+    }
+    const primary = productImages.find((img) => img.is_primary) || productImages[0];
+    setSelectedFichaImage(primary);
+  }, [productImages]);
+
+  useEffect(() => {
+    if (availableBusinesses.length === 0) {
+      setBranchGroupMap({});
+      setLoadingBranchGroups(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadBranchGroups = async () => {
+      try {
+        setLoadingBranchGroups(true);
+        const entries = await Promise.all(
+          availableBusinesses.map(async (business) => {
+            try {
+              const fullBusiness = await businessService.getMyBusiness(
+                business.business_id,
+              );
+              const groupId = fullBusiness?.business_group_id || null;
+              const groupName =
+                fullBusiness?.business_group_name ||
+                (groupId ? "Grupo sin nombre" : "Sin grupo");
+              return [
+                business.business_id,
+                { id: groupId, name: groupName },
+              ] as const;
+            } catch (err) {
+              console.error(
+                `Error cargando grupo de ${business.business_name}:`,
+                err,
+              );
+              return [
+                business.business_id,
+                { id: null, name: "Sin grupo" },
+              ] as const;
+            }
+          }),
+        );
+
+        if (!isMounted) return;
+
+        const map: Record<string, { id?: string | null; name: string }> = {};
+        entries.forEach(([branchId, group]) => {
+          map[branchId] = group;
+        });
+
+        const groupIds = new Set(
+          entries.map(([, group]) => group.id).filter(Boolean) as string[],
+        );
+        const hasUnnamedGroup = entries.some(
+          ([, group]) => group.id && group.name === "Grupo sin nombre",
+        );
+
+        if (groupIds.size === 1 && hasUnnamedGroup) {
+          try {
+            const group = await businessService.getMyBusinessGroup();
+            if (group?.name) {
+              entries.forEach(([branchId, groupInfo]) => {
+                if (groupInfo.id) {
+                  map[branchId] = { ...groupInfo, name: group.name };
+                }
+              });
+            }
+          } catch (err) {
+            console.warn("No se pudo cargar el nombre del grupo:", err);
+          }
+        }
+
+        setBranchGroupMap(map);
+      } finally {
+        if (isMounted) {
+          setLoadingBranchGroups(false);
+        }
+      }
+    };
+
+    loadBranchGroups();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [availableBusinesses.map((b) => b.business_id).join(",")]);
 
   useEffect(() => {
     const businessId = selectedBusiness?.business_id;
@@ -2177,16 +2283,255 @@ export function ProductForm({
     }
   };
 
-  return (
-    <div className="bg-white rounded border border-gray-200">
-      <div className="border-b border-gray-200 px-6 py-4">
-        <h2 className="text-base font-medium text-gray-900">
-          {editingProduct ? "Editar Producto" : "Nuevo Producto"}
-        </h2>
-      </div>
+  const productTypeLabel = useMemo(() => {
+    const match = productTypes.find((type) => type.value === formData.product_type);
+    return match?.label || formData.product_type;
+  }, [productTypes, formData.product_type]);
 
-      <form onSubmit={onSubmit} className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  const categoryLabel = useMemo(() => {
+    const match = categories.find((category) => category.id === formData.category_id);
+    return match?.name || "Sin categoría";
+  }, [categories, formData.category_id]);
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={onSubmit} className="space-y-8">
+        {editingProduct && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-4 rounded border border-gray-200 bg-gray-50 p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                    Ficha técnica del producto
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Consulta la información general del producto. Para editarla,
+                    usa el botón de la derecha.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFichaEditable((prev) => !prev)}
+                  className="px-3 py-1.5 text-xs font-normal border border-gray-200 rounded bg-white text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  {isFichaEditable ? "Cerrar edición" : "Editar ficha"}
+                </button>
+              </div>
+
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-gray-900">
+                  {formData.name || "Producto sin nombre"}
+                </p>
+                <p className="text-xs text-gray-500">
+                  SKU: {formData.sku || "Sin SKU"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-2xl font-semibold text-gray-900">
+                  ${formData.price.toFixed(2)}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
+                    {branchAvailability?.stock !== null &&
+                    branchAvailability?.stock !== undefined
+                      ? `En stock (${branchAvailability.stock})`
+                      : "Stock sin límite"}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600">
+                    {categoryLabel}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-900">Descripción</p>
+                <p className="text-sm text-gray-700 whitespace-pre-line">
+                  {formData.description || "Sin descripción"}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-gray-900">Galería</p>
+                {selectedFichaImage ? (
+                  <div className="space-y-3">
+                    <div className="aspect-square w-full overflow-hidden rounded border border-gray-200 bg-white">
+                      <img
+                        src={selectedFichaImage.public_url}
+                        alt={selectedFichaImage.alt_text || formData.name || "Producto"}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {productImages.map((image) => (
+                        <button
+                          type="button"
+                          key={image.id}
+                          onClick={() => setSelectedFichaImage(image)}
+                          className={`h-14 w-14 overflow-hidden rounded border ${
+                            selectedFichaImage.id === image.id
+                              ? "border-gray-900"
+                              : "border-gray-200"
+                          }`}
+                        >
+                          <img
+                            src={image.public_url}
+                            alt={image.alt_text || formData.name || "Producto"}
+                            className="h-full w-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded border border-dashed border-gray-200 p-6 text-center text-xs text-gray-500">
+                    Sin imágenes registradas.
+                  </div>
+                )}
+              </div>
+
+              {(formData.product_type === "refaccion" ||
+                formData.product_type === "accesorio") && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-900">
+                      Compatibilidad
+                    </p>
+                    {productCompatibilities.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {productCompatibilities.map((compatibility) => {
+                          const labelParts = [
+                            compatibility.brand_name,
+                            compatibility.model_name,
+                            compatibility.year_start
+                              ? `${compatibility.year_start}${
+                                  compatibility.year_end
+                                    ? `-${compatibility.year_end}`
+                                    : ""
+                                }`
+                              : null,
+                            compatibility.generation,
+                            compatibility.engine_code,
+                          ].filter(Boolean);
+                          return (
+                            <span
+                              key={compatibility.id}
+                              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700"
+                            >
+                              {compatibility.is_universal
+                                ? "Universal"
+                                : labelParts.join(" · ")}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">
+                        Sin compatibilidades registradas.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded border border-gray-200 bg-white p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Impuestos
+                  </p>
+                  {productTaxes.length > 0 ? (
+                    <div className="mt-2 space-y-1">
+                      {productTaxes.map((tax) => (
+                        <p key={tax.id} className="text-xs text-gray-700">
+                          {tax.tax_name || tax.tax_code || "Impuesto"}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Sin impuestos asignados.
+                    </p>
+                  )}
+                </div>
+
+                {isMedicine && (
+                  <div className="rounded border border-gray-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-400">
+                      Información de farmacia
+                    </p>
+                    <div className="mt-2 space-y-1 text-xs text-gray-700">
+                      <p>
+                        {formData.requires_prescription
+                          ? "Requiere receta"
+                          : "Sin requisito de receta"}
+                      </p>
+                      {formData.age_restriction !== undefined && (
+                        <p>Edad mínima: {formData.age_restriction} años</p>
+                      )}
+                      {formData.max_quantity_per_order !== undefined && (
+                        <p>
+                          Máximo por pedido: {formData.max_quantity_per_order}
+                        </p>
+                      )}
+                      <p>
+                        {formData.requires_pharmacist_validation
+                          ? "Validación farmacéutica requerida"
+                          : "Sin validación farmacéutica"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {Object.keys(nutritionalInfo).length > 0 && (
+                  <div className="rounded border border-gray-200 bg-white p-4">
+                    <p className="text-xs uppercase tracking-wide text-gray-400">
+                      Información nutricional
+                    </p>
+                    <div className="mt-2 space-y-1 text-xs text-gray-700">
+                      {Object.entries(nutritionalInfo).map(([key, value]) => (
+                        <p key={key}>
+                          {key}: {String(value)}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+            <div className="lg:col-span-2 space-y-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 pb-2">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+                    Disponibilidad por distribuidor
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Configura precio, stock y backorder por cada sucursal.
+                  </p>
+                </div>
+                {(loadingBranchAvailabilities || loadingBranchGroups) && (
+                  <span className="text-xs text-gray-500">Cargando...</span>
+                )}
+              </div>
+              <BranchAvailabilitySection
+                branchAvailabilities={branchAvailabilities}
+                setBranchAvailabilities={setBranchAvailabilities}
+                loadingBranchAvailabilities={loadingBranchAvailabilities}
+                onLoadBranchAvailabilities={onLoadBranchAvailabilities}
+                editingProduct={editingProduct}
+                globalPrice={formData.price}
+                branchGroupMap={branchGroupMap}
+                collectionsByBranch={collectionsByBranch}
+                onToggleCollection={handleCollectionToggle}
+                loadingCollections={loadingCollections}
+                showHeader={false}
+              />
+            </div>
+          </div>
+        )}
+
+        {(!editingProduct || isFichaEditable) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMNA IZQUIERDA - Información del Producto */}
           <div className="lg:col-span-2 space-y-6">
             {/* Información General */}
@@ -2835,104 +3180,7 @@ export function ProductForm({
               </div>
             )}
 
-            {/* Disponibilidad por Sucursal - Entre variantes y compatibilidad */}
-            {editingProduct && (
-              <>
-                <BranchAvailabilitySection
-                  branchAvailabilities={branchAvailabilities}
-                  setBranchAvailabilities={setBranchAvailabilities}
-                  loadingBranchAvailabilities={loadingBranchAvailabilities}
-                  onLoadBranchAvailabilities={onLoadBranchAvailabilities}
-                  editingProduct={editingProduct}
-                  globalPrice={formData.price}
-                />
-
-                {/* Colecciones por sucursal */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-                    <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
-                      Colecciones por Sucursal
-                    </h4>
-                    {loadingCollections && (
-                      <span className="text-xs text-gray-500">Cargando...</span>
-                    )}
-                  </div>
-                  {availableBusinesses.length === 0 ? (
-                    <p className="text-xs text-gray-500">
-                      No hay sucursales disponibles para asignar colecciones.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {availableBusinesses.map((branch) => {
-                        const availability = branchAvailabilities.find(
-                          (a) => a.branch_id === branch.business_id,
-                        );
-                        const branchCollections =
-                          collectionsByBranch[branch.business_id] || [];
-                        const selectedIds =
-                          availability?.collection_ids || [];
-                        const isEnabled = availability?.is_enabled ?? false;
-
-                        return (
-                          <div
-                            key={branch.business_id}
-                            className="p-3 border border-gray-200 rounded"
-                          >
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm text-gray-900">
-                                  {branch.business_name}
-                                </span>
-                                {!isEnabled && (
-                                  <span className="text-xs text-gray-500">
-                                    Disponibilidad desactivada
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {branchCollections.length === 0 ? (
-                              <p className="text-xs text-gray-500">
-                                Sin colecciones para esta sucursal.
-                              </p>
-                            ) : (
-                              <div className="flex flex-wrap gap-3">
-                                {branchCollections.map((collection) => (
-                                  <label
-                                    key={collection.id}
-                                    className="inline-flex items-center gap-2 text-sm text-gray-700"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
-                                      checked={selectedIds.includes(
-                                        collection.id,
-                                      )}
-                                      onChange={(e) =>
-                                        handleCollectionToggle(
-                                          branch.business_id,
-                                          branch.business_name,
-                                          collection.id,
-                                          e.target.checked,
-                                        )
-                                      }
-                                      disabled={!isEnabled}
-                                    />
-                                    <span>{collection.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
             {/* Compatibilidad de Vehículos - Solo para refacciones y accesorios */}
-            {/* Movida aquí para que esté justo después de variantes y sea más prominente */}
             {(formData.product_type === "refaccion" ||
               formData.product_type === "accesorio") && (
               <VehicleCompatibilitySection
@@ -3209,79 +3457,80 @@ export function ProductForm({
           </div>
         </div>
 
-        {/* Colecciones */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-            <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
-              Colecciones
-            </h3>
-            {loadingInlineCollections && (
-              <span className="text-xs text-gray-500">Cargando...</span>
+        {!editingProduct && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+                Colecciones
+              </h3>
+              {loadingInlineCollections && (
+                <span className="text-xs text-gray-500">Cargando...</span>
+              )}
+            </div>
+
+            {collections.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                No hay colecciones creadas para esta sucursal.
+              </p>
+            ) : (
+              <>
+                <div className="border border-gray-200 rounded p-3 space-y-2 bg-white shadow-sm">
+                  <p className="text-xs text-gray-600">
+                    Selecciona las colecciones de{" "}
+                    <span className="font-semibold">
+                      {selectedBusiness?.business_name || ""}
+                    </span>
+                  </p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {collections.map((col) => {
+                      const isSelected = (branchAvailability?.collection_ids || []).includes(col.id);
+                      return (
+                        <label
+                          key={col.id}
+                          className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              className="h-5 w-5 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                              checked={isSelected}
+                              onChange={(e) =>
+                                handleCollectionToggle(
+                                  selectedBusiness?.business_id || "",
+                                  selectedBusiness?.business_name || "",
+                                  col.id,
+                                  e.target.checked,
+                                )
+                              }
+                              disabled={!selectedBusiness}
+                            />
+                            <span className="text-gray-800 font-medium">{col.name}</span>
+                          </div>
+                          {col.status === "inactive" && (
+                            <span className="text-[11px] text-gray-500">Inactiva</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                    {collections.length === 0 && (
+                      <p className="text-xs text-gray-500">No hay colecciones disponibles.</p>
+                    )}
+                  </div>
+                  <div className="pt-3 border-t border-gray-100 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={openCollectionModal}
+                      className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                      disabled={!selectedBusiness}
+                    >
+                      Crear colección
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
-
-          {collections.length === 0 ? (
-            <p className="text-xs text-gray-500">
-              No hay colecciones creadas para esta sucursal.
-            </p>
-          ) : (
-            <>
-              <div className="border border-gray-200 rounded p-3 space-y-2 bg-white shadow-sm">
-                <p className="text-xs text-gray-600">
-                  Selecciona las colecciones de{" "}
-                  <span className="font-semibold">
-                    {selectedBusiness?.business_name || ""}
-                  </span>
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {collections.map((col) => {
-                    const isSelected = (branchAvailability?.collection_ids || []).includes(col.id);
-                    return (
-                      <label
-                        key={col.id}
-                        className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm"
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            className="h-5 w-5 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
-                            checked={isSelected}
-                            onChange={(e) =>
-                              handleCollectionToggle(
-                                selectedBusiness?.business_id || "",
-                                selectedBusiness?.business_name || "",
-                                col.id,
-                                e.target.checked,
-                              )
-                            }
-                            disabled={!selectedBusiness}
-                          />
-                          <span className="text-gray-800 font-medium">{col.name}</span>
-                        </div>
-                        {col.status === "inactive" && (
-                          <span className="text-[11px] text-gray-500">Inactiva</span>
-                        )}
-                      </label>
-                    );
-                  })}
-                  {collections.length === 0 && (
-                    <p className="text-xs text-gray-500">No hay colecciones disponibles.</p>
-                  )}
-                </div>
-                <div className="pt-3 border-t border-gray-100 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={openCollectionModal}
-                    className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-                    disabled={!selectedBusiness}
-                  >
-                    Crear colección
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        )}
 
         {/* Precio y Orden */}
         <div className="space-y-4">
@@ -3666,6 +3915,7 @@ export function ProductForm({
             </div>
           </div>
         </div>
+        )}
 
         {/* Botones */}
         <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-gray-200">
@@ -4396,6 +4646,16 @@ interface BranchAvailabilitySectionProps {
   onLoadBranchAvailabilities?: (productId: string) => void;
   editingProduct: Product | null;
   globalPrice: number;
+  branchGroupMap?: Record<string, { id?: string | null; name: string }>;
+  collectionsByBranch?: Record<string, ProductCollection[]>;
+  loadingCollections?: boolean;
+  onToggleCollection?: (
+    branchId: string,
+    branchName: string,
+    collectionId: string,
+    isSelected: boolean,
+  ) => void;
+  showHeader?: boolean;
 }
 
 function BranchAvailabilitySection({
@@ -4405,6 +4665,11 @@ function BranchAvailabilitySection({
   onLoadBranchAvailabilities,
   editingProduct,
   globalPrice,
+  branchGroupMap = {},
+  collectionsByBranch = {},
+  loadingCollections = false,
+  onToggleCollection,
+  showHeader = true,
 }: BranchAvailabilitySectionProps) {
   const { availableBusinesses } = useSelectedBusiness();
 
@@ -4546,83 +4811,99 @@ function BranchAvailabilitySection({
     );
   });
 
+  const groupedAvailabilities = useMemo(() => {
+    const groups = new Map<
+      string,
+      {
+        id?: string | null;
+        name: string;
+        items: typeof allAvailabilities;
+      }
+    >();
+
+    allAvailabilities.forEach((availability) => {
+      const group = branchGroupMap[availability.branch_id];
+      const groupKey = group?.id || "ungrouped";
+      const groupName = group?.name || "Sin grupo";
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, { id: group?.id, name: groupName, items: [] });
+      }
+      groups.get(groupKey)?.items.push(availability);
+    });
+
+    return Array.from(groups.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [allAvailabilities, branchGroupMap]);
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center border-b border-gray-200 pb-2">
-        <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
-          Disponibilidad por Sucursal
-        </h3>
-        {loadingBranchAvailabilities && (
-          <span className="text-xs text-gray-500">Cargando...</span>
-        )}
-      </div>
+      {showHeader && (
+        <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+          <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+            Disponibilidad por Sucursal
+          </h3>
+          {loadingBranchAvailabilities && (
+            <span className="text-xs text-gray-500">Cargando...</span>
+          )}
+        </div>
+      )}
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {allAvailabilities.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full border border-gray-200 rounded">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Habilitar
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Sucursal
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Precio
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Stock
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Backorder
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-b border-gray-200">
-                    Días estimados
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {allAvailabilities.map((availability) => {
-                  // Verificar is_active: debe ser explícitamente true para estar activa
-                  // Si es undefined, null, o false, se considera inactiva
+          groupedAvailabilities.map((group) => (
+            <div key={group.id || group.name} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  {group.name}
+                </h4>
+                <span className="text-xs text-gray-400">
+                  {group.items.length} sucursal(es)
+                </span>
+              </div>
+              <div className="grid gap-4 grid-cols-1">
+                {group.items.map((availability) => {
                   const isBranchActive = availability.is_active === true;
+                  const branchCollections =
+                    collectionsByBranch[availability.branch_id] || [];
+                  const selectedIds = availability.collection_ids || [];
                   return (
-                    <tr
+                    <div
                       key={availability.branch_id}
-                      className={`hover:bg-gray-50 ${!isBranchActive ? "opacity-60" : ""}`}
+                      className={`w-full rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${
+                        !isBranchActive ? "opacity-70" : ""
+                      }`}
                     >
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={availability.is_enabled}
-                          onChange={() =>
-                            handleToggleEnabled(availability.branch_id)
-                          }
-                          disabled={!isBranchActive}
-                          className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={
-                            !isBranchActive ? "La sucursal está inactiva" : ""
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-sm ${!isBranchActive ? "text-gray-500" : "text-gray-900"}`}
-                          >
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-gray-900">
                             {availability.branch_name}
-                          </span>
+                          </p>
                           {!isBranchActive && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
                               Inactiva
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={availability.is_enabled}
+                            onChange={() =>
+                              handleToggleEnabled(availability.branch_id)
+                            }
+                            disabled={!isBranchActive}
+                            className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50"
+                          />
+                          Disponible
+                        </label>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Precio en sucursal
+                          </label>
                           <input
                             type="number"
                             step="0.01"
@@ -4642,89 +4923,129 @@ function BranchAvailabilitySection({
                             disabled={
                               !availability.is_enabled || !isBranchActive
                             }
-                            className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
-                            title={
-                              !isBranchActive ? "La sucursal está inactiva" : ""
-                            }
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
                           />
                           {availability.price === null && (
-                            <span className="text-xs text-gray-500">
-                              (Global)
+                            <p className="mt-1 text-xs text-gray-400">
+                              Se usa el precio global.
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Stock disponible
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={
+                              availability.stock !== null
+                                ? availability.stock
+                                : ""
+                            }
+                            onChange={(e) =>
+                              handleStockChange(
+                                availability.branch_id,
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Sin límite"
+                            disabled={!availability.is_enabled || !isBranchActive}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        <label className="flex items-center gap-2 text-xs text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={availability.allow_backorder || false}
+                            onChange={() =>
+                              handleBackorderToggle(availability.branch_id)
+                            }
+                            disabled={!availability.is_enabled || !isBranchActive}
+                            className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50"
+                          />
+                          Permitir backorder
+                        </label>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">
+                            Días estimados de backorder
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={
+                              availability.backorder_lead_time_days !== null &&
+                              availability.backorder_lead_time_days !== undefined
+                                ? availability.backorder_lead_time_days
+                                : ""
+                            }
+                            onChange={(e) =>
+                              handleBackorderLeadTimeChange(
+                                availability.branch_id,
+                                e.target.value,
+                              )
+                            }
+                            placeholder="Días"
+                            disabled={
+                              !availability.is_enabled ||
+                              !availability.allow_backorder ||
+                              !isBranchActive
+                            }
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-gray-100 pt-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Colecciones
+                          </p>
+                          {loadingCollections && (
+                            <span className="text-xs text-gray-400">
+                              Cargando...
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            availability.stock !== null
-                              ? availability.stock
-                              : ""
-                          }
-                          onChange={(e) =>
-                            handleStockChange(
-                              availability.branch_id,
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Sin límite"
-                          disabled={!availability.is_enabled || !isBranchActive}
-                          className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
-                          title={
-                            !isBranchActive ? "La sucursal está inactiva" : ""
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          checked={availability.allow_backorder || false}
-                          onChange={() =>
-                            handleBackorderToggle(availability.branch_id)
-                          }
-                          disabled={!availability.is_enabled || !isBranchActive}
-                          className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={
-                            !isBranchActive ? "La sucursal está inactiva" : ""
-                          }
-                        />
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <input
-                          type="number"
-                          min="0"
-                          value={
-                            availability.backorder_lead_time_days !== null &&
-                            availability.backorder_lead_time_days !== undefined
-                              ? availability.backorder_lead_time_days
-                              : ""
-                          }
-                          onChange={(e) =>
-                            handleBackorderLeadTimeChange(
-                              availability.branch_id,
-                              e.target.value,
-                            )
-                          }
-                          placeholder="Días"
-                          disabled={
-                            !availability.is_enabled ||
-                            !availability.allow_backorder ||
-                            !isBranchActive
-                          }
-                          className="w-24 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
-                          title={
-                            !isBranchActive ? "La sucursal está inactiva" : ""
-                          }
-                        />
-                      </td>
-                    </tr>
+                        {branchCollections.length === 0 ? (
+                          <p className="mt-2 text-xs text-gray-500">
+                            Sin colecciones para esta sucursal.
+                          </p>
+                        ) : (
+                          <ul className="mt-3 space-y-2">
+                            {branchCollections.map((collection) => (
+                              <li key={collection.id}>
+                                <label className="flex items-center gap-2 text-sm text-gray-700">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                                    checked={selectedIds.includes(collection.id)}
+                                    onChange={(e) =>
+                                      onToggleCollection?.(
+                                        availability.branch_id,
+                                        availability.branch_name,
+                                        collection.id,
+                                        e.target.checked,
+                                      )
+                                    }
+                                    disabled={!availability.is_enabled}
+                                  />
+                                  <span>{collection.name}</span>
+                                </label>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          ))
         ) : (
           <p className="text-xs text-gray-500 italic">
             No hay sucursales disponibles. Crea una sucursal en Configuración →
