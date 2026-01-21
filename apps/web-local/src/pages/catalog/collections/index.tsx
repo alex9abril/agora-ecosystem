@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
@@ -266,7 +267,12 @@ export default function ProductCollectionsPage() {
                           />
                         </td>
                         <td className="px-6 py-3">
-                          <div className="font-medium text-gray-900">{item.name}</div>
+                          <Link
+                            href={`/catalog/collections/${item.id}/products`}
+                            className="font-medium text-gray-900 hover:text-gray-700"
+                          >
+                            {item.name}
+                          </Link>
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-600">
                           <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-700">{item.slug}</span>

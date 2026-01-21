@@ -32,6 +32,16 @@ type CollectionListResponse = {
   pagination?: { page: number; limit: number; total: number; totalPages: number };
 };
 
+export interface CollectionProductRow {
+  id: string;
+  name: string;
+  sku?: string;
+  price?: number;
+  is_available?: boolean;
+  image_url?: string | null;
+  status?: 'active' | 'inactive';
+}
+
 export const productCollectionsService = {
   async list(
     businessId: string,
@@ -85,5 +95,50 @@ export const productCollectionsService = {
     return apiRequest<{ id: string }>(`/catalog/collections/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  async listProducts(collectionId: string, businessId: string): Promise<{ data: CollectionProductRow[] }> {
+    const params = new URLSearchParams();
+    params.append('businessId', businessId);
+    return apiRequest<{ data: CollectionProductRow[] }>(
+      `/catalog/collections/${collectionId}/products?${params.toString()}`,
+      { method: 'GET' },
+    );
+  },
+
+  async removeProduct(collectionId: string, productId: string, businessId: string): Promise<{ product_id: string }> {
+    const params = new URLSearchParams();
+    params.append('businessId', businessId);
+    return apiRequest<{ product_id: string }>(
+      `/catalog/collections/${collectionId}/products/${productId}?${params.toString()}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  async addProduct(collectionId: string, productId: string, businessId: string): Promise<{ product_id: string }> {
+    const params = new URLSearchParams();
+    params.append('businessId', businessId);
+    return apiRequest<{ product_id: string }>(
+      `/catalog/collections/${collectionId}/products?${params.toString()}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ productId }),
+      },
+    );
+  },
+
+  async searchAvailableProducts(
+    businessId: string,
+    search: string,
+    limit: number = 10,
+  ): Promise<{ data: CollectionProductRow[] }> {
+    const params = new URLSearchParams();
+    params.append('businessId', businessId);
+    params.append('search', search);
+    params.append('limit', limit.toString());
+    return apiRequest<{ data: CollectionProductRow[] }>(
+      `/catalog/collections/available-products?${params.toString()}`,
+      { method: 'GET' },
+    );
   },
 };

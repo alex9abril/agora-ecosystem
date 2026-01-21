@@ -1,4 +1,5 @@
 import Head from "next/head";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import LocalLayout from "@/components/layout/LocalLayout";
 import { useState, useEffect, useMemo } from "react";
@@ -1296,6 +1297,12 @@ export default function ProductsPage() {
                         scope="col"
                         className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                       >
+                        Imagen
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
                         Disponibilidad
                       </th>
                       <th
@@ -1416,6 +1423,31 @@ export default function ProductsPage() {
                             {product.sku && (
                               <div className="text-xs text-gray-500 mt-1">
                                 SKU: {product.sku}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {product.image_url || product.primary_image_url ? (
+                              <img
+                                src={product.image_url || product.primary_image_url}
+                                alt={product.name}
+                                className="h-10 w-10 rounded object-cover border border-gray-200"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400">
+                                <svg
+                                  className="h-5 w-5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
                               </div>
                             )}
                           </td>
@@ -2296,51 +2328,41 @@ export function ProductForm({
   return (
     <div className="space-y-6">
       <form onSubmit={onSubmit} className="space-y-8">
-        {editingProduct && (
+        {editingProduct && !isFichaEditable && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-4 rounded border border-gray-200 bg-gray-50 p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
                     Ficha técnica del producto
                   </h3>
                   <p className="text-xs text-gray-500">
-                    Consulta la información general del producto. Para editarla,
-                    usa el botón de la derecha.
+                    Consulta la información general del producto.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsFichaEditable((prev) => !prev)}
+                  onClick={() => setIsFichaEditable(true)}
                   className="px-3 py-1.5 text-xs font-normal border border-gray-200 rounded bg-white text-gray-700 hover:bg-gray-100 transition-colors"
                 >
-                  {isFichaEditable ? "Cerrar edición" : "Editar ficha"}
+                  Editar producto
                 </button>
               </div>
 
-            <div className="space-y-6">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <p className="text-lg font-semibold text-gray-900">
                   {formData.name || "Producto sin nombre"}
                 </p>
-                <p className="text-xs text-gray-500">
-                  SKU: {formData.sku || "Sin SKU"}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-xs text-gray-500">SKU: {formData.sku || "Sin SKU"}</p>
+                <p className="text-xl font-semibold text-gray-900">
                   ${formData.price.toFixed(2)}
                 </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">
-                    {branchAvailability?.stock !== null &&
-                    branchAvailability?.stock !== undefined
-                      ? `En stock (${branchAvailability.stock})`
-                      : "Stock sin límite"}
-                  </span>
-                  <span className="inline-flex items-center rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600">
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-600">
                     {categoryLabel}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                    {productTypeLabel}
                   </span>
                 </div>
               </div>
@@ -2352,152 +2374,23 @@ export function ProductForm({
                 </p>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <p className="text-sm font-semibold text-gray-900">Galería</p>
-                {selectedFichaImage ? (
-                  <div className="space-y-3">
-                    <div className="aspect-square w-full overflow-hidden rounded border border-gray-200 bg-white">
-                      <img
-                        src={selectedFichaImage.public_url}
-                        alt={selectedFichaImage.alt_text || formData.name || "Producto"}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {productImages.map((image) => (
-                        <button
-                          type="button"
-                          key={image.id}
-                          onClick={() => setSelectedFichaImage(image)}
-                          className={`h-14 w-14 overflow-hidden rounded border ${
-                            selectedFichaImage.id === image.id
-                              ? "border-gray-900"
-                              : "border-gray-200"
-                          }`}
-                        >
-                          <img
-                            src={image.public_url}
-                            alt={image.alt_text || formData.name || "Producto"}
-                            className="h-full w-full object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
+                {productImages.length > 0 ? (
+                  <div className="aspect-square w-full overflow-hidden rounded border border-gray-200 bg-white">
+                    <img
+                      src={productImages[0].public_url}
+                      alt={productImages[0].alt_text || formData.name || "Producto"}
+                      className="h-full w-full object-cover"
+                    />
                   </div>
                 ) : (
-                  <div className="rounded border border-dashed border-gray-200 p-6 text-center text-xs text-gray-500">
+                  <div className="rounded border border-dashed border-gray-200 p-4 text-center text-xs text-gray-500">
                     Sin imágenes registradas.
                   </div>
                 )}
               </div>
-
-              {(formData.product_type === "refaccion" ||
-                formData.product_type === "accesorio") && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-gray-900">
-                      Compatibilidad
-                    </p>
-                    {productCompatibilities.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {productCompatibilities.map((compatibility) => {
-                          const labelParts = [
-                            compatibility.brand_name,
-                            compatibility.model_name,
-                            compatibility.year_start
-                              ? `${compatibility.year_start}${
-                                  compatibility.year_end
-                                    ? `-${compatibility.year_end}`
-                                    : ""
-                                }`
-                              : null,
-                            compatibility.generation,
-                            compatibility.engine_code,
-                          ].filter(Boolean);
-                          return (
-                            <span
-                              key={compatibility.id}
-                              className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700"
-                            >
-                              {compatibility.is_universal
-                                ? "Universal"
-                                : labelParts.join(" · ")}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500">
-                        Sin compatibilidades registradas.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded border border-gray-200 bg-white p-4">
-                  <p className="text-xs uppercase tracking-wide text-gray-400">
-                    Impuestos
-                  </p>
-                  {productTaxes.length > 0 ? (
-                    <div className="mt-2 space-y-1">
-                      {productTaxes.map((tax) => (
-                        <p key={tax.id} className="text-xs text-gray-700">
-                          {tax.tax_name || tax.tax_code || "Impuesto"}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Sin impuestos asignados.
-                    </p>
-                  )}
-                </div>
-
-                {isMedicine && (
-                  <div className="rounded border border-gray-200 bg-white p-4">
-                    <p className="text-xs uppercase tracking-wide text-gray-400">
-                      Información de farmacia
-                    </p>
-                    <div className="mt-2 space-y-1 text-xs text-gray-700">
-                      <p>
-                        {formData.requires_prescription
-                          ? "Requiere receta"
-                          : "Sin requisito de receta"}
-                      </p>
-                      {formData.age_restriction !== undefined && (
-                        <p>Edad mínima: {formData.age_restriction} años</p>
-                      )}
-                      {formData.max_quantity_per_order !== undefined && (
-                        <p>
-                          Máximo por pedido: {formData.max_quantity_per_order}
-                        </p>
-                      )}
-                      <p>
-                        {formData.requires_pharmacist_validation
-                          ? "Validación farmacéutica requerida"
-                          : "Sin validación farmacéutica"}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {Object.keys(nutritionalInfo).length > 0 && (
-                  <div className="rounded border border-gray-200 bg-white p-4">
-                    <p className="text-xs uppercase tracking-wide text-gray-400">
-                      Información nutricional
-                    </p>
-                    <div className="mt-2 space-y-1 text-xs text-gray-700">
-                      {Object.entries(nutritionalInfo).map(([key, value]) => (
-                        <p key={key}>
-                          {key}: {String(value)}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
-          </div>
 
             <div className="lg:col-span-2 space-y-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 pb-2">
@@ -5018,23 +4911,30 @@ function BranchAvailabilitySection({
                           <ul className="mt-3 space-y-2">
                             {branchCollections.map((collection) => (
                               <li key={collection.id}>
-                                <label className="flex items-center gap-2 text-sm text-gray-700">
-                                  <input
-                                    type="checkbox"
-                                    className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
-                                    checked={selectedIds.includes(collection.id)}
-                                    onChange={(e) =>
-                                      onToggleCollection?.(
-                                        availability.branch_id,
-                                        availability.branch_name,
-                                        collection.id,
-                                        e.target.checked,
-                                      )
-                                    }
-                                    disabled={!availability.is_enabled}
-                                  />
-                                  <span>{collection.name}</span>
-                                </label>
+                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                                      checked={selectedIds.includes(collection.id)}
+                                      onChange={(e) =>
+                                        onToggleCollection?.(
+                                          availability.branch_id,
+                                          availability.branch_name,
+                                          collection.id,
+                                          e.target.checked,
+                                        )
+                                      }
+                                      disabled={!availability.is_enabled}
+                                    />
+                                  </label>
+                                  <Link
+                                    href={`/catalog/collections/${collection.id}/products`}
+                                    className="hover:text-gray-900"
+                                  >
+                                    {collection.name}
+                                  </Link>
+                                </div>
                               </li>
                             ))}
                           </ul>

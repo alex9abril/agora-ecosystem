@@ -18,6 +18,7 @@ type ViewMode = 'grid' | 'list';
 interface ProductGridProps {
   filters?: {
     categoryId?: string;
+    collectionId?: string;
     search?: string;
     isFeatured?: boolean;
   };

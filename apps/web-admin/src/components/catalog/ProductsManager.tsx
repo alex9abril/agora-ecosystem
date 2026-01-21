@@ -9,6 +9,7 @@ interface Product {
   name: string;
   description?: string;
   image_url?: string;
+  primary_image_url?: string;
   price: number;
   category_id?: string;
   category_name?: string;
@@ -431,8 +432,12 @@ export default function ProductsManager() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="w-16 h-16 rounded object-cover" />
+                  {product.image_url || product.primary_image_url ? (
+                    <img
+                      src={product.image_url || product.primary_image_url}
+                      alt={product.name}
+                      className="w-16 h-16 rounded object-cover"
+                    />
                   ) : (
                     <div className="w-16 h-16 rounded bg-gray-200 flex items-center justify-center">
                       <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

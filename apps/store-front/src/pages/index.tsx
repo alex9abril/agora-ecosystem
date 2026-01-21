@@ -11,17 +11,20 @@ import BranchSelector from '@/components/BranchSelector';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
 import CategoryCardsSlider from '@/components/CategoryCardsSlider';
 import SmartCategoryCards from '@/components/SmartCategoryCards';
+import CollectionsCarousel from '@/components/CollectionsCarousel';
 import { productsService } from '@/lib/products';
 import { branchesService } from '@/lib/branches';
 import { businessGroupsService } from '@/lib/business-groups';
 import { useStoreContext } from '@/contexts/StoreContext';
 import ContextualLink from '@/components/ContextualLink';
+import { collectionsService, StoreCollection } from '@/lib/collections';
 
 export default function HomePage() {
-  const { contextType } = useStoreContext();
+  const { contextType, branchId } = useStoreContext();
   const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
   const [featuredGroups, setFeaturedGroups] = useState<any[]>([]);
   const [featuredBranches, setFeaturedBranches] = useState<any[]>([]);
+  const [collections, setCollections] = useState<StoreCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
@@ -54,6 +57,14 @@ export default function HomePage() {
         limit: 6,
         isActive: true,
       });
+
+      // Cargar colecciones de la sucursal actual (si aplica)
+      if (contextType === 'sucursal' && branchId) {
+        const collectionsResponse = await collectionsService.list(branchId);
+        setCollections(collectionsResponse.data || []);
+      } else {
+        setCollections([]);
+      }
 
       setFeaturedProducts(productsResponse.data || []);
       setFeaturedGroups(groupsResponse.data || []);
@@ -196,6 +207,9 @@ export default function HomePage() {
 
         {/* Slider de Categorías */}
         <SmartCategoryCards />
+
+        {/* Carrusel de Colecciones */}
+        <CollectionsCarousel collections={collections} />
 
         {/* Contenido con contenedor */}
         <div className="max-w-7xl mx-auto px-4 py-6">

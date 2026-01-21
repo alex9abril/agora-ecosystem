@@ -76,6 +76,7 @@ export interface ListProductsParams {
   brandId?: string;      // Filtro por marca de vehículo (alias para vehicleBrandId)
   vehicleBrandId?: string; // Filtro por marca de vehículo
   categoryId?: string;
+  collectionId?: string;
   isAvailable?: boolean;
   isFeatured?: boolean;
   search?: string;
@@ -128,6 +129,7 @@ export const productsService = {
     if (params.vehicleBrandId) queryParams.append('vehicleBrandId', params.vehicleBrandId);
     if (params.brandId) queryParams.append('vehicleBrandId', params.brandId); // Alias para brandId
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.collectionId) queryParams.append('collectionId', params.collectionId);
     if (params.isAvailable !== undefined) queryParams.append('isAvailable', params.isAvailable.toString());
     if (params.isFeatured !== undefined) queryParams.append('isFeatured', params.isFeatured.toString());
     if (params.search) queryParams.append('search', params.search);

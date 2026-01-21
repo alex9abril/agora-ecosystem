@@ -10,14 +10,19 @@ import ProductGrid from '@/components/ProductGrid';
 import CategoryBreadcrumbs from '@/components/CategoryBreadcrumbs';
 import CategoryInfo from '@/components/CategoryInfo';
 import { useStoreContext } from '@/contexts/StoreContext';
+import ContextualLink from '@/components/ContextualLink';
+import { collectionsService } from '@/lib/collections';
 
 export default function ContextualProductsPage() {
   const router = useRouter();
-  const { contextType, groupData, branchData, isLoading, error } = useStoreContext();
+  const { contextType, groupData, branchData, branchId, isLoading, error } = useStoreContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [collectionFilter, setCollectionFilter] = useState<string>('');
   const [categoryName, setCategoryName] = useState<string>('');
   const [categoryDescription, setCategoryDescription] = useState<string>('');
+  const [collectionName, setCollectionName] = useState<string>('');
+  const [collectionDescription, setCollectionDescription] = useState<string>('');
   const [filters, setFilters] = useState<any>({
     isAvailable: true,
   });
@@ -25,7 +30,7 @@ export default function ContextualProductsPage() {
   useEffect(() => {
     if (!router.isReady) return;
     
-    const { search, categoryId } = router.query;
+    const { search, categoryId, collectionId } = router.query;
     const newFilters: any = {
       isAvailable: true,
     };
@@ -44,9 +49,49 @@ export default function ContextualProductsPage() {
       setCategoryFilter('');
       delete newFilters.categoryId;
     }
+
+    if (collectionId && typeof collectionId === 'string') {
+      setCollectionFilter(collectionId);
+      newFilters.collectionId = collectionId;
+    } else {
+      setCollectionFilter('');
+      delete newFilters.collectionId;
+    }
     
     setFilters(newFilters);
   }, [router.isReady, router.query]);
+
+  useEffect(() => {
+    if (!collectionFilter) {
+      setCollectionName('');
+      setCollectionDescription('');
+      return;
+    }
+    if (!branchId) {
+      return;
+    }
+    let isActive = true;
+    const loadCollection = async () => {
+      try {
+        const response = await collectionsService.list(branchId);
+        const match = response.data?.find((item) => item.id === collectionFilter);
+        const name = match?.name || 'Colección';
+        if (!isActive) return;
+        setCollectionName(name);
+        setCollectionDescription(`Explora productos seleccionados de ${name}.`);
+      } catch (err) {
+        console.error('Error cargando colección:', err);
+        if (!isActive) return;
+        setCollectionName('Colección');
+        setCollectionDescription('Explora productos seleccionados para ti.');
+      }
+    };
+
+    loadCollection();
+    return () => {
+      isActive = false;
+    };
+  }, [collectionFilter, branchId]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +105,10 @@ export default function ContextualProductsPage() {
   };
 
   const storeName = contextType === 'grupo' ? groupData?.name : branchData?.name || 'Agora';
+  const headerTitle = collectionFilter
+    ? (collectionName || 'Colección')
+    : categoryName || (categoryFilter ? 'Productos' : `Productos de ${storeName}`);
+  const headerDescription = collectionFilter ? collectionDescription : categoryDescription;
 
   return (
     <>
@@ -80,13 +129,25 @@ export default function ContextualProductsPage() {
                 <CategoryBreadcrumbs categoryId={categoryFilter} />
               )}
 
-              {/* Título con nombre y descripción de categoría */}
+              {collectionFilter && (
+                <div className="text-sm text-gray-500 mb-4">
+                  <ContextualLink href="/" className="hover:text-gray-700">
+                    Home
+                  </ContextualLink>
+                  <span className="mx-2">/</span>
+                  <span>Colecciones</span>
+                  <span className="mx-2">/</span>
+                  <span className="text-gray-900">{collectionName || 'Colección'}</span>
+                </div>
+              )}
+
+              {/* Título con nombre y descripción de categoría/colección */}
               <div className="mb-6">
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  {categoryName || (categoryFilter ? 'Productos' : `Productos de ${storeName}`)}
+                  {headerTitle}
                 </h1>
-                {categoryDescription && (
-                  <p className="text-gray-600 text-base">{categoryDescription}</p>
+                {headerDescription && (
+                  <p className="text-gray-600 text-base">{headerDescription}</p>
                 )}
               </div>
 

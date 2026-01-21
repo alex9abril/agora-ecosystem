@@ -249,6 +249,7 @@ export class ProductsService {
       groupId,
       branchId,
       categoryId,
+      collectionId,
       isAvailable,
       isFeatured,
       search,
@@ -269,6 +270,7 @@ export class ProductsService {
     let paramIndex = 1;
     let businessJoin = '';
     let branchJoin = '';
+    let collectionJoin = '';
 
     // Si se filtra por grupo, buscar productos disponibles en sucursales del grupo
     // IMPORTANTE: No filtrar por business_id del producto, sino por disponibilidad en sucursales del grupo
@@ -295,6 +297,23 @@ export class ProductsService {
       whereConditions.push(`pba.is_active = TRUE`);
       queryParams.push(branchId);
       paramIndex++;
+    }
+
+    if (collectionId) {
+      collectionJoin = `
+        INNER JOIN catalog.product_coleccion_assignments pca_filter ON pca_filter.product_id = p.id
+        INNER JOIN catalog.product_colecciones pc_filter ON pc_filter.id = pca_filter.coleccion_id
+      `;
+      whereConditions.push(`pca_filter.coleccion_id = $${paramIndex}`);
+      queryParams.push(collectionId);
+      paramIndex++;
+      whereConditions.push(`pca_filter.status = 'active'`);
+      whereConditions.push(`pc_filter.status = 'active'`);
+      if (branchId) {
+        whereConditions.push(`pca_filter.business_id = $${paramIndex}`);
+        queryParams.push(branchId);
+        paramIndex++;
+      }
     }
 
     // Filtro por categoría: incluir la categoría y todas sus subcategorías recursivamente
@@ -406,6 +425,7 @@ export class ProductsService {
       FROM catalog.products p
       ${businessJoin}
       ${branchJoin}
+      ${collectionJoin}
       ${compatibilityJoin}
       ${whereClause}
     `;
@@ -480,6 +500,7 @@ export class ProductsService {
       FROM catalog.products p
       ${businessJoin}
       ${branchJoin}
+      ${collectionJoin}
       ${compatibilityJoin}
       LEFT JOIN core.businesses b ON p.business_id = b.id
       LEFT JOIN catalog.product_categories pc ON p.category_id = pc.id

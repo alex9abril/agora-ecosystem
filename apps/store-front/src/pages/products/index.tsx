@@ -17,6 +17,7 @@ export default function ProductsPage() {
   const { contextType } = useStoreContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [collectionFilter, setCollectionFilter] = useState<string>('');
   const [categoryName, setCategoryName] = useState<string>('');
   const [categoryDescription, setCategoryDescription] = useState<string>('');
   const [filters, setFilters] = useState<any>({
@@ -26,7 +27,7 @@ export default function ProductsPage() {
   useEffect(() => {
     if (!router.isReady) return;
     
-    const { search, categoryId } = router.query;
+    const { search, categoryId, collectionId } = router.query;
     const newFilters: any = {
       isAvailable: true,
     };
@@ -44,6 +45,14 @@ export default function ProductsPage() {
     } else {
       setCategoryFilter('');
       delete newFilters.categoryId;
+    }
+
+    if (collectionId && typeof collectionId === 'string') {
+      setCollectionFilter(collectionId);
+      newFilters.collectionId = collectionId;
+    } else {
+      setCollectionFilter('');
+      delete newFilters.collectionId;
     }
     
     setFilters(newFilters);

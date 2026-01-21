@@ -65,13 +65,7 @@ export default function NewCollectionPage() {
       </Head>
 
       <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Nueva colección</h1>
-            <p className="text-sm text-gray-600">
-              Para la sucursal {selectedBusiness?.business_name || 'sucursal'}.
-            </p>
-          </div>
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={() => router.push('/catalog/collections')}

@@ -63,6 +63,7 @@ export default function Header() {
   // El branding se carga en useEffect, así que en el servidor y en la primera renderización del cliente
   // siempre será true, garantizando que el HTML inicial sea idéntico
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
+  const [isCompactHeader, setIsCompactHeader] = useState(false);
   
   // Función helper para obtener el color guardado
   const getStoredPrimaryColor = (branchId?: string | null, groupId?: string | null): string | null => {
@@ -134,6 +135,16 @@ export default function Header() {
     
     setStoreInfo(info);
   }, [contextType, branchData]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleScroll = () => {
+      setIsCompactHeader(window.scrollY > 60);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -522,10 +533,12 @@ export default function Header() {
         className="sticky top-0 z-50" 
         style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}
       >
-        {/* Primera fila: Logo y acciones de usuario */}
-        <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
-          <div className="w-full px-6 py-4">
-            <div className="flex items-center justify-between">
+        {!isCompactHeader ? (
+          <>
+            {/* Primera fila: Logo y acciones de usuario */}
+            <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
+              <div className="w-full px-6 py-4">
+                <div className="flex items-center justify-between">
               {/* Logo y nombre de tienda */}
               <div className="flex items-center gap-4 flex-shrink-0">
                 <ContextualLink href="/" className="flex items-center gap-4 hover:opacity-80 transition-opacity" style={{}}>
@@ -830,14 +843,14 @@ export default function Header() {
                   )}
                 </div>
               </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Segunda fila: Menú, buscador, selector de vehículo y tienda */}
-        <div style={{ backgroundColor: primaryColor, borderTop: `1px solid ${borderColor}` }}>
-          <div className="w-full px-6 py-3">
-            <div className="flex items-center gap-4">
+            {/* Segunda fila: Menú, buscador, selector de vehículo y tienda */}
+            <div style={{ backgroundColor: primaryColor, borderTop: `1px solid ${borderColor}` }}>
+              <div className="w-full px-6 py-3">
+                <div className="flex items-center gap-4">
               {/* Grupo izquierdo: Menú y selector de vehículo */}
               <div className="flex items-center gap-4 flex-shrink-0 relative">
                 <button
@@ -965,9 +978,272 @@ export default function Header() {
                   </button>
                 )}
               </div>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
+            <div className="w-full px-6 py-2">
+              <div className="flex items-center gap-4">
+                {/* Logo */}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <ContextualLink href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                    <div className="relative" style={{ width: '110px', height: '32px' }}>
+                      {shouldShowLogo ? (
+                        useCustomLogo && logoUrl ? (
+                          <img
+                            src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
+                            alt={logoAlt}
+                            width={110}
+                            height={32}
+                            className="object-contain"
+                            style={{ maxWidth: '110px', maxHeight: '32px', width: 'auto', height: 'auto' }}
+                          />
+                        ) : (
+                          <img
+                            src={typeof agoraLogo === 'string' ? agoraLogo : agoraLogo.src}
+                            alt="AGORA PARTS"
+                            width={110}
+                            height={32}
+                            className="object-contain"
+                            style={{ maxWidth: '110px', maxHeight: '32px', width: 'auto', height: 'auto' }}
+                          />
+                        )
+                      ) : (
+                        <div className="bg-transparent" style={{ width: '110px', height: '32px' }} aria-hidden="true" />
+                      )}
+                    </div>
+                  </ContextualLink>
+                </div>
+
+                {/* Menú y vehículo */}
+                <div className="flex items-center gap-4 flex-shrink-0 relative">
+                  <button
+                    onClick={() => {
+                      setShowCategoriesMenu(!showCategoriesMenu);
+                      setShowMobileMenu(false);
+                    }}
+                    className="flex items-center gap-2 transition-colors hover:opacity-80"
+                    style={{ color: textColor }}
+                  >
+                    <MenuIcon className="w-5 h-5" style={{ color: textColor }} />
+                    <span className="hidden md:inline text-sm font-medium">Menú</span>
+                  </button>
+                  {showCategoriesMenu && (
+                    <CategoriesMenu
+                      isOpen={showCategoriesMenu}
+                      onClose={() => setShowCategoriesMenu(false)}
+                      onCategoryClick={() => setShowCategoriesMenu(false)}
+                    />
+                  )}
+
+                  {isClient && isVehicleLoaded && currentVehicle ? (
+                    <button
+                      onClick={() => setShowVehicleSelector(true)}
+                      className="hidden lg:flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[180px] max-w-[240px] hover:opacity-80"
+                      style={{ color: textColor }}
+                    >
+                      <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
+                      <span className="text-xs font-semibold truncate">
+                        {currentVehicle.nickname || `${currentVehicle.brand_name || ''} ${currentVehicle.model_name || ''}`.trim() || 'Mi Vehículo'}
+                      </span>
+                    </button>
+                  ) : isClient && isVehicleLoaded ? (
+                    <button
+                      onClick={() => setShowVehicleSelector(true)}
+                      className="hidden lg:flex items-center gap-2 transition-colors hover:opacity-80"
+                      style={{ color: textColor }}
+                    >
+                      <DirectionsCarIcon className="w-5 h-5" style={{ color: textColor }} />
+                      <span className="text-sm font-medium">Agregar Vehículo</span>
+                    </button>
+                  ) : null}
+                </div>
+
+                {/* Buscador */}
+                <div className="flex-1 min-w-0">
+                  <form onSubmit={handleSearch} className="relative w-full">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Buscar por nombre o número de parte"
+                      className="w-full pl-6 pr-12 py-2.5 border border-gray-300 rounded-full bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-sm shadow-inner font-sans"
+                      style={{ boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }}
+                    />
+                    {searchQuery ? (
+                      <button
+                        type="button"
+                        onClick={clearSearch}
+                        className="absolute inset-y-0 right-10 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        <CloseIcon className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="submit"
+                      className="absolute inset-y-0 right-0 flex items-center justify-center w-10 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
+                    >
+                      <SearchIcon className="h-4 w-4 text-gray-900" />
+                    </button>
+                  </form>
+                </div>
+
+                {/* Tienda */}
+                <div className="flex-shrink-0">
+                  {isClient && storeInfo ? (
+                    <button
+                      onClick={() => setShowStoreSelector(true)}
+                      className="hidden xl:flex items-center gap-2 text-left rounded-lg px-3 py-2 transition-colors min-w-[200px] max-w-[260px] hover:opacity-80"
+                      style={{ color: textColor }}
+                    >
+                      <CheckCircleIcon className="w-5 h-5" style={{ color: textColor }} />
+                      <span className="text-xs font-semibold truncate">{storeInfo.name}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowStoreSelector(true)}
+                      className="hidden xl:flex items-center gap-2 transition-colors whitespace-nowrap hover:opacity-80"
+                      style={{ color: textColor }}
+                    >
+                      <LocationOnIcon className="w-5 h-5" style={{ color: textColor }} />
+                      <span className="text-sm font-medium">Seleccionar Tienda</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Acciones usuario y carrito */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => setShowNavigationDialog(true)}
+                    className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
+                    style={{ color: textColor }}
+                  >
+                    <BusinessIcon className="w-5 h-5" style={{ color: textColor }} />
+                    <span className="hidden xl:inline">Navegar</span>
+                  </button>
+
+                  {!isAuthenticated ? (
+                    <ContextualLink
+                      href="/auth/login"
+                      className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
+                      style={{ color: textColor }}
+                    >
+                      <PersonIcon className="w-5 h-5" style={{ color: textColor }} />
+                      <span className="hidden xl:inline">Ingresar</span>
+                    </ContextualLink>
+                  ) : (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowUserMenu(!showUserMenu)}
+                        className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 group"
+                        style={{ color: textColor }}
+                      >
+                        <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
+                        <ArrowDropDownIcon className="w-4 h-4" style={{ color: textColorOpacity80 }} />
+                      </button>
+                      {showUserMenu && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setShowUserMenu(false)}
+                            onMouseLeave={() => setShowUserMenu(false)}
+                          />
+                          <div
+                            className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden"
+                            onMouseEnter={() => setShowUserMenu(true)}
+                            onMouseLeave={() => setShowUserMenu(false)}
+                          >
+                            <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}>
+                              <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: textColorOpacity90 }}>
+                                Bienvenido
+                              </p>
+                              <p className="text-base font-bold truncate" style={{ color: textColor }}>
+                                {user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}
+                              </p>
+                              {user?.email && (
+                                <p className="text-xs truncate mt-1" style={{ color: textColorOpacity80 }}>
+                                  {user.email}
+                                </p>
+                              )}
+                            </div>
+                            <div className="py-2">
+                              <ContextualLink
+                                href="/profile"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <HomeIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                  <span className="font-medium">Mis direcciones</span>
+                                </div>
+                                <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                              </ContextualLink>
+                              <ContextualLink
+                                href="/orders"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <ReceiptIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                  <span className="font-medium">Mis pedidos</span>
+                                </div>
+                                <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                              </ContextualLink>
+                              <ContextualLink
+                                href="/profile?tab=payment"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <CreditCardIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                  <span className="font-medium">Mis formas de pago</span>
+                                </div>
+                                <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                              </ContextualLink>
+                            </div>
+                            <div className="border-t border-gray-200" />
+                            <div className="py-2">
+                              <button
+                                onClick={async () => {
+                                  setShowUserMenu(false);
+                                  await signOut();
+                                }}
+                                className="w-full flex items-center gap-3 px-5 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
+                              >
+                                <ExitToAppIcon className="w-5 h-5" />
+                                <span>Cerrar sesión</span>
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  <ContextualLink
+                    href={getCartUrl()}
+                    className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap hover:opacity-80"
+                    style={{ color: textColor }}
+                  >
+                    <div className="relative">
+                      <ShoppingCartIcon className="w-6 h-6" style={{ color: textColor }} />
+                      {itemCount > 0 && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md"
+                          style={{ backgroundColor: textColor, color: primaryColor }}
+                        >
+                          {itemCount > 99 ? '99+' : itemCount}
+                        </span>
+                      )}
+                    </div>
+                  </ContextualLink>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Menú móvil desplegable */}
         {showMobileMenu && (

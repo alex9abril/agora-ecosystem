@@ -11,10 +11,12 @@ import ProductGrid from '@/components/ProductGrid';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
 import CategoryCardsSlider from '@/components/CategoryCardsSlider';
 import SmartCategoryCards from '@/components/SmartCategoryCards';
+import CollectionsCarousel from '@/components/CollectionsCarousel';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { productsService } from '@/lib/products';
 import { landingSlidersService, LandingSlider } from '@/lib/landing-sliders';
 import ContextualLink from '@/components/ContextualLink';
+import { collectionsService, StoreCollection } from '@/lib/collections';
 
 export default function StoreHomePage() {
   const router = useRouter();
@@ -24,12 +26,21 @@ export default function StoreHomePage() {
   const [loading, setLoading] = useState(true);
   const [sliders, setSliders] = useState<SlideContent[]>([]);
   const [loadingSliders, setLoadingSliders] = useState(true);
+  const [collections, setCollections] = useState<StoreCollection[]>([]);
 
   useEffect(() => {
     if (contextType !== 'global' && !isLoading) {
       loadFeaturedProducts();
     }
   }, [contextType, isLoading]);
+
+  useEffect(() => {
+    if (contextType === 'sucursal' && branchId && !isLoading) {
+      loadCollections();
+    } else {
+      setCollections([]);
+    }
+  }, [contextType, branchId, isLoading]);
 
   useEffect(() => {
     // Cargar sliders solo cuando tengamos el ID correspondiente
@@ -148,6 +159,17 @@ export default function StoreHomePage() {
     }
   };
 
+  const loadCollections = async () => {
+    if (!branchId) return;
+    try {
+      const response = await collectionsService.list(branchId);
+      setCollections(response.data || []);
+    } catch (error) {
+      console.error('Error cargando colecciones:', error);
+      setCollections([]);
+    }
+  };
+
   const getRedirectUrl = (slider: LandingSlider): string => {
     if (slider.redirect_type === 'url' && slider.redirect_url) {
       return slider.redirect_url;
@@ -245,6 +267,10 @@ export default function StoreHomePage() {
                 <ProductGrid filters={{ isFeatured: true }} />
               )}
             </section>
+
+            {collections.length > 0 && (
+              <CollectionsCarousel collections={collections} />
+            )}
 
             {/* Todos los Productos */}
             <section>

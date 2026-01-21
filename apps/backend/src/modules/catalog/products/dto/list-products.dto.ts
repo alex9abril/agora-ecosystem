@@ -59,6 +59,11 @@ export class ListProductsDto {
   @Validate(IsValidUuidConstraint)
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por colección', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @Validate(IsValidUuidConstraint)
+  collectionId?: string;
+
   @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de marca de vehículo', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
   @Validate(IsValidUuidConstraint)

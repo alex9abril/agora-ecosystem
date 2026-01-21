@@ -18,6 +18,33 @@ interface ProductCollectionRow {
 
 @Injectable()
 export class ProductCollectionsService {
+  private normalizeBucketName(bucketName: string): string {
+    if (!bucketName) return 'products';
+    if (bucketName.startsWith('http')) {
+      console.warn(
+        '⚠️ [ProductCollectionsService] SUPABASE_STORAGE_BUCKET_PRODUCTS contiene una URL completa. Usando "products".',
+      );
+      return 'products';
+    }
+    if (bucketName.includes('://') || bucketName.includes('/storage/')) {
+      console.warn(
+        '⚠️ [ProductCollectionsService] SUPABASE_STORAGE_BUCKET_PRODUCTS parece una URL. Usando "products".',
+      );
+      return 'products';
+    }
+    return bucketName.trim();
+  }
+
+  private buildProductImageUrl(filePath?: string | null): string | null {
+    if (!filePath) return null;
+    if (filePath.startsWith('http')) return filePath;
+    const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/+$/, '');
+    if (!supabaseUrl) return null;
+    const bucket = this.normalizeBucketName(process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products');
+    const normalizedPath = filePath.replace(/^\/+/, '');
+    return `${supabaseUrl}/storage/v1/object/public/${bucket}/${normalizedPath}`;
+  }
+
   private normalizeSlug(value: string): string {
     if (!value) return '';
     return value
@@ -103,6 +130,64 @@ export class ProductCollectionsService {
     }
   }
 
+  async searchAvailableProducts(businessId: string, search: string, limit: number = 10) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const trimmed = search?.trim();
+    if (!businessId || !trimmed) {
+      return { data: [] };
+    }
+
+    const sql = `
+      SELECT 
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        p.image_url,
+        pi.file_path AS primary_image_path,
+        p.is_available
+      FROM catalog.products p
+      LEFT JOIN LATERAL (
+        SELECT file_path
+        FROM catalog.product_images
+        WHERE product_id = p.id
+          AND is_active = TRUE
+        ORDER BY is_primary DESC, display_order ASC, created_at ASC
+        LIMIT 1
+      ) pi ON TRUE
+      JOIN catalog.product_branch_availability pba
+        ON pba.product_id = p.id
+        AND pba.branch_id = $1
+        AND pba.is_enabled = TRUE
+        AND pba.is_active = TRUE
+      WHERE (p.name ILIKE $2 OR p.sku ILIKE $2)
+      ORDER BY p.name ASC
+      LIMIT $3
+    `;
+
+    try {
+      const result = await dbPool.query(sql, [businessId, `%${trimmed}%`, limit]);
+      const data = (result.rows || []).map((row) => {
+        const { primary_image_path, ...rest } = row;
+        return {
+          ...rest,
+          image_url: row.image_url || this.buildProductImageUrl(primary_image_path),
+        };
+      });
+      return { data };
+    } catch (error: any) {
+      console.error('⚠️ Error buscando productos disponibles:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
+      throw new ServiceUnavailableException('Error al buscar productos disponibles');
+    }
+  }
+
   async findOne(id: string) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
@@ -133,6 +218,147 @@ export class ProductCollectionsService {
     }
 
     return this.mapRow(result.rows[0]);
+  }
+
+  async listProducts(collectionId: string, businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const collectionCheck = await dbPool.query(
+      'SELECT id FROM catalog.product_colecciones WHERE id = $1 AND business_id = $2',
+      [collectionId, businessId],
+    );
+    if (collectionCheck.rows.length === 0) {
+      throw new NotFoundException('Colección no encontrada');
+    }
+
+    const sql = `
+      SELECT 
+        p.id,
+        p.name,
+        p.sku,
+        p.price,
+        p.is_available,
+        p.image_url,
+        pi.file_path AS primary_image_path,
+        pca.status
+      FROM catalog.product_coleccion_assignments pca
+      JOIN catalog.products p ON p.id = pca.product_id
+      LEFT JOIN LATERAL (
+        SELECT file_path
+        FROM catalog.product_images
+        WHERE product_id = p.id
+          AND is_active = TRUE
+        ORDER BY is_primary DESC, display_order ASC, created_at ASC
+        LIMIT 1
+      ) pi ON TRUE
+      WHERE pca.coleccion_id = $1 AND pca.business_id = $2
+      ORDER BY p.name ASC
+    `;
+
+    try {
+      const result = await dbPool.query(sql, [collectionId, businessId]);
+      const data = (result.rows || []).map((row) => {
+        const { primary_image_path, ...rest } = row;
+        return {
+          ...rest,
+          image_url: row.image_url || this.buildProductImageUrl(primary_image_path),
+        };
+      });
+      return { data };
+    } catch (error: any) {
+      console.error('⚠️ Error listando productos de colección:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
+      throw new ServiceUnavailableException('Error al obtener los productos de la colección');
+    }
+  }
+
+  async removeProduct(collectionId: string, productId: string, businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const result = await dbPool.query(
+      `
+        DELETE FROM catalog.product_coleccion_assignments
+        WHERE coleccion_id = $1 AND product_id = $2 AND business_id = $3
+        RETURNING product_id
+      `,
+      [collectionId, productId, businessId],
+    );
+
+    if (result.rows.length === 0) {
+      throw new NotFoundException('Asignación de colección no encontrada');
+    }
+
+    return { product_id: result.rows[0].product_id };
+  }
+
+  async addProduct(collectionId: string, productId: string, businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const collectionCheck = await dbPool.query(
+      'SELECT id FROM catalog.product_colecciones WHERE id = $1 AND business_id = $2',
+      [collectionId, businessId],
+    );
+    if (collectionCheck.rows.length === 0) {
+      throw new NotFoundException('Colección no encontrada');
+    }
+
+    const productCheck = await dbPool.query(
+      `
+        SELECT
+          p.id,
+          p.business_id,
+          (p.business_id = $2) AS is_owned,
+          EXISTS (
+            SELECT 1
+            FROM catalog.product_branch_availability pba
+            WHERE pba.product_id = p.id
+              AND pba.branch_id = $2
+              AND pba.is_enabled = TRUE
+              AND COALESCE(pba.is_active, TRUE) = TRUE
+          ) AS is_enabled_in_branch
+        FROM catalog.products p
+        WHERE p.id = $1
+      `,
+      [productId, businessId],
+    );
+    if (productCheck.rows.length === 0) {
+      throw new NotFoundException('Producto no encontrado');
+    }
+
+    const { is_owned, is_enabled_in_branch } = productCheck.rows[0];
+    if (!is_owned && !is_enabled_in_branch) {
+      throw new NotFoundException('Producto no encontrado en la sucursal');
+    }
+
+    try {
+      await dbPool.query(
+        `
+          INSERT INTO catalog.product_coleccion_assignments (product_id, coleccion_id, business_id, status)
+          VALUES ($1, $2, $3, 'active')
+          ON CONFLICT (product_id, coleccion_id, business_id)
+          DO UPDATE SET status = 'active'
+        `,
+        [productId, collectionId, businessId],
+      );
+
+      return { product_id: productId };
+    } catch (error: any) {
+      console.error('⚠️ Error agregando producto a colección:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+      });
+      throw new ServiceUnavailableException('Error al asignar producto a la colección');
+    }
   }
 
   async create(dto: CreateProductCollectionDto) {
