@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -102,8 +102,20 @@ export default function Sidebar() {
   const router = useRouter();
   const { user } = useAuth();
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const storageKey = 'web-local.sidebar.isCollapsed';
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    try {
+      const storedValue = window.localStorage.getItem(storageKey);
+      return storedValue === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isHovered, setIsHovered] = useState(false);
+  const hasHydratedRef = useRef(false);
   
   // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
   const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
@@ -149,6 +161,21 @@ export default function Sidebar() {
     return user?.email || 'usuario@example.com';
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+    try {
+      window.localStorage.setItem(storageKey, String(isCollapsed));
+    } catch {
+      // ignore storage errors
+    }
+  }, [isCollapsed, storageKey]);
+
   const toggleSidebar = () => {
     setIsCollapsed((prev) => !prev);
     setIsHovered(false);
@@ -191,7 +218,7 @@ export default function Sidebar() {
 
       {/* Navegación */}
       <nav className="flex-1 overflow-y-auto py-4">
-        <ul className="space-y-1 px-3">
+        <ul className={`space-y-1 ${isCollapsed ? 'px-2' : 'px-3'}`}>
           {menuItems
             .filter(shouldShowItem)
             .map((item) => {
@@ -201,15 +228,15 @@ export default function Sidebar() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-normal transition-colors ${
+                    className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'space-x-3 px-3'} py-2 rounded-md text-xs font-normal transition-colors ${
                       isActive
                         ? 'bg-gray-100 text-gray-900'
                         : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   >
-                    {item.icon}
-                    <span className="flex-1">{item.name}</span>
-                    {item.badge && (
+                    <span className={isActive ? 'text-gray-900' : 'text-gray-600'}>{item.icon}</span>
+                    {!isCollapsed && <span className="flex-1">{item.name}</span>}
+                    {!isCollapsed && item.badge && (
                       <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
                         {item.badge}
                       </span>
@@ -223,15 +250,17 @@ export default function Sidebar() {
 
       {/* Usuario en la parte inferior */}
       <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal">
             {getUserInitials()}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-normal text-gray-900 truncate">
-              {getUserEmail()}
-            </p>
-          </div>
+          {!isCollapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-normal text-gray-900 truncate">
+                {getUserEmail()}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </aside>
