@@ -17,7 +17,8 @@ import { apiRequest } from '@/lib/api';
 import { productsService } from '@/lib/products';
 import { walletService, Wallet } from '@/lib/wallet';
 import { logisticsService, type Address as LogisticsAddress, type Parcel } from '@/lib/logistics';
-import { branchesService } from '@/lib/branches';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -28,6 +29,12 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
 
 type CheckoutStep = 'auth' | 'shipping' | 'shipping-method' | 'payment' | 'confirmation';
 
@@ -88,10 +95,13 @@ export default function CheckoutPage() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
+  const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
   const [backorderByItemId, setBackorderByItemId] = useState<Record<string, { isBackorder: boolean; leadTimeDays?: number | null }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const getBranchSettings = (businessId: string) =>
+    branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
   
   // Estados para autenticación
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -343,6 +353,48 @@ export default function CheckoutPage() {
     }
   };
 
+  // Cargar configuracion de impuestos por sucursal
+  useEffect(() => {
+    if (cart && cart.items && cart.items.length > 0) {
+      const loadBranchSettings = async () => {
+        try {
+          const uniqueBusinessIds = Array.from(
+            new Set(
+              cart.items
+                .map((item: CartItem) => item.branch_id || item.business_id)
+                .filter((id): id is string => !!id)
+            )
+          );
+
+          if (uniqueBusinessIds.length === 0) {
+            setBranchTaxSettings({});
+            return;
+          }
+
+          const settingsEntries = await Promise.all(
+            uniqueBusinessIds.map(async (businessId) => {
+              const settings = await branchesService.getBranchTaxSettings(businessId);
+              return [businessId, settings || DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            })
+          );
+
+          const settingsMap: Record<string, BranchTaxSettings> = {};
+          settingsEntries.forEach(([businessId, settings]) => {
+            settingsMap[businessId] = settings;
+          });
+          setBranchTaxSettings(settingsMap);
+        } catch (error) {
+          console.warn('[Checkout] No se pudo cargar configuracion de impuestos por sucursal:', error);
+          setBranchTaxSettings({});
+        }
+      };
+
+      loadBranchSettings();
+    } else {
+      setBranchTaxSettings({});
+    }
+  }, [cart]);
+
   // Calcular impuestos
   useEffect(() => {
     if (cart && cart.items && cart.items.length > 0) {
@@ -353,6 +405,14 @@ export default function CheckoutPage() {
           cart.items.map(async (item: CartItem) => {
             try {
               const subtotal = parseFloat(String(item.item_subtotal || 0));
+              const businessId = item.branch_id || item.business_id || '';
+              const taxSettings = branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
+
+              if (taxSettings.included_in_price) {
+                taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+                return;
+              }
+
               const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
               taxBreakdowns[item.id] = taxBreakdown;
             } catch (error) {
@@ -365,8 +425,10 @@ export default function CheckoutPage() {
       };
       
       calculateTaxes();
+    } else {
+      setItemsTaxBreakdowns({});
     }
-  }, [cart]);
+  }, [cart, branchTaxSettings]);
 
   // Agrupar items por tienda/sucursal
   const itemsByStore = useMemo(() => {
@@ -374,7 +436,7 @@ export default function CheckoutPage() {
     
     const grouped: Record<string, CartItem[]> = {};
     cart.items.forEach((item) => {
-      const storeKey = item.business_id || 'unknown';
+      const storeKey = item.branch_id || item.business_id || 'unknown';
       if (!grouped[storeKey]) {
         grouped[storeKey] = [];
       }
@@ -421,6 +483,12 @@ export default function CheckoutPage() {
     });
     return taxes;
   }, [storesInfo, itemsTaxBreakdowns]);
+
+  const hasIncludedTaxLabels = useMemo(() => {
+    return Object.values(branchTaxSettings).some(
+      (settings) => settings?.included_in_price === true && settings?.show_tax_included_label === true
+    );
+  }, [branchTaxSettings]);
 
   // Calcular totales
   const subtotal = useMemo(() => {
@@ -2768,7 +2836,9 @@ export default function CheckoutPage() {
                 
                 {/* Items del carrito agrupados por tienda */}
                 <div className="space-y-4 mb-6 border-b border-gray-200 pb-6">
-                  {Object.entries(storesInfo).map(([businessId, store], storeIndex) => (
+                  {Object.entries(storesInfo).map(([businessId, store], storeIndex) => {
+                    const storeSettings = getBranchSettings(businessId);
+                    return (
                     <div key={businessId} className={storeIndex > 0 ? 'border-t border-gray-200 pt-4' : ''}>
                       {/* Encabezado de la tienda */}
                       {Object.keys(storesInfo).length > 1 && (
@@ -2782,48 +2852,84 @@ export default function CheckoutPage() {
                         </div>
                       )}
                       
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {storeSettings.included_in_price && storeSettings.show_tax_included_label && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-800">
+                            Precio con impuestos incluidos
+                          </span>
+                        )}
+                        {!storeSettings.included_in_price && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-50 text-yellow-800">
+                            Impuestos calculados al mostrar precio
+                          </span>
+                        )}
+                        {!storeSettings.display_tax_breakdown && !storeSettings.included_in_price && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
+                            Desglose de impuestos oculto
+                          </span>
+                        )}
+                      </div>
+
                       {/* Items de esta tienda */}
                       <div className="space-y-3">
-                        {store.items.map((item: CartItem) => (
-                          <div key={item.id} className="flex gap-3">
-                            <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-gray-200">
-                              {item.product_image_url && !imageErrors[item.id] ? (
-                                <img
-                                  src={item.product_image_url}
-                                  alt={item.product_name}
-                                  className="w-full h-full object-contain p-1"
-                                  onError={() => {
-                                    setImageErrors(prev => ({ ...prev, [item.id]: true }));
-                                  }}
-                                />
-                              ) : (
-                                <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              )}
+                        {store.items.map((item: CartItem) => {
+                          const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
+                          const shouldShowTaxBreakdown =
+                            storeSettings.display_tax_breakdown &&
+                            !storeSettings.included_in_price &&
+                            !!itemTaxBreakdown;
+
+                          return (
+                            <div key={item.id} className="flex gap-3">
+                              <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-gray-200">
+                                {item.product_image_url && !imageErrors[item.id] ? (
+                                  <img
+                                    src={item.product_image_url}
+                                    alt={item.product_name}
+                                    className="w-full h-full object-contain p-1"
+                                    onError={() => {
+                                      setImageErrors(prev => ({ ...prev, [item.id]: true }));
+                                    }}
+                                  />
+                                ) : (
+                                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
+                                <p className="text-xs text-gray-500 mt-1">Cantidad: {item.quantity}</p>
+                                {backorderByItemId[item.id]?.isBackorder && (
+                                  <span
+                                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-800 mt-1"
+                                    title={
+                                      backorderByItemId[item.id]?.leadTimeDays !== null &&
+                                      backorderByItemId[item.id]?.leadTimeDays !== undefined
+                                        ? `Surtido estimado: ${backorderByItemId[item.id]?.leadTimeDays} dias`
+                                        : undefined
+                                    }
+                                  >
+                                    backorder
+                                  </span>
+                                )}
+                                <p className="text-sm font-medium text-gray-900 mt-1">
+                                  {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                                </p>
+                                {shouldShowTaxBreakdown && (
+                                  <div className="mt-1">
+                                    <TaxBreakdownComponent taxBreakdown={itemTaxBreakdown} compact />
+                                  </div>
+                                )}
+                                {!storeSettings.display_tax_breakdown && itemTaxBreakdown?.total_tax > 0 && !storeSettings.included_in_price && (
+                                  <p className="text-[11px] text-gray-500 mt-1">
+                                    Desglose de impuestos oculto por configuracion de la sucursal.
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
-                              <p className="text-xs text-gray-500 mt-1">Cantidad: {item.quantity}</p>
-                              {backorderByItemId[item.id]?.isBackorder && (
-                                <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-yellow-100 text-yellow-800 mt-1"
-                                  title={
-                                    backorderByItemId[item.id]?.leadTimeDays !== null &&
-                                    backorderByItemId[item.id]?.leadTimeDays !== undefined
-                                      ? `Surtido estimado: ${backorderByItemId[item.id]?.leadTimeDays} días`
-                                      : undefined
-                                  }
-                                >
-                                  backorder
-                                </span>
-                              )}
-                              <p className="text-sm font-medium text-gray-900 mt-1">
-                                {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                       
                       {/* Subtotal y envío por tienda (solo si hay múltiples tiendas) */}
@@ -2835,6 +2941,24 @@ export default function CheckoutPage() {
                               {formatPrice(subtotalsByStore[businessId] || 0)}
                             </span>
                           </div>
+                          {taxesByStore[businessId] > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-600">Impuestos {store.name}:</span>
+                              <span className="font-medium text-gray-900">
+                                {formatPrice(taxesByStore[businessId] || 0)}
+                              </span>
+                            </div>
+                          )}
+                          {taxesByStore[businessId] === 0 && storeSettings.included_in_price && storeSettings.show_tax_included_label && (
+                            <div className="flex justify-between text-[11px] text-gray-600">
+                              <span>Impuestos incluidos en precios</span>
+                            </div>
+                          )}
+                          {!storeSettings.display_tax_breakdown && taxesByStore[businessId] > 0 && (
+                            <p className="text-[11px] text-gray-500">
+                              Desglose de impuestos oculto por configuracion de la sucursal.
+                            </p>
+                          )}
                           {currentStep !== 'auth' && currentStep !== 'shipping' && (
                             (() => {
                               const selectedOptionId = shippingSelections[businessId];
@@ -2863,7 +2987,8 @@ export default function CheckoutPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
 
                 {/* Totales */}
@@ -2876,6 +3001,11 @@ export default function CheckoutPage() {
                     <span className="text-gray-600">Impuestos</span>
                     <span className="text-gray-900">{formatPrice(totalTax)}</span>
                   </div>
+                  {hasIncludedTaxLabels && totalTax === 0 && (
+                    <p className="text-xs text-gray-500 -mt-1">
+                      Los precios ya incluyen impuestos para al menos una tienda.
+                    </p>
+                  )}
                   {shippingTotal > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Envío</span>

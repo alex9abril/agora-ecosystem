@@ -36,9 +36,15 @@ const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | n
 
 export default function BrandingLoader({ isLoading, backgroundColor, branchId, groupId }: BrandingLoaderProps) {
   const router = useRouter();
+  const [hasMounted, setHasMounted] = useState(false);
   const [displayColor, setDisplayColor] = useState<string>('#f9fafb');
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+
+  // Evitar render en SSR para prevenir desajustes de hidratación
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // Detectar cambios de ruta para mostrar el loader durante navegación
   useEffect(() => {
@@ -98,6 +104,7 @@ export default function BrandingLoader({ isLoading, backgroundColor, branchId, g
   // Mostrar loader si está cargando o navegando
   const shouldShow = isLoading || isNavigating;
 
+  if (!hasMounted) return null;
   if (!shouldShow && !isVisible) return null;
 
   return (

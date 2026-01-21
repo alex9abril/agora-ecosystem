@@ -33,6 +33,18 @@ export interface ListBranchesParams {
   radius?: number; // en metros
 }
 
+export interface BranchTaxSettings {
+  included_in_price: boolean;
+  display_tax_breakdown: boolean;
+  show_tax_included_label: boolean;
+}
+
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
+
 /**
  * Servicio de sucursales
  */
@@ -106,6 +118,22 @@ export const branchesService = {
    */
   async getBranchesByBrand(brandId: string): Promise<BusinessResponse> {
     return apiRequest<BusinessResponse>(`/businesses/branches/by-brand/${brandId}`, { method: 'GET' });
+  },
+
+  /**
+   * Obtener configuracion de impuestos de una sucursal
+   */
+  async getBranchTaxSettings(businessId: string): Promise<BranchTaxSettings> {
+    try {
+      const response = await apiRequest<{ taxes?: BranchTaxSettings }>(
+        `/businesses/branches/id/${businessId}/tax-settings`,
+        { method: 'GET' }
+      );
+      return response?.taxes || (response as any) || DEFAULT_BRANCH_TAX_SETTINGS;
+    } catch (error) {
+      console.warn('[branchesService] No se pudo obtener configuracion de impuestos, usando defaults:', error);
+      return DEFAULT_BRANCH_TAX_SETTINGS;
+    }
   },
 };
 

@@ -15,11 +15,11 @@ interface ContextualLinkProps extends Omit<LinkProps, 'href'>, Omit<AnchorHTMLAt
   preserveQuery?: boolean;
 }
 
-export default function ContextualLink({ 
-  href, 
-  children, 
+export default function ContextualLink({
+  href,
+  children,
   preserveQuery = false,
-  ...props 
+  ...props
 }: ContextualLinkProps) {
   const { getContextualUrl } = useStoreContext();
   const router = useRouter();
@@ -45,26 +45,19 @@ export default function ContextualLink({
     }
   }
   
-  // Separar props de Link de props de anchor
-  const { style, onMouseEnter, onMouseLeave, className, ...linkProps } = props;
-  
-  // Si hay style o event handlers, necesitamos un wrapper
-  const needsWrapper = style || onMouseEnter || onMouseLeave;
-  
-  if (needsWrapper) {
-    return (
-      <Link href={contextualHref} {...linkProps}>
-        <span style={style} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} className={className}>
-          {children}
-        </span>
-      </Link>
-    );
-  }
-  
+  // Siempre renderizar un anchor consistente para evitar diferencias SSR/CSR
+  const { className, style, onMouseEnter, onMouseLeave, ...linkProps } = props;
+
   return (
-    <Link href={contextualHref} {...linkProps} className={className}>
-      {children}
+    <Link href={contextualHref} {...linkProps} legacyBehavior>
+      <a
+        className={className}
+        style={style}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
+        {children}
+      </a>
     </Link>
   );
 }
-

@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { productsService, Product } from '@/lib/products';
 import { taxesService } from '@/lib/taxes';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import ContextualLink from '@/components/ContextualLink';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
@@ -19,6 +20,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
+
 export default function CartPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
@@ -26,7 +33,10 @@ export default function CartPage() {
   const { getCheckoutUrl } = useStoreRouting();
   const [productsData, setProductsData] = useState<Record<string, Product>>({});
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
+  const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const getBranchSettings = (businessId: string) =>
+    branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
 
   // No redirigir automáticamente - permitir ver carrito sin login
   // Solo requerir login al proceder al checkout
@@ -51,8 +61,50 @@ export default function CartPage() {
         
         setProductsData(productsMap);
       };
-      
+
       loadProducts();
+    }
+  }, [cart]);
+
+  // Cargar configuracion de impuestos por sucursal
+  useEffect(() => {
+    if (cart && cart.items && cart.items.length > 0) {
+      const loadBranchSettings = async () => {
+        try {
+          const uniqueBusinessIds = Array.from(
+            new Set(
+              cart.items
+                .map((item: CartItem) => item.branch_id || item.business_id)
+                .filter((id): id is string => !!id)
+            )
+          );
+
+          if (uniqueBusinessIds.length === 0) {
+            setBranchTaxSettings({});
+            return;
+          }
+
+          const settingsEntries = await Promise.all(
+            uniqueBusinessIds.map(async (businessId) => {
+              const settings = await branchesService.getBranchTaxSettings(businessId);
+              return [businessId, settings || DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            })
+          );
+
+          const settingsMap: Record<string, BranchTaxSettings> = {};
+          settingsEntries.forEach(([businessId, settings]) => {
+            settingsMap[businessId] = settings;
+          });
+          setBranchTaxSettings(settingsMap);
+        } catch (error) {
+          console.warn('[Cart] No se pudo cargar la configuracion de impuestos por sucursal:', error);
+          setBranchTaxSettings({});
+        }
+      };
+
+      loadBranchSettings();
+    } else {
+      setBranchTaxSettings({});
     }
   }, [cart]);
 
@@ -66,6 +118,14 @@ export default function CartPage() {
           cart.items.map(async (item: CartItem) => {
             try {
               const subtotal = parseFloat(String(item.item_subtotal || 0));
+              const businessId = item.branch_id || item.business_id || '';
+              const taxSettings = branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
+
+              if (taxSettings.included_in_price) {
+                taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+                return;
+              }
+
               const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
               taxBreakdowns[item.id] = taxBreakdown;
             } catch (error) {
@@ -78,8 +138,10 @@ export default function CartPage() {
       };
       
       calculateTaxes();
+    } else {
+      setItemsTaxBreakdowns({});
     }
-  }, [cart]);
+  }, [cart, branchTaxSettings]);
 
   const handleQuantityChange = async (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) {
@@ -111,7 +173,7 @@ export default function CartPage() {
     
     const grouped: Record<string, CartItem[]> = {};
     cart.items.forEach((item) => {
-      const storeKey = item.business_id || 'unknown';
+      const storeKey = item.branch_id || item.business_id || 'unknown';
       if (!grouped[storeKey]) {
         grouped[storeKey] = [];
       }
@@ -158,6 +220,12 @@ export default function CartPage() {
     });
     return taxes;
   }, [storesInfo, itemsTaxBreakdowns]);
+
+  const hasIncludedTaxLabels = useMemo(() => {
+    return Object.values(branchTaxSettings).some(
+      (settings) => settings?.included_in_price === true && settings?.show_tax_included_label === true
+    );
+  }, [branchTaxSettings]);
 
   const subtotal = useMemo(() => {
     return Object.values(subtotalsByStore).reduce((sum, storeSubtotal) => sum + storeSubtotal, 0);
@@ -229,140 +297,214 @@ export default function CartPage() {
             {/* Items del carrito - Columna izquierda (2/3) */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                {Object.entries(storesInfo).map(([businessId, store], storeIndex) => (
-                  <div key={businessId} className={storeIndex > 0 ? 'border-t-2 border-gray-300' : ''}>
-                    {/* Encabezado de la tienda */}
-                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-lg font-medium text-gray-900">{store.name}</h2>
-                          <p className="text-sm text-gray-500 mt-0.5">
-                            {store.items.length} {store.items.length === 1 ? 'producto' : 'productos'}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">Subtotal de tienda</p>
-                          <p className="text-lg font-medium text-gray-900">
-                            {formatPrice(subtotalsByStore[businessId] || 0)}
-                          </p>
+                {Object.entries(storesInfo).map(([businessId, store], storeIndex) => {
+                  const storeSettings = getBranchSettings(businessId);
+                  return (
+                    <div
+                      key={businessId}
+                      className={storeIndex > 0 ? 'border-t-2 border-gray-300' : ''}
+                    >
+                      {/* Encabezado de la tienda */}
+                      <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h2 className="text-lg font-medium text-gray-900">{store.name}</h2>
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              {store.items.length} {store.items.length === 1 ? 'producto' : 'productos'}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {storeSettings.included_in_price && storeSettings.show_tax_included_label && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-800">
+                                  Precio con impuestos incluidos
+                                </span>
+                              )}
+                              {!storeSettings.included_in_price && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-50 text-yellow-800">
+                                  Impuestos calculados al mostrar precio
+                                </span>
+                              )}
+                              {!storeSettings.display_tax_breakdown && !storeSettings.included_in_price && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
+                                  Desglose de impuestos oculto
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Subtotal de tienda</p>
+                            <p className="text-lg font-medium text-gray-900">
+                              {formatPrice(subtotalsByStore[businessId] || 0)}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Items de esta tienda */}
-                    {store.items.map((item: CartItem) => (
-                      <div key={item.id} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
-                        <div className="p-6">
-                          <div className="flex gap-6">
-                            {/* Imagen del producto */}
-                            <div className="flex-shrink-0">
-                              <div className="w-32 h-32 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
-                                {item.product_image_url && !imageErrors[item.id] ? (
-                                  <img
-                                    src={item.product_image_url}
-                                    alt={item.product_name}
-                                    className="w-full h-full object-contain p-2"
-                                    onError={() => {
-                                      setImageErrors(prev => ({ ...prev, [item.id]: true }));
-                                    }}
-                                  />
-                                ) : (
-                                  <svg className="w-16 h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                  </svg>
-                                )}
-                              </div>
-                            </div>
+                      {/* Items de esta tienda */}
+                      {store.items.map((item: CartItem) => {
+                        const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
+                        const shouldShowTaxBreakdown =
+                          storeSettings.display_tax_breakdown &&
+                          !storeSettings.included_in_price &&
+                          !!itemTaxBreakdown;
 
-                            {/* Información del producto */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="font-normal text-lg text-gray-900 mb-2 leading-tight">{item.product_name}</h3>
-                                  {item.product_description && (
-                                    <p className="text-sm text-gray-500 mb-3 line-clamp-2">{item.product_description}</p>
-                                  )}
-                                  <div className="flex items-center gap-4">
-                                    <div>
-                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Precio unitario</span>
-                                      <p className="text-base font-normal text-gray-700 mt-0.5">
-                                        {formatPrice(parseFloat(String(item.unit_price || 0)))}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <span className="text-xs text-gray-500 uppercase tracking-wide">Subtotal</span>
-                                      <p className="text-lg font-normal text-gray-900 mt-0.5">
-                                        {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
-                                      </p>
-                                    </div>
+                        return (
+                          <div
+                            key={item.id}
+                            className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="p-6">
+                              <div className="flex gap-6">
+                                {/* Imagen del producto */}
+                                <div className="flex-shrink-0">
+                                  <div className="w-32 h-32 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
+                                    {item.product_image_url && !imageErrors[item.id] ? (
+                                      <img
+                                        src={item.product_image_url}
+                                        alt={item.product_name}
+                                        className="w-full h-full object-contain p-2"
+                                        onError={() => {
+                                          setImageErrors((prev) => ({ ...prev, [item.id]: true }));
+                                        }}
+                                      />
+                                    ) : (
+                                      <svg
+                                        className="w-16 h-16 text-gray-300"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={1.5}
+                                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                        />
+                                      </svg>
+                                    )}
                                   </div>
-                                  {itemsTaxBreakdowns[item.id] && (
-                                    <div className="mt-2">
-                                      <TaxBreakdownComponent taxBreakdown={itemsTaxBreakdowns[item.id]} compact />
-                                    </div>
-                                  )}
                                 </div>
 
-                                {/* Controles de cantidad y eliminar */}
-                                <div className="flex flex-col items-end gap-4">
-                                  <button
-                                    onClick={() => handleRemoveItem(item.id)}
-                                    className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
-                                    title="Eliminar producto"
-                                  >
-                                    <DeleteIcon className="w-5 h-5" />
-                                  </button>
-                                  
-                                  <div className="flex flex-col items-end gap-2">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wide">Cantidad</span>
-                                    <div className="flex items-center gap-3 border border-gray-200 rounded-lg p-1 bg-white">
+                                {/* Informaci?n del producto */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                      <h3 className="font-normal text-lg text-gray-900 mb-2 leading-tight">
+                                        {item.product_name}
+                                      </h3>
+                                      {item.product_description && (
+                                        <p className="text-sm text-gray-500 mb-3 line-clamp-2">
+                                          {item.product_description}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-4">
+                                        <div>
+                                          <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                            Precio unitario
+                                          </span>
+                                          <p className="text-base font-normal text-gray-700 mt-0.5">
+                                            {formatPrice(parseFloat(String(item.unit_price || 0)))}
+                                          </p>
+                                        </div>
+                                        <div>
+                                          <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                            Subtotal
+                                          </span>
+                                          <p className="text-lg font-normal text-gray-900 mt-0.5">
+                                            {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      {shouldShowTaxBreakdown && (
+                                        <div className="mt-2">
+                                          <TaxBreakdownComponent taxBreakdown={itemTaxBreakdown} compact />
+                                        </div>
+                                      )}
+                                      {!storeSettings.display_tax_breakdown &&
+                                        itemTaxBreakdown?.total_tax > 0 &&
+                                        !storeSettings.included_in_price && (
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            Desglose de impuestos desactivado para esta sucursal. El total se refleja en el resumen.
+                                          </p>
+                                        )}
+                                    </div>
+
+                                    {/* Controles de cantidad y eliminar */}
+                                    <div className="flex flex-col items-end gap-4">
                                       <button
-                                        onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
-                                        aria-label="Disminuir cantidad"
+                                        onClick={() => handleRemoveItem(item.id)}
+                                        className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
+                                        title="Eliminar producto"
                                       >
-                                        <RemoveIcon className="w-4 h-4" />
+                                        <DeleteIcon className="w-5 h-5" />
                                       </button>
-                                      <span className="w-10 text-center font-normal text-gray-900 text-base">{item.quantity}</span>
-                                      <button
-                                        onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
-                                        aria-label="Aumentar cantidad"
-                                      >
-                                        <AddIcon className="w-4 h-4" />
-                                      </button>
+
+                                      <div className="flex flex-col items-end gap-2">
+                                        <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                          Cantidad
+                                        </span>
+                                        <div className="flex items-center gap-3 border border-gray-200 rounded-lg p-1 bg-white">
+                                          <button
+                                            onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                                            className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+                                            aria-label="Disminuir cantidad"
+                                          >
+                                            <RemoveIcon className="w-4 h-4" />
+                                          </button>
+                                          <span className="w-10 text-center font-normal text-gray-900 text-base">
+                                            {item.quantity}
+                                          </span>
+                                          <button
+                                            onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                                            className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+                                            aria-label="Aumentar cantidad"
+                                          >
+                                            <AddIcon className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })}
 
-                    {/* Resumen de la tienda */}
-                    {Object.keys(storesInfo).length > 1 && (
-                      <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600">Subtotal {store.name}:</span>
-                          <span className="font-medium text-gray-900">
-                            {formatPrice(subtotalsByStore[businessId] || 0)}
-                          </span>
-                        </div>
-                        {taxesByStore[businessId] > 0 && (
-                          <div className="flex justify-between items-center text-sm mt-1">
-                            <span className="text-gray-600">Impuestos {store.name}:</span>
+                      {/* Resumen de la tienda */}
+                      {Object.keys(storesInfo).length > 1 && (
+                        <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
+                          <div className="flex justify-between items-center text-sm">
+                            <span className="text-gray-600">Subtotal {store.name}:</span>
                             <span className="font-medium text-gray-900">
-                              {formatPrice(taxesByStore[businessId] || 0)}
+                              {formatPrice(subtotalsByStore[businessId] || 0)}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-
+                          {taxesByStore[businessId] > 0 && (
+                            <div className="flex justify-between items-center text-sm mt-1">
+                              <span className="text-gray-600">Impuestos {store.name}:</span>
+                              <span className="font-medium text-gray-900">
+                                {formatPrice(taxesByStore[businessId] || 0)}
+                              </span>
+                            </div>
+                          )}
+                          {taxesByStore[businessId] === 0 &&
+                            storeSettings.included_in_price &&
+                            storeSettings.show_tax_included_label && (
+                              <div className="flex justify-between items-center text-xs mt-1 text-gray-600">
+                                <span>Impuestos incluidos en precios</span>
+                              </div>
+                            )}
+                          {!storeSettings.display_tax_breakdown && taxesByStore[businessId] > 0 && (
+                            <p className="text-[11px] text-gray-500 mt-1">
+                              Desglose de impuestos oculto por configuracion de la sucursal.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {/* Nota sobre múltiples tiendas */}
                 {Object.keys(storesInfo).length > 1 && (
                   <div className="bg-blue-50 border-t-2 border-blue-200 px-6 py-4">
@@ -398,6 +540,11 @@ export default function CartPage() {
                     <span className="text-gray-600">Impuestos</span>
                     <span className="text-gray-900 font-normal">{formatPrice(totalTax)}</span>
                   </div>
+                  {hasIncludedTaxLabels && totalTax === 0 && (
+                    <p className="text-xs text-gray-500 -mt-2">
+                      Los precios ya incluyen impuestos para al menos una tienda.
+                    </p>
+                  )}
                   <div className="flex justify-between items-start py-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">

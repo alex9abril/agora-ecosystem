@@ -14,6 +14,13 @@ import { WalletService } from '../wallet/wallet.service';
 import { KarlopayService } from '../payments/karlopay/karlopay.service';
 import { IntegrationsService } from '../settings/integrations.service';
 import { EmailService } from '../email/email.service';
+import { BusinessesService } from '../businesses/businesses.service';
+
+const DEFAULT_TAX_SETTINGS = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
 
 @Injectable()
 export class OrdersService {
@@ -26,6 +33,7 @@ export class OrdersService {
     private readonly karlopayService: KarlopayService,
     private readonly integrationsService: IntegrationsService,
     private readonly emailService: EmailService,
+    private readonly businessesService: BusinessesService,
   ) {}
 
   /**
@@ -91,11 +99,29 @@ export class OrdersService {
         itemsByBusiness.get(businessId)!.push(item);
       }
 
-      // 4. Generar order_group_id para todas las órdenes relacionadas
+      // 4. Obtener configuracion de impuestos por sucursal (hereda valores globales)
+      const taxSettingsByBusiness = new Map<string, any>();
+      for (const businessId of itemsByBusiness.keys()) {
+        try {
+          const settings = await this.businessesService.getBusinessTaxSettings(businessId);
+          taxSettingsByBusiness.set(
+            businessId,
+            (settings as any)?.taxes || DEFAULT_TAX_SETTINGS,
+          );
+        } catch (error: any) {
+          console.warn(
+            `[OrdersService.checkout] No se pudo obtener configuracion de impuestos para la sucursal ${businessId}:`,
+            error?.message || error
+          );
+          taxSettingsByBusiness.set(businessId, DEFAULT_TAX_SETTINGS);
+        }
+      }
+
+      // 5. Generar order_group_id para todas las órdenes relacionadas
       const orderGroupIdResult = await client.query('SELECT gen_random_uuid() as id');
       const orderGroupId = orderGroupIdResult.rows[0].id;
 
-      // 5. Validar dirección (una sola vez, se usa para todas las órdenes)
+      // 6. Validar dirección (una sola vez, se usa para todas las órdenes)
       const addressResult = await client.query(
         `SELECT 
           id,
@@ -120,7 +146,7 @@ export class OrdersService {
 
       const address = addressResult.rows[0];
 
-      // 6. Construir texto de dirección
+      // 7. Construir texto de dirección
       const addressText = [
         address.street,
         address.street_number,
@@ -131,17 +157,25 @@ export class OrdersService {
         address.country,
       ].filter(Boolean).join(', ');
 
-      // 7. Calcular montos globales (delivery_fee y tip se distribuirán proporcionalmente)
+      // 8. Calcular montos globales (delivery_fee y tip se distribuirán proporcionalmente)
       const globalSubtotal = itemsResult.rows.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
       const deliveryFee = checkoutDto.deliveryFee || 0; // Usar el costo de envío enviado desde el frontend
       const discountAmount = 0; // Por ahora sin descuentos
       const tipAmount = checkoutDto.tipAmount || 0;
 
-      // 8. Calcular impuestos y tax_breakdowns para todos los items
+      // 9. Calcular impuestos y tax_breakdowns para todos los items
       const itemTaxBreakdownsMap = new Map<string, any>();
       
       for (const item of itemsResult.rows) {
         try {
+          const businessId = item.branch_id || item.business_id;
+          const taxSettings = taxSettingsByBusiness.get(businessId) || DEFAULT_TAX_SETTINGS;
+
+          if (taxSettings.included_in_price) {
+            itemTaxBreakdownsMap.set(item.product_id, { taxes: [], total_tax: 0 });
+            continue;
+          }
+
           const taxBreakdown = await this.taxesService.calculateProductTaxes(
             item.product_id,
             parseFloat(item.item_subtotal)
@@ -154,7 +188,7 @@ export class OrdersService {
         }
       }
 
-      // 9. Calcular total global para procesar wallet
+      // 10. Calcular total global para procesar wallet
       let globalTaxAmount = 0;
       for (const item of itemsResult.rows) {
         const taxBreakdown = itemTaxBreakdownsMap.get(item.product_id) || { taxes: [], total_tax: 0 };
@@ -162,7 +196,7 @@ export class OrdersService {
       }
       const totalAmount = globalSubtotal + globalTaxAmount + deliveryFee - discountAmount + tipAmount;
 
-      // 10. Procesar pago con wallet si se especifica
+      // 11. Procesar pago con wallet si se especifica
       let walletAmountUsed = 0;
       let walletTransaction: any = null; // Transacción del wallet si se usa
       let paymentMethod = 'cash'; // Por defecto
@@ -221,7 +255,7 @@ export class OrdersService {
         }
       }
 
-      // 11. Crear una orden por cada sucursal
+      // 12. Crear una orden por cada sucursal
       const createdOrders: any[] = [];
       const businessSubtotals = new Map<string, number>();
 
@@ -332,7 +366,7 @@ export class OrdersService {
         }
       }
 
-      // 12. Actualizar transacciones de wallet con order_id (si se usó wallet)
+      // 13. Actualizar transacciones de wallet con order_id (si se usó wallet)
       if (walletAmountUsed > 0 && createdOrders.length > 0) {
         // Actualizar la última transacción de débito con el order_id del primer pedido
         // (en el futuro se podría distribuir proporcionalmente entre múltiples órdenes)
@@ -355,7 +389,7 @@ export class OrdersService {
         );
       }
 
-      // 13. Limpiar carrito
+      // 14. Limpiar carrito
       await client.query(
         `DELETE FROM orders.shopping_cart_items WHERE cart_id = $1`,
         [cart.id]
@@ -367,7 +401,7 @@ export class OrdersService {
 
       await client.query('COMMIT');
 
-      // 13.5. Guardar transacciones de pago del wallet en payment_transactions
+      // 15. Guardar transacciones de pago del wallet en payment_transactions
       if (walletAmountUsed > 0 && walletTransaction && createdOrders.length > 0) {
         // Distribuir el monto del wallet proporcionalmente entre las órdenes creadas
         const totalOrderAmount = createdOrders.reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
@@ -403,7 +437,7 @@ export class OrdersService {
         }
       }
 
-      // 13.6. Si todas las transacciones están completadas (solo wallet, sin KarloPay pendiente), actualizar payment_status a 'paid'
+      // 16. Si todas las transacciones están completadas (solo wallet, sin KarloPay pendiente), actualizar payment_status a 'paid'
       // Esto solo aplica si NO hay método secundario o si el método secundario no es KarloPay
       if (walletAmountUsed > 0 && walletTransaction && createdOrders.length > 0) {
         const hasSecondaryKarlopay = checkoutDto.payment?.secondary_method === 'karlopay';
@@ -422,7 +456,7 @@ export class OrdersService {
         }
       }
 
-      // 14. Crear orden en Karlopay si el método de pago es karlopay o si hay método secundario karlopay (después del COMMIT)
+      // 17. Crear orden en Karlopay si el método de pago es karlopay o si hay método secundario karlopay (después del COMMIT)
       let karlopayPaymentUrl: string | null = null;
       const needsKarlopay = paymentMethod === 'karlopay' || checkoutDto.payment?.secondary_method === 'karlopay';
       if (needsKarlopay && createdOrders.length > 0) {
@@ -613,7 +647,7 @@ export class OrdersService {
         }
       }
 
-      // 15. Obtener todas las órdenes creadas con sus items
+      // 18. Obtener todas las órdenes creadas con sus items
       // Retornar la primera orden como principal (para compatibilidad con código existente)
       // pero incluir información del grupo
       const primaryOrder = await this.findOne(createdOrders[0].id, userId);
