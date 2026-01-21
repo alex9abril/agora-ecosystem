@@ -484,11 +484,8 @@ export default function CheckoutPage() {
     return taxes;
   }, [storesInfo, itemsTaxBreakdowns]);
 
-  const hasIncludedTaxLabels = useMemo(() => {
-    return Object.values(branchTaxSettings).some(
-      (settings) => settings?.included_in_price === true && settings?.show_tax_included_label === true
-    );
-  }, [branchTaxSettings]);
+  // Etiquetas desactivadas (se ocultaron las opciones 2 y 3)
+  const hasIncludedTaxLabels = false;
 
   // Calcular totales
   const subtotal = useMemo(() => {
@@ -2852,32 +2849,13 @@ export default function CheckoutPage() {
                         </div>
                       )}
                       
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {storeSettings.included_in_price && storeSettings.show_tax_included_label && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-50 text-green-800">
-                            Precio con impuestos incluidos
-                          </span>
-                        )}
-                        {!storeSettings.included_in_price && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-yellow-50 text-yellow-800">
-                            Impuestos calculados al mostrar precio
-                          </span>
-                        )}
-                        {!storeSettings.display_tax_breakdown && !storeSettings.included_in_price && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-700">
-                            Desglose de impuestos oculto
-                          </span>
-                        )}
-                      </div>
-
+                      <div className="flex flex-wrap gap-2 mb-2" />
+                      
                       {/* Items de esta tienda */}
                       <div className="space-y-3">
                         {store.items.map((item: CartItem) => {
-                          const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
-                          const shouldShowTaxBreakdown =
-                            storeSettings.display_tax_breakdown &&
-                            !storeSettings.included_in_price &&
-                            !!itemTaxBreakdown;
+                        const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
+                        const shouldShowTaxBreakdown = false; // desgloses ocultos
 
                           return (
                             <div key={item.id} className="flex gap-3">
@@ -2920,11 +2898,6 @@ export default function CheckoutPage() {
                                   <div className="mt-1">
                                     <TaxBreakdownComponent taxBreakdown={itemTaxBreakdown} compact />
                                   </div>
-                                )}
-                                {!storeSettings.display_tax_breakdown && itemTaxBreakdown?.total_tax > 0 && !storeSettings.included_in_price && (
-                                  <p className="text-[11px] text-gray-500 mt-1">
-                                    Desglose de impuestos oculto por configuracion de la sucursal.
-                                  </p>
                                 )}
                               </div>
                             </div>

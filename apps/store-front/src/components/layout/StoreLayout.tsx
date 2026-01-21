@@ -3,7 +3,7 @@
  */
 
 import React, { ReactNode, useState, useEffect } from 'react';
-import Image from 'next/image';
+// Evitamos next/image aquí para no propagar fetchPriority a <img> en entornos que no lo soportan
 import { useStoreContext } from '@/contexts/StoreContext';
 import Header from './Header';
 import ContextualLink from '../ContextualLink';
@@ -238,13 +238,11 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
         <div className="bg-gray-800 border-b border-gray-700">
           <div className="max-w-7xl mx-auto px-4 py-3">
             <div className="flex items-center gap-3 mb-2">
-              <Image
-                src={agoraLogoWhite}
+              <img
+                src={typeof agoraLogoWhite === 'string' ? agoraLogoWhite : (agoraLogoWhite as any).src}
                 alt="Ágora"
-                width={80}
-                height={30}
                 className="object-contain"
-                style={{ height: 'auto', maxHeight: '30px' }}
+                style={{ height: 'auto', maxHeight: '30px', width: '80px' }}
               />
               <h3 className="text-xs font-semibold text-gray-300">¿Qué es Ágora?</h3>
             </div>
@@ -472,13 +470,11 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-300">Powered by</span>
-                <Image
-                  src={agoraLogoWhite}
+                <img
+                  src={typeof agoraLogoWhite === 'string' ? agoraLogoWhite : (agoraLogoWhite as any).src}
                   alt="Ágora"
-                  width={100}
-                  height={50}
                   className="object-contain"
-                  style={{ height: 'auto', maxHeight: '50px' }}
+                  style={{ height: 'auto', maxHeight: '50px', width: '100px' }}
                 />
               </div>
             </div>

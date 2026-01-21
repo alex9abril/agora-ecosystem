@@ -12,15 +12,18 @@ import { formatPrice } from '@/lib/format';
 interface ProductCardProps {
   product: Product;
   onAddToCart?: (product: Product) => void;
+  overridePrice?: number;
 }
 
-export default function ProductCard({ product, onAddToCart }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, overridePrice }: ProductCardProps) {
   const { contextType, branchData } = useStoreContext();
 
   // Determinar precio a mostrar
-  const displayPrice = contextType === 'sucursal' && product.branch_price !== undefined
-    ? product.branch_price
-    : product.price;
+  const displayPrice = overridePrice !== undefined
+    ? overridePrice
+    : contextType === 'sucursal' && product.branch_price !== undefined
+      ? product.branch_price
+      : product.price;
 
   // Determinar si está disponible
   const isAvailable = contextType === 'sucursal' 

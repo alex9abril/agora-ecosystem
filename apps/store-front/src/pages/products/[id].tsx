@@ -12,7 +12,7 @@ import BranchPriceDisplay from '@/components/BranchPriceDisplay';
 import BranchAvailabilityGrid from '@/components/BranchAvailabilityGrid';
 import { productsService, Product, ProductBranchAvailability, ProductImage } from '@/lib/products';
 import ProductImageGallery from '@/components/ProductImageGallery';
-import { branchesService } from '@/lib/branches';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
 import { categoriesService, ProductCategory } from '@/lib/categories';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,12 +21,19 @@ import { useStoreRouting } from '@/hooks/useStoreRouting';
 import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { formatPrice } from '@/lib/format';
+import { taxesService } from '@/lib/taxes';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
 import { checkProductCompatibility } from '@/lib/product-compatibility';
+
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -54,6 +61,8 @@ export default function ProductDetailPage() {
   const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
   const [checkingCompatibility, setCheckingCompatibility] = useState(false);
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
+  const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
+  const [taxedUnitPrice, setTaxedUnitPrice] = useState<number | null>(null);
   const shouldCheckCompatibility =
     !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
 
@@ -222,6 +231,53 @@ export default function ProductDetailPage() {
       }
     }
   }, [storedBranch, branchAvailabilities, contextType, selectedBranchId]);
+
+  // Cargar configuracion de impuestos para la sucursal seleccionada/contexto
+  useEffect(() => {
+    const loadTaxSettings = async () => {
+      const branchToUse = contextType === 'sucursal'
+        ? branchData?.id
+        : selectedBranchId;
+
+      if (!branchToUse) {
+        setBranchTaxSettings(null);
+        return;
+      }
+
+      try {
+        const settings = await branchesService.getBranchTaxSettings(branchToUse);
+        setBranchTaxSettings(settings || DEFAULT_BRANCH_TAX_SETTINGS);
+      } catch (err) {
+        console.warn('[ProductDetail] No se pudo obtener configuracion de impuestos de la sucursal:', err);
+        setBranchTaxSettings(null);
+      }
+    };
+
+    loadTaxSettings();
+  }, [contextType, branchData?.id, selectedBranchId]);
+
+  // Calcular precio unitario con impuestos (para mostrar)
+  useEffect(() => {
+    const computeTaxedPrice = async () => {
+      if (!product) return;
+      const basePrice = getUnitBasePrice();
+
+      if (!branchTaxSettings || branchTaxSettings.included_in_price) {
+        setTaxedUnitPrice(basePrice);
+        return;
+      }
+
+      try {
+        const taxBreakdown = await taxesService.calculateProductTaxes(product.id, basePrice);
+        setTaxedUnitPrice(basePrice + (taxBreakdown?.total_tax || 0));
+      } catch (err) {
+        console.warn('[ProductDetail] No se pudo calcular impuestos para el producto:', err);
+        setTaxedUnitPrice(basePrice);
+      }
+    };
+
+    computeTaxedPrice();
+  }, [product, branchTaxSettings, selectedVariants]);
 
   useEffect(() => {
     console.log('🔍 [ProductDetail] useEffect triggered:', {
@@ -651,11 +707,15 @@ export default function ProductDetailPage() {
 
   // Calcular precio total con variantes
   const calculateTotalPrice = () => {
+    const unitPrice = taxedUnitPrice ?? getUnitBasePrice();
+    return unitPrice * quantity;
+  };
+
+  const getUnitBasePrice = () => {
     const basePrice = getSelectedBranchPrice();
-    
-    let total = basePrice * quantity;
-    
-    if (product.variant_groups) {
+    let price = basePrice;
+
+    if (product?.variant_groups) {
       product.variant_groups.forEach((group) => {
         const selected = selectedVariants[group.variant_group_id];
         if (selected) {
@@ -663,9 +723,9 @@ export default function ProductDetailPage() {
           group.variants.forEach((variant) => {
             if (variantIds.includes(variant.variant_id)) {
               if (variant.absolute_price !== null && variant.absolute_price !== undefined) {
-                total = variant.absolute_price * quantity;
+                price = variant.absolute_price;
               } else {
-                total += (variant.price_adjustment || 0) * quantity;
+                price += variant.price_adjustment || 0;
               }
             }
           });
@@ -673,10 +733,10 @@ export default function ProductDetailPage() {
       });
     }
 
-    return total;
+    return price;
   };
 
-  const displayPrice = getSelectedBranchPrice();
+  const displayPrice = taxedUnitPrice ?? getUnitBasePrice();
   
   // Obtener la sucursal seleccionada para mostrar información
   let selectedBranch: ProductBranchAvailability | null = null;
@@ -879,7 +939,7 @@ export default function ProductDetailPage() {
                       <>
                         <span className="text-sm text-gray-600 mb-1 block">Precio global:</span>
                         <span className="text-3xl font-bold text-black">
-                          {formatPrice(product.price)}
+                          {formatPrice(displayPrice)}
                         </span>
                         <p className="text-xs text-gray-500 mt-1">
                           Selecciona una sucursal para ver precio y stock específicos
@@ -891,6 +951,7 @@ export default function ProductDetailPage() {
                   <BranchPriceDisplay 
                     product={product} 
                     branchPrice={product.branch_price}
+                    overridePrice={displayPrice}
                   />
                 )}
               </div>

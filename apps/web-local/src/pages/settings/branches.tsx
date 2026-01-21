@@ -376,22 +376,6 @@ const TAX_SETTING_FIELDS: TaxSettingField[] = [
     helpText:
       'Si esta activado, el precio mostrado en el storefront ya incluye los impuestos. Si esta desactivado, los impuestos se calcularan y agregaran al precio base al momento de mostrar el producto.',
   },
-  {
-    key: 'display_tax_breakdown',
-    label: 'Mostrar Desglose de Impuestos',
-    description: 'Define si se debe mostrar el desglose detallado de impuestos en el storefront.',
-    helpText:
-      'Cuando esta activado, los clientes veran un desglose de cada impuesto aplicado (IVA, IEPS, etc.) en lugar de solo el total.',
-  },
-  {
-    key: 'show_tax_included_label',
-    label: 'Mostrar Etiqueta "Impuestos Incluidos"',
-    description: 'Define si se debe mostrar una etiqueta indicando que los impuestos estan incluidos en el precio.',
-    helpText:
-      'Cuando esta activado y "Impuestos Incluidos en Precio" tambien esta activado, se mostrara una etiqueta como "Precio con impuestos incluidos" en el storefront.',
-    requiresIncludedInPrice: true,
-    disabledMessage: 'Activa "Impuestos Incluidos en Precio" para poder mostrar la etiqueta.',
-  },
 ];
 
 const BRANCH_TAX_DEFAULTS: BranchTaxSettings = {
@@ -417,7 +401,11 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
     setError(null);
     try {
       const response = await businessService.getBranchTaxSettings(branch.id);
-      setTaxSettings(response || BRANCH_TAX_DEFAULTS);
+      // Solo usamos included_in_price; las demas opciones estan ocultas/desactivadas
+      setTaxSettings({
+        ...BRANCH_TAX_DEFAULTS,
+        included_in_price: response?.included_in_price ?? BRANCH_TAX_DEFAULTS.included_in_price,
+      });
     } catch (err: any) {
       console.error('[BranchSettingsPreview] Error cargando configuracion de impuestos:', err);
       setError(err?.message || 'No se pudo cargar la configuracion de impuestos.');
@@ -432,23 +420,9 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
   }, [branch.id]);
 
   const handleToggle = async (key: keyof BranchTaxSettings, value: boolean) => {
-    // Evitar cambios en la etiqueta si no aplica
-    if (key === 'show_tax_included_label' && !taxSettings.included_in_price) {
-      return;
-    }
-
     const previous = { ...taxSettings };
     const nextState: BranchTaxSettings = { ...taxSettings, [key]: value };
     let payload: Partial<BranchTaxSettings> = { [key]: value };
-
-    // Si se desactiva "incluidos en precio", forzar a false la etiqueta dependiente
-    if (key === 'included_in_price' && !value && taxSettings.show_tax_included_label) {
-      nextState.show_tax_included_label = false;
-      payload = {
-        included_in_price: value,
-        show_tax_included_label: false,
-      };
-    }
 
     setTaxSettings(nextState);
     setSavingKey(key);
@@ -520,13 +494,12 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
 
             <div className="space-y-4 border-t border-gray-200 pt-4">
               {TAX_SETTING_FIELDS.map((field) => {
-                const dependencyLocked = field.requiresIncludedInPrice && !taxSettings.included_in_price;
-                const isDisabled = savingKey === field.key || dependencyLocked;
+                const isDisabled = savingKey === field.key;
 
                 return (
                   <div
                     key={field.key}
-                    className={`bg-gray-50 rounded-lg p-4 border border-gray-200 ${dependencyLocked ? 'opacity-60' : ''}`}
+                    className="bg-gray-50 rounded-lg p-4 border border-gray-200"
                   >
                     <label className={`flex items-start gap-3 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                       <input
@@ -543,9 +516,6 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
                         )}
                         {field.helpText && (
                           <p className="text-xs text-gray-600 mt-1">{field.helpText}</p>
-                        )}
-                        {dependencyLocked && field.disabledMessage && (
-                          <p className="text-xs text-gray-500 mt-1">{field.disabledMessage}</p>
                         )}
                       </div>
                     </label>
