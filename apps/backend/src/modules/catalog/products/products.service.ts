@@ -1511,7 +1511,7 @@ export class ProductsService {
       // Consulta: obtener TODAS las sucursales (activas e inactivas) con su disponibilidad
       // Usar LEFT JOIN para incluir sucursales sin disponibilidad configurada
       const sqlQuery = `
-        SELECT DISTINCT
+        SELECT
           b.id AS branch_id,
           b.name AS branch_name,
           b.slug AS branch_slug,
@@ -1522,6 +1522,8 @@ export class ProductsService {
           pba.stock,
           COALESCE(pba.allow_backorder, FALSE) AS allow_backorder,
           pba.backorder_lead_time_days,
+          collections.collection_ids,
+          collections.collection_list,
           -- Construir dirección completa desde core.addresses si existe
           CONCAT_WS(', ',
             NULLIF(CONCAT_WS(' ', a.street, a.street_number), ''),
@@ -1535,6 +1537,20 @@ export class ProductsService {
           ON b.id = pba.branch_id 
           AND pba.product_id = $1
           AND COALESCE(pba.is_active, TRUE) = TRUE
+        LEFT JOIN LATERAL (
+          SELECT 
+            ARRAY_REMOVE(ARRAY_AGG(pca.coleccion_id ORDER BY pc.name), NULL) AS collection_ids,
+            json_agg(
+              json_build_object('id', pc.id, 'name', pc.name, 'slug', pc.slug, 'status', pc.status)
+              ORDER BY pc.name
+            ) FILTER (WHERE pc.id IS NOT NULL) AS collection_list
+          FROM catalog.product_coleccion_assignments pca
+          JOIN catalog.product_colecciones pc ON pc.id = pca.coleccion_id
+          WHERE pca.product_id = $1
+            AND pca.business_id = b.id
+            AND pca.status = 'active'
+            AND pc.status = 'active'
+        ) collections ON TRUE
         LEFT JOIN core.addresses a ON b.address_id = a.id
         ${whereClause}
         ORDER BY COALESCE(pba.is_enabled, FALSE) DESC, b.is_active DESC, b.name ASC
@@ -1552,6 +1568,8 @@ export class ProductsService {
           is_enabled: row.is_enabled || false,
           price: row.price !== null && row.price !== undefined ? parseFloat(row.price.toString()) : null,
           stock: row.stock !== null && row.stock !== undefined ? parseInt(row.stock.toString(), 10) : null,
+          collection_ids: Array.isArray(row.collection_ids) ? row.collection_ids : [],
+          collections: Array.isArray(row.collection_list) ? row.collection_list : [],
           allow_backorder: row.allow_backorder === true,
           backorder_lead_time_days:
             row.backorder_lead_time_days !== null && row.backorder_lead_time_days !== undefined
@@ -1597,6 +1615,8 @@ export class ProductsService {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
+      collection_id?: string | null;
+      collection_ids?: string[] | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
     }>
@@ -1629,7 +1649,41 @@ export class ProductsService {
           continue; // Continuar con la siguiente en lugar de fallar
         }
 
-        if (availability.is_enabled) {
+        const collectionIds = Array.from(
+          new Set(
+            Array.isArray(availability.collection_ids)
+              ? availability.collection_ids.filter(Boolean)
+              : availability.collection_id
+                ? [availability.collection_id]
+                : [],
+          ),
+        );
+
+        if (collectionIds.length > 0) {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          for (const cid of collectionIds) {
+            if (!uuidRegex.test(cid)) {
+              throw new BadRequestException('El collection_id debe ser un UUID válido');
+            }
+          }
+
+          const validCollections = await client.query(
+            `
+            SELECT id 
+            FROM catalog.product_colecciones 
+            WHERE id = ANY($1::uuid[]) AND business_id = $2 AND status = 'active'
+          `,
+            [collectionIds, availability.branch_id],
+          );
+
+          if (validCollections.rows.length !== collectionIds.length) {
+            throw new BadRequestException('La colección no existe o está inactiva para esta sucursal');
+          }
+        }
+
+        const shouldEnable = availability.is_enabled || collectionIds.length > 0;
+
+        if (shouldEnable) {
           // Si está habilitada, insertar o actualizar
           const upsertQuery = `
             INSERT INTO catalog.product_branch_availability (
@@ -1650,12 +1704,31 @@ export class ProductsService {
           await client.query(upsertQuery, [
             productId,
             availability.branch_id,
-            true, // Siempre true cuando está habilitada
+            true, // Forzar habilitado si hay colecciones seleccionadas
             availability.price ?? null,
             availability.stock ?? null,
             availability.allow_backorder ?? false,
             availability.backorder_lead_time_days ?? null,
           ]);
+
+          // Limpiar asignaciones previas y reinsertar solo las seleccionadas como activas
+          await client.query(
+            `DELETE FROM catalog.product_coleccion_assignments WHERE product_id = $1 AND business_id = $2`,
+            [productId, availability.branch_id],
+          );
+
+          if (collectionIds.length > 0) {
+            const insertAssignmentQuery = `
+              INSERT INTO catalog.product_coleccion_assignments (product_id, coleccion_id, business_id, status)
+              VALUES ($1, $2, $3, 'active')
+              ON CONFLICT (product_id, coleccion_id, business_id)
+              DO UPDATE SET status = 'active'
+            `;
+
+            for (const cid of collectionIds) {
+              await client.query(insertAssignmentQuery, [productId, cid, availability.branch_id]);
+            }
+          }
         } else {
           // Si está deshabilitada, eliminar el registro o marcarlo como inactivo
           const deleteQuery = `
@@ -1663,6 +1736,11 @@ export class ProductsService {
             WHERE product_id = $1 AND branch_id = $2
           `;
           await client.query(deleteQuery, [productId, availability.branch_id]);
+
+          await client.query(
+            `DELETE FROM catalog.product_coleccion_assignments WHERE product_id = $1 AND business_id = $2`,
+            [productId, availability.branch_id],
+          );
         }
       }
 

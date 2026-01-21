@@ -28,6 +28,17 @@ export class ProductBranchAvailabilityDto {
   @Type(() => Number)
   stock?: number | null;
 
+  @ApiPropertyOptional({ description: 'Coleccion asignada en la sucursal (UUID)', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  collection_id?: string | null;
+
+  @ApiPropertyOptional({ description: 'Lista de colecciones asignadas en la sucursal', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  collection_ids?: string[] | null;
+
   @ApiPropertyOptional({ description: 'Permite vender sin stock (backorder)', example: true })
   @IsOptional()
   @IsBoolean()
@@ -64,6 +75,17 @@ export class UpdateProductBranchAvailabilityDto {
   @Type(() => Number)
   stock?: number | null;
 
+  @ApiPropertyOptional({ description: 'Coleccion asignada en la sucursal (UUID)', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID()
+  collection_id?: string | null;
+
+  @ApiPropertyOptional({ description: 'Lista de colecciones asignadas en la sucursal', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  collection_ids?: string[] | null;
+
   @ApiPropertyOptional({ description: 'Permite vender sin stock (backorder)', example: true })
   @IsOptional()
   @IsBoolean()
@@ -86,7 +108,8 @@ export class BulkUpdateProductBranchAvailabilityDto {
         branch_id: '11111111-1111-1111-1111-111111111111',
         is_enabled: true,
         price: 150.00,
-        stock: 50
+        stock: 50,
+        collection_id: '22222222-2222-2222-2222-222222222222',
       }
     ]
   })

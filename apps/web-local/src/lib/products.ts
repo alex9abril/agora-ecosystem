@@ -291,6 +291,8 @@ export const productsService = {
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
+      collection_ids?: string[];
+      collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
     }>;
   }> {
     try {
@@ -304,6 +306,8 @@ export const productsService = {
           allow_backorder?: boolean;
           backorder_lead_time_days?: number | null;
           is_active?: boolean;
+          collection_ids?: string[];
+          collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {
         method: 'GET',
@@ -325,6 +329,8 @@ export const productsService = {
       is_enabled: boolean;
       price?: number | null;
       stock?: number | null;
+      collection_id?: string | null;
+      collection_ids?: string[] | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
     }>
@@ -339,6 +345,8 @@ export const productsService = {
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
       is_active: boolean;
+      collection_ids?: string[];
+      collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
     }>;
   }> {
     try {

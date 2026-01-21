@@ -84,6 +84,13 @@ Este repositorio contiene el **Panel de Administración** de LOCALIA. Para más 
 3. 🔄 Desarrollo del MVP
 4. 🔄 Piloto en Roma Norte
 
+## Product Collections (Colecciones)
+
+- Database: migration `database/migrations/migration_product_classifications_status.sql` creates `catalog.product_colecciones` and `catalog.product_coleccion_assignments` with a status flag to track active/inactive links.
+- Backend: catalog service now exposes `/catalog/collections` CRUD and product branch availability accepts `collection_ids`; saving a product with collections marks them active, and removing all clears the assignments.
+- Frontend: Catalog shows Collections as its own section; product create/edit forms display a Colecciones box with checkboxes per branch, pre-checking previously assigned collections and a Create button to add new ones.
+- Behavior: Assigning (checking) activates the collection for the product; unchecking removes it. Branch availability is enabled automatically when collections are selected.
+
 ## 📄 Licencia
 
 [Por definir]
