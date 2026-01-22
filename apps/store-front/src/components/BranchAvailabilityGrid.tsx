@@ -30,9 +30,23 @@ export default function BranchAvailabilityGrid({
     .filter((avail) => avail.is_active && avail.is_enabled)
     .map((avail) => ({
       ...avail,
-      displayPrice:
-        (avail as any).taxed_price ??
-        (avail.price !== null && avail.price !== undefined ? avail.price : globalPrice),
+      displayPrice: (() => {
+        const taxedRaw = (avail as any).taxed_price;
+        const taxed = taxedRaw !== null && taxedRaw !== undefined ? Number(taxedRaw) : undefined;
+        const price = avail.price !== null && avail.price !== undefined ? Number(avail.price) : undefined;
+
+        // Prefer taxed price only if it is a valid positive number
+        if (taxed !== undefined && !Number.isNaN(taxed) && taxed > 0) {
+          return taxed;
+        }
+
+        // Fall back to branch price, then global price
+        if (price !== undefined && !Number.isNaN(price)) {
+          return price;
+        }
+
+        return globalPrice;
+      })(),
     }))
     // Ordenar por precio (más bajo primero)
     .sort((a, b) => a.displayPrice - b.displayPrice);

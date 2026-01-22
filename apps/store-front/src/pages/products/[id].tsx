@@ -306,7 +306,8 @@ export default function ProductDetailPage() {
       if (!product) return;
     const basePrice = getUnitBasePrice();
 
-      if (!branchTaxSettings || branchTaxSettings.included_in_price) {
+      // Solo omitir el cÃ¡lculo cuando la sucursal indica que el precio YA incluye impuestos
+      if (branchTaxSettings?.included_in_price) {
         setTaxedUnitPrice(basePrice);
         return;
       }
@@ -503,9 +504,10 @@ export default function ProductDetailPage() {
 
           try {
             const settings = await branchesService.getBranchTaxSettings(normalized.branch_id);
-            if (!settings || settings.included_in_price) {
+            if (settings?.included_in_price) {
               return { ...normalized, taxed_price: basePrice };
             }
+
             const taxBreakdown = await taxesService.calculateProductTaxes(id, basePrice);
             const finalPrice = basePrice + (taxBreakdown?.total_tax || 0);
             return { ...normalized, taxed_price: finalPrice };

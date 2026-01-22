@@ -33,6 +33,7 @@ export default function CartPage() {
   const { getCheckoutUrl } = useStoreRouting();
   const [productsData, setProductsData] = useState<Record<string, Product>>({});
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
+  const [itemsNetSubtotals, setItemsNetSubtotals] = useState<Record<string, number>>({});
   const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const getBranchSettings = (businessId: string) =>
@@ -111,35 +112,82 @@ export default function CartPage() {
   // Calcular impuestos
   useEffect(() => {
     if (cart && cart.items && cart.items.length > 0) {
+      const splitIncludedTaxes = (
+        grossSubtotal: number,
+        taxBreakdown: TaxBreakdown | null | undefined
+      ): { taxBreakdown: TaxBreakdown; netSubtotal: number } => {
+        if (!taxBreakdown || !Array.isArray(taxBreakdown.taxes)) {
+          return { taxBreakdown: { taxes: [], total_tax: 0 }, netSubtotal: grossSubtotal };
+        }
+
+        const percentageRate = taxBreakdown.taxes
+          .filter((t) => t.rate_type === 'percentage')
+          .reduce((sum, t) => sum + (typeof t.rate === 'number' ? t.rate : Number(t.rate) || 0), 0);
+
+        const fixedSum = taxBreakdown.taxes
+          .filter((t) => t.rate_type === 'fixed')
+          .reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : Number(t.amount) || 0), 0);
+
+        const netSubtotal =
+          percentageRate > 0
+            ? (grossSubtotal - fixedSum) / (1 + percentageRate)
+            : Math.max(0, grossSubtotal - fixedSum);
+
+        const adjustedTaxes = taxBreakdown.taxes.map((t) => {
+          if (t.rate_type === 'percentage') {
+            const amount = netSubtotal * (typeof t.rate === 'number' ? t.rate : Number(t.rate) || 0);
+            return { ...t, amount };
+          }
+          return t;
+        });
+
+        const total_tax = adjustedTaxes.reduce((sum, t) => sum + (t.amount || 0), 0);
+        return { taxBreakdown: { taxes: adjustedTaxes, total_tax }, netSubtotal };
+      };
+
       const calculateTaxes = async () => {
         const taxBreakdowns: Record<string, TaxBreakdown> = {};
+        const netSubtotals: Record<string, number> = {};
         
         await Promise.all(
           cart.items.map(async (item: CartItem) => {
             try {
-              const subtotal = parseFloat(String(item.item_subtotal || 0));
+              const grossSubtotal = parseFloat(String(item.item_subtotal || 0));
               const businessId = item.branch_id || item.business_id || '';
               const taxSettings = branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
 
+              const taxBreakdown = await taxesService.calculateProductTaxes(
+                item.product_id,
+                grossSubtotal
+              );
+
               if (taxSettings.included_in_price) {
-                taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+                const { taxBreakdown: adjusted, netSubtotal } = splitIncludedTaxes(
+                  grossSubtotal,
+                  taxBreakdown
+                );
+                taxBreakdowns[item.id] = adjusted;
+                netSubtotals[item.id] = netSubtotal;
                 return;
               }
 
-              const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
               taxBreakdowns[item.id] = taxBreakdown;
+              netSubtotals[item.id] = grossSubtotal;
             } catch (error) {
               taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+              netSubtotals[item.id] = parseFloat(String(item.item_subtotal || 0));
             }
           })
         );
         
         setItemsTaxBreakdowns(taxBreakdowns);
+        setItemsNetSubtotals(netSubtotals);
       };
       
       calculateTaxes();
     } else {
       setItemsTaxBreakdowns({});
+      setItemsNetSubtotals({});
     }
   }, [cart, branchTaxSettings]);
 
@@ -202,12 +250,16 @@ export default function CartPage() {
     const subtotals: Record<string, number> = {};
     Object.entries(storesInfo).forEach(([businessId, store]) => {
       subtotals[businessId] = store.items.reduce(
-        (sum, item) => sum + parseFloat(String(item.item_subtotal || 0)),
+        (sum, item) =>
+          sum +
+          (itemsNetSubtotals[item.id] !== undefined
+            ? itemsNetSubtotals[item.id]
+            : parseFloat(String(item.item_subtotal || 0))),
         0
       );
     });
     return subtotals;
-  }, [storesInfo]);
+  }, [storesInfo, itemsNetSubtotals]);
 
   // Calcular impuestos por tienda
   const taxesByStore = useMemo(() => {
@@ -323,6 +375,10 @@ export default function CartPage() {
                       {/* Items de esta tienda */}
                       {store.items.map((item: CartItem) => {
                         const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
+                        const itemNetSubtotal =
+                          itemsNetSubtotals[item.id] !== undefined
+                            ? itemsNetSubtotals[item.id]
+                            : parseFloat(String(item.item_subtotal || 0));
                         const shouldShowTaxBreakdown = false; // Desglose desactivado globalmente
 
                         return (
@@ -390,18 +446,18 @@ export default function CartPage() {
                                       <div className="flex items-center gap-4">
                                         <div>
                                           <span className="text-xs text-gray-500 uppercase tracking-wide">
-                                            Precio unitario
+                                            {''}
                                           </span>
                                           <p className="text-base font-normal text-gray-700 mt-0.5">
-                                            {formatPrice(parseFloat(String(item.unit_price || 0)))}
+                                            {''}
                                           </p>
                                         </div>
                                         <div>
                                           <span className="text-xs text-gray-500 uppercase tracking-wide">
-                                            Subtotal
+                                            {''}
                                           </span>
                                           <p className="text-lg font-normal text-gray-900 mt-0.5">
-                                            {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                                            {''}
                                           </p>
                                         </div>
                                       </div>

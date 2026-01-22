@@ -222,7 +222,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
             taxSettingsByBusiness[product.business_id] ||
             DEFAULT_BRANCH_TAX_SETTINGS;
 
-          if (!settings || settings.included_in_price) {
+          if (settings?.included_in_price) {
             return [product.id, basePrice] as const;
           }
 

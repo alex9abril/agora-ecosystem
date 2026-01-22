@@ -3,7 +3,7 @@
  * Diseño inspirado en Toyota con paleta de colores oficial
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import agoraLogo from '@/images/agora_logo_white.png';
@@ -13,6 +13,9 @@ import { useCart } from '@/contexts/CartContext';
 import ContextualLink from '../ContextualLink';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
 import { brandingService, Branding } from '@/lib/branding';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import { taxesService } from '@/lib/taxes';
+import { CartItem } from '@/lib/cart';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PersonIcon from '@mui/icons-material/Person';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -48,6 +51,21 @@ export default function Header() {
   const { isAuthenticated, user, signOut } = useAuth();
   const { itemCount, cart } = useCart();
   const { getCartUrl } = useStoreRouting();
+  const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
+  const [taxByItem, setTaxByItem] = useState<Record<string, number>>({});
+  const cartTotal = useMemo(() => {
+    if (!cart || !cart.items) return 0;
+    return cart.items.reduce((sum, item) => {
+      const subtotal = parseFloat(String(item.item_subtotal || 0));
+      const tax =
+        taxByItem[item.id] !== undefined
+          ? taxByItem[item.id]
+          : item.tax_breakdown?.total_tax
+          ? Number(item.tax_breakdown.total_tax)
+          : 0;
+      return sum + subtotal + tax;
+    }, 0);
+  }, [cart, taxByItem]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showStoreSelector, setShowStoreSelector] = useState(false);
   const [showNavigationDialog, setShowNavigationDialog] = useState(false);
@@ -101,6 +119,98 @@ export default function Header() {
   const headerRef = useRef<HTMLElement>(null);
   const compactHeaderRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
+
+  // Cargar configuracion de impuestos por sucursal usada en los items del carrito
+  useEffect(() => {
+    const loadBranchSettings = async () => {
+      if (!cart || !cart.items || cart.items.length === 0) {
+        setBranchTaxSettings({});
+        return;
+      }
+
+      const uniqueBusinessIds = Array.from(
+        new Set(
+          cart.items
+            .map((item: CartItem) => item.branch_id || item.business_id)
+            .filter((id): id is string => !!id)
+        )
+      );
+
+      if (uniqueBusinessIds.length === 0) {
+        setBranchTaxSettings({});
+        return;
+      }
+
+      try {
+        const entries = await Promise.all(
+          uniqueBusinessIds.map(async (businessId) => {
+            try {
+              const settings = await branchesService.getBranchTaxSettings(businessId);
+              return [businessId, settings] as const;
+            } catch (err) {
+              console.warn('[Header] No se pudo obtener config de impuestos para', businessId, err);
+              return [businessId, undefined] as const;
+            }
+          })
+        );
+
+        const map: Record<string, BranchTaxSettings> = {};
+        entries.forEach(([id, settings]) => {
+          if (settings) map[id] = settings;
+        });
+        setBranchTaxSettings(map);
+      } catch (err) {
+        console.warn('[Header] Error cargando configs de impuestos', err);
+        setBranchTaxSettings({});
+      }
+    };
+
+    loadBranchSettings();
+  }, [cart]);
+
+  // Calcular impuestos por item para mostrar el total correcto en el header
+  useEffect(() => {
+    const computeTaxes = async () => {
+      if (!cart || !cart.items || cart.items.length === 0) {
+        setTaxByItem({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        cart.items.map(async (item: CartItem) => {
+          const businessId = item.branch_id || item.business_id || '';
+          const taxSettings = branchTaxSettings[businessId];
+          const subtotal = parseFloat(String(item.item_subtotal || 0));
+
+          // Si la sucursal marca precios con impuestos incluidos, no sumar impuestos
+          if (taxSettings?.included_in_price) {
+            return [item.id, 0] as const;
+          }
+
+          // Si ya viene el desglose en el item, usarlo
+          if (item.tax_breakdown?.total_tax !== undefined) {
+            return [item.id, Number(item.tax_breakdown.total_tax) || 0] as const;
+          }
+
+          try {
+            const breakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
+            return [item.id, breakdown?.total_tax || 0] as const;
+          } catch (err) {
+            console.warn('[Header] No se pudo calcular impuestos para item', item.id, err);
+            return [item.id, 0] as const;
+          }
+        })
+      );
+
+      const map: Record<string, number> = {};
+      entries.forEach(([id, tax]) => {
+        map[id] = tax;
+      });
+      setTaxByItem(map);
+    };
+
+    computeTaxes();
+  }, [cart, branchTaxSettings]);
 
   // Solo cargar información de localStorage en el cliente para evitar problemas de hidratación
   useEffect(() => {
@@ -779,9 +889,9 @@ export default function Header() {
                       <span className="text-xs" style={{ color: textColorOpacity80 }}>
                         Carrito
                       </span>
-                      {cart?.subtotal && (
+                      {cart && (
                         <span className="text-sm font-semibold" style={{ color: textColor }}>
-                          ${parseFloat(cart.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       )}
                     </div>
@@ -842,7 +952,7 @@ export default function Header() {
                             <div className="flex items-center justify-between mb-3">
                               <span className="text-sm font-medium text-gray-700">Subtotal:</span>
                               <span className="text-lg font-bold text-gray-900">
-                                ${parseFloat(cart.subtotal || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                             <ContextualLink

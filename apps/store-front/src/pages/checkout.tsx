@@ -95,6 +95,7 @@ export default function CheckoutPage() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
+  const [itemsNetSubtotals, setItemsNetSubtotals] = useState<Record<string, number>>({});
   const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
   const [backorderByItemId, setBackorderByItemId] = useState<Record<string, { isBackorder: boolean; leadTimeDays?: number | null }>>({});
   const [loading, setLoading] = useState(false);
@@ -398,35 +399,82 @@ export default function CheckoutPage() {
   // Calcular impuestos
   useEffect(() => {
     if (cart && cart.items && cart.items.length > 0) {
+      const splitIncludedTaxes = (
+        grossSubtotal: number,
+        taxBreakdown: TaxBreakdown | null | undefined
+      ): { taxBreakdown: TaxBreakdown; netSubtotal: number } => {
+        if (!taxBreakdown || !Array.isArray(taxBreakdown.taxes)) {
+          return { taxBreakdown: { taxes: [], total_tax: 0 }, netSubtotal: grossSubtotal };
+        }
+
+        const percentageRate = taxBreakdown.taxes
+          .filter((t) => t.rate_type === 'percentage')
+          .reduce((sum, t) => sum + (typeof t.rate === 'number' ? t.rate : Number(t.rate) || 0), 0);
+
+        const fixedSum = taxBreakdown.taxes
+          .filter((t) => t.rate_type === 'fixed')
+          .reduce((sum, t) => sum + (typeof t.amount === 'number' ? t.amount : Number(t.amount) || 0), 0);
+
+        const netSubtotal =
+          percentageRate > 0
+            ? (grossSubtotal - fixedSum) / (1 + percentageRate)
+            : Math.max(0, grossSubtotal - fixedSum);
+
+        const adjustedTaxes = taxBreakdown.taxes.map((t) => {
+          if (t.rate_type === 'percentage') {
+            const amount = netSubtotal * (typeof t.rate === 'number' ? t.rate : Number(t.rate) || 0);
+            return { ...t, amount };
+          }
+          return t;
+        });
+
+        const total_tax = adjustedTaxes.reduce((sum, t) => sum + (t.amount || 0), 0);
+        return { taxBreakdown: { taxes: adjustedTaxes, total_tax }, netSubtotal };
+      };
+
       const calculateTaxes = async () => {
         const taxBreakdowns: Record<string, TaxBreakdown> = {};
+        const netSubtotals: Record<string, number> = {};
         
         await Promise.all(
           cart.items.map(async (item: CartItem) => {
             try {
-              const subtotal = parseFloat(String(item.item_subtotal || 0));
+              const grossSubtotal = parseFloat(String(item.item_subtotal || 0));
               const businessId = item.branch_id || item.business_id || '';
               const taxSettings = branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
 
+              const taxBreakdown = await taxesService.calculateProductTaxes(
+                item.product_id,
+                grossSubtotal
+              );
+
               if (taxSettings.included_in_price) {
-                taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+                const { taxBreakdown: adjusted, netSubtotal } = splitIncludedTaxes(
+                  grossSubtotal,
+                  taxBreakdown
+                );
+                taxBreakdowns[item.id] = adjusted;
+                netSubtotals[item.id] = netSubtotal;
                 return;
               }
 
-              const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
               taxBreakdowns[item.id] = taxBreakdown;
+              netSubtotals[item.id] = grossSubtotal;
             } catch (error) {
               taxBreakdowns[item.id] = { taxes: [], total_tax: 0 };
+              netSubtotals[item.id] = parseFloat(String(item.item_subtotal || 0));
             }
           })
         );
         
         setItemsTaxBreakdowns(taxBreakdowns);
+        setItemsNetSubtotals(netSubtotals);
       };
       
       calculateTaxes();
     } else {
       setItemsTaxBreakdowns({});
+      setItemsNetSubtotals({});
     }
   }, [cart, branchTaxSettings]);
 
@@ -465,12 +513,16 @@ export default function CheckoutPage() {
     const subtotals: Record<string, number> = {};
     Object.entries(storesInfo).forEach(([businessId, store]) => {
       subtotals[businessId] = store.items.reduce(
-        (sum, item) => sum + parseFloat(String(item.item_subtotal || 0)),
+        (sum, item) =>
+          sum +
+          (itemsNetSubtotals[item.id] !== undefined
+            ? itemsNetSubtotals[item.id]
+            : parseFloat(String(item.item_subtotal || 0))),
         0
       );
     });
     return subtotals;
-  }, [storesInfo]);
+  }, [storesInfo, itemsNetSubtotals]);
 
   // Calcular impuestos por tienda
   const taxesByStore = useMemo(() => {
@@ -2855,6 +2907,10 @@ export default function CheckoutPage() {
                       <div className="space-y-3">
                         {store.items.map((item: CartItem) => {
                         const itemTaxBreakdown = itemsTaxBreakdowns[item.id];
+                        const itemNetSubtotal =
+                          itemsNetSubtotals[item.id] !== undefined
+                            ? itemsNetSubtotals[item.id]
+                            : parseFloat(String(item.item_subtotal || 0));
                         const shouldShowTaxBreakdown = false; // desgloses ocultos
 
                           return (
@@ -2873,7 +2929,7 @@ export default function CheckoutPage() {
                                   <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                   </svg>
-                                )}
+                                )} 
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>
@@ -2892,7 +2948,7 @@ export default function CheckoutPage() {
                                   </span>
                                 )}
                                 <p className="text-sm font-medium text-gray-900 mt-1">
-                                  {formatPrice(parseFloat(String(item.item_subtotal || 0)))}
+                                  {formatPrice(itemNetSubtotal)}
                                 </p>
                                 {shouldShowTaxBreakdown && (
                                   <div className="mt-1">
