@@ -11,9 +11,9 @@ import ProductGrid from '@/components/ProductGrid';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
 import CategoryCardsSlider from '@/components/CategoryCardsSlider';
 import SmartCategoryCards from '@/components/SmartCategoryCards';
+import RecentlyViewedProducts from '@/components/RecentlyViewedProducts';
 import CollectionsCarousel from '@/components/CollectionsCarousel';
 import { useStoreContext } from '@/contexts/StoreContext';
-import { productsService } from '@/lib/products';
 import { landingSlidersService, LandingSlider } from '@/lib/landing-sliders';
 import ContextualLink from '@/components/ContextualLink';
 import { collectionsService, StoreCollection } from '@/lib/collections';
@@ -22,17 +22,9 @@ export default function StoreHomePage() {
   const router = useRouter();
   const { origen, slug } = router.query;
   const { contextType, groupData, branchData, groupId, branchId, isLoading, error } = useStoreContext();
-  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sliders, setSliders] = useState<SlideContent[]>([]);
   const [loadingSliders, setLoadingSliders] = useState(true);
   const [collections, setCollections] = useState<StoreCollection[]>([]);
-
-  useEffect(() => {
-    if (contextType !== 'global' && !isLoading) {
-      loadFeaturedProducts();
-    }
-  }, [contextType, isLoading]);
 
   useEffect(() => {
     if (contextType === 'sucursal' && branchId && !isLoading) {
@@ -50,34 +42,6 @@ export default function StoreHomePage() {
       loadSliders();
     }
   }, [contextType, isLoading, groupId, branchId]);
-
-  const loadFeaturedProducts = async () => {
-    try {
-      setLoading(true);
-      
-      const params: any = {
-        page: 1,
-        limit: 8,
-        isAvailable: true,
-        isFeatured: true,
-      };
-
-      if (contextType === 'grupo' && groupData) {
-        // Cargar productos del grupo - necesitamos obtener las sucursales del grupo primero
-        // Por ahora cargamos productos destacados generales
-        const response = await productsService.getProducts(params);
-        setFeaturedProducts(response.data || []);
-      } else if (contextType === 'sucursal' && branchData) {
-        params.branchId = branchData.id;
-        const response = await productsService.getProducts(params);
-        setFeaturedProducts(response.data || []);
-      }
-    } catch (error) {
-      console.error('Error cargando productos destacados:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadSliders = async () => {
     try {
@@ -246,27 +210,13 @@ export default function StoreHomePage() {
             )}
 
             {/* Tarjetas Inteligentes */}
-            <SmartCategoryCards />
+            {/* TODO: Rehabilitar SmartCategoryCards cuando se requiera */}
+            {false && <SmartCategoryCards />}
 
             {/* Contenido con contenedor */}
             <div className="max-w-7xl mx-auto px-4 py-6">
 
-            {/* Productos Destacados */}
-            <section className="mb-12">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-semibold">Productos Destacados</h2>
-                <ContextualLink href="/products" className="text-black hover:text-gray-700 text-sm font-medium">
-                  Ver todos
-                </ContextualLink>
-              </div>
-              {loading ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-500">Cargando productos...</p>
-                </div>
-              ) : (
-                <ProductGrid filters={{ isFeatured: true }} />
-              )}
-            </section>
+            <RecentlyViewedProducts />
 
             {collections.length > 0 && (
               <CollectionsCarousel collections={collections} />

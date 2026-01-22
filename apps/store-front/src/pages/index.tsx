@@ -6,13 +6,12 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import StoreLayout from '@/components/layout/StoreLayout';
-import ProductGrid from '@/components/ProductGrid';
 import BranchSelector from '@/components/BranchSelector';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
 import CategoryCardsSlider from '@/components/CategoryCardsSlider';
 import SmartCategoryCards from '@/components/SmartCategoryCards';
 import CollectionsCarousel from '@/components/CollectionsCarousel';
-import { productsService } from '@/lib/products';
+import RecentlyViewedProducts from '@/components/RecentlyViewedProducts';
 import { branchesService } from '@/lib/branches';
 import { businessGroupsService } from '@/lib/business-groups';
 import { useStoreContext } from '@/contexts/StoreContext';
@@ -21,11 +20,9 @@ import { collectionsService, StoreCollection } from '@/lib/collections';
 
 export default function HomePage() {
   const { contextType, branchId } = useStoreContext();
-  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
   const [featuredGroups, setFeaturedGroups] = useState<any[]>([]);
   const [featuredBranches, setFeaturedBranches] = useState<any[]>([]);
   const [collections, setCollections] = useState<StoreCollection[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
   useEffect(() => {
@@ -34,16 +31,6 @@ export default function HomePage() {
 
   const loadHomeData = async () => {
     try {
-      setLoading(true);
-      
-      // Cargar productos destacados
-      const productsResponse = await productsService.getProducts({
-        page: 1,
-        limit: 8,
-        isAvailable: true,
-        isFeatured: true,
-      });
-      
       // Cargar grupos destacados
       const groupsResponse = await businessGroupsService.getGroups({
         page: 1,
@@ -66,13 +53,10 @@ export default function HomePage() {
         setCollections([]);
       }
 
-      setFeaturedProducts(productsResponse.data || []);
       setFeaturedGroups(groupsResponse.data || []);
       setFeaturedBranches(branchesResponse.data || []);
     } catch (error) {
       console.error('Error cargando datos del home:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -206,7 +190,8 @@ export default function HomePage() {
         />
 
         {/* Slider de Categorías */}
-        <SmartCategoryCards />
+        {/* TODO: Rehabilitar SmartCategoryCards cuando se requiera */}
+        {false && <SmartCategoryCards />}
 
         {/* Carrusel de Colecciones */}
         <CollectionsCarousel collections={collections} />
@@ -267,22 +252,7 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Productos Destacados */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold">Productos Destacados</h2>
-            <ContextualLink href="/products" className="text-black hover:text-gray-700 text-sm font-medium">
-              Ver todos
-            </ContextualLink>
-          </div>
-          {loading ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500">Cargando productos...</p>
-            </div>
-          ) : (
-            <ProductGrid filters={{ isFeatured: true }} />
-          )}
-        </section>
+        <RecentlyViewedProducts />
         </div>
       </StoreLayout>
     </>

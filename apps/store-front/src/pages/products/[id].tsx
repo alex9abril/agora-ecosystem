@@ -56,6 +56,7 @@ export default function ProductDetailPage() {
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
   const shouldCheckCompatibility =
     !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
+  const RECENTLY_VIEWED_KEY = 'recently_viewed_products';
 
   // Cargar sucursal guardada en localStorage
   useEffect(() => {
@@ -149,6 +150,29 @@ export default function ProductDetailPage() {
 
     loadCategoryTrail();
   }, [product?.category_id]);
+
+  useEffect(() => {
+    if (!product || typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(RECENTLY_VIEWED_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      const list = Array.isArray(parsed) ? parsed : [];
+      const nextItem = {
+        id: product.id,
+        name: product.name,
+        sku: product.sku || null,
+        price: product.price ?? null,
+        branch_price: product.branch_price ?? null,
+        image_url: product.image_url || null,
+        primary_image_url: product.primary_image_url || null,
+      };
+      const deduped = list.filter((item: any) => item?.id !== product.id);
+      const nextList = [nextItem, ...deduped].slice(0, 8);
+      localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(nextList));
+    } catch (error) {
+      console.error('Error guardando producto visto recientemente:', error);
+    }
+  }, [product]);
 
   // Escuchar cambios en el vehículo seleccionado
   useEffect(() => {
