@@ -15,6 +15,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
 
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
+
 type ViewMode = 'grid' | 'list';
 
 interface ProductGridProps {
@@ -39,6 +45,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
+  const [taxSettingsByBusiness, setTaxSettingsByBusiness] = useState<Record<string, BranchTaxSettings>>({});
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
 
   // Guardar preferencia de vista en localStorage
@@ -86,6 +93,47 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     };
     loadBranchTaxes();
   }, [contextType, branchId]);
+
+  // Cargar configuracion de impuestos por negocio para contextos no sucursal (usado para mostrar precios con impuestos)
+  useEffect(() => {
+    const loadBusinessTaxSettings = async () => {
+      if (!products || products.length === 0 || (contextType === 'sucursal' && branchId)) {
+        setTaxSettingsByBusiness({});
+        return;
+      }
+
+      const uniqueBusinessIds = Array.from(new Set(products.map(p => p.business_id).filter(Boolean)));
+      if (uniqueBusinessIds.length === 0) {
+        setTaxSettingsByBusiness({});
+        return;
+      }
+
+      try {
+        const entries = await Promise.all(
+          uniqueBusinessIds.map(async (businessId) => {
+            try {
+              const settings = await branchesService.getBranchTaxSettings(businessId);
+              return [businessId, settings || DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            } catch (err) {
+              console.warn(`[ProductGrid] No se pudo obtener configuracion de impuestos del negocio ${businessId}:`, err);
+              return [businessId, DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            }
+          })
+        );
+
+        const map: Record<string, BranchTaxSettings> = {};
+        entries.forEach(([businessId, settings]) => {
+          map[businessId] = settings || DEFAULT_BRANCH_TAX_SETTINGS;
+        });
+        setTaxSettingsByBusiness(map);
+      } catch (err) {
+        console.warn('[ProductGrid] Error cargando configuracion de impuestos por negocio:', err);
+        setTaxSettingsByBusiness({});
+      }
+    };
+
+    loadBusinessTaxSettings();
+  }, [products, contextType, branchId]);
 
   const loadProducts = async () => {
     try {
@@ -161,21 +209,18 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
         return;
       }
 
-      // Si no estamos en contexto sucursal, usamos precio base sin calcular impuestos
-      if (contextType !== 'sucursal' || !branchId) {
-        const baseMap: Record<string, number> = {};
-        products.forEach((product) => {
-          baseMap[product.id] =
-            product.price ?? 0;
-        });
-        setFinalPrices(baseMap);
-        return;
-      }
-
-      const settings = branchTaxSettings;
       const priceEntries = await Promise.all(
         products.map(async (product) => {
-          const basePrice = product.branch_price !== undefined ? product.branch_price : product.price || 0;
+          const basePrice =
+            contextType === 'sucursal' && product.branch_price !== undefined
+              ? product.branch_price
+              : product.price || 0;
+
+          // Priorizar configuracion de la sucursal en contexto sucursal; de lo contrario usar la del negocio
+          const settings =
+            (contextType === 'sucursal' && branchId ? branchTaxSettings : null) ||
+            taxSettingsByBusiness[product.business_id] ||
+            DEFAULT_BRANCH_TAX_SETTINGS;
 
           if (!settings || settings.included_in_price) {
             return [product.id, basePrice] as const;
@@ -200,7 +245,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     };
 
     computePrices();
-  }, [products, branchTaxSettings, contextType, branchId]);
+  }, [products, branchTaxSettings, taxSettingsByBusiness, contextType, branchId]);
 
   if (loading) {
     return (
