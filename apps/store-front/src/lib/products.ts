@@ -97,6 +97,7 @@ export interface ProductBranchAvailability {
   backorder_lead_time_days?: number | null;
   backorder_notes?: string | null;
   is_active: boolean;
+  taxed_price?: number; // Precio final con impuestos (cálculo en frontend)
 }
 
 export interface ProductImage {

@@ -30,9 +30,9 @@ export default function BranchAvailabilityGrid({
     .filter((avail) => avail.is_active && avail.is_enabled)
     .map((avail) => ({
       ...avail,
-      displayPrice: avail.price !== null && avail.price !== undefined
-        ? avail.price
-        : globalPrice,
+      displayPrice:
+        (avail as any).taxed_price ??
+        (avail.price !== null && avail.price !== undefined ? avail.price : globalPrice),
     }))
     // Ordenar por precio (más bajo primero)
     .sort((a, b) => a.displayPrice - b.displayPrice);

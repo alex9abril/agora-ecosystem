@@ -335,30 +335,43 @@ export default function CartPage() {
                                 {/* Imagen del producto */}
                                 <div className="flex-shrink-0">
                                   <div className="w-32 h-32 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
-                                    {item.product_image_url && !imageErrors[item.id] ? (
-                                      <img
-                                        src={item.product_image_url}
-                                        alt={item.product_name}
-                                        className="w-full h-full object-contain p-2"
-                                        onError={() => {
-                                          setImageErrors((prev) => ({ ...prev, [item.id]: true }));
-                                        }}
-                                      />
-                                    ) : (
-                                      <svg
-                                        className="w-16 h-16 text-gray-300"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={1.5}
-                                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                        />
-                                      </svg>
-                                    )}
+                                    {(() => {
+                                      // Prefer imagen que viene en el item; fallback a la del producto cargado aparte
+                                      const product = productsData[item.product_id];
+                                      const fallbackImage = product?.primary_image_url || product?.image_url;
+                                      const imageToShow = !imageErrors[item.id]
+                                        ? item.product_image_url || fallbackImage
+                                        : undefined;
+
+                                      if (imageToShow) {
+                                        return (
+                                          <img
+                                            src={imageToShow}
+                                            alt={item.product_name}
+                                            className="w-full h-full object-contain p-2"
+                                            onError={() => {
+                                              setImageErrors((prev) => ({ ...prev, [item.id]: true }));
+                                            }}
+                                          />
+                                        );
+                                      }
+
+                                      return (
+                                        <svg
+                                          className="w-16 h-16 text-gray-300"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={1.5}
+                                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                          />
+                                        </svg>
+                                      );
+                                    })()}
                                   </div>
                                 </div>
 

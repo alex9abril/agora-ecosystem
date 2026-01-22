@@ -256,11 +256,55 @@ export default function ProductDetailPage() {
     loadTaxSettings();
   }, [contextType, branchData?.id, selectedBranchId]);
 
+  // Obtener precio de la sucursal seleccionada
+  const getSelectedBranchPrice = () => {
+    if (contextType === 'sucursal' && product?.branch_price !== undefined) {
+      return product.branch_price;
+    }
+    if (contextType !== 'sucursal' && selectedBranchId && product) {
+      const selectedBranch = branchAvailabilities.find(
+        (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
+      );
+      if (selectedBranch) {
+        return selectedBranch.price !== null && selectedBranch.price !== undefined
+          ? selectedBranch.price
+          : product.price;
+      }
+    }
+    return product?.price;
+  };
+
+  // Calcular precio unitario base (con variantes) sin impuestos
+  const getUnitBasePrice = () => {
+    const basePrice = getSelectedBranchPrice() ?? 0;
+    let price = basePrice;
+
+    if (product?.variant_groups) {
+      product.variant_groups.forEach((group) => {
+        const selected = selectedVariants[group.variant_group_id];
+        if (selected) {
+          const variantIds = Array.isArray(selected) ? selected : [selected];
+          group.variants.forEach((variant) => {
+            if (variantIds.includes(variant.variant_id)) {
+              if (variant.absolute_price !== null && variant.absolute_price !== undefined) {
+                price = variant.absolute_price;
+              } else {
+                price += variant.price_adjustment || 0;
+              }
+            }
+          });
+        }
+      });
+    }
+
+    return price;
+  };
+
   // Calcular precio unitario con impuestos (para mostrar)
   useEffect(() => {
     const computeTaxedPrice = async () => {
       if (!product) return;
-      const basePrice = getUnitBasePrice();
+    const basePrice = getUnitBasePrice();
 
       if (!branchTaxSettings || branchTaxSettings.included_in_price) {
         setTaxedUnitPrice(basePrice);
@@ -436,24 +480,48 @@ export default function ProductDetailPage() {
         filterGroupId,
         filterBrandId
       );
-      const availabilities = (response.availabilities || []).map((availability) => ({
-        ...availability,
-        allow_backorder: availability.allow_backorder ?? false,
-        backorder_lead_time_days:
-          availability.backorder_lead_time_days !== undefined
-            ? availability.backorder_lead_time_days
-            : null,
-        backorder_notes:
-          availability.backorder_notes !== undefined
-            ? availability.backorder_notes
-            : null,
-      }));
+      // Enriquecer con impuestos por sucursal para mostrar precio final
+      const availabilities = await Promise.all(
+        (response.availabilities || []).map(async (availability) => {
+          const normalized = {
+            ...availability,
+            allow_backorder: availability.allow_backorder ?? false,
+            backorder_lead_time_days:
+              availability.backorder_lead_time_days !== undefined
+                ? availability.backorder_lead_time_days
+                : null,
+            backorder_notes:
+              availability.backorder_notes !== undefined
+                ? availability.backorder_notes
+                : null,
+          };
+
+          const basePrice =
+            normalized.price !== null && normalized.price !== undefined
+              ? normalized.price
+              : product?.price || 0;
+
+          try {
+            const settings = await branchesService.getBranchTaxSettings(normalized.branch_id);
+            if (!settings || settings.included_in_price) {
+              return { ...normalized, taxed_price: basePrice };
+            }
+            const taxBreakdown = await taxesService.calculateProductTaxes(id, basePrice);
+            const finalPrice = basePrice + (taxBreakdown?.total_tax || 0);
+            return { ...normalized, taxed_price: finalPrice };
+          } catch (err) {
+            console.warn('[ProductDetail] No se pudo calcular impuestos para la sucursal', normalized.branch_id, err);
+            return { ...normalized, taxed_price: basePrice };
+          }
+        })
+      );
       console.log('✅ [loadBranchAvailabilities] Availabilities loaded:', {
         count: availabilities.length,
         branches: availabilities.map(a => ({
           id: a.branch_id,
           name: a.branch_name,
           price: a.price,
+          taxed_price: (a as any).taxed_price,
           stock: a.stock,
           is_enabled: a.is_enabled,
           is_active: a.is_active,
@@ -687,53 +755,10 @@ export default function ProductDetailPage() {
     );
   }
 
-  // Obtener precio de la sucursal seleccionada
-  const getSelectedBranchPrice = () => {
-    if (contextType === 'sucursal' && product.branch_price !== undefined) {
-      return product.branch_price;
-    }
-    if (contextType !== 'sucursal' && selectedBranchId) {
-      const selectedBranch = branchAvailabilities.find(
-        (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
-      );
-      if (selectedBranch) {
-        return selectedBranch.price !== null && selectedBranch.price !== undefined
-          ? selectedBranch.price
-          : product.price;
-      }
-    }
-    return product.price;
-  };
-
   // Calcular precio total con variantes
   const calculateTotalPrice = () => {
     const unitPrice = taxedUnitPrice ?? getUnitBasePrice();
     return unitPrice * quantity;
-  };
-
-  const getUnitBasePrice = () => {
-    const basePrice = getSelectedBranchPrice();
-    let price = basePrice;
-
-    if (product?.variant_groups) {
-      product.variant_groups.forEach((group) => {
-        const selected = selectedVariants[group.variant_group_id];
-        if (selected) {
-          const variantIds = Array.isArray(selected) ? selected : [selected];
-          group.variants.forEach((variant) => {
-            if (variantIds.includes(variant.variant_id)) {
-              if (variant.absolute_price !== null && variant.absolute_price !== undefined) {
-                price = variant.absolute_price;
-              } else {
-                price += variant.price_adjustment || 0;
-              }
-            }
-          });
-        }
-      });
-    }
-
-    return price;
   };
 
   const displayPrice = taxedUnitPrice ?? getUnitBasePrice();
@@ -1058,7 +1083,7 @@ export default function ProductDetailPage() {
                       )}
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
-                        globalPrice={product.price}
+                        globalPrice={taxedUnitPrice ?? getUnitBasePrice()}
                         selectedBranchId={selectedBranchId}
                         onBranchSelect={setSelectedBranchId}
                         storedBranchId={storedBranch?.id}
