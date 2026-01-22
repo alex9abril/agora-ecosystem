@@ -15,6 +15,18 @@ import { UpdateBusinessDto } from './dto/update-business.dto';
 import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
 import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 
+type BusinessTaxSettings = {
+  included_in_price: boolean;
+  display_tax_breakdown: boolean;
+  show_tax_included_label: boolean;
+};
+
+const DEFAULT_TAX_SETTINGS: BusinessTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
+
 @Injectable()
 export class BusinessesService {
   /**
@@ -2429,6 +2441,177 @@ export class BusinessesService {
       }
       console.error('❌ Error actualizando grupo empresarial:', error);
       throw new ServiceUnavailableException(`Error al actualizar grupo empresarial: ${error.message}`);
+    }
+  }
+
+  // ============================================================================
+  // TAX SETTINGS
+  // ============================================================================
+
+  /**
+   * Obtener configuracion de impuestos (solo configuracion por sucursal)
+   */
+  async getBusinessTaxSettings(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const businessResult = await pool.query(
+        `SELECT id, settings FROM core.businesses WHERE id = $1`,
+        [businessId]
+      );
+
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const businessSettings = businessResult.rows[0].settings || {};
+      const businessTaxes = businessSettings.taxes || DEFAULT_TAX_SETTINGS;
+
+      const taxes: BusinessTaxSettings = {
+        included_in_price: !!businessTaxes.included_in_price,
+        display_tax_breakdown: businessTaxes.display_tax_breakdown ?? DEFAULT_TAX_SETTINGS.display_tax_breakdown,
+        show_tax_included_label: businessTaxes.show_tax_included_label ?? DEFAULT_TAX_SETTINGS.show_tax_included_label,
+      };
+
+      return {
+        taxes,
+        source: {
+          business: taxes,
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion de impuestos de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion de impuestos: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Obtener configuracion de impuestos por slug (publico)
+   */
+  async getBusinessTaxSettingsBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT id FROM core.businesses WHERE slug = $1 AND is_active = TRUE`,
+        [slug]
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return this.getBusinessTaxSettings(result.rows[0].id);
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo impuestos por slug:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion de impuestos: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Obtener configuracion de impuestos validando permisos del usuario
+   */
+  async getBusinessTaxSettingsForUser(businessId: string, userId: string) {
+    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+
+    return this.getBusinessTaxSettings(businessId);
+  }
+
+  /**
+   * Actualizar configuracion de impuestos de una sucursal
+   */
+  async updateBusinessTaxSettings(
+    businessId: string,
+    userId: string,
+    updateDto: Partial<BusinessTaxSettings>,
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+
+      const currentSettingsResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings 
+         FROM core.businesses 
+         WHERE id = $1`,
+        [businessId]
+      );
+
+      if (currentSettingsResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const currentSettingsObj = currentSettingsResult.rows[0].settings || {};
+      const currentTaxes = {
+        ...DEFAULT_TAX_SETTINGS,
+        ...(currentSettingsObj.taxes || {}),
+      };
+
+      const sanitizedUpdate: Partial<BusinessTaxSettings> = {};
+      if (updateDto.included_in_price !== undefined) {
+        sanitizedUpdate.included_in_price = updateDto.included_in_price;
+      }
+      if (updateDto.display_tax_breakdown !== undefined) {
+        sanitizedUpdate.display_tax_breakdown = updateDto.display_tax_breakdown;
+      }
+      if (updateDto.show_tax_included_label !== undefined) {
+        sanitizedUpdate.show_tax_included_label = updateDto.show_tax_included_label;
+      }
+
+      const updatedTaxes = {
+        ...currentTaxes,
+        ...sanitizedUpdate,
+      };
+
+      const updatedSettings = {
+        ...currentSettingsObj,
+        taxes: updatedTaxes,
+      };
+
+      await pool.query(
+        `UPDATE core.businesses
+         SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [JSON.stringify(updatedSettings), businessId]
+      );
+
+      return this.getBusinessTaxSettings(businessId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error actualizando configuracion de impuestos de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuracion de impuestos: ${error.message}`
+      );
     }
   }
 

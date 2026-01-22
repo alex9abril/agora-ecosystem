@@ -5,6 +5,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { productsService, Product } from '@/lib/products';
+import { taxesService } from '@/lib/taxes';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
 import { useStoreContext } from '@/contexts/StoreContext';
 import ProductCard from './ProductCard';
 import ProductListItem from './ProductListItem';
@@ -12,6 +14,12 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
+
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
 
 type ViewMode = 'grid' | 'list';
 
@@ -36,6 +44,9 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
+  const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
+  const [taxSettingsByBusiness, setTaxSettingsByBusiness] = useState<Record<string, BranchTaxSettings>>({});
+  const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
 
   // Guardar preferencia de vista en localStorage
   useEffect(() => {
@@ -65,10 +76,70 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextType, groupId, branchId, brandId, filtersKey]);
 
+  // Cargar configuracion de impuestos de la sucursal (solo contexto sucursal)
+  useEffect(() => {
+    const loadBranchTaxes = async () => {
+      if (contextType === 'sucursal' && branchId) {
+        try {
+          const settings = await branchesService.getBranchTaxSettings(branchId);
+          setBranchTaxSettings(settings);
+        } catch (err) {
+          console.warn('[ProductGrid] No se pudo obtener configuracion de impuestos de la sucursal:', err);
+          setBranchTaxSettings(null);
+        }
+      } else {
+        setBranchTaxSettings(null);
+      }
+    };
+    loadBranchTaxes();
+  }, [contextType, branchId]);
+
+  // Cargar configuracion de impuestos por negocio para contextos no sucursal (usado para mostrar precios con impuestos)
+  useEffect(() => {
+    const loadBusinessTaxSettings = async () => {
+      if (!products || products.length === 0 || (contextType === 'sucursal' && branchId)) {
+        setTaxSettingsByBusiness({});
+        return;
+      }
+
+      const uniqueBusinessIds = Array.from(new Set(products.map(p => p.business_id).filter(Boolean)));
+      if (uniqueBusinessIds.length === 0) {
+        setTaxSettingsByBusiness({});
+        return;
+      }
+
+      try {
+        const entries = await Promise.all(
+          uniqueBusinessIds.map(async (businessId) => {
+            try {
+              const settings = await branchesService.getBranchTaxSettings(businessId);
+              return [businessId, settings || DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            } catch (err) {
+              console.warn(`[ProductGrid] No se pudo obtener configuracion de impuestos del negocio ${businessId}:`, err);
+              return [businessId, DEFAULT_BRANCH_TAX_SETTINGS] as const;
+            }
+          })
+        );
+
+        const map: Record<string, BranchTaxSettings> = {};
+        entries.forEach(([businessId, settings]) => {
+          map[businessId] = settings || DEFAULT_BRANCH_TAX_SETTINGS;
+        });
+        setTaxSettingsByBusiness(map);
+      } catch (err) {
+        console.warn('[ProductGrid] Error cargando configuracion de impuestos por negocio:', err);
+        setTaxSettingsByBusiness({});
+      }
+    };
+
+    loadBusinessTaxSettings();
+  }, [products, contextType, branchId]);
+
   const loadProducts = async () => {
     try {
       setLoading(true);
       setError(null);
+      setFinalPrices({});
 
       const params: any = {
         isAvailable: true,
@@ -129,6 +200,52 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       alert(error.message || 'Error al agregar producto al carrito');
     }
   };
+
+  // Calcular precios finales (incluyendo impuestos si aplica) por producto
+  useEffect(() => {
+    const computePrices = async () => {
+      if (!products || products.length === 0) {
+        setFinalPrices({});
+        return;
+      }
+
+      const priceEntries = await Promise.all(
+        products.map(async (product) => {
+          const basePrice =
+            contextType === 'sucursal' && product.branch_price !== undefined
+              ? product.branch_price
+              : product.price || 0;
+
+          // Priorizar configuracion de la sucursal en contexto sucursal; de lo contrario usar la del negocio
+          const settings =
+            (contextType === 'sucursal' && branchId ? branchTaxSettings : null) ||
+            taxSettingsByBusiness[product.business_id] ||
+            DEFAULT_BRANCH_TAX_SETTINGS;
+
+          if (!settings || settings.included_in_price) {
+            return [product.id, basePrice] as const;
+          }
+
+          try {
+            const taxBreakdown = await taxesService.calculateProductTaxes(product.id, basePrice);
+            const finalPrice = basePrice + (taxBreakdown?.total_tax || 0);
+            return [product.id, finalPrice] as const;
+          } catch (err) {
+            console.warn(`[ProductGrid] No se pudo calcular impuestos para producto ${product.id}:`, err);
+            return [product.id, basePrice] as const;
+          }
+        })
+      );
+
+      const map: Record<string, number> = {};
+      priceEntries.forEach(([pid, price]) => {
+        map[pid] = price;
+      });
+      setFinalPrices(map);
+    };
+
+    computePrices();
+  }, [products, branchTaxSettings, taxSettingsByBusiness, contextType, branchId]);
 
   if (loading) {
     return (
@@ -252,6 +369,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
             <ProductCard
               key={product.id}
               product={product}
+              overridePrice={finalPrices[product.id]}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
             />
           ))}
@@ -262,6 +380,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
             <ProductListItem
               key={product.id}
               product={product}
+              overridePrice={finalPrices[product.id]}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
             />
           ))}

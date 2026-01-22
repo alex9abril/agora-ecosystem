@@ -39,6 +39,7 @@ import { UpdateBusinessDto } from './dto/update-business.dto';
 import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
 import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 import { UpdateBrandingDto } from './dto/branding.dto';
+import { UpdateBusinessTaxSettingsDto } from './dto/update-business-tax-settings.dto';
 import { BrandingImagesService } from './branding-images.service';
 
 @ApiTags('businesses')
@@ -263,6 +264,26 @@ export class BusinessesController {
     return this.businessesService.getBranchById(id);
   }
 
+  @Get('branches/id/:id/tax-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion de impuestos de una sucursal por ID (Publico)' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Configuracion de impuestos obtenida' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  async getBranchTaxSettingsById(@Param('id') id: string) {
+    return this.businessesService.getBusinessTaxSettings(id);
+  }
+
+  @Get('branches/:slug/tax-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion de impuestos de una sucursal por slug (Publico)' })
+  @ApiParam({ name: 'slug', description: 'Slug de la sucursal' })
+  @ApiResponse({ status: 200, description: 'Configuracion de impuestos obtenida' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada' })
+  async getBranchTaxSettingsBySlug(@Param('slug') slug: string) {
+    return this.businessesService.getBusinessTaxSettingsBySlug(slug);
+  }
+
   @Get('branches/:slug')
   @Public()
   @ApiOperation({ summary: 'Obtener sucursal por slug (Público)' })
@@ -290,6 +311,32 @@ export class BusinessesController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   async getMyBusinessGroup(@CurrentUser() user: User) {
     return this.businessesService.getMyBusinessGroup(user.id);
+  }
+
+  @Get(':id/tax-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion de impuestos de una sucursal (requiere permisos)' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiResponse({ status: 200, description: 'Configuracion de impuestos obtenida' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Sin permisos' })
+  async getBusinessTaxSettings(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getBusinessTaxSettingsForUser(id, user.id);
+  }
+
+  @Put(':id/tax-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion de impuestos de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiResponse({ status: 200, description: 'Configuracion de impuestos actualizada' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({ status: 403, description: 'Sin permisos' })
+  async updateBusinessTaxSettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessTaxSettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateBusinessTaxSettings(id, user.id, updateDto);
   }
 
   @Get(':id')

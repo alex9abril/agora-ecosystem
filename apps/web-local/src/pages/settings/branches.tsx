@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { businessService, Business, CreateBusinessData, BusinessCategory } from '@/lib/business';
+import { businessService, Business, CreateBusinessData, BusinessCategory, BranchTaxSettings } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
@@ -17,6 +17,7 @@ export default function BranchesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Business | null>(null);
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
+  const [settingsPreviewBranch, setSettingsPreviewBranch] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -142,7 +143,7 @@ export default function BranchesPage() {
                 </p>
               </div>
 
-              {!showAddForm && !editingBranch && !brandingBranch && (
+              {!showAddForm && !editingBranch && !brandingBranch && !settingsPreviewBranch && (
                 <div className="mb-6">
                   <button
                     onClick={() => setShowAddForm(true)}
@@ -196,19 +197,33 @@ export default function BranchesPage() {
                   </div>
                   <BrandingManager type="business" id={brandingBranch.id} name={brandingBranch.name} />
                 </div>
+              ) : settingsPreviewBranch ? (
+                <BranchSettingsPreview
+                  branch={settingsPreviewBranch}
+                  onBack={() => setSettingsPreviewBranch(null)}
+                  onUpdated={loadBranches}
+                />
               ) : (
                 <BranchesList 
                   branches={branches} 
                   onRefresh={loadBranches}
                   onEdit={(branch) => {
                     setBrandingBranch(null);
+                    setSettingsPreviewBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(branch);
                   }}
                   onBranding={(branch) => {
+                    setSettingsPreviewBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(null);
                     setBrandingBranch(branch);
+                  }}
+                  onPreviewSettings={(branch) => {
+                    setShowAddForm(false);
+                    setEditingBranch(null);
+                    setBrandingBranch(null);
+                    setSettingsPreviewBranch(branch);
                   }}
                 />
               )}
@@ -225,9 +240,10 @@ interface BranchesListProps {
   onRefresh: () => void;
   onEdit: (branch: Business) => void;
   onBranding?: (branch: Business) => void;
+  onPreviewSettings?: (branch: Business) => void;
 }
 
-function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListProps) {
+function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettings }: BranchesListProps) {
   if (branches.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -320,6 +336,14 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
                   Personalizar
                 </button>
               )}
+              {onPreviewSettings && (
+                <button
+                  onClick={() => onPreviewSettings(branch)}
+                  className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
+                >
+                  Impuestos
+                </button>
+              )}
               <button
                 onClick={() => onEdit(branch)}
                 className="px-3 py-1.5 text-sm text-gray-700 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
@@ -330,6 +354,178 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+type TaxSettingField = {
+  key: keyof BranchTaxSettings;
+  label: string;
+  description?: string;
+  helpText?: string;
+  requiresIncludedInPrice?: boolean;
+  disabledMessage?: string;
+};
+
+const TAX_SETTING_FIELDS: TaxSettingField[] = [
+  {
+    key: 'included_in_price',
+    label: 'Impuestos Incluidos en Precio',
+    description:
+      'Define si los impuestos ya estan incluidos en el precio base de los productos o si se deben agregar al precio mostrado.',
+    helpText:
+      'Si esta activado, el precio mostrado en el storefront ya incluye los impuestos. Si esta desactivado, los impuestos se calcularan y agregaran al precio base al momento de mostrar el producto.',
+  },
+];
+
+const BRANCH_TAX_DEFAULTS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
+
+interface BranchSettingsPreviewProps {
+  branch: Business;
+  onBack: () => void;
+  onUpdated?: () => void;
+}
+
+function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPreviewProps) {
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState<keyof BranchTaxSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [taxSettings, setTaxSettings] = useState<BranchTaxSettings>(BRANCH_TAX_DEFAULTS);
+
+  const loadTaxSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await businessService.getBranchTaxSettings(branch.id);
+      // Solo usamos included_in_price; las demas opciones estan ocultas/desactivadas
+      setTaxSettings({
+        ...BRANCH_TAX_DEFAULTS,
+        included_in_price: response?.included_in_price ?? BRANCH_TAX_DEFAULTS.included_in_price,
+      });
+    } catch (err: any) {
+      console.error('[BranchSettingsPreview] Error cargando configuracion de impuestos:', err);
+      setError(err?.message || 'No se pudo cargar la configuracion de impuestos.');
+      setTaxSettings(BRANCH_TAX_DEFAULTS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTaxSettings();
+  }, [branch.id]);
+
+  const handleToggle = async (key: keyof BranchTaxSettings, value: boolean) => {
+    const previous = { ...taxSettings };
+    const nextState: BranchTaxSettings = { ...taxSettings, [key]: value };
+    let payload: Partial<BranchTaxSettings> = { [key]: value };
+
+    setTaxSettings(nextState);
+    setSavingKey(key);
+    setError(null);
+
+    try {
+      const updated = await businessService.updateBranchTaxSettings(branch.id, payload);
+      setTaxSettings(updated || BRANCH_TAX_DEFAULTS);
+      onUpdated?.();
+    } catch (err: any) {
+      console.error('[BranchSettingsPreview] Error actualizando impuestos:', err);
+      setTaxSettings(previous);
+      setError(err?.message || 'No se pudo guardar la configuracion. Intenta de nuevo.');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={onBack}
+            className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a sucursales
+          </button>
+          <h2 className="text-xl font-normal text-gray-900">Impuestos</h2>
+          <p className="text-sm text-gray-700 mt-1">
+            Configura como se aplican los impuestos para <strong>{branch.name}</strong>. Solo afecta a esta sucursal.
+          </p>
+        </div>
+        <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full">
+          Configuracion por sucursal
+        </span>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">Impuestos</h3>
+            <p className="text-sm text-gray-700">
+              Configura solo esta sucursal. Los cambios no afectan a otras sucursales.
+            </p>
+          </div>
+          {savingKey && (
+            <span className="text-xs text-indigo-600 flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></span>
+              Guardando...
+            </span>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          </div>
+        ) : (
+          <>
+            {error && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4 border-t border-gray-200 pt-4">
+              {TAX_SETTING_FIELDS.map((field) => {
+                const isDisabled = savingKey === field.key;
+
+                return (
+                  <div
+                    key={field.key}
+                    className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                  >
+                    <label className={`flex items-start gap-3 ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:bg-gray-100"
+                        checked={!!taxSettings[field.key]}
+                        onChange={(e) => handleToggle(field.key, e.target.checked)}
+                        disabled={isDisabled}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{field.label}</p>
+                        {field.description && (
+                          <p className="text-xs text-gray-700 mt-1">{field.description}</p>
+                        )}
+                        {field.helpText && (
+                          <p className="text-xs text-gray-600 mt-1">{field.helpText}</p>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1606,4 +1802,3 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
     </div>
   );
 }
-

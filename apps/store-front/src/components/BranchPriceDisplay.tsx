@@ -10,14 +10,20 @@ interface BranchPriceDisplayProps {
   product: Product;
   branchPrice?: number;
   className?: string;
+  overridePrice?: number;
 }
 
 export default function BranchPriceDisplay({ 
   product, 
   branchPrice, 
-  className = '' 
+  className = '',
+  overridePrice,
 }: BranchPriceDisplayProps) {
-  const displayPrice = branchPrice !== undefined ? branchPrice : product.price;
+  const displayPrice = overridePrice !== undefined
+    ? overridePrice
+    : branchPrice !== undefined
+      ? branchPrice
+      : product.price;
   const hasDiscount = branchPrice !== undefined && branchPrice < product.price;
 
   return (

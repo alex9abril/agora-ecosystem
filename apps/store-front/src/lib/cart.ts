@@ -35,6 +35,7 @@ export interface CartItem {
   product_is_available: boolean;
   business_id: string;
   business_name: string;
+  branch_id?: string;
   tax_breakdown?: TaxBreakdown;
 }
 

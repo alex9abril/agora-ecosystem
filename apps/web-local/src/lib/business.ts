@@ -33,6 +33,7 @@ export interface Business {
   // Campos del sistema de roles
   user_role?: 'superadmin' | 'admin' | 'operations_staff' | 'kitchen_staff';
   user_is_active_in_business?: boolean;
+  settings?: Record<string, any>;
   // Campos de dirección
   business_address?: string;
   street?: string;
@@ -139,6 +140,18 @@ export interface LocationValidation {
   region?: ServiceRegion;
   message?: string;
 }
+
+export interface BranchTaxSettings {
+  included_in_price: boolean;
+  display_tax_breakdown: boolean;
+  show_tax_included_label: boolean;
+}
+
+const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
+  included_in_price: false,
+  display_tax_breakdown: true,
+  show_tax_included_label: true,
+};
 
 export const businessService = {
   /**
@@ -449,6 +462,40 @@ export const businessService = {
       return response;
     } catch (error: any) {
       console.error('Error obteniendo sucursales:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Obtener configuracion de impuestos de una sucursal (con fallback a valores globales)
+   */
+  async getBranchTaxSettings(businessId: string): Promise<BranchTaxSettings> {
+    try {
+      const response = await apiRequest<{ taxes?: BranchTaxSettings }>(`/businesses/${businessId}/tax-settings`, {
+        method: 'GET',
+      });
+      return response?.taxes || (response as any) || DEFAULT_BRANCH_TAX_SETTINGS;
+    } catch (error: any) {
+      console.error('[BusinessService] Error obteniendo configuracion de impuestos de la sucursal:', error);
+      return DEFAULT_BRANCH_TAX_SETTINGS;
+    }
+  },
+
+  /**
+   * Actualizar configuracion de impuestos de una sucursal
+   */
+  async updateBranchTaxSettings(
+    businessId: string,
+    data: Partial<BranchTaxSettings>,
+  ): Promise<BranchTaxSettings> {
+    try {
+      const response = await apiRequest<{ taxes?: BranchTaxSettings }>(`/businesses/${businessId}/tax-settings`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+      return response?.taxes || (response as any) || DEFAULT_BRANCH_TAX_SETTINGS;
+    } catch (error: any) {
+      console.error('[BusinessService] Error actualizando configuracion de impuestos de la sucursal:', error);
       throw error;
     }
   },

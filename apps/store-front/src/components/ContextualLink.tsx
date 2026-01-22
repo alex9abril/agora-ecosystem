@@ -15,11 +15,11 @@ interface ContextualLinkProps extends Omit<LinkProps, 'href'>, Omit<AnchorHTMLAt
   preserveQuery?: boolean;
 }
 
-export default function ContextualLink({ 
-  href, 
-  children, 
+export default function ContextualLink({
+  href,
+  children,
   preserveQuery = false,
-  ...props 
+  ...props
 }: ContextualLinkProps) {
   const { getContextualUrl } = useStoreContext();
   const router = useRouter();
@@ -61,4 +61,3 @@ export default function ContextualLink({
     </Link>
   );
 }
-

@@ -61,10 +61,20 @@ site_settings
 **Descripción:** Define si se debe mostrar una etiqueta indicando que los impuestos están incluidos en el precio.
 
 **Valores:**
-- `true`: Mostrar etiqueta "Precio con impuestos incluidos"
-- `false`: No mostrar etiqueta
+  - `true`: Mostrar etiqueta "Precio con impuestos incluidos"
+  - `false`: No mostrar etiqueta
 
 **Nota:** Solo tiene efecto si `taxes.included_in_price` es `true`.
+
+### Estado actual (per-sucursal)
+
+- La configuración se administra por sucursal en web-local (`/settings/branches`), ya no es global.
+- Cada sucursal tiene sus 3 toggles (`included_in_price`, `display_tax_breakdown`, `show_tax_included_label`).
+- El toggle de etiqueta solo se habilita si `included_in_price` está activo; al apagar `included_in_price`, la etiqueta se apaga también.
+- Storefront (carrito/checkout) carga la configuración por `branch_id`/`business_id` de cada item:
+  - Si `included_in_price` es `true`, no se calculan impuestos adicionales para esa sucursal.
+  - El desglose solo se muestra si `display_tax_breakdown` es `true` y `included_in_price` es `false`.
+  - La etiqueta “impuestos incluidos” solo aparece si `included_in_price` y `show_tax_included_label` están activas para esa sucursal.
 
 ## 🔄 Flujo de Trabajo
 
