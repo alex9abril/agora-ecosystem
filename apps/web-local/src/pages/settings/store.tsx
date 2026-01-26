@@ -93,7 +93,7 @@ export default function StoreSettingsPage() {
           // No hay grupo empresarial, permitir crear uno nuevo
           setBusinessGroup(null);
         } else {
-          setError('Error al cargar la información del grupo empresarial');
+          setError('Error al cargar la informaciรณn del grupo empresarial');
         }
       } finally {
         setLoading(false);
@@ -105,7 +105,7 @@ export default function StoreSettingsPage() {
     }
   }, [isSuperadmin]);
 
-  // Generar slug automáticamente desde el nombre si no fue editado manualmente
+  // Generar slug automรกticamente desde el nombre si no fue editado manualmente
   useEffect(() => {
     if (!slugManuallyEdited && formData.name && !businessGroup) {
       const generatedSlug = formData.name
@@ -198,11 +198,11 @@ export default function StoreSettingsPage() {
           is_active: created.is_active ?? true,
         });
         
-        // Mostrar confirmación con sucursales asignadas
+        // Mostrar confirmaciรณn con sucursales asignadas
         if (branchesCount > 0) {
-          alert(`✅ Grupo creado exitosamente. ${branchesCount} sucursal${branchesCount > 1 ? 'es' : ''} asignada${branchesCount > 1 ? 's' : ''} automáticamente.`);
+          alert(`โ�� Grupo creado exitosamente. ${branchesCount} sucursal${branchesCount > 1 ? 'es' : ''} asignada${branchesCount > 1 ? 's' : ''} automรกticamente.`);
         } else {
-          alert('✅ Grupo creado exitosamente');
+          alert('โ�� Grupo creado exitosamente');
         }
         setBranchesWithoutGroup([]); // Limpiar lista ya que fueron asignadas
       }
@@ -210,7 +210,7 @@ export default function StoreSettingsPage() {
       setIsEditing(false);
     } catch (err: any) {
       console.error('Error guardando grupo empresarial:', err);
-      alert(err.message || 'Error al guardar la información. Por favor, intenta de nuevo.');
+      alert(err.message || 'Error al guardar la informaciรณn. Por favor, intenta de nuevo.');
     } finally {
       setSaving(false);
     }
@@ -226,7 +226,7 @@ export default function StoreSettingsPage() {
     );
   }
 
-  // Si no es superadmin, no mostrar nada (ya se redirigió en useEffect)
+  // Si no es superadmin, no mostrar nada (ya se redirigiรณ en useEffect)
   if (!isSuperadmin) {
     return null;
   }
@@ -246,7 +246,7 @@ export default function StoreSettingsPage() {
   return (
     <>
       <Head>
-        <title>Configuración de Grupo Empresarial - AGORA Local</title>
+        <title>Configuraciรณn de Grupo Empresarial - AGORA Local</title>
       </Head>
       <LocalLayout>
         <div className="max-w-7xl mx-auto">
@@ -259,11 +259,11 @@ export default function StoreSettingsPage() {
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              Volver a Configuración
+              Volver a Configuraciรณn
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Configuración de Grupo Empresarial</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Configuraciรณn de Grupo Empresarial</h1>
             <p className="mt-2 text-sm text-gray-600">
-              Gestiona la información de tu grupo empresarial
+              Gestiona la informaciรณn de tu grupo empresarial
             </p>
           </div>
 
@@ -272,30 +272,29 @@ export default function StoreSettingsPage() {
             <div className="max-w-7xl mx-auto px-6 py-8">
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración de Grupo Empresarial</h1>
+                <h1 className="text-xl font-normal text-gray-900 mb-2">Configuraciรณn de Grupo Empresarial</h1>
                 <p className="text-sm text-gray-600">
-                  Gestiona la información de tu grupo empresarial
+                  Gestiona la informaciรณn de tu grupo empresarial
                 </p>
               </div>
 
-                {/* Business Group Information Card */}
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-normal text-gray-900">
-                {businessGroup ? 'Información del Grupo Empresarial' : 'Crear Grupo Empresarial'}
-              </h2>
-              {!isEditing && businessGroup && (
-                <button
-                  onClick={handleEdit}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Editar
-                </button>
-              )}
-            </div>
-            
-            {!isEditing && businessGroup ? (
-              // Vista de solo lectura
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Business Group Information Card */}
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-normal text-gray-900">
+                  {businessGroup ? 'Informaciรณn del Grupo Empresarial' : 'Crear Grupo Empresarial'}
+                </h2>
+                {!isEditing && businessGroup && (
+                  <button
+                    onClick={handleEdit}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {!isEditing && businessGroup ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-normal text-gray-700 mb-2">
                     Nombre del Grupo
@@ -306,7 +305,7 @@ export default function StoreSettingsPage() {
                 {businessGroup.legal_name && (
                   <div>
                     <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Razón Social
+                      Razรณn Social
                     </label>
                     <p className="text-gray-900">{businessGroup.legal_name}</p>
                   </div>
@@ -315,7 +314,7 @@ export default function StoreSettingsPage() {
                 {businessGroup.description && (
                   <div className="md:col-span-2">
                     <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Descripción
+                      Descripciรณn
                     </label>
                     <p className="text-gray-900">{businessGroup.description}</p>
                   </div>
@@ -368,41 +367,40 @@ export default function StoreSettingsPage() {
                   </span>
                 </div>
               </div>
-            ) : (
-              // Formulario de edición/creación
-              <>
-                {/* Preview de sucursales que serán asignadas al crear grupo */}
-                {!businessGroup && branchesWithoutGroup.length > 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                    <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="ml-3 flex-1">
-                        <p className="text-sm font-normal text-blue-900 mb-2">
-                          Al crear este grupo, se asignarán automáticamente <strong>{branchesWithoutGroup.length} sucursal{branchesWithoutGroup.length > 1 ? 'es' : ''}</strong> sin grupo:
-                        </p>
-                        <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
-                          {branchesWithoutGroup.map(branch => (
-                            <li key={branch.id}>{branch.name}</li>
-                          ))}
-                        </ul>
+              ) : (
+                <>
+                  {/* Preview de sucursales que serรกn asignadas al crear grupo */}
+                  {!businessGroup && branchesWithoutGroup.length > 0 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3 flex-1">
+                          <p className="text-sm font-normal text-blue-900 mb-2">
+                            Al crear este grupo, se asignarรกn automรกticamente <strong>{branchesWithoutGroup.length} sucursal{branchesWithoutGroup.length > 1 ? 'es' : ''}</strong> sin grupo:
+                          </p>
+                          <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
+                            {branchesWithoutGroup.map(branch => (
+                              <li key={branch.id}>{branch.name}</li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-                {!businessGroup && branchesWithoutGroup.length === 0 && !loadingBranches && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-gray-700">
-                      No hay sucursales sin grupo para asignar. Todas tus sucursales ya tienen un grupo asignado.
-                    </p>
-                  </div>
-                )}
-                <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
+                  )}
+                  {!businessGroup && branchesWithoutGroup.length === 0 && !loadingBranches && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-gray-700">
+                        No hay sucursales sin grupo para asignar. Todas tus sucursales ya tienen un grupo asignado.
+                      </p>
+                    </div>
+                  )}
+                  <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
                     <label className="block text-sm font-normal text-gray-700 mb-2">
                       Nombre del Grupo <span className="text-red-500">*</span>
                     </label>
@@ -418,7 +416,7 @@ export default function StoreSettingsPage() {
 
                   <div>
                     <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Razón Social
+                      Razรณn Social
                     </label>
                     <input
                       type="text"
@@ -431,14 +429,14 @@ export default function StoreSettingsPage() {
 
                   <div className="md:col-span-2">
                     <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Descripción
+                      Descripciรณn
                     </label>
                     <textarea
                       rows={3}
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Descripción del grupo empresarial..."
+                      placeholder="Descripciรณn del grupo empresarial..."
                     />
                   </div>
 
@@ -463,7 +461,7 @@ export default function StoreSettingsPage() {
                       placeholder="grupo-andrade"
                     />
                     <p className="mt-1 text-xs text-gray-500">
-                      Se genera automáticamente desde el nombre si no lo editas manualmente
+                      Se genera automรกticamente desde el nombre si no lo editas manualmente
                     </p>
                   </div>
 
@@ -559,6 +557,7 @@ export default function StoreSettingsPage() {
               </>
             )}
           </div>
+        </div>
         </div>
       </LocalLayout>
     </>

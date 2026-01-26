@@ -2616,6 +2616,177 @@ export class BusinessesService {
   }
 
   // ============================================================================
+  // KARBOT SETTINGS
+  // ============================================================================
+
+  private readonly DEFAULT_KARBOT_SETTINGS = {
+    enabled: false,
+    environment: 'dev' as 'dev' | 'prod',
+    chatbot_enabled: false,
+    whatsapp_enabled: false,
+    dev: {
+      username: '',
+      password: '',
+      endpoint: '',
+    },
+    prod: {
+      username: '',
+      password: '',
+      endpoint: '',
+    },
+  };
+
+  async getBusinessKarbotSettings(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const businessResult = await pool.query(
+        `SELECT id, settings FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const businessSettings = businessResult.rows[0].settings || {};
+      const karbotSettings = businessSettings.karbot || this.DEFAULT_KARBOT_SETTINGS;
+
+      return {
+        karbot: {
+          ...this.DEFAULT_KARBOT_SETTINGS,
+          ...karbotSettings,
+          dev: { ...this.DEFAULT_KARBOT_SETTINGS.dev, ...(karbotSettings.dev || {}) },
+          prod: { ...this.DEFAULT_KARBOT_SETTINGS.prod, ...(karbotSettings.prod || {}) },
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion Karbot de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion Karbot: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessKarbotSettingsBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT id FROM core.businesses WHERE slug = $1 AND is_active = TRUE`,
+        [slug],
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return this.getBusinessKarbotSettings(result.rows[0].id);
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo Karbot por slug:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion Karbot: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessKarbotSettingsForUser(businessId: string, userId: string) {
+    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getBusinessKarbotSettings(businessId);
+  }
+
+  async updateBusinessKarbotSettings(
+    businessId: string,
+    userId: string,
+    updateDto: {
+      enabled?: boolean;
+      environment?: 'dev' | 'prod';
+      chatbot_enabled?: boolean;
+      whatsapp_enabled?: boolean;
+      dev?: { username?: string; password?: string; endpoint?: string };
+      prod?: { username?: string; password?: string; endpoint?: string };
+    },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+
+      const currentSettingsResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings 
+         FROM core.businesses 
+         WHERE id = $1`,
+        [businessId],
+      );
+
+      if (currentSettingsResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const currentSettingsObj = currentSettingsResult.rows[0].settings || {};
+      const currentKarbot = {
+        ...this.DEFAULT_KARBOT_SETTINGS,
+        ...(currentSettingsObj.karbot || {}),
+        dev: { ...this.DEFAULT_KARBOT_SETTINGS.dev, ...((currentSettingsObj.karbot || {}).dev || {}) },
+        prod: { ...this.DEFAULT_KARBOT_SETTINGS.prod, ...((currentSettingsObj.karbot || {}).prod || {}) },
+      };
+
+      const updatedKarbot = {
+        ...currentKarbot,
+        ...updateDto,
+        dev: { ...currentKarbot.dev, ...(updateDto.dev || {}) },
+        prod: { ...currentKarbot.prod, ...(updateDto.prod || {}) },
+      };
+
+      const updatedSettings = {
+        ...currentSettingsObj,
+        karbot: updatedKarbot,
+      };
+
+      await pool.query(
+        `UPDATE core.businesses
+         SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [JSON.stringify(updatedSettings), businessId],
+      );
+
+      return this.getBusinessKarbotSettings(businessId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error actualizando configuracion Karbot de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuracion Karbot: ${error.message}`,
+      );
+    }
+  }
+
+  // ============================================================================
   // BRANDING / PERSONALIZACIÓN
   // ============================================================================
 

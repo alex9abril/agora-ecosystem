@@ -147,6 +147,23 @@ export interface BranchTaxSettings {
   show_tax_included_label: boolean;
 }
 
+export interface BranchKarbotSettings {
+  enabled: boolean;
+  environment: 'dev' | 'prod';
+  chatbot_enabled: boolean;
+  whatsapp_enabled: boolean;
+  dev: {
+    username?: string;
+    password?: string;
+    endpoint?: string;
+  };
+  prod: {
+    username?: string;
+    password?: string;
+    endpoint?: string;
+  };
+}
+
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   included_in_price: false,
   display_tax_breakdown: true,
@@ -498,6 +515,30 @@ export const businessService = {
       console.error('[BusinessService] Error actualizando configuracion de impuestos de la sucursal:', error);
       throw error;
     }
+  },
+
+  /**
+   * Obtener configuracion Karbot de una sucursal
+   */
+  async getBranchKarbotSettings(businessId: string): Promise<BranchKarbotSettings> {
+    const response = await apiRequest<{ karbot?: BranchKarbotSettings }>(`/businesses/${businessId}/karbot-settings`, {
+      method: 'GET',
+    });
+    return response?.karbot || (response as any);
+  },
+
+  /**
+   * Actualizar configuracion Karbot de una sucursal
+   */
+  async updateBranchKarbotSettings(
+    businessId: string,
+    data: BranchKarbotSettings,
+  ): Promise<BranchKarbotSettings> {
+    const response = await apiRequest<{ karbot?: BranchKarbotSettings }>(`/businesses/${businessId}/karbot-settings`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return response?.karbot || (response as any);
   },
 
   /**

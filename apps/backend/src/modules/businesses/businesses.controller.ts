@@ -40,6 +40,7 @@ import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
 import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 import { UpdateBrandingDto } from './dto/branding.dto';
 import { UpdateBusinessTaxSettingsDto } from './dto/update-business-tax-settings.dto';
+import { UpdateBusinessKarbotSettingsDto } from './dto/update-business-karbot-settings.dto';
 import { BrandingImagesService } from './branding-images.service';
 
 @ApiTags('businesses')
@@ -284,6 +285,22 @@ export class BusinessesController {
     return this.businessesService.getBusinessTaxSettingsBySlug(slug);
   }
 
+  @Get('branches/id/:id/karbot-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion Karbot de una sucursal por ID (Publico)' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  async getBranchKarbotSettingsById(@Param('id') id: string) {
+    return this.businessesService.getBusinessKarbotSettings(id);
+  }
+
+  @Get('branches/:slug/karbot-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion Karbot de una sucursal por slug (Publico)' })
+  @ApiParam({ name: 'slug', description: 'Slug de la sucursal' })
+  async getBranchKarbotSettingsBySlug(@Param('slug') slug: string) {
+    return this.businessesService.getBusinessKarbotSettingsBySlug(slug);
+  }
+
   @Get('branches/:slug')
   @Public()
   @ApiOperation({ summary: 'Obtener sucursal por slug (Público)' })
@@ -337,6 +354,26 @@ export class BusinessesController {
     @CurrentUser() user: User,
   ) {
     return this.businessesService.updateBusinessTaxSettings(id, user.id, updateDto);
+  }
+
+  @Get(':id/karbot-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion Karbot de una sucursal (requiere permisos)' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async getBusinessKarbotSettings(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getBusinessKarbotSettingsForUser(id, user.id);
+  }
+
+  @Put(':id/karbot-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion Karbot de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async updateBusinessKarbotSettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessKarbotSettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateBusinessKarbotSettings(id, user.id, updateDto);
   }
 
   @Get(':id')

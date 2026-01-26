@@ -522,7 +522,7 @@ export class OrdersService {
 
           // Crear orden en Karlopay
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
-            businessArea: 'ventas',
+            businessArea: 'pedidos agora',
             numberOfOrder,
             status: 'R', // Remission
             total: karlopayAmount,

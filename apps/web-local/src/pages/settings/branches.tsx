@@ -4,6 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { businessService, Business, CreateBusinessData, BusinessCategory, BranchTaxSettings } from '@/lib/business';
+import type { BranchKarbotSettings } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
@@ -18,6 +19,7 @@ export default function BranchesPage() {
   const [editingBranch, setEditingBranch] = useState<Business | null>(null);
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
   const [settingsPreviewBranch, setSettingsPreviewBranch] = useState<Business | null>(null);
+  const [karbotBranch, setKarbotBranch] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -143,7 +145,7 @@ export default function BranchesPage() {
                 </p>
               </div>
 
-              {!showAddForm && !editingBranch && !brandingBranch && !settingsPreviewBranch && (
+              {!showAddForm && !editingBranch && !brandingBranch && !settingsPreviewBranch && !karbotBranch && (
                 <div className="mb-6">
                   <button
                     onClick={() => setShowAddForm(true)}
@@ -203,6 +205,12 @@ export default function BranchesPage() {
                   onBack={() => setSettingsPreviewBranch(null)}
                   onUpdated={loadBranches}
                 />
+              ) : karbotBranch ? (
+                <BranchKarbotSettings
+                  branch={karbotBranch}
+                  onBack={() => setKarbotBranch(null)}
+                  onUpdated={loadBranches}
+                />
               ) : (
                 <BranchesList 
                   branches={branches} 
@@ -210,11 +218,13 @@ export default function BranchesPage() {
                   onEdit={(branch) => {
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
+                    setKarbotBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(branch);
                   }}
                   onBranding={(branch) => {
                     setSettingsPreviewBranch(null);
+                    setKarbotBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(null);
                     setBrandingBranch(branch);
@@ -223,7 +233,15 @@ export default function BranchesPage() {
                     setShowAddForm(false);
                     setEditingBranch(null);
                     setBrandingBranch(null);
+                    setKarbotBranch(null);
                     setSettingsPreviewBranch(branch);
+                  }}
+                  onKarbotSettings={(branch) => {
+                    setShowAddForm(false);
+                    setEditingBranch(null);
+                    setBrandingBranch(null);
+                    setSettingsPreviewBranch(null);
+                    setKarbotBranch(branch);
                   }}
                 />
               )}
@@ -241,9 +259,10 @@ interface BranchesListProps {
   onEdit: (branch: Business) => void;
   onBranding?: (branch: Business) => void;
   onPreviewSettings?: (branch: Business) => void;
+  onKarbotSettings?: (branch: Business) => void;
 }
 
-function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettings }: BranchesListProps) {
+function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettings, onKarbotSettings }: BranchesListProps) {
   if (branches.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -342,6 +361,14 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettin
                   className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
                 >
                   Impuestos
+                </button>
+              )}
+              {onKarbotSettings && (
+                <button
+                  onClick={() => onKarbotSettings(branch)}
+                  className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
+                >
+                  Karbot
                 </button>
               )}
               <button
@@ -525,6 +552,374 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+interface BranchKarbotSettingsProps {
+  branch: Business;
+  onBack: () => void;
+  onUpdated?: () => void;
+}
+
+const DEFAULT_KARBOT_SETTINGS: BranchKarbotSettings = {
+  enabled: false,
+  environment: 'dev',
+  chatbot_enabled: false,
+  whatsapp_enabled: false,
+  dev: {
+    username: '',
+    password: '',
+    endpoint: '',
+  },
+  prod: {
+    username: '',
+    password: '',
+    endpoint: '',
+  },
+};
+
+function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSettingsProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<BranchKarbotSettings>(DEFAULT_KARBOT_SETTINGS);
+
+  const loadSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await businessService.getBranchKarbotSettings(branch.id);
+      setSettings({ ...DEFAULT_KARBOT_SETTINGS, ...response });
+    } catch (err: any) {
+      console.error('[BranchKarbotSettings] Error cargando configuracion Karbot:', err);
+      setError(err?.message || 'No se pudo cargar la configuracion de Karbot.');
+      setSettings(DEFAULT_KARBOT_SETTINGS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, [branch.id]);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      await businessService.updateBranchKarbotSettings(branch.id, settings);
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      console.error('[BranchKarbotSettings] Error guardando configuracion Karbot:', err);
+      setError(err?.message || 'No se pudo guardar la configuracion de Karbot.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateEnvField = (env: 'dev' | 'prod', key: 'username' | 'password' | 'endpoint', value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      [env]: {
+        ...prev[env],
+        [key]: value,
+      },
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-gray-500">
+        Cargando configuracion de Karbot...
+      </div>
+    );
+  }
+
+  const isDevMode = settings.environment === 'dev';
+  const isActiveMode = settings.enabled && isDevMode;
+  const isProdMode = settings.enabled && !isDevMode;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={onBack}
+            className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a sucursales
+          </button>
+          <h2 className="text-xl font-normal text-gray-900">Integracion Karbot</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Configura usuario, contraseña y ambiente para la sucursal: <strong>{branch.name}</strong>
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Karbot</h3>
+              <p className="text-xs text-gray-500">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              id="karbot-enabled"
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={(e) => setSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            Habilitar
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Ambiente</label>
+          <select
+            value={settings.environment}
+            onChange={(e) => setSettings((prev) => ({ ...prev, environment: e.target.value as 'dev' | 'prod' }))}
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="dev">Desarrollo</option>
+            <option value="prod">Producción</option>
+          </select>
+        </div>
+
+        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'}`}>
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${isDevMode ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+            <span className="text-xs font-medium">
+              {isDevMode ? 'Modo Desarrollo' : 'Modo Producción'}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">
+            {isDevMode
+              ? 'Se usarán las credenciales y endpoints de desarrollo.'
+              : 'Se usarán las credenciales y endpoints de producción.'}
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Desarrollo</h3>
+            {isDevMode && (
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded mb-3">
+                ACTIVO
+              </span>
+            )}
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Usuario</label>
+                  {isActiveMode && settings.dev.username ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  value={settings.dev.username || ''}
+                  onChange={(e) => updateEnvField('dev', 'username', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Contraseña</label>
+                  {isActiveMode && settings.dev.password ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="password"
+                  value={settings.dev.password || ''}
+                  onChange={(e) => updateEnvField('dev', 'password', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Endpoint</label>
+                  {isActiveMode && settings.dev.endpoint ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.dev.endpoint || ''}
+                  onChange={(e) => updateEnvField('dev', 'endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://api.karbot.mx"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Produccion</h3>
+            {!isDevMode && (
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded mb-3">
+                ACTIVO
+              </span>
+            )}
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Usuario</label>
+                  {isProdMode && settings.prod.username ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  value={settings.prod.username || ''}
+                  onChange={(e) => updateEnvField('prod', 'username', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Contraseña</label>
+                  {isProdMode && settings.prod.password ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="password"
+                  value={settings.prod.password || ''}
+                  onChange={(e) => updateEnvField('prod', 'password', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Endpoint</label>
+                  {isProdMode && settings.prod.endpoint ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.prod.endpoint || ''}
+                  onChange={(e) => updateEnvField('prod', 'endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://api.karbot.mx"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={settings.chatbot_enabled}
+              onChange={(e) => setSettings((prev) => ({ ...prev, chatbot_enabled: e.target.checked }))}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span>
+              <span className="block font-medium text-gray-800">Habilitar chatbot en storefront</span>
+              <span className="block text-xs text-gray-500">Mostrar el widget del chatbot para los clientes.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={settings.whatsapp_enabled}
+              onChange={(e) => setSettings((prev) => ({ ...prev, whatsapp_enabled: e.target.checked }))}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <span>
+              <span className="block font-medium text-gray-800">Habilitar notificaciones WhatsApp</span>
+              <span className="block text-xs text-gray-500">Notificar cambios de estado de pedidos.</span>
+            </span>
+          </label>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-normal text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar configuracion'}
+          </button>
+        </div>
       </div>
     </div>
   );
