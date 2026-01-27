@@ -87,7 +87,14 @@ export default function ProductCard({ product, onAddToCart, overridePrice }: Pro
             <div className="text-xs text-gray-400 mb-1">#{product.sku}</div>
           )}
 
-          <div className="text-xl font-semibold text-gray-900 mb-1">{formatPrice(displayPrice)}</div>
+          <div className="text-xl font-semibold text-gray-900 mb-1 flex items-baseline gap-2">
+            <span>{formatPrice(displayPrice)}</span>
+            {contextType !== 'sucursal' && (
+              <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">
+                Precio aproximado
+              </span>
+            )}
+          </div>
 
           <h3 className="text-sm font-medium text-gray-800 mb-4 line-clamp-2">{product.name}</h3>
 

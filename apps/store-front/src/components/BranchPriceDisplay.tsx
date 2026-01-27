@@ -43,10 +43,6 @@ export default function BranchPriceDisplay({
           </>
         )}
       </div>
-      {branchPrice === undefined && (
-        <p className="text-xs text-gray-500 mt-1">Precio global</p>
-      )}
     </div>
   );
 }
-

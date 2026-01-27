@@ -35,6 +35,7 @@ export default function CartPage() {
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
   const [itemsNetSubtotals, setItemsNetSubtotals] = useState<Record<string, number>>({});
   const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
+  const [branchNames, setBranchNames] = useState<Record<string, string>>({});
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const getBranchSettings = (businessId: string) =>
     branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
@@ -82,6 +83,7 @@ export default function CartPage() {
 
           if (uniqueBusinessIds.length === 0) {
             setBranchTaxSettings({});
+            setBranchNames({});
             return;
           }
 
@@ -97,15 +99,34 @@ export default function CartPage() {
             settingsMap[businessId] = settings;
           });
           setBranchTaxSettings(settingsMap);
+
+          // Cargar nombres reales de las sucursales para mostrar en el carrito
+          const nameEntries = await Promise.all(
+            uniqueBusinessIds.map(async (businessId) => {
+              try {
+                const branch = await branchesService.getBranchById(businessId);
+                return [businessId, branch?.name] as const;
+              } catch {
+                return [businessId, undefined] as const;
+              }
+            })
+          );
+          const nameMap: Record<string, string> = {};
+          nameEntries.forEach(([id, name]) => {
+            if (name) nameMap[id] = name;
+          });
+          setBranchNames(nameMap);
         } catch (error) {
           console.warn('[Cart] No se pudo cargar la configuracion de impuestos por sucursal:', error);
           setBranchTaxSettings({});
+          setBranchNames({});
         }
       };
 
       loadBranchSettings();
     } else {
       setBranchTaxSettings({});
+      setBranchNames({});
     }
   }, [cart]);
 
@@ -363,12 +384,6 @@ export default function CartPage() {
                             </p>
                             <div className="flex flex-wrap gap-2 mt-2" />
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-gray-500">Subtotal de tienda</p>
-                            <p className="text-lg font-medium text-gray-900">
-                              {formatPrice(subtotalsByStore[businessId] || 0)}
-                            </p>
-                          </div>
                         </div>
                       </div>
 
@@ -433,11 +448,14 @@ export default function CartPage() {
 
                                 {/* Informaci?n del producto */}
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-start justify-between gap-4">
-                                    <div className="flex-1 min-w-0">
-                                      <h3 className="font-normal text-lg text-gray-900 mb-2 leading-tight">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1 min-w-0">
+                                      <h3 className="font-normal text-lg text-gray-900 mb-1 leading-tight">
                                         {item.product_name}
                                       </h3>
+                                      <p className="text-xs text-gray-500 mb-2">
+                                        Sucursal: {branchNames[item.branch_id || item.business_id || ''] || store.name}
+                                      </p>
                                       {item.product_description && (
                                         <p className="text-sm text-gray-500 mb-3 line-clamp-2">
                                           {item.product_description}

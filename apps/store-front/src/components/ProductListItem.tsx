@@ -147,13 +147,18 @@ export default function ProductListItem({ product, onAddToCart, overridePrice }:
 
             {/* Precio */}
             <div className="pt-4 border-t border-gray-200">
-              <div>
+              <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-black">
                   {formatPrice(displayPrice)}
                 </span>
                 {contextType === 'sucursal' && product.branch_price !== undefined && product.branch_price !== product.price && (
-                  <span className="text-sm text-gray-500 line-through ml-2">
+                  <span className="text-sm text-gray-500 line-through">
                     {formatPrice(product.price)}
+                  </span>
+                )}
+                {contextType !== 'sucursal' && (
+                  <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">
+                    Precio aproximado
                   </span>
                 )}
               </div>

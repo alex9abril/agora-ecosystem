@@ -322,7 +322,7 @@ export default function ProductDetailPage() {
     };
 
     computeTaxedPrice();
-  }, [product, branchTaxSettings, selectedVariants]);
+  }, [product, branchTaxSettings, selectedVariants, selectedBranchId]);
 
   useEffect(() => {
     console.log('🔍 [ProductDetail] useEffect triggered:', {
@@ -964,7 +964,6 @@ export default function ProductDetailPage() {
                       </>
                     ) : (
                       <>
-                        <span className="text-sm text-gray-600 mb-1 block">Precio global:</span>
                         <span className="text-3xl font-bold text-black">
                           {formatPrice(displayPrice)}
                         </span>
@@ -1085,7 +1084,8 @@ export default function ProductDetailPage() {
                       )}
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
-                        globalPrice={taxedUnitPrice ?? getUnitBasePrice()}
+                        // Usar el precio base del producto como fallback estÃ¡tico para evitar que otras tarjetas cambien cuando se selecciona una sucursal
+                        globalPrice={product?.price ?? 0}
                         selectedBranchId={selectedBranchId}
                         onBranchSelect={setSelectedBranchId}
                         storedBranchId={storedBranch?.id}
