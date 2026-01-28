@@ -46,6 +46,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
   const [taxSettingsByBusiness, setTaxSettingsByBusiness] = useState<Record<string, BranchTaxSettings>>({});
+  const [taxSettingsLoaded, setTaxSettingsLoaded] = useState(false);
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
 
   // Guardar preferencia de vista en localStorage
@@ -79,16 +80,20 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   // Cargar configuracion de impuestos de la sucursal (solo contexto sucursal)
   useEffect(() => {
     const loadBranchTaxes = async () => {
+      setTaxSettingsLoaded(false);
       if (contextType === 'sucursal' && branchId) {
         try {
           const settings = await branchesService.getBranchTaxSettings(branchId);
           setBranchTaxSettings(settings);
+          setTaxSettingsLoaded(true);
         } catch (err) {
           console.warn('[ProductGrid] No se pudo obtener configuracion de impuestos de la sucursal:', err);
           setBranchTaxSettings(null);
+          setTaxSettingsLoaded(true);
         }
       } else {
         setBranchTaxSettings(null);
+        setTaxSettingsLoaded(true);
       }
     };
     loadBranchTaxes();
@@ -99,12 +104,15 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     const loadBusinessTaxSettings = async () => {
       if (!products || products.length === 0 || (contextType === 'sucursal' && branchId)) {
         setTaxSettingsByBusiness({});
+        setTaxSettingsLoaded(true);
         return;
       }
 
+      setTaxSettingsLoaded(false);
       const uniqueBusinessIds = Array.from(new Set(products.map(p => p.business_id).filter(Boolean)));
       if (uniqueBusinessIds.length === 0) {
         setTaxSettingsByBusiness({});
+        setTaxSettingsLoaded(true);
         return;
       }
 
@@ -126,9 +134,11 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
           map[businessId] = settings || DEFAULT_BRANCH_TAX_SETTINGS;
         });
         setTaxSettingsByBusiness(map);
+        setTaxSettingsLoaded(true);
       } catch (err) {
         console.warn('[ProductGrid] Error cargando configuracion de impuestos por negocio:', err);
         setTaxSettingsByBusiness({});
+        setTaxSettingsLoaded(true);
       }
     };
 
@@ -205,6 +215,12 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   useEffect(() => {
     const computePrices = async () => {
       if (!products || products.length === 0) {
+        setFinalPrices({});
+        return;
+      }
+
+      // Esperar configuracion fiscal para evitar mostrar precios inconsistentes
+      if (!taxSettingsLoaded) {
         setFinalPrices({});
         return;
       }
@@ -370,6 +386,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
               key={product.id}
               product={product}
               overridePrice={finalPrices[product.id]}
+              pricePending={finalPrices[product.id] === undefined}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
             />
           ))}
@@ -381,6 +398,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
               key={product.id}
               product={product}
               overridePrice={finalPrices[product.id]}
+              pricePending={finalPrices[product.id] === undefined}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
             />
           ))}

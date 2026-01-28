@@ -394,6 +394,8 @@ export default function CartPage() {
                           itemsNetSubtotals[item.id] !== undefined
                             ? itemsNetSubtotals[item.id]
                             : parseFloat(String(item.item_subtotal || 0));
+                        const itemTaxTotal = itemTaxBreakdown?.total_tax || 0;
+                        const itemGrandTotal = itemNetSubtotal + itemTaxTotal;
                         const shouldShowTaxBreakdown = false; // Desglose desactivado globalmente
 
                         return (
@@ -461,21 +463,21 @@ export default function CartPage() {
                                           {item.product_description}
                                         </p>
                                       )}
-                                      <div className="flex items-center gap-4">
+                                      <div className="flex items-center gap-6 mt-2">
                                         <div>
                                           <span className="text-xs text-gray-500 uppercase tracking-wide">
-                                            {''}
+                                            Subtotal
                                           </span>
                                           <p className="text-base font-normal text-gray-700 mt-0.5">
-                                            {''}
+                                            {formatPrice(itemNetSubtotal)}
                                           </p>
                                         </div>
                                         <div>
                                           <span className="text-xs text-gray-500 uppercase tracking-wide">
-                                            {''}
+                                            Total
                                           </span>
                                           <p className="text-lg font-normal text-gray-900 mt-0.5">
-                                            {''}
+                                            {formatPrice(itemGrandTotal)}
                                           </p>
                                         </div>
                                       </div>

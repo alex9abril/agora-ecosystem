@@ -13,17 +13,21 @@ interface ProductCardProps {
   product: Product;
   onAddToCart?: (product: Product) => void;
   overridePrice?: number;
+  pricePending?: boolean;
 }
 
-export default function ProductCard({ product, onAddToCart, overridePrice }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, overridePrice, pricePending }: ProductCardProps) {
   const { contextType, branchData } = useStoreContext();
 
   // Determinar precio a mostrar
-  const displayPrice = overridePrice !== undefined
-    ? overridePrice
-    : contextType === 'sucursal' && product.branch_price !== undefined
-      ? product.branch_price
-      : product.price;
+  const displayPrice =
+    pricePending
+      ? null
+      : overridePrice !== undefined
+        ? overridePrice
+        : contextType === 'sucursal' && product.branch_price !== undefined
+          ? product.branch_price
+          : product.price;
 
   // Determinar si está disponible
   const isAvailable = contextType === 'sucursal' 
@@ -88,7 +92,7 @@ export default function ProductCard({ product, onAddToCart, overridePrice }: Pro
           )}
 
           <div className="text-xl font-semibold text-gray-900 mb-1 flex items-baseline gap-2">
-            <span>{formatPrice(displayPrice)}</span>
+            <span>{displayPrice !== null && displayPrice !== undefined ? formatPrice(displayPrice) : '--.--'}</span>
             {contextType !== 'sucursal' && (
               <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">
                 Precio aproximado
