@@ -258,13 +258,13 @@ export default function CartPage() {
     Object.entries(itemsByStore).forEach(([businessId, items]) => {
       if (items.length > 0) {
         stores[businessId] = {
-          name: items[0].business_name || 'Tienda desconocida',
+          name: branchNames[businessId] || items[0].business_name || 'Tienda desconocida',
           items,
         };
       }
     });
     return stores;
-  }, [itemsByStore]);
+  }, [itemsByStore, branchNames]);
 
   // Calcular subtotales por tienda
   const subtotalsByStore = useMemo(() => {

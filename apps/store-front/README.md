@@ -14,6 +14,10 @@ Frontend del marketplace tipo AutoZone/MercadoLibre para Agora con soporte para 
 - 📦 **Stock por Sucursal**: Validación de stock específico antes de agregar al carrito
 - 🎨 **Branding Personalizado**: Cada grupo/sucursal puede tener su propio branding
 
+### Notas de precios e impuestos
+- El grid/lista de productos usa el mismo flujo de impuestos que detalle, carrito y checkout: toma la configuración de impuestos de la sucursal/negocio, calcula con calculateProductTaxes cuando included_in_price = false y respeta included_in_price cuando es 	rue.
+- Mientras se obtienen configuraciones fiscales o se calculan impuestos, el precio se muestra como --.-- para evitar saltos visuales.
+
 ## Tecnologías
 
 - **Next.js 14** - Framework React

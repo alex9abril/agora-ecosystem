@@ -219,7 +219,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
         return;
       }
 
-      // Esperar configuracion fiscal para evitar mostrar precios inconsistentes
+      // Esperar configuraciones de impuestos para evitar saltos de precio
       if (!taxSettingsLoaded) {
         setFinalPrices({});
         return;
@@ -261,7 +261,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     };
 
     computePrices();
-  }, [products, branchTaxSettings, taxSettingsByBusiness, contextType, branchId]);
+  }, [products, branchTaxSettings, taxSettingsByBusiness, taxSettingsLoaded, contextType, branchId]);
 
   if (loading) {
     return (

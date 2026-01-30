@@ -820,10 +820,13 @@ export default function Header() {
                                     </p>
                                     <div className="flex items-center justify-between mt-1">
                                       <span className="text-xs text-gray-500">
-                                        Cantidad: {item.quantity}
+                                        Total producto
                                       </span>
                                       <span className="text-sm font-semibold text-gray-900">
-                                        ${parseFloat(String(item.item_subtotal || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        ${(
+                                          parseFloat(String(item.item_subtotal || 0)) +
+                                          (item.tax_breakdown?.total_tax ? Number(item.tax_breakdown.total_tax) : 0)
+                                        ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </span>
                                     </div>
                                   </div>
@@ -850,7 +853,7 @@ export default function Header() {
                         <>
                           <div className="border-t border-gray-200 px-5 py-4 bg-gray-50">
                             <div className="flex items-center justify-between mb-3">
-                              <span className="text-sm font-medium text-gray-700">Subtotal:</span>
+                              <span className="text-sm font-medium text-gray-700">Total:</span>
                               <span className="text-lg font-bold text-gray-900">
                                 ${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
