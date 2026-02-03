@@ -232,6 +232,18 @@ export default function ProductDetailPage() {
     }
   }, [storedBranch, branchAvailabilities, contextType, selectedBranchId]);
 
+  // Si no hay selección previa, elegir automáticamente la sucursal con mejor precio (alineado con la grilla)
+  useEffect(() => {
+    if (contextType === 'sucursal') return;
+    if (selectedBranchId) return;
+    if (!branchAvailabilities || branchAvailabilities.length === 0) return;
+
+    const best = getSelectedAvailability();
+    if (best?.branch_id) {
+      setSelectedBranchId(best.branch_id);
+    }
+  }, [contextType, selectedBranchId, branchAvailabilities]);
+
   // Cargar configuracion de impuestos para la sucursal seleccionada/contexto
   useEffect(() => {
     const loadTaxSettings = async () => {
@@ -256,21 +268,63 @@ export default function ProductDetailPage() {
     loadTaxSettings();
   }, [contextType, branchData?.id, selectedBranchId]);
 
-  // Obtener precio de la sucursal seleccionada
-  const getSelectedBranchPrice = () => {
-    if (contextType === 'sucursal' && product?.branch_price !== undefined) {
-      return product.branch_price;
+  // Obtener disponibilidad activa seleccionada o la de mejor precio (mismo criterio que la grilla)
+  const getSelectedAvailability = (): ProductBranchAvailability | null => {
+    // Contexto sucursal: construir una disponibilidad sintÃ©tica con los datos del producto
+    if (contextType === 'sucursal' && branchData && product) {
+      return {
+        branch_id: branchData.id,
+        branch_name: branchData.name,
+        is_enabled: product.branch_is_enabled ?? true,
+        price: product.branch_price ?? product.price ?? 0,
+        taxed_price: (product as any).taxed_price,
+        stock: product.branch_stock ?? null,
+        allow_backorder: product.branch_allow_backorder ?? false,
+        backorder_lead_time_days: product.branch_backorder_lead_time_days ?? null,
+        backorder_notes: product.branch_backorder_notes ?? null,
+        is_active: true,
+      } as ProductBranchAvailability;
     }
-    if (contextType !== 'sucursal' && selectedBranchId && product) {
-      const selectedBranch = branchAvailabilities.find(
+
+    // Seleccionada explÃ­citamente
+    if (selectedBranchId) {
+      const selected = branchAvailabilities.find(
         (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
       );
-      if (selectedBranch) {
-        return selectedBranch.price !== null && selectedBranch.price !== undefined
-          ? selectedBranch.price
-          : product.price;
-      }
+      if (selected) return selected;
     }
+
+    // Fallback: mejor precio disponible
+    const best = branchAvailabilities
+      .filter((avail) => avail.is_active && avail.is_enabled)
+      .map((avail) => {
+        const taxedRaw = (avail as any).taxed_price;
+        const taxed = taxedRaw !== null && taxedRaw !== undefined ? Number(taxedRaw) : undefined;
+        const price = avail.price !== null && avail.price !== undefined ? Number(avail.price) : undefined;
+        const displayPrice =
+          taxed !== undefined && !Number.isNaN(taxed) && taxed > 0
+            ? taxed
+            : price !== undefined && !Number.isNaN(price)
+            ? price
+            : product?.price || 0;
+        return { ...avail, displayPrice };
+      })
+      .sort((a, b) => a.displayPrice - b.displayPrice)[0];
+
+    return best || null;
+  };
+
+  // Obtener precio base (sin impuestos) de la sucursal seleccionada o fallback
+  const getSelectedBranchPrice = () => {
+    const availability = getSelectedAvailability();
+
+    if (availability) {
+      if (availability.price !== null && availability.price !== undefined) {
+        return Number(availability.price);
+      }
+      return product?.price;
+    }
+
     return product?.price;
   };
 
@@ -304,12 +358,23 @@ export default function ProductDetailPage() {
   useEffect(() => {
     const computeTaxedPrice = async () => {
       if (!product) return;
-    const basePrice = getUnitBasePrice();
+      const availability = getSelectedAvailability();
+      const basePrice = getUnitBasePrice();
 
       // Solo omitir el cÃ¡lculo cuando la sucursal indica que el precio YA incluye impuestos
       if (branchTaxSettings?.included_in_price) {
         setTaxedUnitPrice(basePrice);
         return;
+      }
+
+      // Si la disponibilidad ya trae precio con impuestos, usarlo para alinear con la lista
+      const taxedPriceFromAvailability = availability && (availability as any).taxed_price;
+      if (taxedPriceFromAvailability !== null && taxedPriceFromAvailability !== undefined) {
+        const asNumber = Number(taxedPriceFromAvailability);
+        if (!Number.isNaN(asNumber) && asNumber > 0) {
+          setTaxedUnitPrice(asNumber);
+          return;
+        }
       }
 
       try {
@@ -322,7 +387,7 @@ export default function ProductDetailPage() {
     };
 
     computeTaxedPrice();
-  }, [product, branchTaxSettings, selectedVariants, selectedBranchId]);
+  }, [product, branchTaxSettings, selectedVariants, selectedBranchId, branchAvailabilities]);
 
   useEffect(() => {
     console.log('🔍 [ProductDetail] useEffect triggered:', {
@@ -757,55 +822,40 @@ export default function ProductDetailPage() {
     );
   }
 
+  // Precio final a mostrar (prioriza precio con impuestos enviado por disponibilidad)
+  const getSelectedDisplayPrice = () => {
+    const availability = getSelectedAvailability();
+    if (availability) {
+      const taxedRaw = (availability as any).taxed_price;
+      const taxed = taxedRaw !== null && taxedRaw !== undefined ? Number(taxedRaw) : undefined;
+      const price =
+        availability.price !== null && availability.price !== undefined
+          ? Number(availability.price)
+          : undefined;
+
+      if (taxed !== undefined && !Number.isNaN(taxed) && taxed > 0) {
+        return taxed;
+      }
+      if (price !== undefined && !Number.isNaN(price)) {
+        return price;
+      }
+      return product?.price ?? 0;
+    }
+
+    // Sin disponibilidad (aún cargando): mostrar precio base calculado
+    return taxedUnitPrice ?? getUnitBasePrice();
+  };
+
   // Calcular precio total con variantes
   const calculateTotalPrice = () => {
-    const unitPrice = taxedUnitPrice ?? getUnitBasePrice();
+    const unitPrice = getSelectedDisplayPrice();
     return unitPrice * quantity;
   };
 
-  const displayPrice = taxedUnitPrice ?? getUnitBasePrice();
+  const displayPrice = getSelectedDisplayPrice();
   
   // Obtener la sucursal seleccionada para mostrar información
-  let selectedBranch: ProductBranchAvailability | null = null;
-  
-  if (contextType === 'sucursal' && branchData && product) {
-    // En contexto de sucursal, usar la sucursal del contexto
-    selectedBranch = {
-      branch_id: branchData.id,
-      branch_name: branchData.name,
-      is_enabled: product.branch_is_enabled ?? true,
-      price: product.branch_price ?? product.price ?? 0,
-      stock: product.branch_stock ?? null,
-      allow_backorder: product.branch_allow_backorder ?? false,
-      backorder_lead_time_days: product.branch_backorder_lead_time_days ?? null,
-      backorder_notes: product.branch_backorder_notes ?? null,
-      is_active: true,
-    } as ProductBranchAvailability;
-  } else if (contextType !== 'sucursal' && selectedBranchId) {
-    // Si hay una sucursal seleccionada, buscarla en las disponibilidades
-    selectedBranch = branchAvailabilities.find(
-      (avail) => avail.branch_id === selectedBranchId && avail.is_active && avail.is_enabled
-    ) || null;
-  } else if (contextType !== 'sucursal' && branchAvailabilities.length > 0) {
-    // Si no hay selección pero hay disponibilidades, usar la primera (mejor precio)
-    const availableBranches = branchAvailabilities
-      .filter((avail) => avail.is_active && avail.is_enabled)
-      .map((avail) => ({
-        ...avail,
-        displayPrice: avail.price !== null && avail.price !== undefined
-          ? avail.price
-          : product?.price || 0,
-      }))
-      .sort((a, b) => a.displayPrice - b.displayPrice);
-    
-    if (availableBranches.length > 0) {
-      selectedBranch = availableBranches[0];
-      // Auto-seleccionar si no hay selección previa
-      if (!selectedBranchId) {
-        setSelectedBranchId(availableBranches[0].branch_id);
-      }
-    }
-  }
+  const selectedBranch: ProductBranchAvailability | null = getSelectedAvailability();
 
   const isAvailable = contextType === 'sucursal' 
     ? (product.branch_is_enabled !== false && product.is_available)
