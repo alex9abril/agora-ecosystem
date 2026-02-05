@@ -15,6 +15,8 @@ import { KarlopayService } from '../payments/karlopay/karlopay.service';
 import { IntegrationsService } from '../settings/integrations.service';
 import { EmailService } from '../email/email.service';
 import { BusinessesService } from '../businesses/businesses.service';
+import { KarbotService } from '../businesses/karbot.service';
+import { IntegrationLogsService } from '../settings/integration-logs.service';
 
 const DEFAULT_TAX_SETTINGS = {
   included_in_price: false,
@@ -34,6 +36,8 @@ export class OrdersService {
     private readonly integrationsService: IntegrationsService,
     private readonly emailService: EmailService,
     private readonly businessesService: BusinessesService,
+    private readonly karbotService: KarbotService,
+    private readonly integrationLogs: IntegrationLogsService,
   ) {}
 
   /**
@@ -522,7 +526,7 @@ export class OrdersService {
 
           // Crear orden en Karlopay
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
-            businessArea: 'pedidos agora',
+            businessArea: 'ventas', // ventas // pedidos agora
             numberOfOrder,
             status: 'R', // Remission
             total: karlopayAmount,
@@ -630,10 +634,6 @@ export class OrdersService {
                   [order.id]
                 );
                 
-                // Enviar correo de confirmación de pedido (no bloquea el flujo si falla)
-                this.sendOrderConfirmationEmail(order.id, order.business_id).catch((error) => {
-                  console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, error);
-                });
               } else {
                 console.warn(`⚠️ [CHECKOUT] Orden ${order.id} no marcada como 'paid': monto completado (${totalCompleted}) < total orden (${orderTotal})`);
               }
@@ -777,6 +777,69 @@ export class OrdersService {
       console.error('❌ Error obteniendo pedidos del cliente:', error);
       throw new ServiceUnavailableException(`Error al obtener pedidos del cliente: ${error.message}`);
     }
+  }
+
+  /**
+   * Listar pedidos que tienen logs de integraciones
+   */
+  async findOrdersWithIntegrationLogs() {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const result = await dbPool.query(
+      `SELECT
+         o.id,
+         o.created_at,
+         o.status,
+         o.payment_status,
+         o.total_amount,
+         b.name as business_name,
+         au.email as client_email,
+         COUNT(l.id) as logs_count,
+         MAX(l.created_at) as last_log_at
+       FROM orders.orders o
+       INNER JOIN communication.integration_logs l ON l.order_id = o.id
+       LEFT JOIN core.businesses b ON b.id = o.business_id
+       LEFT JOIN auth.users au ON au.id = o.client_id
+       GROUP BY o.id, o.created_at, o.status, o.payment_status, o.total_amount, b.name, au.email
+       ORDER BY last_log_at DESC`
+    );
+
+    return result.rows;
+  }
+
+  /**
+   * Obtener logs de integraciones por pedido
+   */
+  async getIntegrationLogsByOrder(orderId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const result = await dbPool.query(
+      `SELECT
+         id,
+         business_id,
+         user_id,
+         order_id,
+         integration,
+         event_type,
+         channel,
+         status,
+         message,
+         error_message,
+         request_payload,
+         response_payload,
+         metadata,
+         created_at
+       FROM communication.integration_logs
+       WHERE order_id = $1
+       ORDER BY created_at DESC`,
+      [orderId],
+    );
+
+    return result.rows;
   }
 
   /**
@@ -2308,6 +2371,27 @@ export class OrdersService {
   }
 
   /**
+   * Obtener telefono del usuario desde core.user_profiles
+   */
+  private async getUserPhone(userId: string): Promise<string | null> {
+    if (!dbPool) {
+      return null;
+    }
+
+    try {
+      const result = await dbPool.query(
+        `SELECT phone FROM core.user_profiles WHERE id = $1`,
+        [userId],
+      );
+
+      return result.rows[0]?.phone || null;
+    } catch (error: any) {
+      console.error(`❌ Error obteniendo telefono del usuario ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Enviar correo de confirmación de pedido
    */
   private async sendOrderConfirmationEmail(orderId: string, businessId: string): Promise<void> {
@@ -2338,11 +2422,29 @@ export class OrdersService {
       }
 
       const order = orderResult.rows[0];
+      const channels = await this.businessesService.getNotificationChannels(
+        order.business_id,
+        'order_confirmation',
+      );
+
+      if (!channels.emailEnabled && !channels.whatsappEnabled) {
+        return;
+      }
+
       const userEmail = await this.getUserEmail(order.client_id);
 
-      if (!userEmail) {
+      if (channels.emailEnabled && !userEmail) {
         console.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de confirmación`);
-        return;
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'order_confirmation',
+          channel: 'email',
+          status: 'skipped',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Email no disponible para notificación',
+        });
       }
 
       // Formatear datos
@@ -2371,17 +2473,52 @@ export class OrdersService {
         });
       }
 
-      // Enviar correo
-      await this.emailService.sendOrderConfirmationEmail(
-        userEmail,
-        orderNumber,
-        orderDate,
-        orderTotal,
-        paymentMethod,
-        orderUrl,
-        order.business_id,
-        order.business_group_id
-      );
+      if (channels.emailEnabled && userEmail) {
+        await this.emailService.sendOrderConfirmationEmail(
+          userEmail,
+          orderNumber,
+          orderDate,
+          orderTotal,
+          paymentMethod,
+          orderUrl,
+          order.business_id,
+          order.business_group_id,
+          { userId: order.client_id, orderId: order.id }
+        );
+      }
+
+      if (channels.whatsappEnabled) {
+        const userPhone = await this.getUserPhone(order.client_id);
+        if (!userPhone) {
+          console.warn(`⚠️ No se pudo obtener telefono del usuario ${order.client_id} para WhatsApp`);
+          await this.integrationLogs.log({
+            integration: 'karbot',
+            eventType: 'order_confirmation',
+            channel: 'whatsapp',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'Telefono no disponible para WhatsApp',
+          });
+        } else {
+          await this.karbotService.sendWhatsappNotification({
+            businessId: order.business_id,
+            triggerType: 'order_confirmation',
+            to: userPhone,
+            userId: order.client_id,
+            orderId: order.id,
+            data: {
+              order_id: order.id,
+              order_number: orderNumber,
+              order_date: orderDate,
+              order_total: orderTotal,
+              payment_method: paymentMethod,
+              order_url: orderUrl,
+            },
+          });
+        }
+      }
     } catch (error: any) {
       console.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo
@@ -2421,11 +2558,29 @@ export class OrdersService {
       }
 
       const order = orderResult.rows[0];
+      const channels = await this.businessesService.getNotificationChannels(
+        order.business_id,
+        'order_status_change',
+      );
+
+      if (!channels.emailEnabled && !channels.whatsappEnabled) {
+        return;
+      }
+
       const userEmail = await this.getUserEmail(order.client_id);
 
-      if (!userEmail) {
+      if (channels.emailEnabled && !userEmail) {
         console.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de cambio de estado`);
-        return;
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'order_status_change',
+          channel: 'email',
+          status: 'skipped',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Email no disponible para notificación',
+        });
       }
 
       // Mapear estados a mensajes amigables
@@ -2458,17 +2613,52 @@ export class OrdersService {
         });
       }
 
-      // Enviar correo
-      await this.emailService.sendOrderStatusChangeEmail(
-        userEmail,
-        orderNumber,
-        oldStatus,
-        newStatus,
-        statusMessage,
-        orderUrl,
-        order.business_id,
-        order.business_group_id
-      );
+      if (channels.emailEnabled && userEmail) {
+        await this.emailService.sendOrderStatusChangeEmail(
+          userEmail,
+          orderNumber,
+          oldStatus,
+          newStatus,
+          statusMessage,
+          orderUrl,
+          order.business_id,
+          order.business_group_id,
+          { userId: order.client_id, orderId: order.id }
+        );
+      }
+
+      if (channels.whatsappEnabled) {
+        const userPhone = await this.getUserPhone(order.client_id);
+        if (!userPhone) {
+          console.warn(`⚠️ No se pudo obtener telefono del usuario ${order.client_id} para WhatsApp`);
+          await this.integrationLogs.log({
+            integration: 'karbot',
+            eventType: 'order_status_change',
+            channel: 'whatsapp',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'Telefono no disponible para WhatsApp',
+          });
+        } else {
+          await this.karbotService.sendWhatsappNotification({
+            businessId: order.business_id,
+            triggerType: 'order_status_change',
+            to: userPhone,
+            userId: order.client_id,
+            orderId: order.id,
+            data: {
+              order_id: order.id,
+              order_number: orderNumber,
+              old_status: oldStatus,
+              new_status: newStatus,
+              status_message: statusMessage,
+              order_url: orderUrl,
+            },
+          });
+        }
+      }
     } catch (error: any) {
       console.error(`❌ Error en sendOrderStatusChangeEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo

@@ -29,6 +29,11 @@ export class UpdateBusinessKarbotSettingsDto {
     username?: string;
     password?: string;
     endpoint?: string;
+    template_ids?: {
+      user_registration?: string;
+      order_confirmation?: string;
+      order_status_change?: string;
+    };
   };
 
   @ApiPropertyOptional({ description: 'Credenciales Karbot (prod)', example: { username: 'user', password: 'secret', endpoint: 'https://api.karbot.mx' } })
@@ -38,5 +43,10 @@ export class UpdateBusinessKarbotSettingsDto {
     username?: string;
     password?: string;
     endpoint?: string;
+    template_ids?: {
+      user_registration?: string;
+      order_confirmation?: string;
+      order_status_change?: string;
+    };
   };
 }

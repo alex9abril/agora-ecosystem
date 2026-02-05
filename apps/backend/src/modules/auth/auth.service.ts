@@ -14,13 +14,21 @@ import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
 import { AdminSignUpDto } from './dto/admin-signup.dto';
 import { EmailService } from '../email/email.service';
+import { BusinessesService } from '../businesses/businesses.service';
+import { KarbotService } from '../businesses/karbot.service';
+import { IntegrationLogsService } from '../settings/integration-logs.service';
 
 /**
  * Servicio de autenticación usando Supabase
  */
 @Injectable()
 export class AuthService {
-  constructor(private readonly emailService: EmailService) {}
+  constructor(
+    private readonly emailService: EmailService,
+    private readonly businessesService: BusinessesService,
+    private readonly karbotService: KarbotService,
+    private readonly integrationLogs: IntegrationLogsService,
+  ) {}
 
   /**
    * Obtiene el usuario actual desde el token
@@ -649,8 +657,19 @@ export class AuthService {
 
     // Log final de la respuesta
 
-    // Enviar correo de bienvenida (no bloquea el flujo si falla)
-    if (authData.user && authData.user.email) {
+    // Enviar correo/WhatsApp de bienvenida según configuración (no bloquea el flujo si falla)
+    let emailEnabled = true;
+    let whatsappEnabled = false;
+    if (signUpDto.businessId) {
+      const channels = await this.businessesService.getNotificationChannels(
+        signUpDto.businessId,
+        'user_registration',
+      );
+      emailEnabled = channels.emailEnabled;
+      whatsappEnabled = channels.whatsappEnabled;
+    }
+
+    if (emailEnabled && authData.user && authData.user.email) {
       const userName = `${signUpDto.firstName} ${signUpDto.lastName}`.trim() || signUpDto.email;
       const fallbackUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/dashboard`;
       const dashboardUrl = signUpDto.appUrl || confirmationLink || fallbackUrl;
@@ -671,10 +690,38 @@ export class AuthService {
         userName,
         dashboardUrl,
         signUpDto.businessId,
-        signUpDto.businessGroupId
+        signUpDto.businessGroupId,
+        { userId: authData.user.id }
       ).catch((error) => {
         console.error('❌ Error enviando correo de bienvenida (no crítico):', error);
       });
+    }
+
+    if (whatsappEnabled && signUpDto.businessId) {
+      if (!signUpDto.phone) {
+        await this.integrationLogs.log({
+          integration: 'karbot',
+          eventType: 'user_registration',
+          channel: 'whatsapp',
+          status: 'skipped',
+          businessId: signUpDto.businessId,
+          userId: authData.user?.id,
+          message: 'Telefono no disponible para WhatsApp',
+        });
+      } else {
+        this.karbotService.sendWhatsappNotification({
+          businessId: signUpDto.businessId,
+          triggerType: 'user_registration',
+          to: signUpDto.phone,
+          userId: authData.user?.id,
+          data: {
+            user_name: `${signUpDto.firstName || ''} ${signUpDto.lastName || ''}`.trim() || signUpDto.email,
+            app_url: signUpDto.appUrl || confirmationLink || `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/dashboard`,
+          },
+        }).catch((error) => {
+          console.error('❌ Error enviando WhatsApp de bienvenida (no crítico):', error);
+        });
+      }
     }
 
     return {

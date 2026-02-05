@@ -271,6 +271,26 @@ export default function EmailsPage() {
     order_status_change: null,
   });
 
+  const resolverBusinessId =
+    managementMode === 'business' ? selectedBranchId || selectedBusiness?.business_id || null : null;
+  const resolverBusinessGroupId = businessGroup?.id || null;
+
+  const formatResolverValue = (value: string | null | undefined) => value || '—';
+
+  const getResolvedTemplateInfo = (trigger: EmailTriggerType) => {
+    const localTemplate = templates.find(t => t.trigger_type === trigger);
+    if (localTemplate) {
+      return { id: localTemplate.id, level: managementMode };
+    }
+
+    const globalTemplate = globalTemplates[trigger];
+    if (globalTemplate) {
+      return { id: globalTemplate.id, level: 'global' as const };
+    }
+
+    return null;
+  };
+
   // Calcular loading general: solo mostrar interfaz cuando todas las peticiones estén completas
   useEffect(() => {
     setLoading(loadingContext || loadingGlobalTemplates || loadingTemplates);
@@ -940,6 +960,7 @@ export default function EmailsPage() {
                   <div className="divide-y divide-gray-200">
                     {displayTemplates.map((template) => {
                       const isPlaceholder = !templates.find(t => t.id === template.id && t.trigger_type === template.trigger_type);
+                      const resolvedInfo = getResolvedTemplateInfo(template.trigger_type);
                       return (
                         <div
                           key={template.trigger_type}
@@ -967,6 +988,27 @@ export default function EmailsPage() {
                               <div className="flex items-center gap-4 text-xs text-gray-500">
                                 <span><strong>Asunto:</strong> {template.subject}</span>
                                 <span><strong>Variables:</strong> {template.available_variables.join(', ')}</span>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-400">
+                                <span className="mr-3">
+                                  <strong className="font-normal">Template ID:</strong>{' '}
+                                  <span className="font-mono">
+                                    {resolvedInfo?.id || 'No disponible'}
+                                  </span>
+                                  {resolvedInfo?.level && (
+                                    <span className="ml-1 text-[11px] text-gray-400">
+                                      ({resolvedInfo.level})
+                                    </span>
+                                  )}
+                                </span>
+                                <span>
+                                  <strong className="font-normal">Resolver:</strong>{' '}
+                                  <span className="font-mono">
+                                    trigger_type={template.trigger_type} · business_id=
+                                    {formatResolverValue(resolverBusinessId)} · business_group_id=
+                                    {formatResolverValue(resolverBusinessGroupId)}
+                                  </span>
+                                </span>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 ml-4">

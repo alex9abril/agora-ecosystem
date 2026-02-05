@@ -39,6 +39,14 @@ export interface BranchTaxSettings {
   show_tax_included_label: boolean;
 }
 
+export type BranchNotificationType = 'user_registration' | 'order_confirmation' | 'order_status_change';
+
+export interface BranchNotificationSetting {
+  notification_type: BranchNotificationType;
+  email_enabled: boolean;
+  whatsapp_enabled: boolean;
+}
+
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   included_in_price: false,
   display_tax_breakdown: true,
@@ -134,6 +142,17 @@ export const branchesService = {
       console.warn('[branchesService] No se pudo obtener configuracion de impuestos, usando defaults:', error);
       return DEFAULT_BRANCH_TAX_SETTINGS;
     }
+  },
+
+  /**
+   * Obtener configuracion de notificaciones de una sucursal
+   */
+  async getBranchNotificationSettings(businessId: string): Promise<BranchNotificationSetting[]> {
+    const response = await apiRequest<{ notifications?: BranchNotificationSetting[] }>(
+      `/businesses/branches/id/${businessId}/notification-settings`,
+      { method: 'GET' },
+    );
+    return response?.notifications || (response as any) || [];
   },
 };
 

@@ -39,5 +39,14 @@ export class KarlopayController {
     await this.karlopayService.processPaymentWebhook(webhookDto);
     return { success: true, message: 'Webhook procesado exitosamente' };
   }
+
+  @Post('confirm-redirect')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmación de pago desde redirect de Karlopay (público)' })
+  @ApiResponse({ status: 200, description: 'Confirmación procesada' })
+  async confirmRedirect(@Body() payload: any) {
+    return this.karlopayService.processRedirectConfirmation(payload);
+  }
 }
 

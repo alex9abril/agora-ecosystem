@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import { IntegrationsService, KarlopayCredentials } from '../../settings/integrations.service';
 import { EmailService } from '../../email/email.service';
+import { BusinessesService } from '../../businesses/businesses.service';
+import { KarbotService } from '../../businesses/karbot.service';
+import { IntegrationLogsService } from '../../settings/integration-logs.service';
 import { supabaseAdmin } from '../../../config/supabase.config';
 import axios, { AxiosInstance } from 'axios';
 import { CreateKarlopayOrderDto } from './dto/create-karlopay-order.dto';
@@ -35,7 +38,10 @@ export class KarlopayService {
 
   constructor(
     private readonly integrationsService: IntegrationsService,
-    private readonly emailService: EmailService
+    private readonly emailService: EmailService,
+    private readonly businessesService: BusinessesService,
+    private readonly karbotService: KarbotService,
+    private readonly integrationLogs: IntegrationLogsService,
   ) {}
 
   /**
@@ -171,6 +177,23 @@ export class KarlopayService {
         },
       });
 
+      // Log de parámetros enviados (sin credenciales)
+      this.logger.debug('📦 Payload enviado a Karlopay:', {
+        businessArea: orderDto.businessArea,
+        numberOfOrder: orderDto.numberOfOrder,
+        status: orderDto.status,
+        total: orderDto.total,
+        customer: {
+          foreignId: orderDto.customer?.foreignId,
+          fullName: orderDto.customer?.fullName,
+          phoneNumber: orderDto.customer?.phoneNumber,
+          email: orderDto.customer?.email,
+        },
+        operationsCount: orderDto.operations?.length || 0,
+        redirectUrl: orderDto.redirectUrl,
+        additional: orderDto.additional,
+      });
+
       const response = await axiosInstance.post<KarlopayOrderResponse>(
         ordersUrl,
         orderDto
@@ -185,6 +208,26 @@ export class KarlopayService {
       }
 
       this.logger.log(`✅ Orden ${orderDto.numberOfOrder} procesada exitosamente. URL de pago: ${urlPayment}`);
+      this.logger.debug(`[Karlopay] businessArea para orden ${orderDto.numberOfOrder}:`, {
+        businessArea: orderDto.businessArea,
+      });
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'order_create_or_update',
+        channel: 'api',
+        status: 'success',
+        message: `Orden ${orderDto.numberOfOrder} creada/actualizada`,
+        requestPayload: {
+          numberOfOrder: orderDto.numberOfOrder,
+          total: orderDto.total,
+          businessArea: orderDto.businessArea,
+        },
+        responsePayload: {
+          id: response.data.id,
+          numberOfOrder: response.data.numberOfOrder,
+          status: response.data.status,
+        },
+      });
 
       return {
         ...response.data,
@@ -194,6 +237,21 @@ export class KarlopayService {
       this.logger.error('Error creando/actualizando orden en Karlopay:', {
         error: error.response?.data || error.message,
         orderNumber: orderDto.numberOfOrder,
+      });
+
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'order_create_or_update',
+        channel: 'api',
+        status: 'failed',
+        message: 'Error creando/actualizando orden en Karlopay',
+        errorMessage: error.response?.data?.message || error.message,
+        requestPayload: {
+          numberOfOrder: orderDto.numberOfOrder,
+          total: orderDto.total,
+          businessArea: orderDto.businessArea,
+        },
+        responsePayload: error.response?.data || null,
       });
 
       throw new ServiceUnavailableException(
@@ -217,6 +275,19 @@ export class KarlopayService {
     
     try {
       await client.query('BEGIN');
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'webhook_received',
+        channel: 'api',
+        status: 'success',
+        message: `Webhook recibido para ${webhookDto.numberOfOrder}`,
+        requestPayload: {
+          numberOfOrder: webhookDto.numberOfOrder,
+          referenceNumber: webhookDto.referenceNumber,
+          paymentInformation: webhookDto.paymentInformation || null,
+          additional: webhookDto.additional || null,
+        },
+      });
 
       // Buscar órdenes relacionadas con este numberOfOrder
       // El numberOfOrder se guarda en delivery_notes como "Karlopay Order: {numberOfOrder}"
@@ -235,7 +306,7 @@ export class KarlopayService {
       if (orderGroupId) {
         // Buscar por order_group_id
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
            FROM orders.orders o
            WHERE o.order_group_id = $1`,
           [orderGroupId]
@@ -246,7 +317,7 @@ export class KarlopayService {
       // Si no se encontraron por order_group_id, buscar por numberOfOrder en delivery_notes
       if (!ordersResult || ordersResult.rows.length === 0) {
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
            FROM orders.orders o
            WHERE o.delivery_notes LIKE $1`,
           [`%Karlopay Order: ${numberOfOrder}%`]
@@ -257,7 +328,7 @@ export class KarlopayService {
       // Si aún no se encontraron, buscar por external_reference en payment_transactions
       if (!ordersResult || ordersResult.rows.length === 0) {
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
            FROM orders.orders o
            INNER JOIN orders.payment_transactions pt ON pt.order_id = o.id
            WHERE pt.external_reference = $1 OR pt.transaction_id = $1`,
@@ -268,6 +339,17 @@ export class KarlopayService {
 
       if (!ordersResult || ordersResult.rows.length === 0) {
         this.logger.warn(`⚠️ No se encontraron órdenes para numberOfOrder: ${numberOfOrder}, orderGroupId: ${orderGroupId}`);
+        await this.integrationLogs.log({
+          integration: 'karlopay',
+          eventType: 'webhook_orders_not_found',
+          channel: 'api',
+          status: 'failed',
+          message: 'Webhook sin orden asociada',
+          requestPayload: {
+            numberOfOrder,
+            orderGroupId,
+          },
+        });
         // No hacer rollback, solo loguear el warning para debugging
         await client.query('ROLLBACK');
         return;
@@ -441,19 +523,69 @@ export class KarlopayService {
                 [order.id]
               );
               this.logger.log(`✅ Orden ${order.id} marcada como pagada (todas las transacciones completadas)`);
-              
-              // Enviar correo de confirmación de pedido (no bloquea el flujo si falla)
-              this.sendOrderConfirmationEmail(order.id, order.business_id).catch((error) => {
-                this.logger.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, error);
+
+              await this.integrationLogs.log({
+                integration: 'karlopay',
+                eventType: 'payment_confirmed',
+                channel: 'api',
+                status: 'success',
+                businessId: order.business_id,
+                userId: order.client_id,
+                orderId: order.id,
+                message: 'Pago confirmado por webhook de Karlopay',
+                metadata: {
+                  totalCompleted,
+                  orderTotal,
+                  paymentStatus,
+                },
               });
             } else {
               this.logger.warn(`⚠️ Orden ${order.id} no marcada como pagada: monto completado (${totalCompleted}) < total orden (${orderTotal})`);
+              await this.integrationLogs.log({
+                integration: 'karlopay',
+                eventType: 'payment_not_confirmed',
+                channel: 'api',
+                status: 'skipped',
+                businessId: order.business_id,
+                userId: order.client_id,
+                orderId: order.id,
+                message: 'Monto completado menor al total de la orden',
+                metadata: {
+                  totalCompleted,
+                  orderTotal,
+                },
+              });
             }
           } else {
             this.logger.log(`⏳ Orden ${order.id} aún tiene transacciones pendientes: ${parseInt(completed)}/${parseInt(total)} completadas`);
+            await this.integrationLogs.log({
+              integration: 'karlopay',
+              eventType: 'payment_not_confirmed',
+              channel: 'api',
+              status: 'skipped',
+              businessId: order.business_id,
+              userId: order.client_id,
+              orderId: order.id,
+              message: 'Transacciones pendientes',
+              metadata: {
+                totalTransactions: parseInt(total),
+                completedTransactions: parseInt(completed),
+              },
+            });
           }
         } else {
           this.logger.warn(`⚠️ Pago no completado para orden ${order.id}: paymentStatus = ${paymentStatus}`);
+          await this.integrationLogs.log({
+            integration: 'karlopay',
+            eventType: 'payment_not_confirmed',
+            channel: 'api',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'paymentStatus != completed',
+            metadata: { paymentStatus },
+          });
         }
       }
 
@@ -463,6 +595,199 @@ export class KarlopayService {
       await client.query('ROLLBACK');
       this.logger.error(`❌ Error procesando webhook de KarloPay:`, error);
       throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Procesar confirmación desde redirect (cuando Karlopay regresa al sitio)
+   */
+  async processRedirectConfirmation(payload: any): Promise<{ status: string; message: string }> {
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) {
+      return { status: 'error', message: 'DB no configurada' };
+    }
+
+    const sessionId = (payload?.session_id || payload?.sessionId || payload?.id || '').toString();
+    if (!sessionId) {
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'redirect_invalid',
+        channel: 'api',
+        status: 'failed',
+        message: 'session_id requerido',
+        requestPayload: payload,
+      });
+      return { status: 'error', message: 'session_id requerido' };
+    }
+
+    const client = await dbPool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const alreadyReceived = await client.query(
+        `SELECT 1
+         FROM communication.integration_logs
+         WHERE integration = 'karlopay'
+           AND event_type = 'redirect_received'
+           AND request_payload->>'session_id' = $1
+         LIMIT 1`,
+        [sessionId],
+      );
+
+      if (alreadyReceived.rows.length > 0) {
+        await this.integrationLogs.log({
+          integration: 'karlopay',
+          eventType: 'redirect_duplicate',
+          channel: 'api',
+          status: 'skipped',
+          message: 'Redirect duplicado ignorado',
+          requestPayload: { sessionId },
+        });
+        await client.query('ROLLBACK');
+        return { status: 'ok', message: 'Redirect ya procesado' };
+      }
+
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'redirect_received',
+        channel: 'api',
+        status: 'success',
+        message: `Redirect recibido para ${sessionId}`,
+        requestPayload: { ...payload, session_id: sessionId },
+      });
+
+      const ordersResult = await client.query(
+        `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
+         FROM orders.orders o
+         LEFT JOIN orders.payment_transactions pt ON pt.order_id = o.id
+         WHERE o.delivery_notes LIKE $1
+            OR pt.external_reference = $2
+            OR pt.transaction_id = $2`,
+        [`%Karlopay Order: ${sessionId}%`, sessionId],
+      );
+
+      if (ordersResult.rows.length === 0) {
+        await this.integrationLogs.log({
+          integration: 'karlopay',
+          eventType: 'redirect_orders_not_found',
+          channel: 'api',
+          status: 'failed',
+          message: 'Redirect sin orden asociada',
+          requestPayload: { sessionId },
+        });
+        await client.query('ROLLBACK');
+        return { status: 'not_found', message: 'Orden no encontrada' };
+      }
+
+      let confirmedCount = 0;
+      let skippedCount = 0;
+
+      for (const order of ordersResult.rows) {
+        await this.integrationLogs.log({
+          integration: 'karlopay',
+          eventType: 'redirect_order_linked',
+          channel: 'api',
+          status: 'success',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Orden vinculada al redirect',
+          requestPayload: { sessionId },
+        });
+        const payments = await client.query(
+          `SELECT COUNT(*) as total,
+                  COUNT(*) FILTER (WHERE status = 'completed') as completed,
+                  SUM(amount) FILTER (WHERE status = 'completed') as total_completed_amount
+           FROM orders.payment_transactions
+           WHERE order_id = $1`,
+          [order.id],
+        );
+
+        const { total, completed, total_completed_amount } = payments.rows[0];
+        const totalCompleted = parseFloat(total_completed_amount || '0');
+        const orderTotal = parseFloat(order.total_amount || '0');
+
+        if (parseInt(total) === 0 || parseInt(completed) !== parseInt(total) || totalCompleted < orderTotal - 0.01) {
+          await this.integrationLogs.log({
+            integration: 'karlopay',
+            eventType: 'redirect_payment_not_confirmed',
+            channel: 'api',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'Pago no confirmado en redirect',
+            metadata: { total, completed, totalCompleted, orderTotal },
+          });
+          skippedCount += 1;
+          continue;
+        }
+
+        const alreadySent = await client.query(
+          `SELECT 1
+           FROM communication.integration_logs
+           WHERE order_id = $1
+             AND event_type = 'order_confirmation'
+             AND status = 'success'
+             AND integration IN ('email', 'karbot')
+           LIMIT 1`,
+          [order.id],
+        );
+
+        if (alreadySent.rows.length > 0) {
+          await this.integrationLogs.log({
+            integration: 'notifications',
+            eventType: 'order_confirmation',
+            channel: 'email/whatsapp',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'Notificaciones ya enviadas previamente',
+          });
+          skippedCount += 1;
+          continue;
+        }
+
+        await this.integrationLogs.log({
+          integration: 'notifications',
+          eventType: 'order_confirmation',
+          channel: 'email/whatsapp',
+          status: 'success',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Disparando notificaciones desde redirect',
+        });
+
+        await this.sendOrderConfirmationEmail(order.id, order.business_id);
+        confirmedCount += 1;
+      }
+
+      await client.query('COMMIT');
+      if (confirmedCount > 0) {
+        return { status: 'ok', message: 'Notificaciones enviadas' };
+      }
+      if (skippedCount > 0) {
+        return { status: 'pending', message: 'Pago aún no confirmado' };
+      }
+      return { status: 'pending', message: 'Sin acciones para procesar' };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      this.logger.error('❌ Error procesando redirect de Karlopay:', error);
+      await this.integrationLogs.log({
+        integration: 'karlopay',
+        eventType: 'redirect_failed',
+        channel: 'api',
+        status: 'failed',
+        message: 'Error procesando redirect',
+        errorMessage: error?.message || String(error),
+        requestPayload: payload,
+      });
+      return { status: 'error', message: error?.message || 'Error procesando redirect' };
     } finally {
       client.release();
     }
@@ -493,6 +818,27 @@ export class KarlopayService {
       return authUser.user.email;
     } catch (error: any) {
       this.logger.error(`❌ Error obteniendo email del usuario ${userId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtener telefono del usuario desde core.user_profiles
+   */
+  private async getUserPhone(userId: string): Promise<string | null> {
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) {
+      return null;
+    }
+
+    try {
+      const result = await dbPool.query(
+        `SELECT phone FROM core.user_profiles WHERE id = $1`,
+        [userId],
+      );
+      return result.rows[0]?.phone || null;
+    } catch (error: any) {
+      this.logger.error(`❌ Error obteniendo telefono del usuario ${userId}:`, error);
       return null;
     }
   }
@@ -529,11 +875,39 @@ export class KarlopayService {
       }
 
       const order = orderResult.rows[0];
+      const channels = await this.businessesService.getNotificationChannels(
+        order.business_id,
+        'order_confirmation',
+      );
+
+      if (!channels.emailEnabled && !channels.whatsappEnabled) {
+        await this.integrationLogs.log({
+          integration: 'notifications',
+          eventType: 'order_confirmation',
+          channel: 'email/whatsapp',
+          status: 'skipped',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Notificaciones deshabilitadas para la sucursal',
+        });
+        return;
+      }
+
       const userEmail = await this.getUserEmail(order.client_id);
 
-      if (!userEmail) {
+      if (channels.emailEnabled && !userEmail) {
         this.logger.warn(`⚠️ No se pudo obtener email del usuario ${order.client_id} para enviar correo de confirmación`);
-        return;
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'order_confirmation',
+          channel: 'email',
+          status: 'skipped',
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: 'Email no disponible para notificación',
+        });
       }
 
       // Formatear datos
@@ -549,17 +923,63 @@ export class KarlopayService {
       const paymentMethod = order.payment_method || 'No especificado';
       const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
 
-      // Enviar correo
-      await this.emailService.sendOrderConfirmationEmail(
-        userEmail,
-        orderNumber,
-        orderDate,
-        orderTotal,
-        paymentMethod,
-        orderUrl,
-        order.business_id,
-        order.business_group_id
-      );
+      if (channels.emailEnabled && userEmail) {
+        const emailStatus = await this.emailService.sendOrderConfirmationEmail(
+          userEmail,
+          orderNumber,
+          orderDate,
+          orderTotal,
+          paymentMethod,
+          orderUrl,
+          order.business_id,
+          order.business_group_id,
+          { userId: order.client_id, orderId: order.id }
+        );
+
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'order_confirmation',
+          channel: 'email',
+          status: emailStatus,
+          businessId: order.business_id,
+          userId: order.client_id,
+          orderId: order.id,
+          message: `Envio de correo de confirmacion: ${emailStatus}`,
+        });
+      }
+
+      if (channels.whatsappEnabled) {
+        const userPhone = await this.getUserPhone(order.client_id);
+        if (!userPhone) {
+          this.logger.warn(`⚠️ No se pudo obtener telefono del usuario ${order.client_id} para WhatsApp`);
+          await this.integrationLogs.log({
+            integration: 'karbot',
+            eventType: 'order_confirmation',
+            channel: 'whatsapp',
+            status: 'skipped',
+            businessId: order.business_id,
+            userId: order.client_id,
+            orderId: order.id,
+            message: 'Telefono no disponible para WhatsApp',
+          });
+        } else {
+          await this.karbotService.sendWhatsappNotification({
+            businessId: order.business_id,
+            triggerType: 'order_confirmation',
+            to: userPhone,
+            userId: order.client_id,
+            orderId: order.id,
+            data: {
+              order_id: order.id,
+              order_number: orderNumber,
+              order_date: orderDate,
+              order_total: orderTotal,
+              payment_method: paymentMethod,
+              order_url: orderUrl,
+            },
+          });
+        }
+      }
     } catch (error: any) {
       this.logger.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo

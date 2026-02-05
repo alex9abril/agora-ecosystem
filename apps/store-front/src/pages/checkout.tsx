@@ -18,6 +18,7 @@ import { productsService } from '@/lib/products';
 import { walletService, Wallet } from '@/lib/wallet';
 import { logisticsService, type Address as LogisticsAddress, type Parcel } from '@/lib/logistics';
 import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import { authService } from '@/lib/auth';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
@@ -84,7 +85,7 @@ interface ShippingSelection {
 export default function CheckoutPage() {
   const router = useRouter();
   const { cart, loading: cartLoading, refreshCart } = useCart();
-  const { isAuthenticated, signIn, signUp, user } = useAuth();
+  const { isAuthenticated, signIn, signUp, user, token, refreshUser } = useAuth();
   const { contextType, slug, getContextualUrl, groupId, branchId } = useStoreContext();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('auth');
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -96,12 +97,20 @@ export default function CheckoutPage() {
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
   const [branchTaxSettings, setBranchTaxSettings] = useState<Record<string, BranchTaxSettings>>({});
+  const [branchWhatsappEnabledById, setBranchWhatsappEnabledById] = useState<Record<string, boolean>>({});
+  const [showWhatsappPrompt, setShowWhatsappPrompt] = useState(false);
+  const [whatsappPromptDismissed, setWhatsappPromptDismissed] = useState(false);
+  const [whatsappPhoneInput, setWhatsappPhoneInput] = useState('');
+  const [whatsappSaving, setWhatsappSaving] = useState(false);
+  const [whatsappError, setWhatsappError] = useState('');
   const [backorderByItemId, setBackorderByItemId] = useState<Record<string, { isBackorder: boolean; leadTimeDays?: number | null }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const getBranchSettings = (businessId: string) =>
     branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
+
+  const userPhone = (user?.profile?.phone || user?.phone || '').trim();
   
   // Estados para autenticación
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -176,6 +185,55 @@ export default function CheckoutPage() {
       isCancelled = true;
     };
   }, [cart?.items?.map((item) => `${item.id}:${item.business_id || ''}`).join(',')]);
+
+  useEffect(() => {
+    if (!cart?.items || cart.items.length === 0) {
+      setBranchWhatsappEnabledById({});
+      return;
+    }
+
+    let isCancelled = false;
+    const businessIds = Array.from(
+      new Set(cart.items.map((item) => item.business_id).filter(Boolean) as string[]),
+    );
+
+    const loadWhatsappConfig = async () => {
+      const entries = await Promise.all(
+        businessIds.map(async (businessId) => {
+          try {
+            const settings = await branchesService.getBranchNotificationSettings(businessId);
+            const hasWhatsapp = settings.some((item) => item.whatsapp_enabled);
+            return [businessId, hasWhatsapp] as const;
+          } catch (error) {
+            return [businessId, false] as const;
+          }
+        }),
+      );
+
+      if (!isCancelled) {
+        setBranchWhatsappEnabledById(Object.fromEntries(entries));
+      }
+    };
+
+    loadWhatsappConfig();
+    return () => {
+      isCancelled = true;
+    };
+  }, [cart?.items?.map((item) => `${item.id}:${item.business_id || ''}`).join(',')]);
+
+  useEffect(() => {
+    if (!isAuthenticated || whatsappPromptDismissed) {
+      return;
+    }
+
+    const anyWhatsappEnabled = Object.values(branchWhatsappEnabledById).some(Boolean);
+    if (anyWhatsappEnabled && !userPhone) {
+      setShowWhatsappPrompt(true);
+      return;
+    }
+
+    setShowWhatsappPrompt(false);
+  }, [isAuthenticated, branchWhatsappEnabledById, userPhone, whatsappPromptDismissed]);
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   
   // Estados para facturación
@@ -1464,6 +1522,74 @@ export default function CheckoutPage() {
         <title>Checkout - Agora</title>
       </Head>
       <StoreLayout>
+        {showWhatsappPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-md rounded-lg bg-white shadow-lg">
+              <div className="border-b border-gray-200 px-6 py-4">
+                <h2 className="text-lg font-medium text-gray-900">Notificaciones por WhatsApp</h2>
+              </div>
+              <div className="px-6 py-4 space-y-3">
+                <p className="text-sm text-gray-700">
+                  Podemos notificarte por WhatsApp pero para ello debes proporcionarnos tu número.
+                </p>
+                <input
+                  type="tel"
+                  value={whatsappPhoneInput}
+                  onChange={(e) => {
+                    setWhatsappPhoneInput(e.target.value);
+                    setWhatsappError('');
+                  }}
+                  placeholder="Ej: +525512345678"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+                {whatsappError && (
+                  <p className="text-xs text-red-600">{whatsappError}</p>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWhatsappPrompt(false);
+                    setWhatsappPromptDismissed(true);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  Omitir por ahora
+                </button>
+                <button
+                  type="button"
+                  disabled={whatsappSaving}
+                  onClick={async () => {
+                    if (!token) {
+                      setWhatsappError('Inicia sesión para guardar tu número.');
+                      return;
+                    }
+                    const phone = whatsappPhoneInput.trim();
+                    if (!phone) {
+                      setWhatsappError('Ingresa un número de teléfono válido.');
+                      return;
+                    }
+                    try {
+                      setWhatsappSaving(true);
+                      await authService.updateProfile(token, { phone });
+                      await refreshUser();
+                      setShowWhatsappPrompt(false);
+                      setWhatsappPromptDismissed(true);
+                    } catch (err: any) {
+                      setWhatsappError(err?.message || 'No se pudo guardar el teléfono.');
+                    } finally {
+                      setWhatsappSaving(false);
+                    }
+                  }}
+                  className="rounded-md bg-black px-4 py-2 text-sm text-white hover:bg-gray-900 disabled:opacity-50"
+                >
+                  {whatsappSaving ? 'Guardando...' : 'Guardar número'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto py-8">
           <h1 className="text-3xl font-medium text-gray-900 mb-8">Finalizar Compra</h1>
 

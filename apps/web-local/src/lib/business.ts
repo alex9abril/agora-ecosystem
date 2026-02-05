@@ -156,12 +156,30 @@ export interface BranchKarbotSettings {
     username?: string;
     password?: string;
     endpoint?: string;
+    template_ids?: {
+      user_registration?: string;
+      order_confirmation?: string;
+      order_status_change?: string;
+    };
   };
   prod: {
     username?: string;
     password?: string;
     endpoint?: string;
+    template_ids?: {
+      user_registration?: string;
+      order_confirmation?: string;
+      order_status_change?: string;
+    };
   };
+}
+
+export type BranchNotificationType = 'user_registration' | 'order_confirmation' | 'order_status_change';
+
+export interface BranchNotificationSetting {
+  notification_type: BranchNotificationType;
+  email_enabled: boolean;
+  whatsapp_enabled: boolean;
 }
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
@@ -515,6 +533,36 @@ export const businessService = {
       console.error('[BusinessService] Error actualizando configuracion de impuestos de la sucursal:', error);
       throw error;
     }
+  },
+
+  /**
+   * Obtener configuracion de notificaciones de una sucursal
+   */
+  async getBranchNotificationSettings(businessId: string): Promise<BranchNotificationSetting[]> {
+    const response = await apiRequest<{ notifications?: BranchNotificationSetting[] }>(
+      `/businesses/${businessId}/notification-settings`,
+      {
+        method: 'GET',
+      },
+    );
+    return response?.notifications || (response as any) || [];
+  },
+
+  /**
+   * Actualizar configuracion de notificaciones de una sucursal
+   */
+  async updateBranchNotificationSettings(
+    businessId: string,
+    settings: BranchNotificationSetting[],
+  ): Promise<BranchNotificationSetting[]> {
+    const response = await apiRequest<{ notifications?: BranchNotificationSetting[] }>(
+      `/businesses/${businessId}/notification-settings`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ settings }),
+      },
+    );
+    return response?.notifications || (response as any) || [];
   },
 
   /**

@@ -4,7 +4,7 @@
  * Soporta rutas como: /grupo/{slug}/karlopay-redirect o /sucursal/{slug}/karlopay-redirect
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
@@ -21,6 +21,8 @@ export default function KarlopayRedirectPage() {
   const [paymentStatus, setPaymentStatus] = useState<'success' | 'error' | 'pending'>('pending');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [redirected, setRedirected] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState<string>('');
+  const confirmRequestedRef = useRef(false);
 
   useEffect(() => {
     // Esperar a que el router esté listo
@@ -28,26 +30,45 @@ export default function KarlopayRedirectPage() {
 
     // Verificar si hay parámetros de sesión
     if (session_id || id) {
-      // Aquí podrías hacer una llamada al backend para verificar el estado del pago
-      // Por ahora, asumimos éxito si hay session_id o id
-      setPaymentStatus('success');
+      if (confirmRequestedRef.current) {
+        return;
+      }
+      confirmRequestedRef.current = true;
+      const payload = {
+        session_id: session_id || null,
+        id: id || null,
+        status: status || null,
+        error: error || null,
+      };
+
+      console.log('[KarlopayRedirect] Parámetros recibidos:', payload);
+
+      apiRequest('/payments/karlopay/confirm-redirect', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+        .then((response: any) => {
+          const responseStatus = response?.status || 'ok';
+          setConfirmMessage(response?.message || 'Confirmación procesada');
+
+          if (responseStatus === 'ok') {
+            setPaymentStatus('success');
+          } else if (responseStatus === 'pending') {
+            setPaymentStatus('pending');
+          } else {
+            setPaymentStatus('error');
+            setErrorMessage(response?.message || 'No se pudo confirmar el pago');
+          }
+        })
+        .catch((err: any) => {
+          setConfirmMessage(err?.message || 'Error al confirmar el pago');
+          setPaymentStatus('error');
+          setErrorMessage(err?.message || 'No se pudo confirmar el pago');
+        });
+
       setLoading(false);
 
-      // Redirigir a la página de pedidos después de 3 segundos
-      // Solo si no hemos redirigido ya
-      if (!redirected) {
-        const timeoutId = setTimeout(() => {
-          setRedirected(true);
-          // Usar la URL contextual para mantener el contexto de tienda
-          const ordersUrl = getContextualUrl('/orders');
-          router.replace(ordersUrl).catch((err) => {
-            console.error('Error redirigiendo a /orders:', err);
-            window.location.href = ordersUrl;
-          });
-        }, 3000);
-
-        return () => clearTimeout(timeoutId);
-      }
+      setLoading(false);
     } else if (error) {
       setPaymentStatus('error');
       setErrorMessage(error as string);
@@ -58,7 +79,22 @@ export default function KarlopayRedirectPage() {
       setErrorMessage('No se recibió información del pago');
       setLoading(false);
     }
-  }, [session_id, id, error, router.isReady, router, redirected, getContextualUrl]);
+  }, [session_id, id, status, error, router.isReady, router, getContextualUrl]);
+
+  useEffect(() => {
+    if (paymentStatus !== 'success' || redirected) return;
+
+    const timeoutId = setTimeout(() => {
+      setRedirected(true);
+      const ordersUrl = getContextualUrl('/orders');
+      router.replace(ordersUrl).catch((err) => {
+        console.error('Error redirigiendo a /orders:', err);
+        window.location.href = ordersUrl;
+      });
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [paymentStatus, redirected, getContextualUrl, router]);
 
   const handleGoToOrders = () => {
     setRedirected(true);
@@ -105,8 +141,34 @@ export default function KarlopayRedirectPage() {
               <p className="text-lg text-gray-600 mb-4">
                 Tu pago ha sido procesado correctamente.
               </p>
+              <div className="text-xs text-gray-500 mb-4 space-y-1">
+                <p>session_id: {String(session_id || '')}</p>
+                <p>id: {String(id || '')}</p>
+                <p>status: {String(status || '')}</p>
+                <p>error: {String(error || '')}</p>
+                {confirmMessage && <p>confirm: {confirmMessage}</p>}
+              </div>
               <p className="text-sm text-gray-500 mb-6">
                 Serás redirigido a tus pedidos en unos segundos...
+              </p>
+              <button
+                onClick={handleGoToOrders}
+                className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
+              >
+                Ver Mis Pedidos
+              </button>
+            </div>
+          ) : paymentStatus === 'pending' ? (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-yellow-100 mb-6">
+                <CheckCircleIcon className="w-16 h-16 text-yellow-600" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-3">Pago en validación</h1>
+              <p className="text-lg text-gray-600 mb-4">
+                Estamos validando tu pago con el proveedor.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                Puedes esperar unos minutos o revisar tus pedidos más tarde.
               </p>
               <button
                 onClick={handleGoToOrders}

@@ -48,6 +48,15 @@ export class OrdersController {
     return this.ordersService.findAll(user.id);
   }
 
+  @Get('logs')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar pedidos con logs de integraciones' })
+  @ApiResponse({ status: 200, description: 'Lista de pedidos con logs obtenida exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async findOrdersWithLogs() {
+    return this.ordersService.findOrdersWithIntegrationLogs();
+  }
+
   @Get(':id')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener detalle de pedido' })
@@ -57,6 +66,16 @@ export class OrdersController {
   @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
   async findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.ordersService.findOne(id, user.id);
+  }
+
+  @Get(':id/logs')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener logs de integraciones por pedido' })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Logs del pedido obtenidos exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async getOrderLogs(@Param('id') id: string) {
+    return this.ordersService.getIntegrationLogsByOrder(id);
   }
 
   @Post(':id/cancel')

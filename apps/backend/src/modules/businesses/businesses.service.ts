@@ -21,6 +21,12 @@ type BusinessTaxSettings = {
   show_tax_included_label: boolean;
 };
 
+type BranchNotificationSetting = {
+  notification_type: 'user_registration' | 'order_confirmation' | 'order_status_change';
+  email_enabled: boolean;
+  whatsapp_enabled: boolean;
+};
+
 const DEFAULT_TAX_SETTINGS: BusinessTaxSettings = {
   included_in_price: false,
   display_tax_breakdown: true,
@@ -2616,6 +2622,183 @@ export class BusinessesService {
   }
 
   // ============================================================================
+  // NOTIFICATION SETTINGS
+  // ============================================================================
+
+  private readonly DEFAULT_NOTIFICATION_SETTINGS: BranchNotificationSetting[] = [
+    { notification_type: 'user_registration', email_enabled: false, whatsapp_enabled: false },
+    { notification_type: 'order_confirmation', email_enabled: false, whatsapp_enabled: false },
+    { notification_type: 'order_status_change', email_enabled: false, whatsapp_enabled: false },
+  ];
+
+  async getBusinessNotificationSettings(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const businessResult = await pool.query(
+        `SELECT id FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const settingsResult = await pool.query(
+        `SELECT notification_type, email_enabled, whatsapp_enabled
+         FROM communication.branch_notification_settings
+         WHERE business_id = $1`,
+        [businessId],
+      );
+
+      const settingsByType = new Map<string, BranchNotificationSetting>();
+      for (const row of settingsResult.rows) {
+        settingsByType.set(row.notification_type, {
+          notification_type: row.notification_type,
+          email_enabled: !!row.email_enabled,
+          whatsapp_enabled: !!row.whatsapp_enabled,
+        });
+      }
+
+      const notifications = this.DEFAULT_NOTIFICATION_SETTINGS.map((base) => ({
+        ...base,
+        ...(settingsByType.get(base.notification_type) || {}),
+      }));
+
+      return { notifications };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion de notificaciones de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion de notificaciones: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessNotificationSettingsBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT id FROM core.businesses WHERE slug = $1 AND is_active = TRUE`,
+        [slug],
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return this.getBusinessNotificationSettings(result.rows[0].id);
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion de notificaciones por slug:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion de notificaciones: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessNotificationSettingsForUser(businessId: string, userId: string) {
+    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+
+    return this.getBusinessNotificationSettings(businessId);
+  }
+
+  async getNotificationChannels(
+    businessId: string,
+    notificationType: BranchNotificationSetting['notification_type'],
+  ) {
+    const result = await this.getBusinessNotificationSettings(businessId);
+    const match = result.notifications.find(
+      (item: BranchNotificationSetting) => item.notification_type === notificationType,
+    );
+
+    return {
+      emailEnabled: !!match?.email_enabled,
+      whatsappEnabled: !!match?.whatsapp_enabled,
+    };
+  }
+
+  async updateBusinessNotificationSettings(
+    businessId: string,
+    userId: string,
+    updateDto: { settings: BranchNotificationSetting[] },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+
+      const businessResult = await pool.query(
+        `SELECT id FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const allowedTypes = new Set(
+        this.DEFAULT_NOTIFICATION_SETTINGS.map((item) => item.notification_type),
+      );
+
+      const sanitizedSettings = (updateDto.settings || []).filter((setting) =>
+        allowedTypes.has(setting.notification_type),
+      );
+
+      for (const setting of sanitizedSettings) {
+        await pool.query(
+          `INSERT INTO communication.branch_notification_settings
+           (business_id, notification_type, email_enabled, whatsapp_enabled)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (business_id, notification_type)
+           DO UPDATE SET
+             email_enabled = EXCLUDED.email_enabled,
+             whatsapp_enabled = EXCLUDED.whatsapp_enabled`,
+          [
+            businessId,
+            setting.notification_type,
+            !!setting.email_enabled,
+            !!setting.whatsapp_enabled,
+          ],
+        );
+      }
+
+      return this.getBusinessNotificationSettings(businessId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error actualizando configuracion de notificaciones de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuracion de notificaciones: ${error.message}`,
+      );
+    }
+  }
+
+  // ============================================================================
   // KARBOT SETTINGS
   // ============================================================================
 
@@ -2628,11 +2811,21 @@ export class BusinessesService {
       username: '',
       password: '',
       endpoint: '',
+      template_ids: {
+        user_registration: '',
+        order_confirmation: '',
+        order_status_change: '',
+      },
     },
     prod: {
       username: '',
       password: '',
       endpoint: '',
+      template_ids: {
+        user_registration: '',
+        order_confirmation: '',
+        order_status_change: '',
+      },
     },
   };
 

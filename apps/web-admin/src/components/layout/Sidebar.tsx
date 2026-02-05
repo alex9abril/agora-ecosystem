@@ -48,6 +48,15 @@ const menuItems: MenuItem[] = [
     ),
   },
   {
+    name: 'Bitácora',
+    href: '/bitacora',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2a4 4 0 014-4h6M9 17H5a2 2 0 01-2-2V7a2 2 0 012-2h8a2 2 0 012 2v2M9 17h6m4 4H7a2 2 0 01-2-2v-2" />
+      </svg>
+    ),
+  },
+  {
     name: 'Clientes',
     href: '/clients',
     icon: (

@@ -49,6 +49,9 @@ CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON core.user_profil
 CREATE TRIGGER update_businesses_updated_at BEFORE UPDATE ON core.businesses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_branch_notification_settings_updated_at BEFORE UPDATE ON communication.branch_notification_settings
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_product_categories_updated_at BEFORE UPDATE ON catalog.product_categories
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

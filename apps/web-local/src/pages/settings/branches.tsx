@@ -3,8 +3,14 @@ import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { businessService, Business, CreateBusinessData, BusinessCategory, BranchTaxSettings } from '@/lib/business';
-import type { BranchKarbotSettings } from '@/lib/business';
+import {
+  businessService,
+  Business,
+  CreateBusinessData,
+  BusinessCategory,
+  BranchTaxSettings,
+} from '@/lib/business';
+import type { BranchKarbotSettings, BranchNotificationSetting, BranchNotificationType } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
@@ -20,6 +26,7 @@ export default function BranchesPage() {
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
   const [settingsPreviewBranch, setSettingsPreviewBranch] = useState<Business | null>(null);
   const [karbotBranch, setKarbotBranch] = useState<Business | null>(null);
+  const [notificationBranch, setNotificationBranch] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -145,7 +152,12 @@ export default function BranchesPage() {
                 </p>
               </div>
 
-              {!showAddForm && !editingBranch && !brandingBranch && !settingsPreviewBranch && !karbotBranch && (
+              {!showAddForm &&
+                !editingBranch &&
+                !brandingBranch &&
+                !settingsPreviewBranch &&
+                !karbotBranch &&
+                !notificationBranch && (
                 <div className="mb-6">
                   <button
                     onClick={() => setShowAddForm(true)}
@@ -211,6 +223,11 @@ export default function BranchesPage() {
                   onBack={() => setKarbotBranch(null)}
                   onUpdated={loadBranches}
                 />
+              ) : notificationBranch ? (
+                <BranchNotificationSettings
+                  branch={notificationBranch}
+                  onBack={() => setNotificationBranch(null)}
+                />
               ) : (
                 <BranchesList 
                   branches={branches} 
@@ -219,12 +236,14 @@ export default function BranchesPage() {
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
+                    setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(branch);
                   }}
                   onBranding={(branch) => {
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
+                    setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(null);
                     setBrandingBranch(branch);
@@ -234,6 +253,7 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setKarbotBranch(null);
+                    setNotificationBranch(null);
                     setSettingsPreviewBranch(branch);
                   }}
                   onKarbotSettings={(branch) => {
@@ -241,7 +261,16 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
+                    setNotificationBranch(null);
                     setKarbotBranch(branch);
+                  }}
+                  onNotificationSettings={(branch) => {
+                    setShowAddForm(false);
+                    setEditingBranch(null);
+                    setBrandingBranch(null);
+                    setSettingsPreviewBranch(null);
+                    setKarbotBranch(null);
+                    setNotificationBranch(branch);
                   }}
                 />
               )}
@@ -260,9 +289,18 @@ interface BranchesListProps {
   onBranding?: (branch: Business) => void;
   onPreviewSettings?: (branch: Business) => void;
   onKarbotSettings?: (branch: Business) => void;
+  onNotificationSettings?: (branch: Business) => void;
 }
 
-function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettings, onKarbotSettings }: BranchesListProps) {
+function BranchesList({
+  branches,
+  onRefresh,
+  onEdit,
+  onBranding,
+  onPreviewSettings,
+  onKarbotSettings,
+  onNotificationSettings,
+}: BranchesListProps) {
   if (branches.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -369,6 +407,14 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding, onPreviewSettin
                   className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
                 >
                   Karbot
+                </button>
+              )}
+              {onNotificationSettings && (
+                <button
+                  onClick={() => onNotificationSettings(branch)}
+                  className="px-3 py-1.5 text-sm text-white bg-black rounded hover:bg-gray-900 transition-colors"
+                >
+                  Notificaciones
                 </button>
               )}
               <button
@@ -557,6 +603,202 @@ function BranchSettingsPreview({ branch, onBack, onUpdated }: BranchSettingsPrev
   );
 }
 
+interface BranchNotificationSettingsProps {
+  branch: Business;
+  onBack: () => void;
+}
+
+const DEFAULT_NOTIFICATION_SETTINGS: BranchNotificationSetting[] = [
+  { notification_type: 'user_registration', email_enabled: false, whatsapp_enabled: false },
+  { notification_type: 'order_confirmation', email_enabled: false, whatsapp_enabled: false },
+  { notification_type: 'order_status_change', email_enabled: false, whatsapp_enabled: false },
+];
+
+const NOTIFICATION_OPTIONS: Array<{
+  type: BranchNotificationType;
+  title: string;
+  description: string;
+}> = [
+  {
+    type: 'user_registration',
+    title: 'Bienvenida',
+    description: 'Se envía cuando un usuario se registra.',
+  },
+  {
+    type: 'order_confirmation',
+    title: 'Confirmación de pedido',
+    description: 'Se envía cuando el pedido queda confirmado.',
+  },
+  {
+    type: 'order_status_change',
+    title: 'Cambio de estatus del pedido',
+    description: 'Se envía cada vez que cambia el estatus del pedido.',
+  },
+];
+
+function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettingsProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<BranchNotificationSetting[]>(DEFAULT_NOTIFICATION_SETTINGS);
+
+  const loadSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await businessService.getBranchNotificationSettings(branch.id);
+      const byType = new Map<string, BranchNotificationSetting>();
+      response.forEach((item) => {
+        byType.set(item.notification_type, item);
+      });
+      const merged = DEFAULT_NOTIFICATION_SETTINGS.map((item) => ({
+        ...item,
+        ...(byType.get(item.notification_type) || {}),
+      }));
+      setSettings(merged);
+    } catch (err: any) {
+      console.error('[BranchNotificationSettings] Error cargando configuracion de notificaciones:', err);
+      setError(err?.message || 'No se pudo cargar la configuracion de notificaciones.');
+      setSettings(DEFAULT_NOTIFICATION_SETTINGS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, [branch.id]);
+
+  const updateChannel = (
+    type: BranchNotificationType,
+    channel: 'email_enabled' | 'whatsapp_enabled',
+    value: boolean,
+  ) => {
+    setSettings((prev) =>
+      prev.map((item) =>
+        item.notification_type === type ? { ...item, [channel]: value } : item,
+      ),
+    );
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      await businessService.updateBranchNotificationSettings(branch.id, settings);
+    } catch (err: any) {
+      console.error('[BranchNotificationSettings] Error guardando configuracion de notificaciones:', err);
+      setError(err?.message || 'No se pudo guardar la configuracion de notificaciones.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-gray-500">
+        Cargando configuracion de notificaciones...
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={onBack}
+            className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a sucursales
+          </button>
+          <h2 className="text-xl font-normal text-gray-900">Notificaciones</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Define si cada notificación se envía por correo, WhatsApp o ambos para la sucursal:{' '}
+            <strong>{branch.name}</strong>
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          Los templates de correo ya existen para estas notificaciones. Aquí solo defines los
+          canales por los que se enviarán.
+        </div>
+
+        <div className="space-y-4">
+          {NOTIFICATION_OPTIONS.map((option) => {
+            const config = settings.find((item) => item.notification_type === option.type);
+            const emailEnabled = config?.email_enabled ?? false;
+            const whatsappEnabled = config?.whatsapp_enabled ?? false;
+
+            return (
+              <div
+                key={option.type}
+                className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{option.title}</p>
+                  <p className="text-xs text-gray-600 mt-1">{option.description}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={emailEnabled}
+                      onChange={(e) => updateChannel(option.type, 'email_enabled', e.target.checked)}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    Correo
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={whatsappEnabled}
+                      onChange={(e) =>
+                        updateChannel(option.type, 'whatsapp_enabled', e.target.checked)
+                      }
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                    WhatsApp
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-normal text-white bg-black rounded-md hover:bg-gray-900 disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar configuracion'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface BranchKarbotSettingsProps {
   branch: Business;
   onBack: () => void;
@@ -572,11 +814,21 @@ const DEFAULT_KARBOT_SETTINGS: BranchKarbotSettings = {
     username: '',
     password: '',
     endpoint: '',
+    template_ids: {
+      user_registration: '',
+      order_confirmation: '',
+      order_status_change: '',
+    },
   },
   prod: {
     username: '',
     password: '',
     endpoint: '',
+    template_ids: {
+      user_registration: '',
+      order_confirmation: '',
+      order_status_change: '',
+    },
   },
 };
 
@@ -629,6 +881,23 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
     }));
   };
 
+  const updateTemplateField = (
+    env: 'dev' | 'prod',
+    key: 'user_registration' | 'order_confirmation' | 'order_status_change',
+    value: string,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      [env]: {
+        ...prev[env],
+        template_ids: {
+          ...(prev[env].template_ids || {}),
+          [key]: value,
+        },
+      },
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-gray-500">
@@ -640,6 +909,8 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
   const isDevMode = settings.environment === 'dev';
   const isActiveMode = settings.enabled && isDevMode;
   const isProdMode = settings.enabled && !isDevMode;
+  const activeEndpoint = isDevMode ? settings.dev.endpoint : settings.prod.endpoint;
+  const isWhatsappReady = settings.enabled && !!activeEndpoint;
 
   return (
     <div>
@@ -794,6 +1065,36 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                   placeholder="https://api.karbot.mx"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Bienvenida (user_registration)</label>
+                <input
+                  type="text"
+                  value={settings.dev.template_ids?.user_registration || ''}
+                  onChange={(e) => updateTemplateField('dev', 'user_registration', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50"
+                  placeholder="UUID del template"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Confirmación (order_confirmation)</label>
+                <input
+                  type="text"
+                  value={settings.dev.template_ids?.order_confirmation || ''}
+                  onChange={(e) => updateTemplateField('dev', 'order_confirmation', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50"
+                  placeholder="UUID del template"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Cambio Estatus (order_status_change)</label>
+                <input
+                  type="text"
+                  value={settings.dev.template_ids?.order_status_change || ''}
+                  onChange={(e) => updateTemplateField('dev', 'order_status_change', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50"
+                  placeholder="UUID del template"
+                />
+              </div>
             </div>
           </div>
 
@@ -872,6 +1173,36 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                   placeholder="https://api.karbot.mx"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Bienvenida (user_registration)</label>
+                <input
+                  type="text"
+                  value={settings.prod.template_ids?.user_registration || ''}
+                  onChange={(e) => updateTemplateField('prod', 'user_registration', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50"
+                  placeholder="UUID del template"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Confirmación (order_confirmation)</label>
+                <input
+                  type="text"
+                  value={settings.prod.template_ids?.order_confirmation || ''}
+                  onChange={(e) => updateTemplateField('prod', 'order_confirmation', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50"
+                  placeholder="UUID del template"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">Template Cambio Estatus (order_status_change)</label>
+                <input
+                  type="text"
+                  value={settings.prod.template_ids?.order_status_change || ''}
+                  onChange={(e) => updateTemplateField('prod', 'order_status_change', e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50"
+                  placeholder="UUID del template"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -894,11 +1225,17 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
               type="checkbox"
               checked={settings.whatsapp_enabled}
               onChange={(e) => setSettings((prev) => ({ ...prev, whatsapp_enabled: e.target.checked }))}
+              disabled={!isWhatsappReady}
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             />
             <span>
               <span className="block font-medium text-gray-800">Habilitar notificaciones WhatsApp</span>
               <span className="block text-xs text-gray-500">Notificar cambios de estado de pedidos.</span>
+              {!isWhatsappReady && (
+                <span className="block text-xs text-red-600 mt-1">
+                  Requiere Karbot habilitado y endpoint configurado en el ambiente activo.
+                </span>
+              )}
             </span>
           </label>
         </div>
