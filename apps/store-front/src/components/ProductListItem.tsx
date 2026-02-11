@@ -13,17 +13,21 @@ interface ProductListItemProps {
   product: Product;
   onAddToCart?: (product: Product) => void;
   overridePrice?: number;
+  pricePending?: boolean;
 }
 
-export default function ProductListItem({ product, onAddToCart, overridePrice }: ProductListItemProps) {
+export default function ProductListItem({ product, onAddToCart, overridePrice, pricePending }: ProductListItemProps) {
   const { contextType, branchId } = useStoreContext();
 
   // Determinar precio a mostrar
-  const displayPrice = overridePrice !== undefined
-    ? overridePrice
-    : contextType === 'sucursal' && product.branch_price !== undefined
-      ? product.branch_price
-      : product.price;
+  const displayPrice =
+    pricePending
+      ? null
+      : overridePrice !== undefined
+        ? overridePrice
+        : contextType === 'sucursal' && product.branch_price !== undefined
+          ? product.branch_price
+          : product.price;
 
   // Determinar si está disponible
   const isAvailable = contextType === 'sucursal' 
@@ -147,13 +151,18 @@ export default function ProductListItem({ product, onAddToCart, overridePrice }:
 
             {/* Precio */}
             <div className="pt-4 border-t border-gray-200">
-              <div>
+              <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-bold text-black">
-                  {formatPrice(displayPrice)}
+                  {displayPrice !== null && displayPrice !== undefined ? formatPrice(displayPrice) : '--.--'}
                 </span>
                 {contextType === 'sucursal' && product.branch_price !== undefined && product.branch_price !== product.price && (
-                  <span className="text-sm text-gray-500 line-through ml-2">
+                  <span className="text-sm text-gray-500 line-through">
                     {formatPrice(product.price)}
+                  </span>
+                )}
+                {contextType !== 'sucursal' && (
+                  <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase">
+                    Precio aproximado
                   </span>
                 )}
               </div>

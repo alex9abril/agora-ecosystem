@@ -281,3 +281,8 @@ if (!taxSettings.included_in_price) {
 
 
 
+
+
+### Notas UI storefront (lista/detalle)
+- El grid/lista de productos usa el mismo cálculo que carrito/checkout: aplica calculateProductTaxes cuando included_in_price=false y respeta precios base cuando included_in_price=true.
+- Mientras se cargan configuraciones de impuestos o el cálculo, el precio se muestra como --.-- para evitar parpadeos y mantener consistencia visual.

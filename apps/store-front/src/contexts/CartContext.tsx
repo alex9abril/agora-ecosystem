@@ -4,10 +4,12 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { cartService, Cart, CartItem } from '@/lib/cart';
+import { cartService, Cart, CartItem, TaxBreakdown } from '@/lib/cart';
 import { guestCartService, GuestCart } from '@/lib/guest-cart';
 import { useAuth } from './AuthContext';
 import { useStoreContext } from './StoreContext';
+import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import { taxesService } from '@/lib/taxes';
 
 interface CartContextType {
   cart: Cart | null;
@@ -31,6 +33,61 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // Enriquecer items con impuestos calculados si no vienen desde backend
+  const enrichCartWithTaxes = useCallback(async (cartData: Cart | null): Promise<Cart | null> => {
+    if (!cartData || !cartData.items || cartData.items.length === 0) return cartData;
+
+    // Obtener sucursales Ãºnicas del carrito
+    const uniqueBranchIds = Array.from(
+      new Set(
+        cartData.items
+          .map((item) => item.branch_id || item.business_id)
+          .filter((id): id is string => !!id)
+      )
+    );
+
+    // Cargar configuraciÃ³n de impuestos por sucursal
+    const branchSettings: Record<string, BranchTaxSettings> = {};
+    await Promise.all(
+      uniqueBranchIds.map(async (id) => {
+        try {
+          branchSettings[id] = await branchesService.getBranchTaxSettings(id);
+        } catch {
+          // Si falla, dejar sin configuraciÃ³n para usar fallback
+        }
+      })
+    );
+
+    const enrichedItems = await Promise.all(
+      cartData.items.map(async (item) => {
+        // Si ya trae desglose, mantenerlo
+        if (item.tax_breakdown && item.tax_breakdown.total_tax !== undefined) {
+          return item;
+        }
+
+        const businessId = item.branch_id || item.business_id || '';
+        const settings = branchSettings[businessId];
+        const subtotal = parseFloat(String(item.item_subtotal || 0));
+
+        // Si la sucursal marca precios con impuestos incluidos, asumir 0 adicional
+        if (settings?.included_in_price) {
+          const emptyBreakdown: TaxBreakdown = { taxes: [], total_tax: 0 };
+          return { ...item, tax_breakdown: emptyBreakdown };
+        }
+
+        try {
+          const taxBreakdown = await taxesService.calculateProductTaxes(item.product_id, subtotal);
+          return { ...item, tax_breakdown: taxBreakdown };
+        } catch {
+          const emptyBreakdown: TaxBreakdown = { taxes: [], total_tax: 0 };
+          return { ...item, tax_breakdown: emptyBreakdown };
+        }
+      })
+    );
+
+    return { ...cartData, items: enrichedItems };
+  }, []);
+
   const loadCart = useCallback(async () => {
     try {
       setLoading(true);
@@ -49,7 +106,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           })),
         });
       }
-      setCart(cartData);
+      const enriched = await enrichCartWithTaxes(cartData);
+      setCart(enriched);
     } catch (error: any) {
       console.error('Error cargando carrito:', error);
       if (error.statusCode === 404) {
@@ -58,7 +116,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [enrichCartWithTaxes]);
 
   const migrateGuestCart = useCallback(async () => {
     try {
@@ -294,7 +352,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       };
 
       console.log('✅ [loadGuestCart] Carrito convertido:', cart);
-      setCart(cart);
+      const enriched = await enrichCartWithTaxes(cart);
+      setCart(enriched);
     } catch (error) {
       console.error('❌ [loadGuestCart] Error cargando carrito de invitado:', error);
       setCart(null);
@@ -390,7 +449,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           specialInstructions,
           branchId,
         });
-        setCart(updatedCart);
+        const enriched = await enrichCartWithTaxes(updatedCart);
+        setCart(enriched);
       } else {
         // Invitado: guardar en localStorage
         // businessId: si hay branchId, ese ES el business_id; si no, usar el businessId pasado o undefined
@@ -431,7 +491,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         try {
           console.log('✅ [updateItem] Usuario autenticado, llamando al backend');
           const updatedCart = await cartService.updateItem(itemId, quantity, specialInstructions);
-          setCart(updatedCart);
+          const enriched = await enrichCartWithTaxes(updatedCart);
+          setCart(enriched);
           return;
         } catch (error: any) {
           // Si el error es 401, el token puede haber expirado
@@ -518,7 +579,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         try {
           console.log('✅ [removeItem] Usuario autenticado, llamando al backend');
           const updatedCart = await cartService.removeItem(itemId);
-          setCart(updatedCart);
+          const enriched = await enrichCartWithTaxes(updatedCart);
+          setCart(enriched);
           return;
         } catch (error: any) {
           // Si el error es 401, el token puede haber expirado

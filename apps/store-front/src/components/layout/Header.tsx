@@ -3,7 +3,7 @@
  * Diseño inspirado en Toyota con paleta de colores oficial
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import agoraLogo from '@/images/agora_logo_white.png';
@@ -48,6 +48,16 @@ export default function Header() {
   const { isAuthenticated, user, signOut } = useAuth();
   const { itemCount, cart } = useCart();
   const { getCartUrl } = useStoreRouting();
+  const cartTotal = useMemo(() => {
+    if (!cart || !cart.items) return 0;
+    return cart.items.reduce((sum, item) => {
+      const subtotal = parseFloat(String(item.item_subtotal || 0));
+      const tax = item.tax_breakdown?.total_tax
+        ? Number(item.tax_breakdown.total_tax)
+        : 0;
+      return sum + subtotal + tax;
+    }, 0);
+  }, [cart]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showStoreSelector, setShowStoreSelector] = useState(false);
   const [showNavigationDialog, setShowNavigationDialog] = useState(false);
@@ -779,9 +789,9 @@ export default function Header() {
                       <span className="text-xs" style={{ color: textColorOpacity80 }}>
                         Carrito
                       </span>
-                      {cart?.subtotal && (
+                      {cart && (
                         <span className="text-sm font-semibold" style={{ color: textColor }}>
-                          ${parseFloat(cart.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                       )}
                     </div>
@@ -810,10 +820,13 @@ export default function Header() {
                                     </p>
                                     <div className="flex items-center justify-between mt-1">
                                       <span className="text-xs text-gray-500">
-                                        Cantidad: {item.quantity}
+                                        Total producto
                                       </span>
                                       <span className="text-sm font-semibold text-gray-900">
-                                        ${parseFloat(String(item.item_subtotal || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        ${(
+                                          parseFloat(String(item.item_subtotal || 0)) +
+                                          (item.tax_breakdown?.total_tax ? Number(item.tax_breakdown.total_tax) : 0)
+                                        ).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                       </span>
                                     </div>
                                   </div>
@@ -840,9 +853,9 @@ export default function Header() {
                         <>
                           <div className="border-t border-gray-200 px-5 py-4 bg-gray-50">
                             <div className="flex items-center justify-between mb-3">
-                              <span className="text-sm font-medium text-gray-700">Subtotal:</span>
+                              <span className="text-sm font-medium text-gray-700">Total:</span>
                               <span className="text-lg font-bold text-gray-900">
-                                ${parseFloat(cart.subtotal || '0').toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                ${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                             <ContextualLink
