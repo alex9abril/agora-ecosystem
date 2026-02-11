@@ -1,0 +1,615 @@
+# Autoparts Toyota – Shop Categories
+Date: 2026-02-10
+
+## Menu tree
+- Maintenance
+  - Batteries
+    - True Start Batteries & True 2 Batteries
+  - Brakes
+    - Brake Calipers
+    - Brake Drums & Rotors
+    - Brake Fluid
+    - Brake Pads & Shoes
+    - TRD Brake Parts
+  - Coolant
+    - Genuine Toyota Coolant
+  - Filters
+    - Cabin Air Filters
+    - Engine Air Filters
+    - Fuel Filters
+    - TRD Engine Air Filters & Intakes
+  - Ignition
+    - Spark Plugs & Wires
+  - Oil Change
+    - Drain Plug Gaskets
+    - Motor Oil
+    - Oil Filters
+  - Paint
+    - Touch Up Paint
+  - Transmission
+    - Transmission Fluid
+  - Windshield
+    - Windshield Wiper Blades
+    - Windshield Wiper Inserts
+    - Windshield Washer Fluid
+- Interior Accessories
+  - Interior Styling
+    - Steering Wheel Accessories
+    - Interior Emblem
+    - Door Sill Protectors
+    - Shift Knob
+    - Illuminated Door Sills
+    - Interior Light Kit
+    - Interior Applique
+    - Illuminated Cargo Sills
+    - Label
+    - Seat Cover
+  - Interior Products
+    - Vacuum
+    - Led Bulb
+    - Clothes Hanger
+  - Vehicle Security
+    - Security System
+    - Console Safe
+  - Driver Convenience
+    - Remote Car Starter
+    - Armrest
+    - Center Console Box
+    - Coin Holder & Ashtray Cup
+    - Backup Camera
+    - Auto-Dimming Mirror
+    - Key Glove
+    - Owner Portfolio
+    - Kick Sensor
+    - Center Console Tray
+    - Wire Harness
+    - Organizer
+    - Onboard Tire Inflator
+    - Power Port
+    - Cell Phone Signal Booster
+    - Cell Phone Holder
+    - Pet Products
+    - Seatback
+    - Sun Shade
+    - Charger Cable
+    - Electric Vehicle Charging
+    - Homelink
+    - Wireless Charger
+    - First Aid Kit
+    - Emergency Assistance Kit
+    - Fire Extinguisher
+  - Cargo Management
+    - Cargo Hooks
+    - Cargo Net
+    - Cargo Cover
+    - Cargo Organizer
+    - Cargo Storage Box
+    - Cargo Tote
+    - Hard Organizer
+    - Cargo Management Cooler
+    - Seat Back Storage
+  - Floor Mats & Interior Protection
+    - Carpet Floor Mats
+    - Cargo Liner
+    - Cargo Tray
+    - Carpet Trunk Mat
+    - Carpet Cargo Mat
+  - Video
+    - Dashcam
+  - Sound System, Entertainment & Navigation Accessories
+    - Historical Audio
+    - Navigation Headunit
+    - Satellite Radio
+    - Interface Kit For Ipod
+    - Navigation Upgrade Kit
+    - Extension Box
+    - Rear Seat Entertainment System
+    - Base Audio Headunit
+    - Premium Audio Headunit
+    - Hands Free System
+    - Wireless Headphones
+    - Subwoofer
+    - Portable Navigation System
+    - Screen Protector
+- Exterior Accessories
+  - Exterior Products
+    - Spoiler & Mudguard
+    - Roof Rack
+    - Cat-Shield
+    - Side Mudguard & Spoiler
+    - Fog Lights
+    - Running Boards
+    - Winch
+    - Light Bar
+    - Tube Steps
+    - Rock Rails
+    - Activity Mount
+    - Cross Bars
+    - Off Road Lights
+    - Accent Lighting
+    - Bumper
+    - Roof Cargo Basket
+    - Roof Utility
+    - Camping Accessories
+    - Off Road
+    - Bike Rack
+    - License Plate Frame
+    - Camera Mount
+    - Side Puddle Light
+  - Exterior Styling
+    - Exterior Emblem
+    - Rear Spoiler
+    - Mirror Caps
+    - Body Kit
+    - Exhaust Tip
+    - Exterior Applique
+    - Spare Tire Cover
+    - Graphics
+    - Rear Window Spoiler
+    - Front Grille
+    - Sport Bumper Trim
+    - Lower Rocker Panel
+    - Fender Flares
+    - Rear Garnish
+    - Splitter
+    - Rear Taillight Lens
+    - Rear Wind Deflector
+    - Fender Vent Insert
+    - Window Deflector
+  - Truck Bed Products
+    - Bed Step
+    - Rear Step Bumper
+    - Tonneau Cover
+    - Tailgate Lock
+    - Bed-Mount Tire Carrier
+    - Storage Box
+    - Bed Liner
+    - Bed Rail
+    - Bed Cleats
+    - Bed Extender
+    - Bed Net
+    - Bed Lighting
+    - Bed Cargo Divider
+    - Bed Rugs
+    - Bed Storage Box Swing Out
+    - Bed Rack
+    - Side Storage Box
+    - Bed Tent
+    - Truck Bike Rack
+    - Sport Bar
+    - Camper Shell
+    - Mini-Tie Down
+    - Bed Mat
+    - Deck Rail Kit
+    - D-Rings
+  - Towing
+    - Towing Wire Harnesses & Adapters
+    - Tow Hitch
+    - Ball Mount
+    - Tow Hook
+    - Trailer Ball
+    - Hitch Utility
+  - Body And Paint Protection
+    - Door Edge Guard
+    - Body Side Moldings
+    - Mudguards
+    - Paint Protection Film
+    - Front Skid Plate
+    - Skid Plate
+    - Rear Skid Plate
+    - Rear Bumper Protector
+    - Hood Protector
+    - Rear Bumper Applique
+    - Door Edge Film
+    - Front End Mask
+- Body
+  - Front End Parts
+    - Front Bumper & Bumper Stay
+    - Engine Hood & Hood Lock
+    - Front Door Lock & Handle
+    - Hood & Front Fender
+    - Front Dash Panel & Fender Apron
+    - Radiator Grill
+    - Hood Lock & Hood Hinge
+    - Front Molding
+    - Front Ventilator
+    - Front Door Window Regulator And Door Hinge
+    - Radiator Support & Wind Guide
+    - Cowl Ventilator
+  - Rear End Parts
+    - Back Door Lock & Hinge
+    - Back Door Lock & Handle
+    - Rear Door Lock & Handle
+    - Rear Bumper & Bumper Stay
+    - Rear Molding
+    - Luggage Compartment Door & Lock
+    - Rear Body Side Panel
+    - Rear Body Mounting
+    - Rear Body Floor & Fender
+    - Rear Body Assembly
+    - Rear Door Window Regulator & Hinge
+  - Roof, Side & Floor Parts
+    - Side Sheet Metal
+    - Side Molding
+    - Side Mirror
+    - Side Roller & Rail
+    - Floor Side Member
+    - Convertible Parts
+    - Floor Pan & Lower Back Panel
+    - Rear Ventilator & Roof Ventilator
+    - Floor Member
+    - Roof Panel & Back Panel
+    - Roof Side Ventilator
+    - Cover Top
+    - Power Window Motor & Door Lock Solenoid
+  - Frame & Structural Parts
+    - Suspension Crossmember & Under Cover
+    - Frame
+    - Front Floor Panel & Front Floor Member
+    - Rear Floor Panel & Rear Floor Member
+    - Cab Mounting & Body Mounting
+    - Rear Body Guard Frame & Tail Gate
+  - Glass & Related Parts
+    - Front Door Panel & Glass
+    - Rear Door Panel & Glass
+    - Roof Panel & Back Window Glass
+    - Windshield Glass & Cowl Panel
+    - Windshield Glass & Front Panel
+    - Back Door Panel & Glass
+    - Side Window
+    - Quarter Window
+    - Room Separator & Glass
+    - Room Curtain & Room Rack
+    - Front Door Ventilator Window
+    - Separation Door Panel & Glass
+  - Vehicle Trim, Logos & Labels
+    - Molding
+    - Exterior & Interior Caution Plate
+    - Caution Plate
+    - Emblem & Name Plate
+    - Emblem & Name Plate (Exterior & Interior)
+    - Body Stripe
+- Engine & Performance
+  - Engines & Internal Components
+    - Engine Overhaul Gasket Kit
+    - Cylinder Block
+    - Crankshaft & Piston
+    - Cylinder Head
+    - Short Block Assembly
+    - Engine Name Plate & Caution Plate
+    - Timing Gear Cover & Rear End Plate
+    - Camshaft & Valve
+    - Motor Mounts
+    - Timing Chain
+    - Partial Engine Assembly
+    - Timing Belt
+    - Urea Tank & Tube
+    - V-Belt
+  - Intake & Exhaust
+    - Engine Manifold
+    - Ventilation Hose
+    - Air Cleaner
+    - Egr System
+    - Vacuum Piping
+    - Manifold Air Injection System
+    - Exhaust Pipe
+    - Air Pump
+    - Pneumatic Governor
+    - Mechanical Governor
+    - Venturi
+    - Electronic Fuel Injection System
+    - Vacuum Pump
+    - Electronic Controlled Diesel (Ecd)
+    - Electronic Diesel Injection Control System
+  - Hybrid, Electric & Fuel Cell Vehicle Components
+    - Hybrid Vehicle Inverter (Hv)
+    - Inverter For Hybrid Electric Vehicle (Hev)
+    - Stack & Converter For Fuel Cell Electric Vehicle
+    - Fuel Cell Vehicle Stack & Converter
+    - Dc, Dc Converter & Charger (Bev, Fcev)
+    - Dc, Dc Converter & Charger (Ev, Fcv)
+    - Electric Vehicle Motor
+    - Motor For Battery Electric Vehicle
+    - Fuel Cell Electric Vehicle Intake & Exhaust
+    - Fuel Cell Vehicle Intake & Exhaust
+    - Inverter (Ev, Fcv)
+    - Inverter (Bev, Fcev)
+  - Cooling System
+    - Radiator & Water Outlet
+    - Fuel Cell Electric Vehicle Cooling
+    - Fuel Cell Vehicle Cooling
+    - Water Pump
+    - Electric Vehicle Cooling
+    - Battery Electric Vehicle Cooling
+    - Inverter Cooling
+    - Intercooler & Sub Radiator
+  - Performance Engine Accessories
+    - Performance Oil Filter
+    - Performance Air Filter
+    - Performance Radiator Cap
+    - Performance Oil Cap
+  - Performance Engine
+    - Performance Exhaust
+    - Performance Air Intake System
+    - Performance Supercharger
+- Braking & Suspension
+  - Brake
+    - Brake Booster & Vacuum Tube
+    - Brake Clamp & Tube
+    - Front Brake Pad & Front Brake Caliper
+    - Rear Brake Pad & Rear Brake Caliper
+    - Rear Brake Shoe, Backing Plate & Rear Drum Brake Wheel Cylinder
+    - Brake Master Cylinder
+    - Front Brake Shoe, Backing Plate & Front Drum Brake Wheel Cylinder
+    - Brake Pedal & Bracket
+    - Transfer Direct Clutch, Low Brake & Support
+    - Parking Brake & Cable
+  - Driveline
+    - Rear Axle Housing & Differential
+    - Front Axle Housing & Differential
+    - Transaxle Assy (Cvt)
+    - Propeller Shaft & Universal Joint
+    - Front Axle Hub
+    - Front Drive Shaft
+    - Rear Axle Shaft & Hub
+    - Transaxle Assy (Hv, Ev, Fcv)
+    - Transaxle Assy (Hev, Bev, Fcev)
+    - Equipment Drive Shaft
+    - Control Shaft & Cross Shaft
+    - Transfer Gear
+    - Overdrive Gear For Automatic Transmission
+    - Drive Shaft
+    - Differential Lock Control
+  - Suspension
+    - Rear Shock Absorber & Spring
+    - Front Spring & Shock Absorber
+    - Auto-Leveler Height Control
+    - Electronic Modulated Suspension
+  - Performance Suspension & Chassis
+    - Performance Suspension Kit
+    - Performance Brakes
+    - Performance Jounce Bumper
+    - Performance Shocks And Struts
+    - Performance Chassis Brace
+    - Performance Stabilizer Bar
+    - Performance Springs
+    - Performance Strut Tie Brace
+    - Performance Sway Bar
+    - Performance Brake Pads
+- Interior
+  - Front Components
+    - Inside Trim Board
+    - Armrest & Visor
+    - Console Box & Bracket
+    - Glove Compartment & Instrument Cluster
+    - Ashtray
+    - Inside Trim Board & Door Opening Trim Molding
+    - Dash Silencer Board & Floor Silencer Pad
+    - Wooden Grain Panel & Molding
+  - Rear Seat & Storage Area
+    - Deck Board & Deck Trim Cover
+    - Luggage Compartment Mat & Package Tray Panel
+    - Package Tray Panel
+    - Rear Body Top Curtain & Roof Panel
+  - Floor & Ceiling
+    - Roof Headlining & Silencer Pad
+    - Floor Mat & Silencer Pad
+    - Mat & Carpet
+    - Floor Insulator
+    - Floor Mat
+  - Seat & Seat Parts
+    - Rear Seat & Seat Track
+    - Seat Belt
+    - Seat & Seat Track
+    - Front Seat & Seat Track
+    - Seat Belt & Child Restraint Seat
+    - Seat Rail
+    - Seat Truck
+    - Seat Motor & Seat Heater
+- Steering & Transmission
+  - Manual Transmission
+    - Speedometer Driven Gear (Mtm)
+    - Clutch Housing & Transmission Case (Mtm)
+    - Transaxle, Transmission Assy & Gasket Kit (Mtm)
+    - Clutch Release Cylinder
+    - Clutch Master Cylinder
+    - Clutch Pedal & Flexible Hose
+    - Gear Shift Fork & Lever Shaft (Mtm)
+    - Extension Housing For Manual Transmission
+    - Clutch & Release Fork
+    - Transmission Gear (Mtm)
+    - Pump & Actuator, Sequential Or Multi-Mode Manual Transaxle
+    - Clutch Booster
+  - Automatic Transmission
+    - Shift Lever & Retainer
+    - Transaxle, Transmission Assy & Gasket Kit (Atm)
+    - Transmission Case & Oil Pan (Atm)
+    - Power Take-Off Case & Gear
+    - Extension Housing For Automatic Transmission
+    - Speedometer Driven Gear (Atm)
+    - Planetary Gear, Reverse Piston & Counter Gear (Atm)
+    - Brake Band & Multiple Disc Clutch (Atm)
+    - Brake No.3, 1st & Reverse Brake (Atm)
+    - Center Support & Planetary Sun Gear (Atm)
+    - Throttle Link & Valve Lever (Atm)
+    - Power Take-Off Lever & Link
+    - Electronic Controlled Transmission
+  - 4 Wheel Drive
+    - Transfer Vacuum Piping
+    - Transfer Assembly & Gasket Kit
+    - Transfer Valve Body & Valve Lever
+    - Transfer Case & Extension Housing
+    - Transfer Lever & Shift Rod
+    - Diaphragm Cylinder & Transfer Vacuum Actuator
+  - Steering
+    - Steering Wheel
+    - Steering Column & Shaft
+    - Steering Knuckle & Front Axle Arm
+    - Front Steering Gear & Link
+    - Power Steering Vane Pump & Reservoir
+    - Power Steering Tube
+    - 4ws Rear Steering Gear
+    - Steering Control System
+  - Performance Drivetrain
+    - Performance Quickshifter
+    - Performance Clutch
+- Wheels & Related Parts
+  - Wheels
+    - Disc Wheel & Wheel Cap
+    - Spare Wheel Carrier
+  - Performance Wheels
+      - Performance Wheels & Related Parts
+      - Performance Wheel Locks
+      - Performance Wheel Inserts
+      - Performance Wheel Covers
+      - Performance Center Cap
+      - Performance Lug Nuts
+      - Spare Tire Lock
+- Fuel & Oil Related Parts
+  - Fuel System & Related Parts
+    - Fuel Tank & Tube
+    - Carburetor Assembly
+    - Injection Nozzle
+    - Fuel Injection System
+    - Fuel Filter
+    - Carburetor
+    - Injection Pump Body
+    - Fuel Feed Pump
+    - Injection Pump Assembly
+    - Fuel Pump & Pipe
+    - Accelerator Link
+    - Lpg & Cng Regulator
+    - Fuel Pipe & Clamp
+    - Lpg & Cng Injection System
+  - Oil System & Related Parts
+    - Engine Oil Pump
+    - Oil Filter
+    - Engine Oil Cooler
+    - Oil Cooler & Tube (Atm)
+    - Oil Cooler & Tube (Cvt)
+    - Torque Converter, Front Oil Pump & Chain (Atm)
+    - Torque Converter, Front Oil Pump (Cvt)
+    - Oil Cooler & Tube (Hv, Ev, Fcv)
+    - Oil Cooler & Tube (Hev, Bev, Fcev)
+    - Oil Pump, Oil Cooler & Pipe (Mtm)
+    - Valve Body & Oil Strainer (Atm)
+    - Rear Oil Pump & Governor (Atm)
+    - Transfer Oil Pump
+    - Valve Body & Oil Strainer (Hv, Ev, Fcv)
+    - Valve Body & Oil Strainer (Hev, Bev, Fcev)
+- Electrical
+  - Front Lighting
+    - Headlight
+    - Fog Light
+    - Front Marker Light
+    - Front Turn Signal Light
+    - Front Clearance Light
+    - Side Turn Signal Light & Outer Mirror Light
+    - Cornering Light
+    - Spot Light (Search Light)
+    - Daytime Running Light
+    - Conlight Automatic Light Control System
+  - Rear Lighting
+      - Rear Combination Light
+      - Rear License Plate Light
+      - Rear Side Marker Light
+      - Back Up Light
+      - Center Stop Light
+      - Reflex Reflector
+      - Rear Fog Light
+      - Work Light
+  - Interior & Miscellaneous Lighting
+      - Interior Light
+      - Indicator
+      - Spot Light
+      - Headlight Cleaner
+  - Charging & Starting Circuit
+      - Battery & Battery Cable
+      - Distributor
+      - Alternator
+      - Spark Plug, Ignition Coil & Glow Plug
+      - Starter
+      - Battery Carrier
+  - Wiring, Sensors & Computers
+      - Wiring & Clamp
+      - Switch Relay Computer
+      - Overdrive & Electronic Controlled Transmission
+      - Electronic Height Control
+      - Control Computer (Bev, Fcev)
+      - Power Steering Computer
+      - Control Computer For Hybrid Electric Vehicle
+      - Control Computer For Hybrid Vehicle
+      - Junction Box
+      - Control Computer (Ev,Fcv)
+- Safety, Security & Convenience
+  - Safety & Security
+    - Lock Cylinder Set
+    - Anti-Lock Brakes & Vehicle Skid Control
+    - Anti-Theft Device
+    - Air Bag
+    - Telephone & Mayday
+    - Tire Pressure Warning System
+    - Pre-Collision System
+    - Wireless Door Lock
+    - Horn
+    - Passive Belt System
+  - Audio, Entertainment & Navigation
+    - Meter
+    - Speaker
+    - Navigation & Front Monitor Display
+    - Radio Receiver, Amplifier & Condenser
+    - Radio Communication
+    - Antenna
+  - Climate Control
+    - Heating & Air Conditioning Cooler Piping
+    - Heating & Air Conditioning Control & Air Duct
+    - Heating & Air Conditioning Water Piping
+    - Heating & Air Conditioning Compressor
+    - Heating & Air Conditioning Heater Unit & Blower
+    - Air Purifier & Ion Generator
+    - Heating & Air Conditioning Cooler Unit
+    - Heating & Air Conditioning Vacuum Piping
+  - Windshield Wipers & Washer System
+    - Windshield Washer System
+    - Rear Washer System
+    - Windshield Wipers
+    - Rear Wiper
+  - Drive Assist
+    - Camera & Rear Monitor Display
+    - Adaptative Cruise Control
+    - Clearance & Back Sonar
+    - Traction Control
+    - Lane Assist
+    - Eco-Run System
+    - Night View
+    - Active Control Suspension
+- Tools & Equipment
+  - Tools
+    - Standard Tool
+    - Tool Box & License Plate Bracket
+- Lifestyle Accessories
+  - ARB
+  - Carmate
+  - Chargepoint
+  - Diamondback
+  - Dometic
+  - EGR
+  - FabFours
+  - Factor 55
+  - Go Rhino
+  - Kammok
+  - Kurgo
+  - MillerCAT
+  - Napier
+  - Pelican
+  - Prinsu
+  - RAM
+  - ReTrax
+  - RIGID
+  - Thule
+  - Weboost
+  - Yakima
+
+## Notes / Next steps
+- When you open a category, copy the `ul` (sub-menu) outerHTML and paste below to log the second level.
+- If there is a third level, repeat the copy of that nested `ul` to capture all subcategories.

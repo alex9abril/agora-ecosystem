@@ -46,6 +46,7 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
   const rootCategoriesFromRedux = useAppSelector(selectRootCategories);
   const categoriesLoading = useAppSelector(selectCategoriesLoading);
   const categoriesInitialized = useAppSelector(selectCategoriesInitialized);
+  const subcategoriesByParent = useAppSelector((state) => state.categories.subcategoriesByParent);
   
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<ProductCategory | null>(null);
@@ -381,9 +382,9 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                     </>
                   )}
 
-                  {/* Sección Categorías */}
+                  {/* Sección Partes y accesorios */}
                   <div className="px-6 py-3 border-t border-gray-200 mt-2">
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Categorías</h3>
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Partes y accesorios</h3>
                   </div>
 
                   {/* Todas las categorías */}
@@ -391,10 +392,17 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                     <button
                       key={category.id}
                       onClick={(e) => handleCategoryClick(category, e)}
-                      className="w-full flex items-center gap-3 px-6 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
+                      className="w-full flex items-center gap-3 px-6 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
                     >
                       <span className="flex-1 font-medium">{category.name}</span>
-                      <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      {(
+                        // Mostrar flecha solo si la categoría tiene subcategorías
+                        categoriesInitialized
+                          ? (subcategoriesByParent?.[category.id]?.length ?? 0) > 0
+                          : true // Mientras inicializa, mantenemos el comportamiento anterior
+                      ) && (
+                        <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                      )}
                     </button>
                   ))}
 
@@ -469,11 +477,11 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                     <p className="text-sm text-gray-500">Cargando subcategorías...</p>
                   </div>
                 ) : (
-                  <div className="px-6 py-2">
+                  <div className="px-6 py-1.5">
                     {/* Opción "Todo [Nombre de Categoría]" */}
                     <button
                       onClick={() => handleSubcategoryNavigation(selectedCategory)}
-                      className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-2"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
                     >
                       <span className="flex-1">Todo {selectedCategory.name}</span>
                     </button>
@@ -483,33 +491,17 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                       const hasSubSubcategories = subSubcats.length > 0;
                       
                       return (
-                        <div key={subcategory.id} className="mb-2">
+                        <div key={subcategory.id} className="mb-1.5">
                           {/* Nivel 2: Subcategoría */}
                           <button
                             onClick={(e) => handleSubcategoryClick(subcategory, e)}
-                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left"
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left"
                           >
                             <span className="flex-1">{subcategory.name}</span>
                             {hasSubSubcategories && (
-                              <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <ChevronRightIcon className="w-4 h-4 text-gray-400" />
                             )}
                           </button>
-                          
-                          {/* Nivel 3: Sub-subcategorías (mostrar inline si no hay vista separada) */}
-                          {hasSubSubcategories && subSubcats.length <= 5 && (
-                            <ul className="ml-4 mt-1 space-y-1">
-                              {subSubcats.map((subSubcat) => (
-                                <li key={subSubcat.id}>
-                                  <button
-                                    onClick={() => handleSubcategoryNavigation(subSubcat)}
-                                    className="block w-full text-left px-4 py-2 text-sm text-gray-600 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors"
-                                  >
-                                    {subSubcat.name}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
                         </div>
                       );
                     })}
@@ -558,10 +550,10 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                       <p className="text-sm text-gray-500">Cargando subcategorías...</p>
                     </div>
                   ) : (
-                    <div className="px-6 py-2">
+                    <div className="px-6 py-1.5">
                       <button
                         onClick={() => handleSubcategoryNavigation(selectedSubcategory)}
-                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-2"
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
                       >
                         <span className="flex-1">Todo {selectedSubcategory.name}</span>
                       </button>
@@ -569,7 +561,7 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
                         <button
                           key={subSubcat.id}
                           onClick={() => handleSubcategoryNavigation(subSubcat)}
-                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-2"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
                         >
                           <span className="flex-1">{subSubcat.name}</span>
                         </button>

@@ -272,6 +272,9 @@ export class ProductsService {
     let branchJoin = '';
     let collectionJoin = '';
 
+    // Regla de negocio: no mostrar productos con precio 0 (evitar compras inválidas)
+    whereConditions.push('(p.price IS NOT NULL AND (p.price)::numeric > 0)');
+
     // Si se filtra por grupo, buscar productos disponibles en sucursales del grupo
     // IMPORTANTE: No filtrar por business_id del producto, sino por disponibilidad en sucursales del grupo
     if (groupId) {
@@ -702,7 +705,7 @@ export class ProductsService {
   /**
    * Obtener un producto por ID
    */
-  async findOne(id: string, branchId?: string) {
+  async findOne(id: string, branchId?: string, allowZeroPrice = false) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
@@ -787,6 +790,14 @@ export class ProductsService {
       }
 
       const row = result.rows[0];
+
+      // Regla de negocio: no permitir acceso público a producto con precio 0 (solo listado/detalle; admin puede editar)
+      if (!allowZeroPrice) {
+        const productPrice = row.price != null ? parseFloat(String(row.price)) : 0;
+        if (productPrice <= 0) {
+          throw new NotFoundException('Producto no encontrado');
+        }
+      }
 
       // Parsear variant_groups estructuradas
       let variantGroupsStructured = [];
@@ -1117,7 +1128,7 @@ export class ProductsService {
       // Verificar qué se guardó en la base de datos
       const savedRow = result.rows[0];
 
-      return this.findOne(result.rows[0].id);
+      return this.findOne(result.rows[0].id, undefined, true);
     } catch (error: any) {
       console.error('❌ Error creando producto:', {
         message: error.message,
@@ -1152,7 +1163,7 @@ export class ProductsService {
 
     try {
       // Verificar que el producto existe
-      const existing = await this.findOne(id);
+      const existing = await this.findOne(id, undefined, true);
 
       // Validar que la categoría existe si se proporciona
       if (updateProductDto.category_id && updateProductDto.category_id.trim() !== '') {
@@ -1219,7 +1230,7 @@ export class ProductsService {
             console.error('❌ [UPDATE] Error subiendo imagen desde data URI:', error);
             // Si falla la subida, mantener la imagen existente del producto
             // o usar null si no hay imagen previa
-            const existingProduct = await this.findOne(id);
+            const existingProduct = await this.findOne(id, undefined, true);
             if (existingProduct.image_url && !this.isDataUri(existingProduct.image_url)) {
               // Si el producto ya tiene una URL válida (no data URI), mantenerla
               imageUrl = existingProduct.image_url;
@@ -1391,7 +1402,7 @@ export class ProductsService {
         throw new NotFoundException(`Producto con ID ${id} no encontrado`);
       }
       
-      const updatedProduct = await this.findOne(id);
+      const updatedProduct = await this.findOne(id, undefined, true);
       return updatedProduct;
     } catch (error: any) {
       console.error('❌ [UPDATE] ============================================');
@@ -1441,7 +1452,7 @@ export class ProductsService {
     const pool = dbPool;
 
     // Verificar que el producto existe
-    const existing = await this.findOne(id);
+    const existing = await this.findOne(id, undefined, true);
 
     // Verificar si está en pedidos activos o entregados recientemente
     const ordersCheck = await pool.query(

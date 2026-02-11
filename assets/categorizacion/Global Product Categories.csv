@@ -1,0 +1,608 @@
+id,name,parent_category_id,display_order,is_active
+3025fc9b-e2ba-416c-b62e-af1cffa6611a,Mantenimiento,null,1,true
+a60ac249-d808-4bd2-a6ee-d37b9cd496e9,Accesorios interiores,null,2,true
+6af57f44-7a7d-4685-836e-d9d9ff236de2,Accesorios exteriores,null,3,true
+efb36c67-7545-45a2-b5c7-464ca356878d,Carrocería,null,4,true
+e7ee055e-6133-43e7-a143-602bf6621f23,Motor y desempeño,null,5,true
+ce74d370-963f-4e55-bd25-39853a56839e,Frenos y suspensión,null,6,true
+0c04f899-0950-48c7-97c5-d835f0ec0067,Habitáculo,null,7,true
+fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,Dirección y transmisión,null,8,true
+b29739b5-31ba-4dfb-89b0-ca35690a3960,Rines y relacionados,null,9,true
+4beebfd3-3368-436a-aca7-89ade01d7c7c,Partes de combustible y aceite,null,10,true
+1ea46f40-4db5-4b88-b86e-f848ec072ae4,Eléctrico,null,11,true
+ccd8ba5f-1543-490d-a059-ca356cbd87fa,Seguridad y conveniencia,null,12,true
+8a49d961-fd5b-4acb-a810-178bccb0a21f,Herramientas y equipo,null,13,true
+09cab457-e49e-4fb6-9904-047fe156cb5f,Accesorios lifestyle,null,14,true
+e80d43d1-cf8a-42c8-aff7-f53cdb8303b8,Protectores de estribo,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,1,true
+b7228951-b788-4f9b-905c-2d1be8123271,Estribos de carga iluminados,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,2,true
+31404220-d212-4e35-a029-7fba81782c41,Estribos iluminados,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,3,true
+a8555b39-4983-4c3f-a5ee-5f8f3977e1e9,Aplique interior,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,4,true
+513f4c48-d966-466a-8b8c-3c2ec01e1a2c,Emblema interior,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,5,true
+668de8a9-26b5-4b7f-87ee-03d762c23938,Kit de luz interior,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,6,true
+729bb186-3501-40ea-b195-23c8e5008407,Etiqueta,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,7,true
+134410ce-264c-417e-b3d1-4266a8b50b7a,Funda de asiento,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,8,true
+b3de0945-8f1a-4870-aab2-e645b0c87877,Perilla de cambios,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,9,true
+dbfc0c13-8b8b-411e-902a-a9fd74afb4ec,Accesorios de volante,04be8b06-2f70-4b95-8b50-aa14eb2ba0df,10,true
+4d3641c0-fd10-401a-a0ea-41e945ca6657,Servo de freno y manguera de vacío,059541e6-67fb-4d1b-9c38-f05f4bb37a24,1,true
+06b3be55-3869-4f89-8c13-22bf55ce7197,Abrazadera y tubo de freno,059541e6-67fb-4d1b-9c38-f05f4bb37a24,2,true
+a3a82a9d-5bb8-4cf1-a929-694ee69ff998,Cilindro maestro,059541e6-67fb-4d1b-9c38-f05f4bb37a24,3,true
+85b31678-37f4-4812-800e-5bdab1280b5a,Pedal y soporte de freno,059541e6-67fb-4d1b-9c38-f05f4bb37a24,4,true
+4dc9c395-f78b-4083-8b2f-d81ea1d2573d,Pastillas y cáliper delantero,059541e6-67fb-4d1b-9c38-f05f4bb37a24,5,true
+54dec8f7-3194-4d16-a19b-12706ac22733,"Zapatas delanteras, plato y cilindro de freno de tambor",059541e6-67fb-4d1b-9c38-f05f4bb37a24,6,true
+deb02b97-16fe-4e5f-bc81-36dd3b9964f8,Freno de estacionamiento y cable,059541e6-67fb-4d1b-9c38-f05f4bb37a24,7,true
+e663a342-9cf6-44e7-b9a3-c998082ec008,Pastillas y cáliper trasero,059541e6-67fb-4d1b-9c38-f05f4bb37a24,8,true
+3ac4c25b-bbe4-43f6-a8c4-972e5736ddfe,"Zapatas traseras, plato y cilindro de freno de tambor",059541e6-67fb-4d1b-9c38-f05f4bb37a24,9,true
+065ace58-bbbf-4cfd-9bf4-11bae01c4dbc,"Embrague directo de transferencia, freno bajo y soporte",059541e6-67fb-4d1b-9c38-f05f4bb37a24,10,true
+17ae1004-585a-4bf5-b4f4-a7dfe6c6583f,ARB,09cab457-e49e-4fb6-9904-047fe156cb5f,1,true
+d97580de-d1c0-4cd5-8877-5566ea8a6c11,Carmate,09cab457-e49e-4fb6-9904-047fe156cb5f,2,true
+5e0a350b-063a-4357-a81d-1bdcaeadb70f,Chargepoint,09cab457-e49e-4fb6-9904-047fe156cb5f,3,true
+d0845e87-1cc5-4f27-9528-0a5e1da398d8,Diamondback,09cab457-e49e-4fb6-9904-047fe156cb5f,4,true
+f89cca7c-7ff4-4bde-ba61-c505b2562eb7,Dometic,09cab457-e49e-4fb6-9904-047fe156cb5f,5,true
+9d832b2c-107a-404c-a12c-1f525cf6c1b9,EGR,09cab457-e49e-4fb6-9904-047fe156cb5f,6,true
+1072afbf-e436-4952-bfcb-334162dedeb9,FabFours,09cab457-e49e-4fb6-9904-047fe156cb5f,7,true
+42312337-9da4-45d6-86f2-0dc1a3ad790e,Factor 55,09cab457-e49e-4fb6-9904-047fe156cb5f,8,true
+40aacf38-2229-4d47-94d1-9fef5811d0af,Go Rhino,09cab457-e49e-4fb6-9904-047fe156cb5f,9,true
+eb8e6e0a-689d-4adf-bbaf-760c58587e5b,Kammok,09cab457-e49e-4fb6-9904-047fe156cb5f,10,true
+c7cf2d0c-9c3f-4d80-adbf-fe4b6f1692d7,Kurgo,09cab457-e49e-4fb6-9904-047fe156cb5f,11,true
+22b3bfcd-2e83-4344-b1d8-f010a4a9b899,MillerCAT,09cab457-e49e-4fb6-9904-047fe156cb5f,12,true
+2bb10711-c628-4787-9031-8cf81fa7239e,Napier,09cab457-e49e-4fb6-9904-047fe156cb5f,13,true
+ade566fa-ad8a-4621-ab09-d412d305f722,Pelican,09cab457-e49e-4fb6-9904-047fe156cb5f,14,true
+37f121a5-022f-45d0-8659-031a013a4818,Prinsu,09cab457-e49e-4fb6-9904-047fe156cb5f,15,true
+81909d70-1a25-4b7f-b736-c9d8449b5def,RAM,09cab457-e49e-4fb6-9904-047fe156cb5f,16,true
+66c056f2-faab-4c0e-b6d8-b3d0a23ba81d,ReTrax,09cab457-e49e-4fb6-9904-047fe156cb5f,17,true
+3dbe8f1e-344c-43ce-a205-daf1ef22bc56,RIGID,09cab457-e49e-4fb6-9904-047fe156cb5f,18,true
+b5bffdd9-0c8f-4ed6-9baa-08ac456da26d,Thule,09cab457-e49e-4fb6-9904-047fe156cb5f,19,true
+efda9a2a-acb3-4a5c-93ad-9c7274e166f5,Weboost,09cab457-e49e-4fb6-9904-047fe156cb5f,20,true
+bbc06d5f-06b4-4fa7-b4b1-6c0d77b95961,Yakima,09cab457-e49e-4fb6-9904-047fe156cb5f,21,true
+cc2dc414-eb3b-4340-a1fa-e3938e59e74c,Rin y tapa de rin,0a576a3e-9c6d-43c0-b54f-1fbd22224548,1,true
+157d3fb1-c3c2-42aa-a88f-b82080eb2962,Soporte de refacción,0a576a3e-9c6d-43c0-b54f-1fbd22224548,2,true
+551e2803-9325-4a85-a150-8a6b74d659bc,Piso y techo,0c04f899-0950-48c7-97c5-d835f0ec0067,1,true
+710b0387-f9ab-4c13-9e29-63579b4941e4,Componentes frontales,0c04f899-0950-48c7-97c5-d835f0ec0067,2,true
+68dd1ab9-e472-4352-bac3-5d94688b2bd5,Asiento trasero y área de carga,0c04f899-0950-48c7-97c5-d835f0ec0067,3,true
+aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,Asientos y partes,0c04f899-0950-48c7-97c5-d835f0ec0067,4,true
+c0950b27-d795-47b0-bdd6-be308a94a8f6,Montaje de cabina y carrocería,0eed5d54-00ec-46ce-9d53-ee7109f96730,1,true
+5e2af3e5-2aae-4639-91fc-882049171ba8,Bastidor,0eed5d54-00ec-46ce-9d53-ee7109f96730,2,true
+69ac82e0-0b80-4890-a6dc-04c09e184ec5,Panel y larguero de piso delantero,0eed5d54-00ec-46ce-9d53-ee7109f96730,3,true
+bbbfc5b7-44ca-4baa-91cd-89480ad19f1d,Bastidor protector trasero y compuerta,0eed5d54-00ec-46ce-9d53-ee7109f96730,4,true
+5e03082c-a6b3-4305-a696-bb63e33073a8,Panel y larguero de piso trasero,0eed5d54-00ec-46ce-9d53-ee7109f96730,5,true
+95f8d909-94e7-497f-898c-7573683d626d,Subchasis de suspensión y cubierta inferior,0eed5d54-00ec-46ce-9d53-ee7109f96730,6,true
+2d9ca85c-802a-45e8-a151-c752011740ca,Percha,1cbf6388-bfc1-47fe-bb64-c0243359de69,1,true
+1ccb6f60-7143-4ae7-9594-99d609f946f6,Foco LED,1cbf6388-bfc1-47fe-bb64-c0243359de69,2,true
+fd8dbd2b-3b1b-47c1-a0e8-745fad74adef,Aspiradora,1cbf6388-bfc1-47fe-bb64-c0243359de69,3,true
+4e3d7fa3-2ab4-4768-8850-c4b51e322fee,Cálipers de freno,1e613732-1456-409b-b361-0659ed3365e2,1,true
+79acd124-5e26-42ea-b474-cd7820d551d9,Tambores y discos,1e613732-1456-409b-b361-0659ed3365e2,2,true
+170201a9-7e29-4611-bce4-d0f9d08dbe0f,Líquido de frenos,1e613732-1456-409b-b361-0659ed3365e2,3,true
+827b3183-3b86-4b30-8083-d483cdd0ca98,Pastillas y zapatas,1e613732-1456-409b-b361-0659ed3365e2,4,true
+c5e8fd82-bf16-4e7e-a240-a67516f89d0b,Partes de freno TRD,1e613732-1456-409b-b361-0659ed3365e2,5,true
+486697d8-7091-4c45-bb57-c477f6fb66b5,Suspensión de control activo,1e730d3d-8f09-46f6-ac31-a111690fcae6,1,true
+89d0cf5e-edf2-46ee-8938-be1f55d68189,Control crucero adaptativo,1e730d3d-8f09-46f6-ac31-a111690fcae6,2,true
+43b1fbc5-fa3e-44be-bfcb-2852a9a79a50,Cámara y monitor trasero,1e730d3d-8f09-46f6-ac31-a111690fcae6,3,true
+c6781483-a930-46ee-b703-1fbbf9e35416,Sensores de estacionamiento,1e730d3d-8f09-46f6-ac31-a111690fcae6,4,true
+82a6a263-34d9-413e-9243-999470f42bcf,Sistema Eco-Run,1e730d3d-8f09-46f6-ac31-a111690fcae6,5,true
+8526e9c7-ad98-436c-853e-f0df1f7cae7e,Asistencia de carril,1e730d3d-8f09-46f6-ac31-a111690fcae6,6,true
+1eee52e4-e7de-4da9-9217-5159c34cc8d4,Visión nocturna,1e730d3d-8f09-46f6-ac31-a111690fcae6,7,true
+9f787f4a-e258-464f-b06f-07d503dae4db,Control de tracción,1e730d3d-8f09-46f6-ac31-a111690fcae6,8,true
+2f67b5de-aa46-452c-ab71-ec0641b12512,Circuito de carga y arranque,1ea46f40-4db5-4b88-b86e-f848ec072ae4,1,true
+95be2505-3713-4cce-8a29-25d649e78ef8,Iluminación frontal,1ea46f40-4db5-4b88-b86e-f848ec072ae4,2,true
+f23e8559-7263-4a69-8a5e-c0eab67f1550,Iluminación interior y miscelánea,1ea46f40-4db5-4b88-b86e-f848ec072ae4,3,true
+98e2982e-8da4-4ac1-8aed-265324482e38,Iluminación trasera,1ea46f40-4db5-4b88-b86e-f848ec072ae4,4,true
+4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,"Cableado, sensores y computadoras",1ea46f40-4db5-4b88-b86e-f848ec072ae4,5,true
+04dc50c8-07dd-446c-993a-521d0493b4ca,Unidad base de audio,21f6f03c-bd18-4641-bfa8-5977b480d265,1,true
+118742ba-58f4-48a0-bc95-47a178e2e985,Caja de extensión,21f6f03c-bd18-4641-bfa8-5977b480d265,2,true
+eb6115d4-c124-452e-847a-5c3044e5912a,Manos libres,21f6f03c-bd18-4641-bfa8-5977b480d265,3,true
+8ba8fb6a-0f6f-4b80-85e5-89231ec34ac3,Audio histórico,21f6f03c-bd18-4641-bfa8-5977b480d265,4,true
+97f1fcd7-4c8d-490a-803f-3627eae44d4b,Kit de interfaz para iPod,21f6f03c-bd18-4641-bfa8-5977b480d265,5,true
+fd2b5dfe-e739-4638-a6b0-87addf027e08,Unidad principal de navegación,21f6f03c-bd18-4641-bfa8-5977b480d265,6,true
+60ba07f7-b779-4b67-99ef-dce26ce85040,Kit de actualización de navegación,21f6f03c-bd18-4641-bfa8-5977b480d265,7,true
+4005a5a5-514a-4ae7-8f89-2647cddac359,Navegación portátil,21f6f03c-bd18-4641-bfa8-5977b480d265,8,true
+a614f92e-ca78-441a-bd6b-d415d7274367,Unidad premium de audio,21f6f03c-bd18-4641-bfa8-5977b480d265,9,true
+2cf970de-d1a6-4174-85d4-899c4d73a98b,Entretenimiento asiento trasero,21f6f03c-bd18-4641-bfa8-5977b480d265,10,true
+91f85613-2d9a-4bc4-b72b-467ad69cea7a,Radio satelital,21f6f03c-bd18-4641-bfa8-5977b480d265,11,true
+f23bea12-daf3-4959-9408-8820d04efb01,Protector de pantalla,21f6f03c-bd18-4641-bfa8-5977b480d265,12,true
+00c1cea8-bd29-443d-9375-c00385c33fba,Subwoofer,21f6f03c-bd18-4641-bfa8-5977b480d265,13,true
+51be5f68-026b-4f76-be0b-63013ed08412,Audífonos inalámbricos,21f6f03c-bd18-4641-bfa8-5977b480d265,14,true
+d559fae7-3cda-4cc5-ad2d-c62820f74662,Enfriador de aceite,2757dc09-7057-4ed4-8d4d-5f0963b9fd40,1,true
+b17d3162-f3db-4bcd-9f09-9c572cae151c,Bomba de aceite,2757dc09-7057-4ed4-8d4d-5f0963b9fd40,2,true
+0b6902c4-e04e-4e96-b355-460d4f80b530,Enfriador y línea (AT),2757dc09-7057-4ed4-8d4d-5f0963b9fd40,3,true
+6015662d-7ea6-4161-844e-bd591252df19,Enfriador y línea (CVT),2757dc09-7057-4ed4-8d4d-5f0963b9fd40,4,true
+c52e16a1-1ed2-4540-a51a-7998cfb9c690,"Enfriador y línea (HEV, BEV, FCEV)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,5,true
+1e69e306-888d-425a-9725-60fa595037d2,"Enfriador y línea (HV, EV, FCV)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,6,true
+0b45d70f-8a55-43aa-935c-ab49c5eb6e1c,Filtro de aceite,2757dc09-7057-4ed4-8d4d-5f0963b9fd40,7,true
+18bc282f-26fc-42ee-a49a-6e9b9087bb4f,"Bomba, enfriador y tubería (MTM)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,8,true
+5477fe2b-83d2-40b5-a894-094eb44a05a1,Bomba trasera y gobernador (AT),2757dc09-7057-4ed4-8d4d-5f0963b9fd40,9,true
+277a43b6-3846-4ed7-a699-b605aa2652b3,Convertidor y bomba delantera (CVT),2757dc09-7057-4ed4-8d4d-5f0963b9fd40,10,true
+8519a25a-ff09-47de-a79a-982c344b971c,"Convertidor, bomba delantera y cadena (AT)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,11,true
+cf388cca-c69e-4a03-9e7b-e7d95794e409,Bomba de aceite de transferencia,2757dc09-7057-4ed4-8d4d-5f0963b9fd40,12,true
+9d18813b-5bf4-4654-a408-7a3cb14e2e4d,Cuerpo de válvulas y colador (AT),2757dc09-7057-4ed4-8d4d-5f0963b9fd40,13,true
+ca58ed7c-9a20-4df0-b7f5-dd40759caa08,"Cuerpo de válvulas y colador (HEV, BEV, FCEV)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,14,true
+d5cf32ce-0be1-4ed0-8f93-74592eaf68de,"Cuerpo de válvulas y colador (HV, EV, FCV)",2757dc09-7057-4ed4-8d4d-5f0963b9fd40,15,true
+1ef421f4-7a68-40f4-8170-537f85bfbd69,Banda y clutch multidisco (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,1,true
+5b4b73c7-2fb3-4986-a026-9ac046b363de,"Freno No.3, 1a y reversa (AT)",27bd02cf-dd1d-40ca-be47-7889bbf1581b,2,true
+51961051-1aee-4e25-9e85-67ede53402e2,Soporte central y solar (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,3,true
+0174ac5f-4239-4377-b3d0-7995f81df5c4,Transmisión controlada electrónicamente,27bd02cf-dd1d-40ca-be47-7889bbf1581b,4,true
+eb6caf12-435b-4e36-a9f5-4cc43f218089,Carter trasero AT,27bd02cf-dd1d-40ca-be47-7889bbf1581b,5,true
+251b8517-4ec2-44ba-b7b5-29f6f9d1cf08,Engranaje planetario/pistón reversa (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,6,true
+7b0e0c41-a056-4dee-83f9-bfc453aa4bae,Caja y engrane PTO,27bd02cf-dd1d-40ca-be47-7889bbf1581b,7,true
+e6d9bbb0-da6f-4362-b332-92f06a4daf2b,Palanca y enlace PTO,27bd02cf-dd1d-40ca-be47-7889bbf1581b,8,true
+ac79a869-448f-4253-9f3b-fffa96ee8cea,Palanca y retén,27bd02cf-dd1d-40ca-be47-7889bbf1581b,9,true
+8fdec4db-96d6-4ff8-9302-5c3ac3c8e839,Engranaje velocímetro (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,10,true
+982848c0-e2a0-4e76-8a60-a55ff55c8e27,Enlace de aceleración y palanca (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,11,true
+003a88ed-ec2c-47c8-9a04-f0f04d4b11cf,Transaxle/conjunto/gasket (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,12,true
+296c6923-91d7-424e-a49a-a90a439e0e98,Carter y cárter de aceite (AT),27bd02cf-dd1d-40ca-be47-7889bbf1581b,13,true
+060b28d5-67e6-407d-9de1-7378ab0bb009,Iluminación decorativa,288f5e12-c838-4676-ba4b-0c9e6ccfa636,1,true
+e11a6425-f941-4089-b28b-8b71cff3e490,Soporte de actividad,288f5e12-c838-4676-ba4b-0c9e6ccfa636,2,true
+74d5e89b-d6df-4cae-b436-547af9493183,Portabicicletas,288f5e12-c838-4676-ba4b-0c9e6ccfa636,3,true
+1cc7e93a-4e27-467a-a4ce-364d5f118073,Parachoques,288f5e12-c838-4676-ba4b-0c9e6ccfa636,4,true
+038804b5-d11e-4167-84b0-8940e0b40417,Soporte de cámara,288f5e12-c838-4676-ba4b-0c9e6ccfa636,5,true
+8dfee4fe-9aee-4ba4-b1f4-9c6262972c10,Accesorios de camping,288f5e12-c838-4676-ba4b-0c9e6ccfa636,6,true
+577d0803-b936-4ea3-91f8-9e128ff21409,Protector catalítico,288f5e12-c838-4676-ba4b-0c9e6ccfa636,7,true
+c6b0761c-7759-48db-a4fa-51fcf348a1f9,Barras transversales,288f5e12-c838-4676-ba4b-0c9e6ccfa636,8,true
+ab15057d-d440-4441-b3be-7013fce349d8,Luces antiniebla,288f5e12-c838-4676-ba4b-0c9e6ccfa636,9,true
+50f57191-f288-4318-b4d4-a67dce365984,Marco de placa,288f5e12-c838-4676-ba4b-0c9e6ccfa636,10,true
+7418d2c5-b9e3-44c1-8ff1-b846ec5caa6a,Barra de luz,288f5e12-c838-4676-ba4b-0c9e6ccfa636,11,true
+7c9cbebc-22cf-4a29-a3d6-e12e3fc8ea4e,Off-road,288f5e12-c838-4676-ba4b-0c9e6ccfa636,12,true
+16ec2676-6346-4b19-864e-1f138dab6a97,Luces off-road,288f5e12-c838-4676-ba4b-0c9e6ccfa636,13,true
+628b48d6-e0cb-4d3b-b2cb-ad6dcae7971d,Rieles de roca,288f5e12-c838-4676-ba4b-0c9e6ccfa636,14,true
+9c3e9b81-311e-42f5-a3b1-65c634ff2c92,Canastilla de techo,288f5e12-c838-4676-ba4b-0c9e6ccfa636,15,true
+6658073c-5340-4118-9941-bf938dbe1ad1,Portaequipaje de techo,288f5e12-c838-4676-ba4b-0c9e6ccfa636,16,true
+53521ba4-bcf1-469e-94bb-dfd914817cfb,Utilitario de techo,288f5e12-c838-4676-ba4b-0c9e6ccfa636,17,true
+1a7bf761-64f4-4c6f-afc7-cb4d8e602e77,Estribos,288f5e12-c838-4676-ba4b-0c9e6ccfa636,18,true
+4c591dee-ddc6-4f3c-a89e-4e529cb1154e,Guardafangos y spoiler lateral,288f5e12-c838-4676-ba4b-0c9e6ccfa636,19,true
+7bf16c40-84ac-4cac-90ca-bbb7b2c65be0,Luz lateral de charco,288f5e12-c838-4676-ba4b-0c9e6ccfa636,20,true
+68e617c9-4c36-4c85-8006-b0b3c742fea1,Spoiler y guardafangos,288f5e12-c838-4676-ba4b-0c9e6ccfa636,21,true
+80ae3a16-683f-4ac8-8037-a011d696fa67,Estribos tubulares,288f5e12-c838-4676-ba4b-0c9e6ccfa636,22,true
+7c5a3892-8896-44aa-8ab1-b2ef9f7868db,Winche,288f5e12-c838-4676-ba4b-0c9e6ccfa636,23,true
+689a2a1d-1e17-477a-a0f0-c7a0760b945e,Antena,291132e1-84f8-4180-be5f-a3c2ce96482b,1,true
+fdb8c622-7c61-442d-8a0b-1d9951983cd3,Tablero / medidor,291132e1-84f8-4180-be5f-a3c2ce96482b,2,true
+68626657-0db5-4e10-97c2-84410108c456,Navegación y pantalla frontal,291132e1-84f8-4180-be5f-a3c2ce96482b,3,true
+c6c56e57-f2be-4ee0-9ff6-3b84f0cc31e2,Comunicación por radio,291132e1-84f8-4180-be5f-a3c2ce96482b,4,true
+f71b461d-c801-4fb3-bccc-82313b9c60d3,"Radio, amplificador y condensador",291132e1-84f8-4180-be5f-a3c2ce96482b,5,true
+166656d4-4956-419d-bea1-5f3ce1b1212c,Bocina,291132e1-84f8-4180-be5f-a3c2ce96482b,6,true
+e71df13a-aef8-4fef-9d92-3918e5305ce6,Bolsa de aire,2cf26c4f-07e9-49cd-a096-994325d6acf4,1,true
+313dae00-2ac7-45c1-820a-477041c7566b,ABS y control de derrape,2cf26c4f-07e9-49cd-a096-994325d6acf4,2,true
+5babad8e-a43e-448a-ba5e-6805f04a3d48,Antirrobo,2cf26c4f-07e9-49cd-a096-994325d6acf4,3,true
+c66588e5-4569-4a3f-8804-8329fc730933,Claxon,2cf26c4f-07e9-49cd-a096-994325d6acf4,4,true
+d6737f71-3565-44f6-9523-27e985e0ed90,Juego de cilindros de llave,2cf26c4f-07e9-49cd-a096-994325d6acf4,5,true
+902ca679-2903-4112-8dd5-dc7f40ec0ebd,Cinturón pasivo,2cf26c4f-07e9-49cd-a096-994325d6acf4,6,true
+2d8d9c14-55b5-4adf-96a6-33a53aa60a15,Sistema precolisión,2cf26c4f-07e9-49cd-a096-994325d6acf4,7,true
+f25dc7fb-be61-4aa3-b020-d661680a434b,Teléfono y llamada de emergencia,2cf26c4f-07e9-49cd-a096-994325d6acf4,8,true
+efece711-345d-43c1-9b7d-6e13fb3644d5,Sistema de presión de llantas,2cf26c4f-07e9-49cd-a096-994325d6acf4,9,true
+b82e2482-75cb-4c13-a76b-83f82fb459a6,Seguro inalámbrico,2cf26c4f-07e9-49cd-a096-994325d6acf4,10,true
+0b58efc6-2037-450f-82c4-f818b83b3bbc,Empaques de tapón de drenado,2d514351-6570-4287-a9e2-cf2d5a3fdf62,1,true
+d1432ef2-26f7-44d8-b06e-c6f7108691cc,Aceite de motor,2d514351-6570-4287-a9e2-cf2d5a3fdf62,2,true
+9477563e-3398-4bfd-b3d8-32c8d598962d,Filtros de aceite,2d514351-6570-4287-a9e2-cf2d5a3fdf62,3,true
+af9c34c3-66a4-4d17-a10d-e91173d812f8,Seguro y manija de puerta trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,1,true
+db234018-b50e-471f-bc42-e77bd28d591c,Seguro y bisagra de puerta trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,2,true
+95cc48d7-16f4-4b75-878f-7506189b966d,Puerta de cajuela y seguro,2e055772-1c10-4234-a5cf-e7d6dc90a23b,3,true
+9fef1d69-0d45-4710-aff4-1cba82db546d,Ensamble de carrocería trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,4,true
+e73c4e75-8fc2-4707-9858-23379682dfbf,Piso y guardabarros trasero,2e055772-1c10-4234-a5cf-e7d6dc90a23b,5,true
+0b9c881f-ab8e-41fd-96be-321366901ae6,Montaje de carrocería trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,6,true
+e6cef4be-ddba-4bec-857a-8da383b5c7f7,Panel lateral trasero,2e055772-1c10-4234-a5cf-e7d6dc90a23b,7,true
+aaf974ff-2f2a-47a9-9d61-3d883178e495,Parachoques trasero y soporte,2e055772-1c10-4234-a5cf-e7d6dc90a23b,8,true
+1c054c5d-7357-4dcb-bd6c-1c30b7b45cb8,Seguro y manija de puerta trasera lateral,2e055772-1c10-4234-a5cf-e7d6dc90a23b,9,true
+37635755-7064-407e-b56c-a17dad1258a4,Elevador y bisagra de puerta trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,10,true
+e57a110b-4e81-42d5-a5a3-f1970b1e5d6b,Moldura trasera,2e055772-1c10-4234-a5cf-e7d6dc90a23b,11,true
+e6891d1f-dddb-4e05-a42a-3bdfaefb481d,Alternador,2f67b5de-aa46-452c-ab71-ec0641b12512,1,true
+71558a6f-bb57-482e-bce0-d46a68df1aaa,Batería y cables,2f67b5de-aa46-452c-ab71-ec0641b12512,2,true
+369cf628-86d8-484e-be33-aa501555e71a,Bandeja/soporte de batería,2f67b5de-aa46-452c-ab71-ec0641b12512,3,true
+3569820c-855c-4742-b84f-038bb9009b4b,Distribuidor,2f67b5de-aa46-452c-ab71-ec0641b12512,4,true
+092df3d0-843f-4cfd-a3cf-359cada9b211,"Bujía, bobina e incandescente",2f67b5de-aa46-452c-ab71-ec0641b12512,5,true
+bf710465-9849-471a-8654-f04f263e02c3,Marcha/arrancador,2f67b5de-aa46-452c-ab71-ec0641b12512,6,true
+91ada05d-e702-4d15-bb13-0029d330e538,Baterías,3025fc9b-e2ba-416c-b62e-af1cffa6611a,1,true
+1e613732-1456-409b-b361-0659ed3365e2,Frenos,3025fc9b-e2ba-416c-b62e-af1cffa6611a,2,true
+a1269388-e1e3-4983-8b5e-6b2b986ea948,Refrigerante,3025fc9b-e2ba-416c-b62e-af1cffa6611a,3,true
+3986255d-f6fd-4941-ae8c-b3ef1c7eb68b,Filtros,3025fc9b-e2ba-416c-b62e-af1cffa6611a,4,true
+af2bd6d5-e0d9-4930-9677-ebe5422c6da4,Ignición,3025fc9b-e2ba-416c-b62e-af1cffa6611a,5,true
+2d514351-6570-4287-a9e2-cf2d5a3fdf62,Cambio de aceite,3025fc9b-e2ba-416c-b62e-af1cffa6611a,6,true
+cf900b54-2cf5-43ac-b29c-1775bdb9a423,Pintura,3025fc9b-e2ba-416c-b62e-af1cffa6611a,7,true
+a86a9d94-95c3-456c-8088-2684a28c4c89,Transmisión,3025fc9b-e2ba-416c-b62e-af1cffa6611a,8,true
+307d42b7-8c70-4a9e-88b2-bb1a3226a381,Parabrisas,3025fc9b-e2ba-416c-b62e-af1cffa6611a,9,true
+9c0e0009-a02e-4410-aef7-a91eb933d148,Líquido limpiaparabrisas,307d42b7-8c70-4a9e-88b2-bb1a3226a381,1,true
+4e42843c-84a7-4c09-a888-e923ef2e9ce3,Plumillas,307d42b7-8c70-4a9e-88b2-bb1a3226a381,2,true
+f89029d1-146f-4fdd-937d-eba44a6cb47e,Insertos de plumillas,307d42b7-8c70-4a9e-88b2-bb1a3226a381,3,true
+f29bd783-5253-44d7-a734-0121d1bf02aa,Cilindro/actuador de vacío de transferencia,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,1,true
+79747acc-4b8a-428f-9cb0-c470ff92fba1,Conjunto de transferencia y empaques,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,2,true
+fd8fc44c-6a1a-46ac-a050-70884b564d4a,Caja de transferencia y carter,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,3,true
+15115f9b-3216-47ca-956d-72e38c658d5b,Palanca y varilla de cambios de transferencia,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,4,true
+91133d28-2d57-4952-839e-ba73b8e1120a,Líneas de vacío de transferencia,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,5,true
+1a90006e-ead0-4ce0-8704-62d0e2a1d9c7,Cuerpo de válvulas de transferencia,3108cccb-9b7d-488f-ac17-3a0f624bcc2a,6,true
+fcb904b5-3744-4e27-abc9-ee9994a0552b,Cámara de tablero,32dccb66-0464-4ae4-a9a9-99d59f112f04,1,true
+9b917802-b556-40d3-8495-622072f054dc,Ventilación de cofre,350eb480-c122-463b-b0ab-e43332a9ec7d,1,true
+405a3401-d32c-4299-893b-7e69ec006840,Cofre y seguro de cofre,350eb480-c122-463b-b0ab-e43332a9ec7d,2,true
+80e1eb39-b0ce-4a5e-88da-610c3016f1ef,Parachoques frontal y soporte,350eb480-c122-463b-b0ab-e43332a9ec7d,3,true
+316b7c9e-f3fb-41a6-82c0-2729a96779d1,Panel frontal y faldón de guardabarros,350eb480-c122-463b-b0ab-e43332a9ec7d,4,true
+dcf07a8e-aa8d-49d0-9ee2-f9bd2155b36c,Seguro y manija de puerta delantera,350eb480-c122-463b-b0ab-e43332a9ec7d,5,true
+9bfdff9e-00d4-472a-a31e-e1aa0f811eb4,Elevador y bisagra de puerta delantera,350eb480-c122-463b-b0ab-e43332a9ec7d,6,true
+048b3d95-ed0a-45c3-ac88-9f13b48543ca,Moldura frontal,350eb480-c122-463b-b0ab-e43332a9ec7d,7,true
+8e9ce731-95cc-4375-9e3d-4b90b05f9351,Ventilador frontal,350eb480-c122-463b-b0ab-e43332a9ec7d,8,true
+04b3fc68-3ea1-430b-bbba-918e97942c20,Cofre y guardabarros delantero,350eb480-c122-463b-b0ab-e43332a9ec7d,9,true
+2c95c724-133f-4933-813d-2644192c4dd7,Seguro y bisagra del cofre,350eb480-c122-463b-b0ab-e43332a9ec7d,10,true
+d7facf1b-446e-44b4-8160-f529459da42e,Parrilla del radiador,350eb480-c122-463b-b0ab-e43332a9ec7d,11,true
+dd8739ba-8121-447e-83e9-06979dafd74d,Soporte de radiador y guía de aire,350eb480-c122-463b-b0ab-e43332a9ec7d,12,true
+bcde92e6-f1ea-410c-928c-34fd04ef303c,Filtros de aire de cabina,3986255d-f6fd-4941-ae8c-b3ef1c7eb68b,1,true
+28b38fd9-526f-41fb-bde7-0f79fb84fbf8,Filtros de aire de motor,3986255d-f6fd-4941-ae8c-b3ef1c7eb68b,2,true
+9565985e-5bc3-4122-9ee0-588b7313ad2c,Filtros de combustible,3986255d-f6fd-4941-ae8c-b3ef1c7eb68b,3,true
+f6c44b59-1c04-463c-b85d-080fe7615445,Filtros de aire e intakes TRD,3986255d-f6fd-4941-ae8c-b3ef1c7eb68b,4,true
+b267f744-d45c-44da-8c71-4dcabc49930d,Árbol de levas y válvulas,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,1,true
+3a8ac6ec-de4c-47d6-87b2-99cd9d469301,Cigüeñal y pistón,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,2,true
+4bbf80be-9d76-4127-97df-bb89fb5c8392,Bloque de cilindros,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,3,true
+1cea3e90-af51-4ce3-af37-f6ef6aa8fa19,Cabeza de cilindros,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,4,true
+c99753f4-6074-44ec-b356-099d684d33e9,Placa de motor y advertencia,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,5,true
+facb453b-8142-455d-b3e5-5bf230e0c160,Kit de empaques de motor,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,6,true
+18094550-13e1-4ef2-9087-f9e26a03f44e,Soportes de motor,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,7,true
+5a347911-95c8-4b60-a26b-b5eb152eb9a6,Ensamble parcial de motor,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,8,true
+db0a03ba-d33e-4d98-80bc-3bb5ce69bc44,Ensamble short block,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,9,true
+c17cad30-49a9-414d-8c43-514b448a99e0,Banda de tiempo,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,10,true
+2b00872c-e829-4c9b-9d2c-413b797e9205,Cadena de tiempo,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,11,true
+8b828116-e4fa-4592-b9ba-61fafc7b5877,Cubierta de distribución y placa trasera,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,12,true
+67c25fd7-9c10-421b-ac55-62191313598d,Tanque y tubo de urea,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,13,true
+480a7c34-0000-497e-ac55-bdc2432e2446,Banda V,3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,14,true
+967f3b0b-58f5-4363-b3c6-0ba8312f32b4,Partes de convertible,403bdc9e-3b45-4715-a8a3-895b83bc75c8,1,true
+dee633b5-f839-426b-b745-2c7fef6a578b,Cubierta superior,403bdc9e-3b45-4715-a8a3-895b83bc75c8,2,true
+737f3207-607b-4324-9737-201d9f77eac1,Miembro de piso,403bdc9e-3b45-4715-a8a3-895b83bc75c8,3,true
+cac5107f-1459-41e5-8253-f378738c33d2,Piso y panel inferior trasero,403bdc9e-3b45-4715-a8a3-895b83bc75c8,4,true
+01a212f7-0576-4c1b-9ef9-0fe0e2f5c3de,Larguero lateral de piso,403bdc9e-3b45-4715-a8a3-895b83bc75c8,5,true
+a6c875cf-2506-4f9c-a48c-35ad56247a5f,Motor de elevador y solenoide de seguro,403bdc9e-3b45-4715-a8a3-895b83bc75c8,6,true
+6d9858b5-f7f5-405c-859e-0f33f38243a9,Ventilación trasera y de techo,403bdc9e-3b45-4715-a8a3-895b83bc75c8,7,true
+caf56def-c441-4b3c-90a7-2428b5b2a88d,Panel de techo y panel trasero,403bdc9e-3b45-4715-a8a3-895b83bc75c8,8,true
+7f8f4e8e-393f-4cdb-84a9-db2457fc3cb6,Ventilación lateral de techo,403bdc9e-3b45-4715-a8a3-895b83bc75c8,9,true
+e2b8f62b-1092-4b78-bed6-49851c43994f,Espejo lateral,403bdc9e-3b45-4715-a8a3-895b83bc75c8,10,true
+65b970ff-6771-4912-8e41-3237964e2983,Moldura lateral,403bdc9e-3b45-4715-a8a3-895b83bc75c8,11,true
+8359a44f-8275-423a-a2bc-a2b87961d55e,Rueda y riel lateral,403bdc9e-3b45-4715-a8a3-895b83bc75c8,12,true
+80124786-2d5e-4613-b432-863939e14612,Lámina lateral,403bdc9e-3b45-4715-a8a3-895b83bc75c8,13,true
+b653d455-aa64-435d-b42f-3892ef6342e5,Eje de control y cruceta,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,1,true
+68441327-7409-4149-94e0-af71c13b1133,Control de bloqueo de diferencial,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,2,true
+80579937-6de2-45cc-94b7-3c502bd39e26,Eje de transmisión,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,3,true
+19ae8790-7420-4fd5-a516-159852054227,Eje motriz de equipo,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,4,true
+c4711222-3547-49fc-983e-da39a8a59f34,Eje delantero y diferencial,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,5,true
+394cdc86-e374-4cd5-99a8-3baadc5aea87,Maza delantera,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,6,true
+dd8659f0-d0d7-4766-9535-27b9453e1bd2,Semi-eje delantero,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,7,true
+5401e111-9e10-437b-aef1-ebedd86ccbe4,Engranaje overdrive AT,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,8,true
+108ba361-dd52-45a8-8c8e-d49b6d16bd51,Cardán y junta universal,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,9,true
+3fe4ae48-321b-4d1d-9934-be6c81ca8f5f,Eje trasero y diferencial,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,10,true
+d99cf3d4-8264-4b3e-aa4e-08743840a6ec,Semi-eje y maza trasera,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,11,true
+1ebb00fb-a493-4597-966c-eb778add6d20,Transaxle (CVT),46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,12,true
+d0e22589-8441-43db-9089-9f3d5e457ad1,"Transaxle (HEV, BEV, FCEV)",46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,13,true
+e5f247ea-d126-421a-935a-3e49e8481102,"Transaxle (HV, EV, FCV)",46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,14,true
+03360581-e572-4e9a-bb98-bb84c447d3a7,Engranaje de transferencia,46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,15,true
+da57976c-629a-41f8-837d-7182f753ab69,Sistema de combustible y relacionados,4beebfd3-3368-436a-aca7-89ade01d7c7c,1,true
+2757dc09-7057-4ed4-8d4d-5f0963b9fd40,Sistema de aceite y relacionados,4beebfd3-3368-436a-aca7-89ade01d7c7c,2,true
+bbfc7849-2b0b-42f7-9cc8-8f4b10c9c22c,"Computadora (BEV, FCEV)",4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,1,true
+a4452131-c408-4187-8586-efb50c9ffd55,"Computadora (EV, FCV)",4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,2,true
+16e5dbf9-bf46-49fb-8d7c-6a28256e1b09,Computadora para HEV,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,3,true
+95524b84-1a26-4894-afa7-b38312ad3bf0,Computadora para híbrido,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,4,true
+92536034-7adc-47a7-8070-4e21d94b9617,Control electrónico de altura,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,5,true
+5a863bfe-df7c-4c9e-9041-a62119364a55,Caja de fusibles / unión,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,6,true
+a9bc6ec3-4743-4ce0-957e-f7939559d6d7,Overdrive y transmisión controlada,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,7,true
+ce73d052-e95c-41a5-b2b7-368953cbe8b9,Computadora de dirección asistida,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,8,true
+c336842f-e275-48d2-85e4-14b9d4edc98b,Relés / ECU de conmutación,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,9,true
+57fa0212-dc2e-43cf-8579-dc59b55c265d,Cableado y abrazaderas,4dd98218-ef1d-4e2e-a0d9-a0aa504bf0b0,10,true
+d3c5d0e0-b4e9-4a2c-83bb-6229d27e68c7,Aislante de piso,551e2803-9325-4a85-a150-8a6b74d659bc,1,true
+3ab3a30f-3da7-44ab-8f7b-60353fb12e6e,Tapete de piso,551e2803-9325-4a85-a150-8a6b74d659bc,2,true
+a96b6aa6-15ba-4bac-8584-74e9656525f8,Tapete y aislante de piso,551e2803-9325-4a85-a150-8a6b74d659bc,3,true
+86a1f478-f339-4f1d-9cd3-5f852100bb33,Tapete y alfombra,551e2803-9325-4a85-a150-8a6b74d659bc,4,true
+15f27ef5-5891-4f98-b7cd-2d0ccdfb0141,Tapicería de techo y aislante,551e2803-9325-4a85-a150-8a6b74d659bc,5,true
+9811d243-3d2f-4347-8a6d-0364b5514863,Enfriamiento BEV,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,1,true
+2481d4d7-eadf-4c5c-bed5-de4e741201c2,Enfriamiento EV,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,2,true
+5fd5042f-1b30-4f72-ab22-9535ca8ca7c6,Enfriamiento FCEV,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,3,true
+6fa2f219-d58f-48c9-a5a6-b9daa77add59,Enfriamiento FCV,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,4,true
+55ce84b7-b07d-4cb1-9024-04743babb02d,Intercooler y radiador secundario,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,5,true
+8b99df5d-e611-4a71-aee7-0a248325b9fa,Enfriamiento de inversor,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,6,true
+5530ec58-7ed0-4e65-9156-46f27e5e97ef,Radiador y salida de agua,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,7,true
+5fe364e8-e9bf-4cbc-a73f-fa7a522c352b,Bomba de agua,5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,8,true
+0c7f1cca-7a72-4ff1-88df-31bb9ebd00c1,"Convertidor/cargador DC-DC (BEV, FCEV)",6244c28e-4390-497f-8b6b-8a860402b124,1,true
+1dd71ad1-3b70-42b9-8fe8-f13afdf00c4a,"Convertidor/cargador DC-DC (EV, FCV)",6244c28e-4390-497f-8b6b-8a860402b124,2,true
+e435a4da-c59b-47ac-94e6-8d8c529b2221,Motor de vehículo eléctrico,6244c28e-4390-497f-8b6b-8a860402b124,3,true
+fd20e58a-9c0a-420a-b5e1-71bba45b440c,Admisión/escape FCEV,6244c28e-4390-497f-8b6b-8a860402b124,4,true
+970952eb-129a-4a97-b86e-23b92a879a75,Admisión/escape FCV,6244c28e-4390-497f-8b6b-8a860402b124,5,true
+2c413237-9d27-4038-a62d-131a976ee808,Stack y convertidor FCEV,6244c28e-4390-497f-8b6b-8a860402b124,6,true
+750aeff2-c3f5-4ef0-890f-92e20e899f73,Inversor vehículo híbrido (HV),6244c28e-4390-497f-8b6b-8a860402b124,7,true
+2b0f8700-cba7-4890-a7ad-8ab3a1d4fd2c,"Inversor (BEV, FCEV)",6244c28e-4390-497f-8b6b-8a860402b124,8,true
+951e93db-5eb0-42f3-81e6-d9f68dd6d388,"Inversor (EV, FCV)",6244c28e-4390-497f-8b6b-8a860402b124,9,true
+71e61009-9e38-4474-bef5-2dc9788c847e,Inversor para HEV,6244c28e-4390-497f-8b6b-8a860402b124,10,true
+91b1491c-f580-4010-baf8-f79679f97b79,Motor para BEV,6244c28e-4390-497f-8b6b-8a860402b124,11,true
+d6cf4ab5-db7d-4ca5-b092-d61c12247ad5,Stack y convertidor para FCEV,6244c28e-4390-497f-8b6b-8a860402b124,12,true
+e63666af-1baa-404a-982f-c429991f10f1,Tablero y cubierta de cajuela,68dd1ab9-e472-4352-bac3-5d94688b2bd5,1,true
+d0b6fc48-6aab-4e4c-9db4-1264390f27b5,Tapete de cajuela y bandeja,68dd1ab9-e472-4352-bac3-5d94688b2bd5,2,true
+a54c9b56-06e8-4559-8f8a-8454e22ff136,Bandeja trasera,68dd1ab9-e472-4352-bac3-5d94688b2bd5,3,true
+013d58d2-f571-4796-bc06-26b1c1a8ab05,Cortina superior y panel de techo trasero,68dd1ab9-e472-4352-bac3-5d94688b2bd5,4,true
+d72302e0-e167-4fa1-9e39-56386a172d50,Protección de carrocería y pintura,6af57f44-7a7d-4685-836e-d9d9ff236de2,1,true
+288f5e12-c838-4676-ba4b-0c9e6ccfa636,Productos exteriores,6af57f44-7a7d-4685-836e-d9d9ff236de2,2,true
+c137d5bf-3336-40c6-ae51-bc30a0dbdac6,Estilo exterior,6af57f44-7a7d-4685-836e-d9d9ff236de2,3,true
+b0dd6cf3-8138-492f-90a7-9a4417535a03,Remolque,6af57f44-7a7d-4685-836e-d9d9ff236de2,4,true
+d31d76ff-d045-4fa9-aeb2-857b7c982486,Productos para caja de pickup,6af57f44-7a7d-4685-836e-d9d9ff236de2,5,true
+853a158e-5803-42d4-a568-e1c2ec964c12,Descansabrazos y visera,710b0387-f9ab-4c13-9e29-63579b4941e4,1,true
+79a63ab0-30a1-4649-ab92-292375f0f15d,Cenicero,710b0387-f9ab-4c13-9e29-63579b4941e4,2,true
+3c7ad5dd-9753-42f4-b384-89f2c8d4c061,Caja y soporte de consola,710b0387-f9ab-4c13-9e29-63579b4941e4,3,true
+c7a81367-a61a-4467-ab88-748fc25e6af8,Aislante de tablero y piso,710b0387-f9ab-4c13-9e29-63579b4941e4,4,true
+d79df677-f94c-4016-aa5a-b4abebe4e9be,Guantera y tablero,710b0387-f9ab-4c13-9e29-63579b4941e4,5,true
+edcb96ed-b6fb-4450-990e-527e62f3dc09,Panel interior,710b0387-f9ab-4c13-9e29-63579b4941e4,6,true
+c45452d6-f628-46a9-846b-8770cf07e990,Panel interior y moldura de apertura,710b0387-f9ab-4c13-9e29-63579b4941e4,7,true
+d7ac27da-03ac-4233-a49f-70f00d35da42,Panel/moldura imitación madera,710b0387-f9ab-4c13-9e29-63579b4941e4,8,true
+6358345c-17ed-4723-a48f-6989d7f00b76,Panel y cristal de puerta trasera,775321cc-409f-4c87-9223-fbb88691fdbd,1,true
+0621df7c-14a1-4fa7-80be-7f5d73aaf221,Panel y cristal de puerta delantera,775321cc-409f-4c87-9223-fbb88691fdbd,2,true
+6c866bbe-501b-4d8c-80bf-1f4b5e735ed0,Ventilación en puerta delantera,775321cc-409f-4c87-9223-fbb88691fdbd,3,true
+5f6c6631-ea12-4681-b09b-eec08ab3da62,Ventanilla de cuarto,775321cc-409f-4c87-9223-fbb88691fdbd,4,true
+dfab4624-56e7-448e-947e-401e3d2589f0,Panel y cristal de puerta trasera,775321cc-409f-4c87-9223-fbb88691fdbd,5,true
+211b2360-619b-4f41-8e74-ee7bb758f9d8,Panel de techo y cristal trasero,775321cc-409f-4c87-9223-fbb88691fdbd,6,true
+3e192ad9-7373-4e0f-ba62-11ac4f22debc,Cortina y rack interior,775321cc-409f-4c87-9223-fbb88691fdbd,7,true
+0ab3581d-c1f9-4f96-a5de-a4dabb90ca22,Separador y cristal de cabina,775321cc-409f-4c87-9223-fbb88691fdbd,8,true
+485bfacc-36e0-4fc4-9766-7c199684d7e6,Panel y cristal de puerta divisoria,775321cc-409f-4c87-9223-fbb88691fdbd,9,true
+9ca92cc5-c275-41c0-9bf7-30abf237c8d3,Ventana lateral,775321cc-409f-4c87-9223-fbb88691fdbd,10,true
+756b26d0-d5ce-4183-ac76-ef917b929d5e,Parabrisas y panel de cofre,775321cc-409f-4c87-9223-fbb88691fdbd,11,true
+2cf3a733-885c-4085-a735-a11cf1f6ef50,Parabrisas y panel frontal,775321cc-409f-4c87-9223-fbb88691fdbd,12,true
+8ee58396-08b0-4fc9-b471-21dd8548b454,Lavador trasero,7d6f32af-7fb8-4f07-894a-7797d36860a2,1,true
+58e97a87-a635-425b-b293-ec7c55f752df,Limpiaparabrisas trasero,7d6f32af-7fb8-4f07-894a-7797d36860a2,2,true
+d1d48f3f-5f6f-440e-8c37-8583aab0fc14,Sistema de lavado,7d6f32af-7fb8-4f07-894a-7797d36860a2,3,true
+09947fd8-540b-42b6-8fa1-3ae348a9d75f,Limpiaparabrisas,7d6f32af-7fb8-4f07-894a-7797d36860a2,4,true
+613fb078-4568-41be-94a5-58795f0d2ade,Clutch performance,80b2ca41-941d-42ca-a277-faa4f3846358,1,true
+18862f1d-1504-4c01-b786-5440ae9ad326,Quickshifter performance,80b2ca41-941d-42ca-a277-faa4f3846358,2,true
+8b5ee1b6-3d18-46dc-8116-950642d40e4a,Herramientas,8a49d961-fd5b-4acb-a810-178bccb0a21f,1,true
+b4ae5348-9112-42b4-8db0-bebe531d337f,Franjas de carrocería,8aad8c08-f271-460d-a812-243d1afc56aa,1,true
+8a43b52a-455d-4e70-b2bd-ce9b92e00046,Placa de advertencia,8aad8c08-f271-460d-a812-243d1afc56aa,2,true
+5647a525-2441-4b5d-a4f1-5d2054cace88,Emblema y placa de nombre,8aad8c08-f271-460d-a812-243d1afc56aa,3,true
+acdfc10c-b517-430e-be16-beb9671587a7,Emblema y placa (exterior/interior),8aad8c08-f271-460d-a812-243d1afc56aa,4,true
+af6c898a-f928-4878-ae3a-5bb39be68352,Placa de advertencia interior/exterior,8aad8c08-f271-460d-a812-243d1afc56aa,5,true
+b20da90f-f1b3-4330-b523-8168950f1026,Moldura,8aad8c08-f271-460d-a812-243d1afc56aa,6,true
+1c995717-a19b-43bb-82bf-11cda91bd01d,Herramienta estándar,8b5ee1b6-3d18-46dc-8116-950642d40e4a,1,true
+8ca32fa9-b1e6-4f7f-b0ad-269bda265fb2,Caja de herramientas y soporte de placa,8b5ee1b6-3d18-46dc-8116-950642d40e4a,2,true
+5f7ec63b-3317-4e89-bed5-d251141174cc,Descansabrazos,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,1,true
+24433741-055a-438c-82b5-e58e96bb91a7,Espejo electrocrómico,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,2,true
+73e1bea8-86a3-45cc-b2e4-60cea3ce1f0c,Cámara de reversa,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,3,true
+347efb1d-cb7c-4c6b-9ca9-60149f823b4d,Soporte de teléfono,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,4,true
+72a935f5-4617-4949-956f-002a067cda96,Amplificador de señal celular,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,5,true
+2ce9fc1a-8ed4-4520-86da-1d1bf50314a0,Caja de consola central,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,6,true
+b619498c-a396-4d87-a931-d49ce3f4b52c,Bandeja de consola central,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,7,true
+3437201c-99be-4df8-aba1-3d851ee0a412,Cable de carga,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,8,true
+30af6449-7ba7-477e-ac89-c440f9eec482,Monedero y cenicero,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,9,true
+3e249ace-5887-492c-b98b-d44138c67573,Carga para vehículo eléctrico,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,10,true
+01db44ef-a8cb-4454-a967-06175d6344f5,Kit de emergencia,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,11,true
+01cb3824-e320-478e-814f-9c3dc902bcba,Extintor,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,12,true
+b7e0262f-cc22-4b1f-a810-4162e2266b42,Botiquín,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,13,true
+38a9404b-323f-4b6b-94cd-b2f42eb73ca5,Homelink,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,14,true
+fb2f9c86-5125-48a2-b356-401ff2c46b9b,Funda de llave,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,15,true
+84daf8ea-2cc3-4dcc-976b-af4fd7f48c98,Sensor de pie,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,16,true
+78966a7b-8437-4c0c-90b4-1af2802e3d1c,Inflador de llantas a bordo,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,17,true
+65c1af11-df93-4fb1-bbf6-5f7fd26241a8,Organizador,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,18,true
+6eaad06f-0dd8-41d4-8ae2-c5cbb84db16d,Portafolio de propietario,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,19,true
+12886281-0c79-4eee-8d94-a039c44c98c4,Productos para mascotas,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,20,true
+0b4ae4c0-23b5-406a-9ed8-51a7d5eae92e,Puerto de energía,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,21,true
+c9843719-9fbb-4a9b-a1a9-9a98169adb05,Encendido remoto,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,22,true
+812d147c-8a63-4a07-8aa2-09e6ee3303cd,Respaldo,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,23,true
+58753595-813b-4061-9eba-590a8b6cdbc0,Sombrilla / parasol,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,24,true
+ec12bef7-e092-49b3-b861-6abdf48cb917,Arnés,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,25,true
+3808c8dc-f3e9-49b8-9eda-568fdcd31da4,Cargador inalámbrico,8e5159a5-e1a5-4adf-9a3e-98c5d836470f,26,true
+785b3bb5-9d00-4024-9d02-7dc5150b6fcc,Baterías True Start y True 2,91ada05d-e702-4d15-bb13-0029d330e538,1,true
+06fbef5e-b119-4efc-9672-c8c4ad9926e4,Intake de aire performance,95054a61-3851-436f-8f52-3ab2b86b2efd,1,true
+c9c6188d-8229-4b45-9b3a-9f558b746078,Escape performance,95054a61-3851-436f-8f52-3ab2b86b2efd,2,true
+63d3bd67-a443-47de-b6a4-9792b0a4d4dd,Supercargador performance,95054a61-3851-436f-8f52-3ab2b86b2efd,3,true
+30755632-1652-4bb2-a9b5-9848b4acfaad,Conlight (control automático de luz),95be2505-3713-4cce-8a29-25d649e78ef8,1,true
+f99b8d19-c08a-4048-b901-39e8efa29386,Luz de giro,95be2505-3713-4cce-8a29-25d649e78ef8,2,true
+e8820e30-2950-4536-b59b-7eef50548c62,Luz diurna,95be2505-3713-4cce-8a29-25d649e78ef8,3,true
+6ed9a880-8323-4cc5-9f15-1e0a6ef1abd9,Antiniebla,95be2505-3713-4cce-8a29-25d649e78ef8,4,true
+60e9dc84-ea7c-44e7-80d1-d76b58bc4c27,Luz de gálibo delantera,95be2505-3713-4cce-8a29-25d649e78ef8,5,true
+06b4c982-e25f-496d-9135-69367d0f0cdd,Luz de posición delantera,95be2505-3713-4cce-8a29-25d649e78ef8,6,true
+b81a0023-8c8d-42d8-8357-5b4a9fcccdc6,Direccional delantera,95be2505-3713-4cce-8a29-25d649e78ef8,7,true
+7dfa4ea7-9ba4-4038-b107-6a93d7a03312,Faro,95be2505-3713-4cce-8a29-25d649e78ef8,8,true
+b84dbcc8-990b-489a-b698-245d9f776dca,Direccional lateral / luz de espejo,95be2505-3713-4cce-8a29-25d649e78ef8,9,true
+756df51e-2633-4f77-9b6f-b60e6700a8b3,Reflector / luz de búsqueda,95be2505-3713-4cce-8a29-25d649e78ef8,10,true
+3bb49583-0ba8-429c-a2d7-f3caa3119f24,Filtro de aire performance,97abf3d2-a518-418b-bd79-80ac2adf3f65,1,true
+6fa9229a-1eaf-4f73-8c6b-e2c82f789cff,Tapón de aceite performance,97abf3d2-a518-418b-bd79-80ac2adf3f65,2,true
+0229f6b3-1cb9-4c15-bab1-91cd150c167b,Filtro de aceite performance,97abf3d2-a518-418b-bd79-80ac2adf3f65,3,true
+99332f7f-2932-4635-ba75-0db26f829d9d,Tapón de radiador performance,97abf3d2-a518-418b-bd79-80ac2adf3f65,4,true
+057e0da2-21ec-4254-9f1f-d957b0e4107e,Centro de rin performance,97ca2201-fe01-4df9-afa7-769704840b40,1,true
+56b5600b-e1d9-4424-8a34-2beada1f33e1,Tuercas performance,97ca2201-fe01-4df9-afa7-769704840b40,2,true
+70131e5a-002e-47d8-af56-d1f56d530a02,Tapas performance,97ca2201-fe01-4df9-afa7-769704840b40,3,true
+26ff2fd6-275d-47c1-a7a0-c0267acb6d9c,Inserciones de rin performance,97ca2201-fe01-4df9-afa7-769704840b40,4,true
+55b8123d-688e-4250-9e1d-4ceacb47d8ae,Candados para rin performance,97ca2201-fe01-4df9-afa7-769704840b40,5,true
+426d92fd-6ce7-4e3f-84a9-4755cf04f859,Rines performance y relacionados,97ca2201-fe01-4df9-afa7-769704840b40,6,true
+ac5bb148-e68a-4d77-b330-39a0d23f4baf,Seguro de llanta de refacción,97ca2201-fe01-4df9-afa7-769704840b40,7,true
+cb998006-a6e1-4fe5-aa15-9bcdc27a73da,Luz de reversa,98e2982e-8da4-4ac1-8aed-265324482e38,1,true
+11a50314-2b95-44d6-b0f6-89a29ed2a9af,Luz de freno central,98e2982e-8da4-4ac1-8aed-265324482e38,2,true
+ce42b162-1d05-4eab-be85-edca80bdf2ef,Calavera,98e2982e-8da4-4ac1-8aed-265324482e38,3,true
+a2e96bf0-28b4-40ec-9c27-ab155df8d8b6,Antiniebla trasera,98e2982e-8da4-4ac1-8aed-265324482e38,4,true
+31849f4c-c87e-4578-9883-2ebcc20552c8,Luz de placa trasera,98e2982e-8da4-4ac1-8aed-265324482e38,5,true
+eb89ab42-f1c5-44b4-9fd0-f082430a401e,Luz lateral trasera,98e2982e-8da4-4ac1-8aed-265324482e38,6,true
+154c0075-9eba-4bf6-81a6-dab36b6f1b7c,Reflector,98e2982e-8da4-4ac1-8aed-265324482e38,7,true
+6007e634-69dc-423b-b659-8cbccf93646d,Luz de trabajo,98e2982e-8da4-4ac1-8aed-265324482e38,8,true
+2dbeaa6c-6e3b-4263-b2a2-84c8f00c5810,Refrigerante Toyota genuino,a1269388-e1e3-4983-8b5e-6b2b986ea948,1,true
+be4eb13e-c153-4c41-8343-56b5c6a32d0b,Gestión de carga,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,1,true
+8e5159a5-e1a5-4adf-9a3e-98c5d836470f,Comodidad del conductor,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,2,true
+f3c88f39-c995-43ce-8123-a82a1f988582,Tapetes y protección interior,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,3,true
+1cbf6388-bfc1-47fe-bb64-c0243359de69,Productos interiores,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,4,true
+04be8b06-2f70-4b95-8b50-aa14eb2ba0df,Estilo interior,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,5,true
+21f6f03c-bd18-4641-bfa8-5977b480d265,"Audio, entretenimiento y navegación (accesorios)",a60ac249-d808-4bd2-a6ee-d37b9cd496e9,6,true
+f1c26c61-0996-49b4-bcde-e957810573b8,Seguridad del vehículo,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,7,true
+32dccb66-0464-4ae4-a9a9-99d59f112f04,Video,a60ac249-d808-4bd2-a6ee-d37b9cd496e9,8,true
+4076ddb7-becd-462f-8a67-4bf8105ee315,Fluido de transmisión,a86a9d94-95c3-456c-8088-2684a28c4c89,1,true
+7349faa4-4aad-4a4d-9156-e5baad59d651,Asiento delantero y riel,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,1,true
+9b62db7f-60c8-4bcd-9c96-915062491c51,Asiento trasero y riel,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,2,true
+4a05c612-aa57-4a4f-8b25-2b67b1f84525,Asiento y riel,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,3,true
+2bd65d21-b354-4a5c-8b4a-f4911ced6267,Cinturón de seguridad,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,4,true
+4612b341-1b14-4964-8dfd-e115e88931a9,Cinturón y asiento infantil,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,5,true
+ebcc229e-5972-41c0-b075-9cf3b43ea8ba,Motor y calefactor de asiento,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,6,true
+6b5944ea-9a39-4af1-8990-c08ce159049a,Riel de asiento,aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,7,true
+c5bcc604-b395-4d95-a520-c19436138134,Base de asiento (camión),aa57fb2d-c6f0-46cc-8d5e-1cad9b42a89f,8,true
+a411905d-74bd-48db-b71b-86fac8759818,Bujías y cables,af2bd6d5-e0d9-4930-9677-ebe5422c6da4,1,true
+14f39be6-f78b-45bc-8879-7e27890a38f0,Montura de bola,b0dd6cf3-8138-492f-90a7-9a4417535a03,1,true
+e43fd60b-f496-4f5f-ac43-55f2a2bd3404,Accesorios de enganche,b0dd6cf3-8138-492f-90a7-9a4417535a03,2,true
+e5d3ef08-a6c1-484f-8b70-5bf49d52ddb9,Enganche de remolque,b0dd6cf3-8138-492f-90a7-9a4417535a03,3,true
+b2e6296f-fcfb-4778-bfe5-445ea2c386b8,Gancho de remolque,b0dd6cf3-8138-492f-90a7-9a4417535a03,4,true
+5620bb97-45bc-403c-82a7-0585d537cc39,Arneses y adaptadores de remolque,b0dd6cf3-8138-492f-90a7-9a4417535a03,5,true
+bb82971e-56e7-4607-a4ef-5557d5d96569,Bola de remolque,b0dd6cf3-8138-492f-90a7-9a4417535a03,6,true
+97ca2201-fe01-4df9-afa7-769704840b40,Rines performance,b29739b5-31ba-4dfb-89b0-ca35690a3960,1,true
+0a576a3e-9c6d-43c0-b54f-1fbd22224548,Rines,b29739b5-31ba-4dfb-89b0-ca35690a3960,2,true
+f9a9ee44-36c2-4c33-8357-ac2ed6271567,Pastillas de freno performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,1,true
+aa693aeb-8086-4b32-9e02-3537e99d8eff,Frenos performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,2,true
+947db2b5-7ff6-4454-bf00-eba6889374af,Refuerzo de chasis performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,3,true
+fc2f77df-8f4d-4567-a2d1-831d75e42fa5,Topes de suspensión performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,4,true
+f5a9201d-d6e4-4700-8160-3468dfd02b11,Amortiguadores y struts performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,5,true
+f064165a-e900-439f-a836-b22d4c31ce64,Resortes performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,6,true
+c07412d5-5900-40ad-a6f7-1ecb6511e2dd,Barra estabilizadora performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,7,true
+7f2f2069-a95a-4010-ac16-ac6d4b9bfa60,Amarre de strut performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,8,true
+e9cddc89-023e-489e-84b6-2a41aba7cd78,Kit de suspensión performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,9,true
+20e58572-abbd-4360-ad49-b116779d0375,Barra estabilizadora performance,b7748ff0-5e78-424e-b401-2ff1c1eb2a06,10,true
+2752b8aa-a630-4dbc-aa6b-7be0da716102,Cubierta de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,1,true
+eda88bc3-0eec-40f5-9b3e-c79b7bb2c3c4,Ganchos de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,2,true
+4505f660-27a6-4e38-9cd2-e1ade6f74a37,Hielera de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,3,true
+865601b7-d735-462c-8d1b-2f1139e7308e,Red de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,4,true
+3729fed3-5db3-41df-b10e-b9150cb909ea,Organizador de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,5,true
+c4d092ed-9d97-4ebd-9160-98a986a5cfa1,Caja de almacenamiento,be4eb13e-c153-4c41-8343-56b5c6a32d0b,6,true
+54b16664-593a-4242-95cf-f57a1b83db8a,Bolsa de carga,be4eb13e-c153-4c41-8343-56b5c6a32d0b,7,true
+084ba71e-4a23-47a6-9438-4129318b4ef4,Organizador rígido,be4eb13e-c153-4c41-8343-56b5c6a32d0b,8,true
+8cb90630-a1b3-40ef-8cf2-7341fedff1b6,Almacenamiento tras asiento,be4eb13e-c153-4c41-8343-56b5c6a32d0b,9,true
+d0dfd4e5-fb15-495b-8cd8-e362a2433735,Clutch y horquilla,bed5301a-db81-4b87-b193-940bac97466b,1,true
+f856d9a8-d4d5-4889-87a5-3b2be79d6a98,Servoclutch,bed5301a-db81-4b87-b193-940bac97466b,2,true
+9da0c3bc-5edf-4f8a-a1ed-6298199a44de,Carter embrague y caja (MTM),bed5301a-db81-4b87-b193-940bac97466b,3,true
+b97af442-c1c9-4368-bafb-b9e71be558cd,Cilindro maestro de clutch,bed5301a-db81-4b87-b193-940bac97466b,4,true
+13d2257c-6653-435d-bc97-5aac1ac1ee91,Pedal de clutch y manguera,bed5301a-db81-4b87-b193-940bac97466b,5,true
+e23146f4-46ac-45ca-bd01-9f99672b4749,Cilindro de clutch,bed5301a-db81-4b87-b193-940bac97466b,6,true
+e4633593-3db0-4459-9573-44a7ef64b4e6,Carter trasero MT,bed5301a-db81-4b87-b193-940bac97466b,7,true
+cdbd6791-77d9-434a-82a8-1409db07347b,Horquilla y eje de palanca (MTM),bed5301a-db81-4b87-b193-940bac97466b,8,true
+d978b708-d918-4ac3-8e3a-c026558fa981,Bomba/actuador transaxle secuencial,bed5301a-db81-4b87-b193-940bac97466b,9,true
+6f10bbad-6cbe-4a3a-8dde-cb7fa7d952d9,Engranaje velocímetro (MTM),bed5301a-db81-4b87-b193-940bac97466b,10,true
+3821f235-109b-4f91-a614-4242f2bdbd5c,Transaxle/conjunto/gasket (MTM),bed5301a-db81-4b87-b193-940bac97466b,11,true
+eafc80af-94d8-441a-88f8-729437cd6f22,Engranajes de transmisión (MTM),bed5301a-db81-4b87-b193-940bac97466b,12,true
+1e9a436f-88a7-4b05-afdf-d77f214f157d,Body kit,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,1,true
+34823dd4-de6b-4ea1-9a56-1e80bb44dcef,Punta de escape,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,2,true
+92cef941-a984-42e5-b3a4-3f24e2935117,Aplique exterior,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,3,true
+6d868149-2f92-40bc-8edc-b189a4e0191f,Emblema exterior,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,4,true
+09807b54-e820-4184-bdce-540a10b18ca7,Faldones de guardabarros,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,5,true
+df614e31-7530-4ae7-8f91-da842936f302,Inserto de ventilación de guardabarros,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,6,true
+0e804a0f-12cf-4f59-a210-efb40d5b4c53,Parrilla frontal,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,7,true
+ba3776ff-0807-4cd0-95c0-75f2f6516628,Gráficos,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,8,true
+26f2a158-f523-4d94-90df-6c3f533d57fb,Panel lateral inferior,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,9,true
+99483c96-042b-4849-baba-1288ba2acbd1,Cubiertas de espejo,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,10,true
+6fa1a404-5dc5-4dca-afd9-437d69774bc9,Moldura trasera,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,11,true
+919bb345-9967-466b-a8e2-5afc40f52853,Spoiler trasero,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,12,true
+249671d8-be19-436e-84fb-c94a6fad6f68,Mica de calavera trasera,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,13,true
+76df5aa2-46a0-4ecd-a42c-7f3a988aa894,Deflector trasero,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,14,true
+16c88327-82b1-4ff7-92bc-afe0cc18e158,Spoiler de ventana trasera,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,15,true
+f5886d83-3a54-4e2c-b50b-a0f8f28549e6,Cubierta de llanta de refacción,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,16,true
+2efb5ab0-10f7-49f6-88e6-c8be0e3362c5,Splitter,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,17,true
+4a0f786d-822e-4006-9a39-0624e27229db,Aplique de parachoques deportivo,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,18,true
+939d325f-5d38-4f40-bbab-e316ef6fac99,Deflector de ventana,c137d5bf-3336-40c6-ae51-bc30a0dbdac6,19,true
+e7870975-a714-49ed-9f03-33f5da5d9092,Filtro de aire,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,1,true
+beb81708-f277-46f9-8d11-f4223c9365a8,Bomba de aire,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,2,true
+c48f8cab-6035-4391-9232-cd7c1651b0e4,Sistema EGR,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,3,true
+aab1fe88-21fb-4b3d-bdd1-5c82729c605c,Diésel controlado electrónicamente (ECD),c37baa6b-dcaa-421c-b5a1-7c897f3ee147,4,true
+e136f513-712a-449a-bffa-5fe3fa5f5831,Control de inyección diésel electrónico,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,5,true
+9ec5c4e2-6d5f-4f76-974b-8c025323a59d,Sistema EFI,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,6,true
+659ff253-8a44-4af9-a5a1-f3970deb77c3,Múltiple de motor,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,7,true
+218f6e8c-593e-47ca-b6d6-2ab439567afd,Tubo de escape,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,8,true
+092bc191-56ad-4ded-868b-7043cf8e016e,Sistema de inyección de aire al múltiple,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,9,true
+97baa8c8-e88e-41f5-a149-b80c8574ed40,Gobernador mecánico,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,10,true
+7fbb1678-9dc7-40ee-bbee-26419bacdb1b,Gobernador neumático,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,11,true
+f2ea60fe-f8b7-48c0-8c99-22d13c067ed1,Tubería de vacío,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,12,true
+1ed33e15-9658-472c-b0c1-a2b89aa474ff,Bomba de vacío,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,13,true
+07bf4782-68eb-4ebd-b204-c25613c48451,Manguera de ventilación,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,14,true
+9e7a6deb-5ef7-4e6b-b86e-db5ee82d9286,Venturi,c37baa6b-dcaa-421c-b5a1-7c897f3ee147,15,true
+686bf2df-b053-4444-8e5b-21e93cee8f72,Cremallera trasera 4WS,c7698d98-fdc7-4a89-851c-c68a133e42bf,1,true
+7bad733c-947b-4dd8-a522-ab7b729f5339,Cremallera/enlace delantero,c7698d98-fdc7-4a89-851c-c68a133e42bf,2,true
+42e4d415-b7c7-4230-85e4-4af5a367b373,Línea de dirección asistida,c7698d98-fdc7-4a89-851c-c68a133e42bf,3,true
+e69b2ccb-c938-42ec-a4d8-8f05ef986d19,Bomba hidráulica y depósito,c7698d98-fdc7-4a89-851c-c68a133e42bf,4,true
+92b76cb6-ad0d-4bd8-8952-6bbb30cc6a3d,Columna y eje de dirección,c7698d98-fdc7-4a89-851c-c68a133e42bf,5,true
+38ed3faf-fa6a-4da8-849f-67662509c154,Sistema de control de dirección,c7698d98-fdc7-4a89-851c-c68a133e42bf,6,true
+c80f0acf-3911-4b99-a0f8-843790518809,Mangueta y brazo de eje delantero,c7698d98-fdc7-4a89-851c-c68a133e42bf,7,true
+3d871cd9-71f2-4e4e-be02-b41bc39ddda3,Volante,c7698d98-fdc7-4a89-851c-c68a133e42bf,8,true
+291132e1-84f8-4180-be5f-a3c2ce96482b,"Audio, entretenimiento y navegación",ccd8ba5f-1543-490d-a059-ca356cbd87fa,1,true
+f9949f51-6a8a-40ad-a7c5-8ca87ef07227,Climatización,ccd8ba5f-1543-490d-a059-ca356cbd87fa,2,true
+1e730d3d-8f09-46f6-ac31-a111690fcae6,Asistencias de manejo,ccd8ba5f-1543-490d-a059-ca356cbd87fa,3,true
+2cf26c4f-07e9-49cd-a096-994325d6acf4,Seguridad,ccd8ba5f-1543-490d-a059-ca356cbd87fa,4,true
+7d6f32af-7fb8-4f07-894a-7797d36860a2,Limpiaparabrisas y lavadores,ccd8ba5f-1543-490d-a059-ca356cbd87fa,5,true
+059541e6-67fb-4d1b-9c38-f05f4bb37a24,Freno,ce74d370-963f-4e55-bd25-39853a56839e,1,true
+46af58ee-4a6e-4c59-bbda-9662f3d9bf9e,Línea motriz,ce74d370-963f-4e55-bd25-39853a56839e,2,true
+b7748ff0-5e78-424e-b401-2ff1c1eb2a06,Suspensión y chasis performance,ce74d370-963f-4e55-bd25-39853a56839e,3,true
+d02854cd-6713-40e7-a064-f344d8c91d25,Suspensión,ce74d370-963f-4e55-bd25-39853a56839e,4,true
+1768a4ff-229e-4dcc-9540-749a50f3486f,Pintura de retoque,cf900b54-2cf5-43ac-b29c-1775bdb9a423,1,true
+f3890f3d-0dc7-4126-a9bb-a7f94e488bdb,Control de altura autonivelante,d02854cd-6713-40e7-a064-f344d8c91d25,1,true
+0860cef2-a458-45b3-b626-9a905c2de0f5,Suspensión modulada electrónica,d02854cd-6713-40e7-a064-f344d8c91d25,2,true
+9372aaee-8685-48f7-a962-baccb4ce8855,Resorte y amortiguador delantero,d02854cd-6713-40e7-a064-f344d8c91d25,3,true
+2f281d85-81c9-4934-8eab-1183313ff6a2,Amortiguador y resorte trasero,d02854cd-6713-40e7-a064-f344d8c91d25,4,true
+7664a227-f87f-4282-8fbf-8e216ed5a2de,Divisor de carga,d31d76ff-d045-4fa9-aeb2-857b7c982486,1,true
+8ff74758-d2a7-48b9-9fb5-da501eab0af6,Anclajes de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,2,true
+9de4ee51-0c7c-48b8-a64b-2ae7e6ef65e5,Extensor de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,3,true
+c9b7099c-3751-4187-a203-77cf37a037d4,Iluminación de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,4,true
+6b734a93-8634-4add-abe6-2d7e0b7cc562,Forro de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,5,true
+d142e300-3a98-4d16-9710-2fc40408a8b5,Tapete de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,6,true
+972f0215-7dbc-4486-b3bd-d90982adbaaa,Red de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,7,true
+662b9166-cd70-4553-b524-54a426984f52,Rack de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,8,true
+7bc4dbc0-6f37-46c2-8a77-984b4efd8344,Riel de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,9,true
+398a0c7b-9198-48cc-8ee9-45178423bb7f,Tapetes de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,10,true
+2bdd58ae-cee8-4fe4-bd3d-7a671b6ddab7,Escalón de caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,11,true
+e7f217bf-7510-4c10-a93c-017ac1108b88,Caja de almacenamiento abatible,d31d76ff-d045-4fa9-aeb2-857b7c982486,12,true
+3e8d077a-0b88-409d-9575-b89836f40d42,Casa de campaña para caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,13,true
+e1943ae9-34df-4eb5-9df5-21b01cac446d,Portallantas en caja,d31d76ff-d045-4fa9-aeb2-857b7c982486,14,true
+a9728c8e-9eca-498e-bb2a-3bd432c28de6,Cúpula / camper,d31d76ff-d045-4fa9-aeb2-857b7c982486,15,true
+6cadca6e-001d-4b37-a180-5d35a26b570e,Anillos D,d31d76ff-d045-4fa9-aeb2-857b7c982486,16,true
+ce4d374f-24a1-4068-a1a6-969b274177c6,Kit riel de plataforma,d31d76ff-d045-4fa9-aeb2-857b7c982486,17,true
+82b992ac-3fbc-4eae-969f-3b6ae3ae8f14,Anclaje pequeño,d31d76ff-d045-4fa9-aeb2-857b7c982486,18,true
+31628bf1-d2d1-4d21-9785-ec916b030f3a,Parachoques trasero con escalón,d31d76ff-d045-4fa9-aeb2-857b7c982486,19,true
+d424b5b5-6bde-478d-9b6a-b76460e7a7f0,Caja lateral,d31d76ff-d045-4fa9-aeb2-857b7c982486,20,true
+f10cae68-19a0-4e03-80dd-eea5ef9126de,Barra deportiva,d31d76ff-d045-4fa9-aeb2-857b7c982486,21,true
+711143ba-7c9a-45c6-82f3-62e37535f9ed,Caja de almacenamiento,d31d76ff-d045-4fa9-aeb2-857b7c982486,22,true
+1a6d7324-755a-498b-bc66-c70972505de8,Seguro de compuerta,d31d76ff-d045-4fa9-aeb2-857b7c982486,23,true
+3e4d9c47-c09e-4b65-8b0c-af46bd416792,Tapa de caja (tonneau),d31d76ff-d045-4fa9-aeb2-857b7c982486,24,true
+054d206c-005e-4cf8-90a6-b92e3d840940,Rack de bici para pickup,d31d76ff-d045-4fa9-aeb2-857b7c982486,25,true
+40d27622-b57d-4a02-987b-b538ae62e504,Molduras laterales,d72302e0-e167-4fa1-9e39-56386a172d50,1,true
+001e27c7-e662-47c2-8e32-ec171e3070c2,Película de borde de puerta,d72302e0-e167-4fa1-9e39-56386a172d50,2,true
+0887ec01-1949-432f-8106-2a631638f76a,Protector de borde de puerta,d72302e0-e167-4fa1-9e39-56386a172d50,3,true
+349e5810-fbf4-4fca-b82f-d72680bc94d7,Cobertor frontal,d72302e0-e167-4fa1-9e39-56386a172d50,4,true
+2a4ed32d-c5c4-4079-9c58-4271a42330b7,Placa protectora frontal,d72302e0-e167-4fa1-9e39-56386a172d50,5,true
+99cf866f-f623-4c51-a447-4c0b995fd007,Protector de cofre,d72302e0-e167-4fa1-9e39-56386a172d50,6,true
+f74e3ae8-a546-48e5-b7fe-e6aba0355735,Guardafangos,d72302e0-e167-4fa1-9e39-56386a172d50,7,true
+cf47c23f-eccc-4f23-b111-909e492cef3a,Película protectora de pintura,d72302e0-e167-4fa1-9e39-56386a172d50,8,true
+b3748d2c-d115-48af-9bcf-da30ee047502,Aplique de parachoques trasero,d72302e0-e167-4fa1-9e39-56386a172d50,9,true
+bf5acdad-6344-42d4-9d88-6d7f7ef76e7e,Protector de parachoques trasero,d72302e0-e167-4fa1-9e39-56386a172d50,10,true
+5340278c-c9e8-40ee-ab8a-026a1832b68d,Placa protectora trasera,d72302e0-e167-4fa1-9e39-56386a172d50,11,true
+0561cd27-f46a-4f8b-bcdf-e48c8d22669b,Placa protectora,d72302e0-e167-4fa1-9e39-56386a172d50,12,true
+c64766a7-a621-4813-a43a-57031e972254,Vínculo de acelerador,da57976c-629a-41f8-837d-7182f753ab69,1,true
+47dd932d-54b0-42af-840a-e705f6a1dfdd,Carburador,da57976c-629a-41f8-837d-7182f753ab69,2,true
+c9601cd9-969c-471d-a2b7-1546c148e285,Carburador (ensamble),da57976c-629a-41f8-837d-7182f753ab69,3,true
+82da34e9-1e7d-43b1-b255-91402fefa05b,Bomba de alimentación,da57976c-629a-41f8-837d-7182f753ab69,4,true
+76cc4fdf-3b88-4705-a68d-33927bf1b226,Filtro de combustible,da57976c-629a-41f8-837d-7182f753ab69,5,true
+eadd6978-0a61-4b0a-8101-24fe3281d6ad,Sistema de inyección,da57976c-629a-41f8-837d-7182f753ab69,6,true
+37d45559-2824-4b92-9a98-9512a6e40726,Tubería y abrazadera de combustible,da57976c-629a-41f8-837d-7182f753ab69,7,true
+a3689adf-2c8d-4a2b-92a2-86e15ab7bc4d,Bomba y tubería de combustible,da57976c-629a-41f8-837d-7182f753ab69,8,true
+c99b5597-5367-43f6-8b19-30cd83193226,Tanque y tubo de combustible,da57976c-629a-41f8-837d-7182f753ab69,9,true
+e1b286e3-a0c2-40c8-b3e1-baac6e424efe,Boquilla de inyección,da57976c-629a-41f8-837d-7182f753ab69,10,true
+9deac450-21ff-4299-8d25-287cf3dce9b5,Bomba de inyección (ensamble),da57976c-629a-41f8-837d-7182f753ab69,11,true
+6d19cde4-2ad1-4fbf-ad84-113fddd164bb,Cuerpo de bomba de inyección,da57976c-629a-41f8-837d-7182f753ab69,12,true
+a7ac2092-bbe4-4f30-9896-d8a53023b888,Sistema de inyección LPG/CNG,da57976c-629a-41f8-837d-7182f753ab69,13,true
+a0752a3f-ad3f-412d-aa56-8527ce6ff33f,Regulador LPG/CNG,da57976c-629a-41f8-837d-7182f753ab69,14,true
+5aca49d7-9f8d-4e5e-a995-6cc08fe516e6,Sistema de enfriamiento,e7ee055e-6133-43e7-a143-602bf6621f23,1,true
+3db1a3bc-7ae7-4c9e-bc98-1c6c81dc539f,Motores y componentes internos,e7ee055e-6133-43e7-a143-602bf6621f23,2,true
+6244c28e-4390-497f-8b6b-8a860402b124,"Componentes híbridos, eléctricos y de celda de combustible",e7ee055e-6133-43e7-a143-602bf6621f23,3,true
+c37baa6b-dcaa-421c-b5a1-7c897f3ee147,Admisión y escape,e7ee055e-6133-43e7-a143-602bf6621f23,4,true
+95054a61-3851-436f-8f52-3ab2b86b2efd,Motor performance,e7ee055e-6133-43e7-a143-602bf6621f23,5,true
+97abf3d2-a518-418b-bd79-80ac2adf3f65,Accesorios de motor de alto desempeño,e7ee055e-6133-43e7-a143-602bf6621f23,6,true
+0eed5d54-00ec-46ce-9d53-ee7109f96730,Estructura y bastidor,efb36c67-7545-45a2-b5c7-464ca356878d,1,true
+350eb480-c122-463b-b0ab-e43332a9ec7d,Partes frontales,efb36c67-7545-45a2-b5c7-464ca356878d,2,true
+775321cc-409f-4c87-9223-fbb88691fdbd,Cristales y relacionados,efb36c67-7545-45a2-b5c7-464ca356878d,3,true
+2e055772-1c10-4234-a5cf-e7d6dc90a23b,Partes traseras,efb36c67-7545-45a2-b5c7-464ca356878d,4,true
+403bdc9e-3b45-4715-a8a3-895b83bc75c8,"Partes de techo, laterales y piso",efb36c67-7545-45a2-b5c7-464ca356878d,5,true
+8aad8c08-f271-460d-a812-243d1afc56aa,"Apliques, logotipos y etiquetas",efb36c67-7545-45a2-b5c7-464ca356878d,6,true
+bf43266a-35bb-4dc0-8221-7b104bd06973,Caja fuerte de consola,f1c26c61-0996-49b4-bcde-e957810573b8,1,true
+0c95486c-fcf4-4aea-8ca8-25d154b1f8b2,Sistema de seguridad,f1c26c61-0996-49b4-bcde-e957810573b8,2,true
+ddcbf008-041e-41f0-b881-1065eaf36fd4,Limpiador de faro,f23e8559-7263-4a69-8a5e-c0eab67f1550,1,true
+51a677a8-dbe0-4620-97aa-f64a2062529a,Indicador,f23e8559-7263-4a69-8a5e-c0eab67f1550,2,true
+7445aae4-1887-4b2f-82c3-16ed154538fc,Luz interior,f23e8559-7263-4a69-8a5e-c0eab67f1550,3,true
+6f4a7c7f-2d80-4130-ba42-b0672fe2693c,Luz puntual,f23e8559-7263-4a69-8a5e-c0eab67f1550,4,true
+8a588bfb-31b4-4449-88ec-f79d6e75c73a,Forro de carga,f3c88f39-c995-43ce-8123-a82a1f988582,1,true
+a9e38603-bf4a-4495-9f8b-fe08270b5132,Charola de carga,f3c88f39-c995-43ce-8123-a82a1f988582,2,true
+2dd0d0e9-2ac0-4a19-831a-9e914634b5a3,Tapete de carga (alfombra),f3c88f39-c995-43ce-8123-a82a1f988582,3,true
+d0576f09-b8ec-4ce8-9b01-947cb4b6d5f7,Tapetes de alfombra,f3c88f39-c995-43ce-8123-a82a1f988582,4,true
+fcba7a92-822a-4c3d-930a-3dfe0b565f3d,Tapete de cajuela (alfombra),f3c88f39-c995-43ce-8123-a82a1f988582,5,true
+211c0a13-18ca-4fe6-b278-973c723218f3,Purificador / ionizador,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,1,true
+143c02ec-9a23-4888-9dee-32d26764f1e4,Compresor A/C,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,2,true
+5f5ecede-a7b7-4684-9568-befa387f47e0,Controles y ductos A/C,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,3,true
+a7fe59e1-c0bb-4149-8bf2-4cb713420ae1,Líneas de enfriamiento A/C,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,4,true
+228f2bf3-4fe0-44a4-838a-8cc97931f4be,Unidad evaporador A/C,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,5,true
+021b5604-3410-4213-b216-a3c8f9f55081,Unidad de calefacción y soplador,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,6,true
+42f42a21-4bb1-4549-9d7c-3d50a5921f39,Líneas de vacío A/C,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,7,true
+a6fe2cab-4e8b-4512-b61c-0ce10415c6e5,Líneas de agua calefacción,f9949f51-6a8a-40ad-a7c5-8ca87ef07227,8,true
+3108cccb-9b7d-488f-ac17-3a0f624bcc2a,4x4,fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,1,true
+27bd02cf-dd1d-40ca-be47-7889bbf1581b,Transmisión automática,fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,2,true
+bed5301a-db81-4b87-b193-940bac97466b,Transmisión manual,fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,3,true
+80b2ca41-941d-42ca-a277-faa4f3846358,Transmisión performance,fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,4,true
+c7698d98-fdc7-4a89-851c-c68a133e42bf,Dirección,fcc165e7-6cb3-4ca4-9a77-41d2775e1e56,5,true

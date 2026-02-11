@@ -33,6 +33,12 @@ import {
 } from "@/lib/product-collections";
 import { businessService } from "@/lib/business";
 
+// Formateador de precios con separación de miles (ej: 6,589.32)
+const priceFormatter = new Intl.NumberFormat("es-MX", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
@@ -1470,7 +1476,7 @@ export default function ProductsPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              ${product.price.toFixed(2)}
+                              ${priceFormatter.format(product.price || 0)}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -2355,7 +2361,7 @@ export function ProductForm({
                 </p>
                 <p className="text-xs text-gray-500">SKU: {formData.sku || "Sin SKU"}</p>
                 <p className="text-xl font-semibold text-gray-900">
-                  ${formData.price.toFixed(2)}
+                  ${priceFormatter.format(formData.price || 0)}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-600">
@@ -2834,7 +2840,7 @@ export function ProductForm({
                                     </div>
                                     <p className="text-xs text-gray-400 mt-0.5">
                                       {variant.absolute_price
-                                        ? `Precio fijo: $${variant.absolute_price.toFixed(2)}`
+                                        ? `Precio fijo: $${priceFormatter.format(variant.absolute_price)}`
                                         : "Usa ajuste relativo"}
                                     </p>
                                   </div>
@@ -2850,16 +2856,16 @@ export function ProductForm({
                                           ? "+"
                                           : ""}
                                         $
-                                        {(
-                                          variant.price_adjustment || 0
-                                        ).toFixed(2)}
+                                        {priceFormatter.format(
+                                          variant.price_adjustment || 0,
+                                        )}
                                       </strong>
                                     </span>
                                     <span className="text-gray-400 text-xs">
                                       Ejemplo: Sucursal $90 → $
-                                      {(
-                                        90 + (variant.price_adjustment || 0)
-                                      ).toFixed(2)}
+                                      {priceFormatter.format(
+                                        90 + (variant.price_adjustment || 0),
+                                      )}
                                     </span>
                                   </div>
                                 ) : (
@@ -2982,11 +2988,11 @@ export function ProductForm({
                                       <strong>Ajuste de Precio:</strong> Se suma
                                       al precio base (
                                       {formData.price
-                                        ? `$${formData.price.toFixed(2)}`
+                                        ? `$${priceFormatter.format(formData.price)}`
                                         : "$0.00"}
                                       ). Ej: +$5.00 = $
                                       {formData.price
-                                        ? (formData.price + 5).toFixed(2)
+                                        ? priceFormatter.format(formData.price + 5)
                                         : "5.00"}
                                     </li>
                                     <li>

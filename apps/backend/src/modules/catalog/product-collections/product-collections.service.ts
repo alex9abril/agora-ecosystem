@@ -167,6 +167,7 @@ export class ProductCollectionsService {
         AND pba.is_enabled = TRUE
         AND pba.is_active = TRUE
       WHERE (p.name ILIKE $2 OR p.sku ILIKE $2)
+        AND p.price IS NOT NULL AND (p.price)::numeric > 0
       ORDER BY p.name ASC
       LIMIT $3
     `;
@@ -258,6 +259,7 @@ export class ProductCollectionsService {
         LIMIT 1
       ) pi ON TRUE
       WHERE pca.coleccion_id = $1 AND pca.business_id = $2
+        AND p.price IS NOT NULL AND (p.price)::numeric > 0
       ORDER BY p.name ASC
     `;
 

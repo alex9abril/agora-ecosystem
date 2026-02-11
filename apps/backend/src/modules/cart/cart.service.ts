@@ -231,6 +231,12 @@ export class CartService {
 
       const product = productResult.rows[0];
 
+      // Regla de negocio: no permitir agregar al carrito productos con precio 0
+      const basePrice = product.price != null ? parseFloat(String(product.price)) : 0;
+      if (basePrice <= 0) {
+        throw new BadRequestException('Este producto no está disponible para compra');
+      }
+
       // Determinar el business_id a usar
       // Si se proporciona branchId, usarlo (en contexto global con sucursal seleccionada)
       // Si no, usar el business_id del producto
