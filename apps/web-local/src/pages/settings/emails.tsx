@@ -723,6 +723,7 @@ export default function EmailsPage() {
     // Preservar la posición del cursor antes de modificar el HTML
     const savedRange = saveSelection();
 
+    if (!editorRef.current) return; // Verificación adicional defensiva
     const currentHtml = editorRef.current.innerHTML;
     let updatedHtml = currentHtml;
     
@@ -730,6 +731,7 @@ export default function EmailsPage() {
     updatedHtml = updateLogoBackgroundInContent(updatedHtml, color);
 
     // Actualizar el HTML
+    if (!editorRef.current) return; // Verificación adicional defensiva
     editorRef.current.innerHTML = updatedHtml;
     
     // Restaurar la posición del cursor
@@ -756,6 +758,10 @@ export default function EmailsPage() {
     setSaving(true);
     try {
       // Obtener contenido del editor
+      if (!editorRef.current) {
+        setSaving(false);
+        return;
+      }
       const editedContent = editorRef.current.innerHTML;
       
       // Reconstruir template completo (usar logo_url si existe)
