@@ -1,3 +1,4 @@
+import Head from 'next/head';
 import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,9 +8,10 @@ import RightSidebar from './RightSidebar';
 
 interface AdminLayoutProps {
   children: ReactNode;
+  title?: string;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default function AdminLayout({ children, title }: AdminLayoutProps) {
   const { isAuthenticated, loading, token, user } = useAuth();
   const router = useRouter();
 
@@ -45,27 +47,34 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   // Esto permite que la sesión se restaure sin redireccionar
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar izquierdo */}
-      <Sidebar />
+    <>
+      {title && (
+        <Head>
+          <title>{title} - AGORA Admin</title>
+        </Head>
+      )}
+      <div className="flex h-screen bg-gray-50">
+        {/* Sidebar izquierdo */}
+        <Sidebar />
 
-      {/* Contenido principal */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Topbar */}
-        <Topbar />
+        {/* Contenido principal */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Topbar */}
+          <Topbar />
 
-        {/* Contenido con sidebar derecho */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Contenido principal */}
-          <main className="flex-1 overflow-y-auto p-6">
-            {children}
-          </main>
+          {/* Contenido con sidebar derecho */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Contenido principal */}
+            <main className="flex-1 overflow-y-auto p-6">
+              {children}
+            </main>
 
-          {/* Sidebar derecho */}
-          <RightSidebar />
+            {/* Sidebar derecho */}
+            <RightSidebar />
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
