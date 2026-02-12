@@ -411,13 +411,14 @@ export default function EmailsPage() {
 
   // Sincronizar el contenido del editor solo cuando cambia editorContent y no estamos editando
   useEffect(() => {
-    if (editorRef.current && !isInitializingEditor.current && editingTemplate) {
+    const editorEl = editorRef.current;
+    if (editorEl && !isInitializingEditor.current && editingTemplate) {
       // Solo actualizar si el contenido es diferente para evitar loops
-      const currentContent = editorRef.current.innerHTML;
+      const currentContent = editorEl.innerHTML;
       if (currentContent !== editorContent && editorContent) {
         // Guardar la posición del cursor antes de actualizar
         const savedRange = saveSelection();
-        editorRef.current.innerHTML = editorContent;
+        editorEl.innerHTML = editorContent;
         // Restaurar la posición del cursor si existe
         if (savedRange) {
           requestAnimationFrame(() => {
@@ -1159,11 +1160,12 @@ export default function EmailsPage() {
                                       t.id === updatedTemplate.id ? updatedTemplate : t
                                     ));
 
-                                    // Reemplazar el logo en el HTML del template
-                                    if (editorRef.current) {
-                                      const currentContent = editorRef.current.innerHTML;
+                                    // Reemplazar el logo en el HTML del template (Insertar logo al inicio del contenido editable)
+                                    const editorEl = editorRef.current;
+                                    if (editorEl) {
+                                      const currentContent = editorEl.innerHTML;
                                       const updatedContent = updateLogoInContent(currentContent, uploadResult.url);
-                                      editorRef.current.innerHTML = updatedContent;
+                                      editorEl.innerHTML = updatedContent;
                                       setEditorContent(updatedContent);
                                     }
                                   } catch (error: any) {
