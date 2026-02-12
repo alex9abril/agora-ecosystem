@@ -2,6 +2,7 @@ import React from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import LocalLayout from '@/components/layout/LocalLayout';
+import SettingsSidebar from '@/components/settings/SettingsSidebar';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
@@ -1050,7 +1051,11 @@ export default function UsersSettingsPage() {
               </div>
             </div>
           )}
-        </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </LocalLayout>
   );
