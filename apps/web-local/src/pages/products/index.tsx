@@ -1703,6 +1703,7 @@ export interface ProductFormProps {
     is_enabled: boolean;
     price: number | null;
     stock: number | null;
+    is_active?: boolean;
     classification_ids?: string[];
     classifications?: Array<{ id: string; name: string; slug: string }>;
   }>;
@@ -1714,6 +1715,7 @@ export interface ProductFormProps {
         is_enabled: boolean;
         price: number | null;
         stock: number | null;
+        is_active?: boolean;
         classification_ids?: string[];
         classifications?: Array<{ id: string; name: string; slug: string }>;
       }>
@@ -1851,7 +1853,7 @@ export function ProductForm({
 
         const map: Record<string, ProductClassification[]> = {};
         entries.forEach(([businessId, list]) => {
-          map[businessId] = list;
+          map[businessId] = [...list];
         });
         setClassificationsByBranch(map);
       } finally {

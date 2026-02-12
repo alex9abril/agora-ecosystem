@@ -313,7 +313,7 @@ function BranchesList({ branches, onRefresh, onEdit, onBranding }: BranchesListP
             </div>
             <div className="ml-4 flex items-center gap-2">
               <button
-                onClick={() => onBranding(branch)}
+                onClick={() => onBranding?.(branch)}
                 className="px-3 py-1.5 text-sm text-purple-700 bg-purple-50 rounded hover:bg-purple-100 transition-colors"
               >
                 Personalizar
