@@ -117,12 +117,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const response: AuthResponse = await authService.signIn({ email, password });
-      
-      setToken(response.accessToken);
+      // Normalizar tokens: el backend puede enviarlos en `accessToken` o dentro de `session`
+      const accessToken = response.accessToken || response.session?.access_token || null;
+      const refreshToken = response.refreshToken || response.session?.refresh_token || null;
+
+      if (!accessToken) {
+        console.error('❌ [AuthContext.signIn] No se recibió accessToken en la respuesta:', response);
+        throw new Error('No se pudo iniciar sesión. Por favor, intenta de nuevo.');
+      }
+
+      setToken(accessToken);
       setUser(response.user);
       
-      setAuthToken(response.accessToken);
-      setRefreshToken(response.refreshToken);
+      setAuthToken(accessToken);
+      if (refreshToken) {
+        setRefreshToken(refreshToken);
+      }
       setUserInStorage(response.user);
       
       // Sincronizar vehículo de localStorage a la base de datos si existe
