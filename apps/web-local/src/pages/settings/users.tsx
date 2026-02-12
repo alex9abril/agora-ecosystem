@@ -320,36 +320,32 @@ export default function UsersSettingsPage() {
     return user.businesses?.some((b) => b.business_id === selectedBusinessFilter);
   });
 
-  if (loading) {
-    return (
-      <LocalLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-      </LocalLayout>
-    );
-  }
-
   return (
     <LocalLayout>
       <Head>
         <title>Usuarios y Permisos - AGORA Local</title>
       </Head>
       <div className="p-6 max-w-7xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
-            <p className="text-sm text-gray-600">
-              Gestiona la configuración de tu tienda y personal
-            </p>
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
           </div>
+        ) : (
+          <>
+            <div className="mb-6">
+              <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
+              <p className="text-sm text-gray-600">
+                Gestiona la configuración de tu tienda y personal
+              </p>
+            </div>
 
-          <div className="flex gap-6">
-            {/* Sidebar: Categorías */}
-            <SettingsSidebar />
+            <div className="flex gap-6">
+              {/* Sidebar: Categorías */}
+              <SettingsSidebar />
 
-            {/* Contenido principal */}
-            <div className="flex-1">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              {/* Contenido principal */}
+              <div className="flex-1">
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
                 {/* Header */}
                 <div className="mb-6">
                   <div className="flex items-center justify-between">
@@ -388,38 +384,37 @@ export default function UsersSettingsPage() {
                   </div>
                 )}
 
-          {/* Filters */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-normal text-gray-700 mb-2">
-                  Filtrar por Tienda
-                </label>
-                <select
-                  value={selectedBusinessFilter}
-                  onChange={(e) => setSelectedBusinessFilter(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                >
-                  <option value="all">Todas las tiendas</option>
-                  {businesses.map((business) => (
-                    <option key={business.business_id} value={business.business_id}>
-                      {business.business_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
+                {/* Filters */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 mb-6">
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-normal text-gray-700 mb-2">
+                        Filtrar por Tienda
+                      </label>
+                      <select
+                        value={selectedBusinessFilter}
+                        onChange={(e) => setSelectedBusinessFilter(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="all">Todas las tiendas</option>
+                        {businesses.map((business) => (
+                          <option key={business.business_id} value={business.business_id}>
+                            {business.business_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Current Users */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-normal text-gray-900">Miembros del Personal</h2>
-              <span className="text-sm text-gray-500">
-                {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            
+                {/* Current Users */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-normal text-gray-900">Miembros del Personal</h2>
+                    <span className="text-sm text-gray-500">
+                      {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
             {filteredUsers.length === 0 ? (
               <div className="text-center py-12">
                 <svg
