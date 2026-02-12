@@ -268,7 +268,7 @@ export default function KitchenPage() {
       if (products.length === 0 && !loadingProducts) {
         try {
           setLoadingProducts(true);
-          const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+          const productsResponse = await productsService.getProducts(selectedBusiness.business_id, undefined, { includeZeroPrice: true });
           setProducts(productsResponse.data);
         } catch (err: any) {
           console.error('Error cargando productos:', err);
@@ -360,7 +360,7 @@ export default function KitchenPage() {
       
       try {
         setLoadingProducts(true);
-        const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+        const productsResponse = await productsService.getProducts(selectedBusiness.business_id, undefined, { includeZeroPrice: true });
         setProducts(productsResponse.data);
       } catch (err: any) {
         console.error('Error cargando productos:', err);

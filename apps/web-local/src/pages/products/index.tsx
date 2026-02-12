@@ -92,6 +92,13 @@ export default function ProductsPage() {
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>(
     {},
   );
+  const [metadataEntries, setMetadataEntries] = useState<
+    Array<{ key: string; value: string }>
+  >(() => [
+    { key: "", value: "" },
+    { key: "", value: "" },
+    { key: "", value: "" },
+  ]);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
@@ -271,6 +278,7 @@ export default function ProductsPage() {
           page,
           limit,
           search: searchValue,
+          includeZeroPrice: true, // web-local: ver todos los productos, incluidos precio 0
         }), // undefined = todos los productos globales
         productsService.getCategories(),
       ]);
@@ -644,6 +652,11 @@ export default function ProductsPage() {
     setVariantGroups([]);
     setAllergens([]);
     setNutritionalInfo({});
+    setMetadataEntries([
+      { key: "", value: "" },
+      { key: "", value: "" },
+      { key: "", value: "" },
+    ]);
     setEditingProduct(null);
     setProductTaxes([]);
   };
@@ -666,6 +679,26 @@ export default function ProductsPage() {
         // imageUrl = await productsService.uploadProductImage(imageFile, editingProduct?.id);
       }
 
+      const metadataRows =
+        metadataEntries?.filter(
+          (r) => (r.key || "").trim() !== "" || (r.value || "").trim() !== ""
+        ) ?? [];
+      const invalidMeta = metadataRows.some(
+        (r) => (r.value || "").trim() !== "" && (r.key || "").trim() === ""
+      );
+      if (invalidMeta) {
+        setError("En Metadata: las filas con valor deben tener una clave.");
+        setSaving(false);
+        return;
+      }
+      const metadataObj = metadataRows.reduce<Record<string, string>>((acc, r) => {
+        const k = (r.key || "").trim();
+        const v = (r.value || "").trim();
+        if (k) acc[k] = v;
+        return acc;
+      }, {});
+      const hasMetadata = Object.keys(metadataObj).length > 0;
+
       const productData: CreateProductData = {
         ...formData,
         sku:
@@ -677,6 +710,7 @@ export default function ProductsPage() {
         allergens: allergens.length > 0 ? allergens : undefined,
         nutritional_info:
           Object.keys(nutritionalInfo).length > 0 ? nutritionalInfo : undefined,
+        metadata: hasMetadata ? metadataObj : undefined,
       };
 
       // En contexto de sucursal, evitar modificar disponibilidad global
@@ -689,6 +723,7 @@ export default function ProductsPage() {
         savedProduct = await productsService.updateProduct({
           ...productData,
           id: editingProduct.id,
+          metadata: metadataObj, // Siempre enviar metadata en actualización (permite limpiar si está vacío)
         });
       } else {
         savedProduct = await productsService.createProduct(productData);
@@ -1195,6 +1230,8 @@ export default function ProductsPage() {
                 ? () => loadProductCompatibilities(editingProduct.id)
                 : undefined
             }
+            metadataEntries={metadataEntries}
+            setMetadataEntries={setMetadataEntries}
             branchAvailabilities={branchAvailabilities}
             setBranchAvailabilities={setBranchAvailabilities}
             loadingBranchAvailabilities={loadingBranchAvailabilities}
@@ -1816,6 +1853,10 @@ export interface ProductFormProps {
   >;
   loadingCompatibilities: boolean;
   onLoadProductCompatibilities?: () => void;
+  metadataEntries: Array<{ key: string; value: string }>;
+  setMetadataEntries: React.Dispatch<
+    React.SetStateAction<Array<{ key: string; value: string }>>
+  >;
   branchAvailabilities: Array<{
     branch_id: string;
     branch_name: string;
@@ -1882,6 +1923,8 @@ export function ProductForm({
   setProductCompatibilities,
   loadingCompatibilities,
   onLoadProductCompatibilities,
+  metadataEntries,
+  setMetadataEntries,
   branchAvailabilities,
   setBranchAvailabilities,
   loadingBranchAvailabilities,
@@ -1904,6 +1947,13 @@ export function ProductForm({
   const [showSelectionTypeHelp, setShowSelectionTypeHelp] = useState(false);
   const [isFichaEditable, setIsFichaEditable] = useState(!editingProduct);
   const [selectedFichaImage, setSelectedFichaImage] = useState<ProductImage | null>(null);
+  const hasMetadataItems = (metadataEntries || []).some(
+    (r) => (r.key || "").trim() !== "" || (r.value || "").trim() !== ""
+  );
+  const [metadataAccordionOpen, setMetadataAccordionOpen] = useState(false);
+  useEffect(() => {
+    if (hasMetadataItems) setMetadataAccordionOpen(true);
+  }, [hasMetadataItems]);
   const branchAvailability = currentBranchId
     ? branchAvailabilities.find((a) => a.branch_id === currentBranchId)
     : undefined;
@@ -3078,6 +3128,97 @@ export function ProductForm({
                 </p>
               </div>
             )}
+
+            {/* Metadata - Acordeón clave/valor */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setMetadataAccordionOpen((prev) => !prev)}
+                className="w-full flex items-center justify-between text-left px-4 py-3 text-sm font-medium text-gray-700 uppercase tracking-wide hover:bg-gray-50/80 transition-colors"
+                aria-expanded={metadataAccordionOpen}
+              >
+                <span>Metadata</span>
+                <span className="text-gray-400">
+                  {metadataAccordionOpen ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+              {metadataAccordionOpen && (
+                <div className="px-4 pb-4 pt-0 space-y-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 pt-3">
+                    Atributos adicionales del producto en formato clave-valor (opcional).
+                  </p>
+                  <div className="space-y-3">
+                    {(metadataEntries || []).map((row, index) => (
+                      <div key={index} className="flex gap-2 items-start">
+                        <input
+                          type="text"
+                          className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white"
+                          placeholder="Clave (ej. origen, certificación)"
+                          value={row.key}
+                          maxLength={100}
+                          onChange={(e) =>
+                            setMetadataEntries((prev) => {
+                              const next = [...(prev || [])];
+                              if (!next[index]) next[index] = { key: "", value: "" };
+                              next[index] = { ...next[index], key: e.target.value };
+                              return next;
+                            })
+                          }
+                        />
+                        <input
+                          type="text"
+                          className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 bg-white"
+                          placeholder="Valor"
+                          value={row.value}
+                          maxLength={500}
+                          onChange={(e) =>
+                            setMetadataEntries((prev) => {
+                              const next = [...(prev || [])];
+                              if (!next[index]) next[index] = { key: "", value: "" };
+                              next[index] = { ...next[index], value: e.target.value };
+                              return next;
+                            })
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMetadataEntries((prev) => {
+                              if ((prev || []).length <= 1) return prev;
+                              return prev.filter((_, i) => i !== index);
+                            })
+                          }
+                          disabled={(metadataEntries || []).length <= 1}
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Quitar fila"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMetadataEntries((prev) => [...(prev || []), { key: "", value: "" }])
+                      }
+                      className="text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-3 py-1.5 hover:bg-gray-50 transition-colors"
+                    >
+                      + Agregar fila
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Compatibilidad de Vehículos - Solo para refacciones y accesorios */}
             {(formData.product_type === "refaccion" ||

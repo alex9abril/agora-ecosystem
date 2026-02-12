@@ -141,13 +141,16 @@ export default function CollectionImageUpload({
     e.stopPropagation();
     setDragging(false);
 
-    let file = e.dataTransfer.files?.[0];
+    // Permitir que file sea nulo hasta que confirmemos que existe un archivo válido
+    let file: File | null = e.dataTransfer.files?.[0] ?? null;
+
     if (!file && e.dataTransfer.items?.length) {
       const item = Array.from(e.dataTransfer.items).find(
         (entry) => entry.kind === 'file',
       );
-      file = item?.getAsFile() || undefined;
+      file = item?.getAsFile() ?? null;
     }
+
     if (file && file.type.startsWith('image/')) {
       handleUploadImage(file);
     }

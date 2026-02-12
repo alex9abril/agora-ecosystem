@@ -84,11 +84,17 @@ export class ProductsController {
   @ApiOperation({ summary: 'Obtener detalle de un producto (Público)' })
   @ApiParam({ name: 'id', description: 'ID del producto (UUID)' })
   @ApiQuery({ name: 'branchId', required: false, type: String, description: 'ID de la sucursal para obtener precio y stock específicos' })
+  @ApiQuery({ name: 'includeZeroPrice', required: false, type: String, description: 'Si es "true", permite ver productos con precio 0 (para web-local/admin)' })
   @ApiResponse({ status: 200, description: 'Producto obtenido exitosamente' })
   @ApiResponse({ status: 404, description: 'Producto no encontrado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
-  async findOne(@Param('id') id: string, @Query('branchId') branchId?: string) {
-    return this.productsService.findOne(id, branchId);
+  async findOne(
+    @Param('id') id: string,
+    @Query('branchId') branchId?: string,
+    @Query('includeZeroPrice') includeZeroPrice?: string,
+  ) {
+    const allowZeroPrice = includeZeroPrice === 'true';
+    return this.productsService.findOne(id, branchId, allowZeroPrice);
   }
 
   @Post()

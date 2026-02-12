@@ -28,6 +28,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
 import { checkProductCompatibility } from '@/lib/product-compatibility';
+import SimilarProductsCarousel from '@/components/SimilarProductsCarousel';
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   included_in_price: false,
@@ -63,6 +64,7 @@ export default function ProductDetailPage() {
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
   const [taxedUnitPrice, setTaxedUnitPrice] = useState<number | null>(null);
+  const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const shouldCheckCompatibility =
     !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
   const RECENTLY_VIEWED_KEY = 'recently_viewed_products';
@@ -471,6 +473,35 @@ export default function ProductDetailPage() {
       console.log('⏸️ [ProductDetail] No product ID yet, waiting...');
     }
   }, [id, branchId, contextType, groupId, brandId, contextLoading]);
+
+  // Productos de la misma categoría (top 15, 4 por vista en el carrusel)
+  useEffect(() => {
+    if (!product?.category_id || !product?.id) {
+      setSimilarProducts([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchSimilar = async () => {
+      try {
+        const params: any = {
+          categoryId: product.category_id,
+          limit: 16,
+          isAvailable: true,
+        };
+        if (contextType === 'sucursal' && branchId) params.branchId = branchId;
+        if (contextType === 'grupo' && groupId) params.groupId = groupId;
+        if (contextType === 'brand' && brandId) params.vehicleBrandId = brandId;
+        const res = await productsService.getProducts(params);
+        const list = res?.data || [];
+        const others = list.filter((p: Product) => p.id !== product.id).slice(0, 15);
+        if (!cancelled) setSimilarProducts(others);
+      } catch (err) {
+        if (!cancelled) setSimilarProducts([]);
+      }
+    };
+    fetchSimilar();
+    return () => { cancelled = true; };
+  }, [product?.id, product?.category_id, contextType, branchId, groupId, brandId]);
 
   const loadProduct = async () => {
     if (!id || typeof id !== 'string') {
@@ -935,75 +966,6 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Leyenda de compatibilidad con vehículo - Solo para productos no alimenticios */}
-          {shouldCheckCompatibility && (
-            <>
-              {!currentVehicle ? (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
-              <InfoIcon className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-blue-900 font-medium mb-1">
-                  Verifica la compatibilidad
-                </p>
-                <p className="text-sm text-blue-700">
-                  Para verificar si este producto es compatible con tu vehículo,{' '}
-                  <button
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('open-vehicle-panel'));
-                      }
-                    }}
-                    className="text-blue-600 hover:text-blue-800 underline font-medium"
-                  >
-                    selecciona un vehículo
-                  </button>
-                  .
-                </p>
-              </div>
-            </div>
-          ) : checkingCompatibility ? (
-            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
-              <p className="text-sm text-gray-700">
-                Verificando compatibilidad con {getVehicleDescription(currentVehicle)}...
-              </p>
-            </div>
-          ) : isCompatible === true ? (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-              <CheckCircleIcon className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-green-900 font-medium mb-1">
-                  ✓ Compatible con tu vehículo
-                </p>
-                <p className="text-sm text-green-700">
-                  Este producto es compatible con{' '}
-                  <span className="font-semibold">
-                    {getVehicleDescription(currentVehicle)}
-                  </span>
-                  .
-                </p>
-              </div>
-            </div>
-          ) : isCompatible === false ? (
-            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-3">
-              <WarningIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-yellow-900 font-medium mb-1">
-                  ⚠ No compatible con tu vehículo
-                </p>
-                <p className="text-sm text-yellow-700">
-                  Este producto no es compatible con{' '}
-                  <span className="font-semibold">
-                    {getVehicleDescription(currentVehicle)}
-                  </span>
-                  . Verifica las especificaciones antes de comprar.
-                </p>
-              </div>
-            </div>
-          ) : null}
-            </>
-          )}
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Galería de imágenes */}
             <div>
@@ -1224,9 +1186,13 @@ export default function ProductDetailPage() {
                 if (contextType === 'sucursal') {
                   if (!isAvailable) {
                     return (
-                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                        Producto no disponible
-                      </div>
+<div className="mb-4 p-4 rounded-xl bg-red-100 flex items-start gap-3">
+                          <span className="flex-shrink-0 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white font-bold">!</span>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Producto no disponible</p>
+                            <p className="text-sm text-gray-800">Este producto no está disponible en esta sucursal.</p>
+                          </div>
+                        </div>
                     );
                   }
                   return (
@@ -1248,9 +1214,14 @@ export default function ProductDetailPage() {
                   // Si hay disponibilidades pero no hay selección, mostrar mensaje
                   if (branchAvailabilities.length > 0) {
                     return (
-                      <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
-                        <p className="font-medium mb-1">Selecciona una sucursal para agregar al carrito</p>
-                        <p className="text-sm">Elige una sucursal de la lista arriba para ver precio y stock específicos</p>
+                      <div className="mb-4 p-4 rounded-xl bg-blue-100 flex items-start gap-3">
+                        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                          <InfoIcon className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Selecciona una sucursal</p>
+                          <p className="text-sm text-gray-800">Elige una sucursal de la lista arriba para ver precio y stock y agregar al carrito.</p>
+                        </div>
                       </div>
                     );
                   }
@@ -1270,8 +1241,12 @@ export default function ProductDetailPage() {
                 return (
                   <>
                     {hasInsufficientStock && selectedBranch && (
-                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                        Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}
+                      <div className="mb-4 p-4 rounded-xl bg-amber-100 flex items-start gap-3">
+                        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold">!</span>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Stock limitado</p>
+                          <p className="text-sm text-gray-800">Solo hay {selectedBranch.stock} unidades disponibles en {selectedBranch.branch_name}.</p>
+                        </div>
                       </div>
                     )}
                     <button 
@@ -1288,9 +1263,100 @@ export default function ProductDetailPage() {
                   </>
                 );
               })()}
+
+              {/* Compatibilidad con vehículo - justo debajo del botón Agregar al Carrito */}
+              {shouldCheckCompatibility && (
+                <div className="mt-4">
+                  {!currentVehicle ? (
+                    <div className="p-4 rounded-xl bg-blue-100 flex items-start gap-3">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                        <InfoIcon className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm text-gray-800">
+                          Para verificar si este producto es compatible con tu vehículo,{' '}
+                          <button
+                            onClick={() => typeof window !== 'undefined' && window.dispatchEvent(new CustomEvent('open-vehicle-panel'))}
+                            className="text-gray-900 underline font-medium hover:no-underline"
+                          >
+                            selecciona un vehículo
+                          </button>
+                          .
+                        </p>
+                      </div>
+                    </div>
+                  ) : checkingCompatibility ? (
+                    <div className="p-4 rounded-xl bg-gray-100 flex items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-500 border-t-transparent" />
+                      <p className="text-sm text-gray-900">
+                        Verificando compatibilidad con {getVehicleDescription(currentVehicle)}...
+                      </p>
+                    </div>
+                  ) : isCompatible === true ? (
+                    <div className="p-4 rounded-xl bg-green-100 flex items-start gap-3">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
+                        <CheckCircleIcon className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm text-gray-800">
+                          Este producto es compatible con <strong>{getVehicleDescription(currentVehicle)}</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  ) : isCompatible === false ? (
+                    <div className="p-4 rounded-xl bg-amber-100 flex items-start gap-3">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white">
+                        <WarningIcon className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <p className="text-sm text-gray-800">
+                          No compatible con <strong>{getVehicleDescription(currentVehicle)}</strong>. Verifica especificaciones.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {/* Especificaciones del producto (metadata) - debajo del botón Agregar al Carrito */}
+              {(() => {
+                const rawMeta = product.metadata;
+                const meta =
+                  rawMeta == null
+                    ? null
+                    : typeof rawMeta === 'string'
+                      ? (() => { try { return JSON.parse(rawMeta); } catch { return null; } })()
+                      : typeof rawMeta === 'object' && !Array.isArray(rawMeta)
+                        ? rawMeta
+                        : null;
+                const entries = meta && Object.keys(meta).length > 0
+                  ? Object.entries(meta).filter(([, v]) => v != null && String(v).trim() !== '')
+                  : [];
+                if (entries.length === 0) return null;
+                return (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">Especificaciones del producto</h3>
+                    <dl className="space-y-2">
+                      {entries.map(([key, value]) => (
+                        <div key={key} className="flex items-baseline gap-2 text-sm">
+                          <dt className="font-bold text-gray-700 shrink-0">{key}</dt>
+                          <dd className="text-gray-600">{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
+
+        {/* Carrusel: productos de la misma categoría (4 por vista, hasta 15) */}
+        <SimilarProductsCarousel
+          products={similarProducts}
+          title="Productos de la misma categoría"
+          subtitle="Otros productos que podrían interesarte."
+        />
         </StoreLayout>
         
         {/* Snackbar para notificaciones */}

@@ -259,6 +259,7 @@ export class ProductsService {
       vehicleModelId,
       vehicleYearId,
       vehicleSpecId,
+      includeZeroPrice,
     } = query;
 
     const offset = (page - 1) * limit;
@@ -272,8 +273,11 @@ export class ProductsService {
     let branchJoin = '';
     let collectionJoin = '';
 
-    // Regla de negocio: no mostrar productos con precio 0 (evitar compras inválidas)
-    whereConditions.push('(p.price IS NOT NULL AND (p.price)::numeric > 0)');
+    // Regla de negocio: no mostrar productos con precio 0 en storefront (evitar compras inválidas).
+    // Web-local/admin puede pasar includeZeroPrice=true para ver todos los productos.
+    if (!includeZeroPrice) {
+      whereConditions.push('(p.price IS NOT NULL AND (p.price)::numeric > 0)');
+    }
 
     // Si se filtra por grupo, buscar productos disponibles en sucursales del grupo
     // IMPORTANTE: No filtrar por business_id del producto, sino por disponibilidad en sucursales del grupo
@@ -512,7 +516,7 @@ export class ProductsService {
       GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
-               p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
+               p.requires_pharmacist_validation, p.display_order, p.metadata, p.created_at, p.updated_at,
                b.name, pc.name, pc.business_id, pc.display_order
       ORDER BY COALESCE(pc.display_order, 999) ASC, ${orderByColumn} ${orderDirection}
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
@@ -777,7 +781,7 @@ export class ProductsService {
       GROUP BY p.id, p.business_id, p.name, p.sku, p.description, p.image_url, p.price, p.product_type,
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
-               p.requires_pharmacist_validation, p.display_order, p.created_at, p.updated_at,
+               p.requires_pharmacist_validation, p.display_order, p.metadata, p.created_at, p.updated_at,
                b.name, pc.name, pc.business_id, pi_main.file_path${branchId ? ', pba.price, pba.stock, pba.is_enabled' : ''}
     `;
 
@@ -981,6 +985,9 @@ export class ProductsService {
         max_quantity_per_order: row.max_quantity_per_order || null,
         requires_pharmacist_validation: row.requires_pharmacist_validation || false,
         display_order: row.display_order,
+        metadata: row.metadata != null
+          ? (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata)
+          : null,
         created_at: row.created_at,
         updated_at: row.updated_at,
       };
@@ -1048,9 +1055,9 @@ export class ProductsService {
         business_id, name, sku, description, image_url, price, product_type, category_id,
         is_available, is_featured, variants, nutritional_info, allergens,
         display_order, requires_prescription, age_restriction, max_quantity_per_order,
-        requires_pharmacist_validation
+        requires_pharmacist_validation, metadata
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
       ) RETURNING *
     `;
 
@@ -1102,6 +1109,13 @@ export class ProductsService {
         ? createProductDto.sku.trim() 
         : null;
 
+      const metadataValue =
+        createProductDto.metadata != null &&
+        typeof createProductDto.metadata === 'object' &&
+        Object.keys(createProductDto.metadata).length > 0
+          ? JSON.stringify(createProductDto.metadata)
+          : null;
+
       const queryParams = [
         createProductDto.business_id,
         createProductDto.name,
@@ -1121,6 +1135,7 @@ export class ProductsService {
         createProductDto.age_restriction || null,
         createProductDto.max_quantity_per_order || null,
         createProductDto.requires_pharmacist_validation || false,
+        metadataValue,
       ];
 
       const result = await pool.query(sqlQuery, queryParams);
@@ -1373,6 +1388,21 @@ export class ProductsService {
         updateFields.push(`requires_pharmacist_validation = $${paramIndex}`);
         updateValues.push(updateProductDto.requires_pharmacist_validation);
         paramIndex++;
+      }
+
+      if (updateProductDto.metadata !== undefined) {
+        const metadataValue =
+          updateProductDto.metadata !== null &&
+          typeof updateProductDto.metadata === 'object' &&
+          Object.keys(updateProductDto.metadata).length > 0
+            ? JSON.stringify(updateProductDto.metadata)
+            : null;
+        updateFields.push(`metadata = $${paramIndex}::jsonb`);
+        updateValues.push(metadataValue);
+        paramIndex++;
+        if (metadataValue) {
+          console.log('[UPDATE] Guardando metadata:', metadataValue);
+        }
       }
 
       if (updateFields.length === 0) {

@@ -55,6 +55,8 @@ export interface Product {
   branch_allow_backorder?: boolean;
   branch_backorder_lead_time_days?: number | null;
   branch_backorder_notes?: string | null;
+  /** Metadatos adicionales clave-valor (ej. Ubicación, Marca) */
+  metadata?: Record<string, string> | null;
 }
 
 export interface ProductsResponse {

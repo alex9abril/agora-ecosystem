@@ -110,5 +110,11 @@ export class ListProductsDto {
   @IsOptional()
   @IsString()
   sortOrder?: 'asc' | 'desc' = 'asc';
+
+  @ApiPropertyOptional({ description: 'Incluir productos con precio 0 (para admin/web-local). Por defecto false: no se muestran en storefront.', example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  includeZeroPrice?: boolean;
 }
 

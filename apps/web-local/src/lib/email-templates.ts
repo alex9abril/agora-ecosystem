@@ -46,7 +46,6 @@ export interface CreateEmailTemplateData {
   // Para templates de sucursal
   business_id?: string;
   inherit_from_group?: boolean;
-  inherit_from_global?: boolean;
 }
 
 export interface UpdateEmailTemplateData {
@@ -59,6 +58,7 @@ export interface UpdateEmailTemplateData {
   is_active?: boolean;
   inherit_from_global?: boolean;
   inherit_from_group?: boolean;
+   logo_url?: string;
 }
 
 /**

@@ -83,7 +83,7 @@ export default function OrderDetailPage() {
             await Promise.all(
               productIds.map(async (productId) => {
                 try {
-                  const product = await productsService.getProduct(productId);
+                  const product = await productsService.getProduct(productId, true);
                   console.log(`📦 Producto cargado:`, {
                     productId,
                     productName: product.name,

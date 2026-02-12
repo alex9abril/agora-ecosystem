@@ -64,6 +64,8 @@ export interface Product {
   max_quantity_per_order?: number;
   requires_pharmacist_validation?: boolean;
   display_order: number;
+  /** Metadatos adicionales clave-valor (JSON) */
+  metadata?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +90,8 @@ export interface CreateProductData {
   max_quantity_per_order?: number;
   requires_pharmacist_validation?: boolean;
   display_order?: number;
+  /** Metadatos adicionales clave-valor (JSON) */
+  metadata?: Record<string, string>;
 }
 
 export interface UpdateProductData extends Partial<CreateProductData> {
@@ -175,7 +179,7 @@ export const productsService = {
   async getProducts(
     businessId?: string, 
     vehicle?: { brand_id?: string; model_id?: string; year_id?: string; spec_id?: string },
-    options?: { page?: number; limit?: number; search?: string }
+    options?: { page?: number; limit?: number; search?: string; includeZeroPrice?: boolean }
   ): Promise<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
     try {
       // Construir query params
@@ -194,11 +198,12 @@ export const productsService = {
         if (vehicle.spec_id) params.append('vehicleSpecId', vehicle.spec_id);
       }
       
-      // Agregar parámetros de paginación y búsqueda
+      // Agregar parámetros de paginación, búsqueda y visibilidad (web-local debe ver productos con precio 0)
       if (options) {
         if (options.page) params.append('page', options.page.toString());
         if (options.limit) params.append('limit', options.limit.toString());
         if (options.search) params.append('search', options.search);
+        if (options.includeZeroPrice === true) params.append('includeZeroPrice', 'true');
       }
       
       const response = await apiRequest<{ data: Product[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(`/catalog/products?${params.toString()}`, {
@@ -217,10 +222,14 @@ export const productsService = {
 
   /**
    * Obtener un producto por ID
+   * @param includeZeroPrice - Si true, permite obtener productos con precio 0 (para web-local/admin)
    */
-  async getProduct(productId: string): Promise<Product> {
+  async getProduct(productId: string, includeZeroPrice = false): Promise<Product> {
     try {
-      const product = await apiRequest<Product>(`/catalog/products/${productId}`, {
+      const url = includeZeroPrice
+        ? `/catalog/products/${productId}?includeZeroPrice=true`
+        : `/catalog/products/${productId}`;
+      const product = await apiRequest<Product>(url, {
         method: 'GET',
       });
       return product;

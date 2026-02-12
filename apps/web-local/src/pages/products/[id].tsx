@@ -46,7 +46,12 @@ export default function ProductDetailPage() {
   const [variantGroups, setVariantGroups] = useState<ProductVariantGroup[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
-  
+  const [metadataEntries, setMetadataEntries] = useState<Array<{ key: string; value: string }>>([
+    { key: '', value: '' },
+    { key: '', value: '' },
+    { key: '', value: '' },
+  ]);
+
   // Estados para compatibilidad de vehículos
   const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibility[]>([]);
   const [loadingCompatibilities, setLoadingCompatibilities] = useState(false);
@@ -232,7 +237,8 @@ export default function ProductDetailPage() {
 
         const map: Record<string, ProductCollection[]> = {};
         entries.forEach(([businessId, list]) => {
-          map[businessId] = list;
+          // Clonamos la lista para garantizar que sea un array mutable
+          map[businessId] = [...list];
         });
         setCollectionsByBranch(map);
       } finally {
@@ -254,7 +260,7 @@ export default function ProductDetailPage() {
       setLoading(true);
       setError(null);
 
-      const productData = await productsService.getProduct(productId);
+      const productData = await productsService.getProduct(productId, true); // includeZeroPrice: web-local debe ver productos con precio 0
       setProduct(productData);
 
       // Cargar configuración de campos para el tipo de producto
@@ -318,6 +324,26 @@ export default function ProductDetailPage() {
       setVariantGroups(loadedVariantGroups);
       setAllergens(productData.allergens || []);
       setNutritionalInfo(productData.nutritional_info || {});
+
+      let meta = productData.metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {
+          // Si el JSON es inválido, ignoramos la metadata
+          meta = {};
+        }
+      }
+      const entries: Array<{ key: string; value: string }> =
+        meta && typeof meta === 'object' && !Array.isArray(meta)
+          ? Object.entries(meta).map(([k, v]) => ({ key: k, value: String(v ?? '') }))
+          : [];
+      const minRows = 3;
+      const padded =
+        entries.length >= minRows
+          ? entries
+          : [...entries, ...Array.from({ length: minRows - entries.length }, () => ({ key: '', value: '' }))];
+      setMetadataEntries(padded);
     } catch (err: any) {
       console.error('Error cargando producto:', err);
       setError('Error al cargar el producto');
@@ -380,6 +406,23 @@ export default function ProductDetailPage() {
       // Asegurarse de que variant_groups tenga la estructura correcta con variantes
       console.log('🔍 [FRONTEND] variantGroups antes de enviar:', JSON.stringify(variantGroups, null, 2));
       
+      const metadataRows = (metadataEntries || []).filter(
+        (r) => (r.key || '').trim() !== '' || (r.value || '').trim() !== ''
+      );
+      const invalidMeta = metadataRows.some(
+        (r) => (r.value || '').trim() !== '' && (r.key || '').trim() === ''
+      );
+      if (invalidMeta) {
+        setError('En Metadata: las filas con valor deben tener una clave.');
+        setSaving(false);
+        return;
+      }
+      const metadataObj = metadataRows.reduce<Record<string, string>>((acc, r) => {
+        const k = (r.key || '').trim();
+        const v = (r.value || '').trim();
+        if (k) acc[k] = v;
+        return acc;
+      }, {});
       const productData: any = {
         name: updateData.name,
         description: updateData.description,
@@ -397,6 +440,7 @@ export default function ProductDetailPage() {
         age_restriction: updateData.age_restriction,
         max_quantity_per_order: updateData.max_quantity_per_order,
         requires_pharmacist_validation: updateData.requires_pharmacist_validation,
+        metadata: metadataObj,
       };
       
       console.log('🔍 [FRONTEND] productData.variant_groups:', JSON.stringify(productData.variant_groups, null, 2));
@@ -631,6 +675,8 @@ export default function ProductDetailPage() {
           setProductCompatibilities={setProductCompatibilities}
           loadingCompatibilities={loadingCompatibilities}
           onLoadProductCompatibilities={handleLoadProductCompatibilities}
+          metadataEntries={metadataEntries}
+          setMetadataEntries={setMetadataEntries}
           branchAvailabilities={branchAvailabilities}
           setBranchAvailabilities={setBranchAvailabilities}
           loadingBranchAvailabilities={loadingBranchAvailabilities}

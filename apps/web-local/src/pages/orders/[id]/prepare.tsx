@@ -94,7 +94,7 @@ export default function PrepareOrderPage() {
         .map(async (item) => {
           try {
             // Obtener producto
-            const product = await productsService.getProduct(item.product_id!);
+            const product = await productsService.getProduct(item.product_id!, true);
             
             // Obtener disponibilidad en la sucursal
             const availabilityResponse = await productsService.getProductBranchAvailability(

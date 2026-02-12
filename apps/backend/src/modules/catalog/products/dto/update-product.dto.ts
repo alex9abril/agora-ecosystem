@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsBoolean, IsInt, IsUUID, IsUrl, IsNumber, IsArray, Min, MaxLength, IsEnum, IsObject } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Expose } from 'class-transformer';
 import { ProductType } from './create-product.dto';
 
 export class UpdateProductDto {
@@ -101,5 +101,11 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   requires_pharmacist_validation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Metadatos adicionales clave-valor (JSON)', example: { origin: 'local', certifications: ['organic'] } })
+  @Expose()
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, string>;
 }
 

@@ -58,7 +58,7 @@ export default function ProductsPage() {
       
       // Cargar productos y categorías en paralelo
       const [productsResponse, categoriesData] = await Promise.all([
-        productsService.getProducts(selectedBusiness.business_id, userVehicle || undefined),
+        productsService.getProducts(selectedBusiness.business_id, userVehicle || undefined, { includeZeroPrice: true }),
         productsService.getCategories(),
       ]);
 

@@ -9,7 +9,6 @@ import {
   CollectionProductRow,
   ProductCollection,
 } from '@/lib/product-collections';
-import { Product } from '@/lib/products';
 
 export default function CollectionProductsPage() {
   const router = useRouter();
@@ -18,7 +17,7 @@ export default function CollectionProductsPage() {
   const [collection, setCollection] = useState<ProductCollection | null>(null);
   const [products, setProducts] = useState<CollectionProductRow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchResults, setSearchResults] = useState<CollectionProductRow[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -146,7 +145,7 @@ export default function CollectionProductsPage() {
     }
   };
 
-  const handleAddProduct = async (product: Product) => {
+  const handleAddProduct = async (product: CollectionProductRow) => {
     if (!selectedBusiness?.business_id || !id || typeof id !== 'string') return;
     try {
       await productCollectionsService.addProduct(id, product.id, selectedBusiness.business_id);

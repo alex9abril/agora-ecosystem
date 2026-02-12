@@ -109,5 +109,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   requires_pharmacist_validation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Metadatos adicionales clave-valor (JSON)', example: { origin: 'local', certifications: ['organic'] } })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, string>;
 }
 

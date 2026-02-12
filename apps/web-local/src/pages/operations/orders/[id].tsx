@@ -63,7 +63,7 @@ export default function OperationsOrderDetailPage() {
 
     const loadProducts = async () => {
       try {
-        const productsResponse = await productsService.getProducts(selectedBusiness.business_id);
+        const productsResponse = await productsService.getProducts(selectedBusiness.business_id, undefined, { includeZeroPrice: true });
         setProducts(productsResponse.data);
       } catch (err: any) {
         console.error('Error cargando productos:', err);
