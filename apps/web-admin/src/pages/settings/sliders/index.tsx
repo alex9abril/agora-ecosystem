@@ -10,6 +10,7 @@ import { apiRequest } from '@/lib/api';
 import {
   landingSlidersService,
   LandingSlider,
+  ListLandingSlidersResponse,
   RedirectType,
 } from '@/lib/landing-sliders';
 
@@ -120,7 +121,7 @@ export default function AdminSlidersPage() {
   const handleCreate = () => {
     if (selectedContext === 'global') {
       router.push('/settings/sliders/new?context=global');
-    } else if (selectedContext && selectedContext !== 'global') {
+    } else if (selectedContext && typeof selectedContext === 'object' && selectedContext.type === 'brand') {
       router.push(`/settings/sliders/new?context=brand&brand_id=${selectedContext.brand.id}&brand_name=${encodeURIComponent(selectedContext.brand.name)}`);
     }
   };
@@ -157,7 +158,7 @@ export default function AdminSlidersPage() {
   const contextLabel =
     selectedContext === 'global'
       ? 'Global'
-      : selectedContext && selectedContext !== 'global'
+      : selectedContext && typeof selectedContext === 'object' && selectedContext.type === 'brand'
       ? `Marca: ${selectedContext.brand.name}`
       : '';
 
