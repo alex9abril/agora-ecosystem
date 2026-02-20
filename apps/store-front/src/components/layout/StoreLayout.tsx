@@ -29,19 +29,24 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
     error,
     groupId,
     branchId,
+    brandId,
   } = useStoreContext();
   const [branding, setBranding] = useState<Branding | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
   const [initialBackgroundColor, setInitialBackgroundColor] = useState<string | undefined>(undefined);
 
   // Función helper para guardar el color en localStorage
-  const saveBackgroundColor = (color: string, branchId?: string | null, groupId?: string | null) => {
+  const saveBackgroundColor = (color: string, branchId?: string | null, groupId?: string | null, brandId?: string | null) => {
     if (typeof window === 'undefined') return;
     try {
       if (branchId) {
         localStorage.setItem(`branding_bg_${branchId}`, color);
       } else if (groupId) {
         localStorage.setItem(`branding_bg_group_${groupId}`, color);
+      } else if (brandId) {
+        localStorage.setItem(`branding_bg_brand_${brandId}`, color);
+      } else {
+        localStorage.setItem('branding_bg_global', color);
       }
     } catch (error) {
       console.error('Error guardando color:', error);
@@ -49,7 +54,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
   };
 
   // Función helper para obtener el color guardado
-  const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | null): string | null => {
+  const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | null, brandId?: string | null): string | null => {
     if (typeof window === 'undefined') return null;
     try {
       if (branchId) {
@@ -58,6 +63,14 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
       }
       if (groupId) {
         const stored = localStorage.getItem(`branding_bg_group_${groupId}`);
+        if (stored) return stored;
+      }
+      if (brandId) {
+        const stored = localStorage.getItem(`branding_bg_brand_${brandId}`);
+        if (stored) return stored;
+      }
+      if (!branchId && !groupId && !brandId) {
+        const stored = localStorage.getItem('branding_bg_global');
         if (stored) return stored;
       }
     } catch (error) {
@@ -69,14 +82,14 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
   // Aplicar color de fondo inmediatamente cuando se detecta el contexto
   useEffect(() => {
     // Intentar obtener el color guardado primero
-    const storedColor = getStoredBackgroundColor(branchId, groupId);
+    const storedColor = getStoredBackgroundColor(branchId, groupId, brandId);
     const colorToApply = storedColor || '#f9fafb'; // gray-50 por defecto
     
     if (typeof document !== 'undefined') {
       document.body.style.backgroundColor = colorToApply;
       setInitialBackgroundColor(colorToApply);
     }
-  }, [branchId, groupId]);
+  }, [branchId, groupId, brandId]);
 
   // Cargar branding para mostrar redes sociales y aplicar colores
   useEffect(() => {
@@ -110,6 +123,11 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
           }
         } else if (groupId) {
           brandingData = await brandingService.getGroupBranding(groupId);
+        } else if (brandId) {
+          brandingData = await brandingService.getVehicleBrandBranding(brandId);
+        } else {
+          // Tienda global (Agora global)
+          brandingData = await brandingService.getGlobalBranding();
         }
         
         if (isMounted) {
@@ -124,7 +142,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
               document.body.style.backgroundColor = bgColor;
             }
             // Guardar el color en localStorage para uso futuro
-            saveBackgroundColor(bgColor, branchId, groupId);
+            saveBackgroundColor(bgColor, branchId, groupId, brandId);
           } else {
             // Color por defecto
             const defaultColor = '#f9fafb'; // gray-50
@@ -133,7 +151,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
               document.body.style.backgroundColor = defaultColor;
             }
             // Guardar el color por defecto también
-            saveBackgroundColor(defaultColor, branchId, groupId);
+            saveBackgroundColor(defaultColor, branchId, groupId, brandId);
           }
         }
       } catch (error) {
@@ -146,7 +164,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
             document.body.style.backgroundColor = defaultColor;
           }
           // Guardar el color por defecto en caso de error
-          saveBackgroundColor(defaultColor, branchId, groupId);
+          saveBackgroundColor(defaultColor, branchId, groupId, brandId);
         }
       } finally {
         if (isMounted) {
@@ -155,22 +173,13 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
       }
     };
 
-    if (branchId || groupId) {
-      loadBranding();
-    } else {
-      // Si no hay contexto de tienda, usar color por defecto
-      setIsBrandingLoading(false);
-      const defaultColor = '#f9fafb';
-      setInitialBackgroundColor(defaultColor);
-      if (typeof document !== 'undefined') {
-        document.body.style.backgroundColor = defaultColor;
-      }
-    }
+    // Siempre cargar branding: por contexto (grupo/sucursal/marca) o tienda global
+    loadBranding();
     
     return () => {
       isMounted = false;
     };
-  }, [branchId, groupId]);
+  }, [branchId, groupId, brandId]);
 
   // Función helper para detectar si una URL es una imagen
   const isImageUrl = (url: string): boolean => {
@@ -183,8 +192,9 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
            lowerUrl.includes('logo');
   };
 
-  // Obtener color de fondo del branding o usar el por defecto
-  const backgroundColor = branding?.colors?.background || initialBackgroundColor || '#f9fafb';
+  // Usar SIEMPRE el color de fondo configurado en branding cuando exista
+  const configuredBackground = branding?.colors?.background && String(branding.colors.background).trim();
+  const backgroundColor = configuredBackground || initialBackgroundColor || '#f9fafb';
   
   // También considerar el loading del contexto de la tienda
   const isFullyLoading = isBrandingLoading || isLoading;
@@ -197,6 +207,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
         backgroundColor={backgroundColor}
         branchId={branchId}
         groupId={groupId}
+        brandId={brandId}
       />
       
       <div 

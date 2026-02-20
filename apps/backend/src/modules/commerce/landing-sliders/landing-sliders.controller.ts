@@ -62,17 +62,20 @@ export class LandingSlidersController {
 
   @Get('public')
   @Public()
-  @ApiOperation({ summary: 'Obtener sliders activos para un contexto (público)' })
+  @ApiOperation({ summary: 'Obtener sliders activos para un contexto (público). Sin parámetros = sliders globales.' })
   @ApiQuery({ name: 'business_group_id', required: false, type: String })
   @ApiQuery({ name: 'business_id', required: false, type: String })
+  @ApiQuery({ name: 'vehicle_brand_id', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Sliders obtenidos exitosamente' })
   async getActiveSliders(
     @Query('business_group_id') businessGroupId?: string,
     @Query('business_id') businessId?: string,
+    @Query('vehicle_brand_id') vehicleBrandId?: string,
   ) {
     return this.landingSlidersService.getActiveSlidersByContext(
       businessGroupId,
       businessId,
+      vehicleBrandId,
     );
   }
 
@@ -159,6 +162,40 @@ export class LandingSlidersController {
     @CurrentUser('id') userId: string,
   ) {
     return this.sliderImagesService.uploadImage('branch', branchId, file);
+  }
+
+  @Post('upload-image/global')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir imagen de slider global (web-admin)' })
+  @ApiResponse({ status: 201, description: 'Imagen subida exitosamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async uploadGlobalImage(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.sliderImagesService.uploadImage('global', 'global', file);
+  }
+
+  @Post('upload-image/brand/:id')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth()
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir imagen de slider por marca (web-admin)' })
+  @ApiParam({ name: 'id', description: 'ID de la marca de vehículo' })
+  @ApiResponse({ status: 201, description: 'Imagen subida exitosamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async uploadBrandImage(
+    @Param('id') brandId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.sliderImagesService.uploadImage('brand', brandId, file);
   }
 }
 

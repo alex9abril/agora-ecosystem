@@ -42,7 +42,7 @@ export class SliderImagesService {
    * Estructura: sliders/{type}/{id}/{fileName}
    */
   private generateFilePath(
-    type: 'group' | 'branch',
+    type: 'group' | 'branch' | 'global' | 'brand',
     id: string,
     originalName: string
   ): string {
@@ -54,10 +54,11 @@ export class SliderImagesService {
   }
 
   /**
-   * Sube una imagen de slider
+   * Sube una imagen de slider.
+   * type 'global' usa id 'global'; type 'brand' usa vehicle_brand_id.
    */
   async uploadImage(
-    type: 'group' | 'branch',
+    type: 'group' | 'branch' | 'global' | 'brand',
     id: string,
     file: Express.Multer.File
   ): Promise<{ url: string; path: string }> {

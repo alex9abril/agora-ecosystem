@@ -51,7 +51,7 @@ interface Branding {
 }
 
 interface BrandingManagerProps {
-  type: 'group' | 'business';
+  type: 'group' | 'business' | 'brand' | 'global';
   id: string;
   name: string;
 }
@@ -80,9 +80,13 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
 
       setLoading(true);
       try {
-        const endpoint = type === 'group' 
+        const endpoint = type === 'group'
           ? `/businesses/groups/${id}/branding`
-          : `/businesses/${id}/branding`;
+          : type === 'business'
+            ? `/businesses/${id}/branding`
+            : type === 'global'
+              ? `/settings/branding/global`
+              : `/settings/branding/vehicle-brand/${id}`;
         
         const response = await apiRequest<{ branding: Branding }>(endpoint, {
           method: 'GET',
@@ -144,7 +148,11 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
     try {
       const endpoint = type === 'group'
         ? `/businesses/groups/${id}/branding`
-        : `/businesses/${id}/branding`;
+        : type === 'business'
+          ? `/businesses/${id}/branding`
+          : type === 'global'
+            ? `/settings/branding/global`
+            : `/settings/branding/vehicle-brand/${id}`;
 
       await apiRequest(endpoint, {
         method: 'PUT',
@@ -204,9 +212,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       const formData = new FormData();
       formData.append('file', file);
 
+      const uploadPath = imageType === 'logo' ? 'logo' : imageType === 'logo_light' ? 'logo-light' : imageType === 'logo_dark' ? 'logo-dark' : 'favicon';
       const endpoint = type === 'group'
-        ? `/businesses/groups/${id}/branding/upload-${imageType === 'logo' ? 'logo' : imageType === 'logo_light' ? 'logo-light' : imageType === 'logo_dark' ? 'logo-dark' : 'favicon'}`
-        : `/businesses/${id}/branding/upload-${imageType === 'logo' ? 'logo' : imageType === 'logo_light' ? 'logo-light' : imageType === 'logo_dark' ? 'logo-dark' : 'favicon'}`;
+        ? `/businesses/groups/${id}/branding/upload-${uploadPath}`
+        : type === 'business'
+          ? `/businesses/${id}/branding/upload-${uploadPath}`
+          : type === 'global'
+            ? `/settings/branding/global/upload-${uploadPath}`
+            : `/settings/branding/vehicle-brand/${id}/upload-${uploadPath}`;
 
       // Usar la misma URL base que apiRequest
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
@@ -251,9 +264,13 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       // Recargar branding completo desde el servidor para asegurar sincronización
       // y forzar re-renderizado de todos los componentes
       try {
-        const refreshEndpoint = type === 'group' 
+        const refreshEndpoint = type === 'group'
           ? `/businesses/groups/${id}/branding`
-          : `/businesses/${id}/branding`;
+          : type === 'business'
+            ? `/businesses/${id}/branding`
+            : type === 'global'
+              ? `/settings/branding/global`
+              : `/settings/branding/vehicle-brand/${id}`;
         
         const refreshResponse = await apiRequest<{ branding: Branding }>(refreshEndpoint, {
           method: 'GET',

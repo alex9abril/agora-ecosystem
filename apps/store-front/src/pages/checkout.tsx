@@ -14,7 +14,7 @@ import { CartItem, TaxBreakdown } from '@/lib/cart';
 import { taxesService } from '@/lib/taxes';
 import { formatPrice } from '@/lib/format';
 import { apiRequest } from '@/lib/api';
-import { productsService } from '@/lib/products';
+import { productsService, type Product } from '@/lib/products';
 import { walletService, Wallet } from '@/lib/wallet';
 import { logisticsService, type Address as LogisticsAddress, type Parcel } from '@/lib/logistics';
 import { branchesService, BranchTaxSettings } from '@/lib/branches';
@@ -108,6 +108,32 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [productsData, setProductsData] = useState<Record<string, Product>>({});
+
+  // Cargar datos de productos para imágenes en resumen (fallback si el carrito no trae product_image_url)
+  useEffect(() => {
+    if (cart?.items?.length) {
+      const productIds = Array.from(new Set(cart.items.map((i) => i.product_id)));
+      const load = async () => {
+        const map: Record<string, Product> = {};
+        await Promise.all(
+          productIds.map(async (id) => {
+            try {
+              const p = await productsService.getProduct(id);
+              map[id] = p;
+            } catch {
+              // ignore
+            }
+          })
+        );
+        setProductsData(map);
+      };
+      load();
+    } else {
+      setProductsData({});
+    }
+  }, [cart?.items?.length, cart?.items?.map((i) => i.product_id).join(',')]);
+
   const getBranchSettings = (businessId: string) =>
     branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
 
@@ -2211,8 +2237,8 @@ export default function CheckoutPage() {
                       </div>
                     )}
 
-                    {/* Dirección de facturación */}
-                    <div className="mt-8 mb-6 border-t border-gray-200 pt-6">
+                    {/* Dirección de facturación (oculta por ahora, retomar más adelante) */}
+                    <div className="mt-8 mb-6 border-t border-gray-200 pt-6 hidden">
                       <h3 className="text-lg font-medium text-gray-900 mb-4">Dirección de Facturación</h3>
                       
                       <label className="flex items-center gap-3 mb-4 cursor-pointer">
@@ -3042,20 +3068,26 @@ export default function CheckoutPage() {
                           return (
                             <div key={item.id} className="flex gap-3">
                               <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center border border-gray-200">
-                                {item.product_image_url && !imageErrors[item.id] ? (
-                                  <img
-                                    src={item.product_image_url}
-                                    alt={item.product_name}
-                                    className="w-full h-full object-contain p-1"
-                                    onError={() => {
-                                      setImageErrors(prev => ({ ...prev, [item.id]: true }));
-                                    }}
-                                  />
-                                ) : (
-                                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                  </svg>
-                                )} 
+                                {(() => {
+                                  const product = productsData[item.product_id];
+                                  const imageToShow = !imageErrors[item.id]
+                                    ? item.product_image_url || product?.primary_image_url || product?.image_url
+                                    : undefined;
+                                  return imageToShow ? (
+                                    <img
+                                      src={imageToShow}
+                                      alt={item.product_name}
+                                      className="w-full h-full object-contain p-1"
+                                      onError={() => {
+                                        setImageErrors(prev => ({ ...prev, [item.id]: true }));
+                                      }}
+                                    />
+                                  ) : (
+                                    <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  );
+                                })()}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.product_name}</p>

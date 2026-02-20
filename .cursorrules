@@ -1,261 +1,149 @@
-# Cursor Rules para LOCALIA Admin
+# Cursor Rules — AGORA Ecosystem
 
-## 🗄️ Reglas para Base de Datos
+Reglas para desarrollo asistido por IA en este repositorio. El agente debe seguirlas en todo momento para mantener consistencia con la base de datos, convenciones y flujos del proyecto.
 
-## 🎨 Reglas UI (Web Admin / Web Local)
+---
 
-- En `web-admin` y `web-local`, los botones principales deben ser negros.
+## 1. Contexto de trabajo y agentes
 
-### IMPORTANTE: Antes de cualquier operación de base de datos
+### 1.1 Contexto de trabajo (`docs/contexto-trabajo/`)
 
-**SIEMPRE** debes revisar los archivos SQL en la carpeta `database/` antes de:
-- Crear nuevas tablas, columnas, índices o constraints
+Cuando el usuario mencione **`@docs/contexto-trabajo/...`** o pida partir del **"contexto de [tema]"** o **"según el contexto de [X]"**:
+
+- **Leer primero** el archivo indicado en `docs/contexto-trabajo/` (ej: `correo-confirmacion-pedido.md`).
+- Usar ese documento como **fuente de verdad** del estado actual, decisiones y archivos clave.
+- No pedir que repita explicaciones ya escritas ahí; si falta algo, completar el archivo de contexto cuando sea natural.
+
+### 1.2 Agentes / referencia por dominio (`docs/agentes/`)
+
+Cuando el usuario mencione **`@docs/agentes/...`** (ej: `01-multitienda-contexto-global-grupo-sucursal.md`):
+
+- **Leer primero** ese archivo como referencia estable del dominio (cómo funciona X en el proyecto).
+- Usar su contenido para BD, APIs, flujos y convenciones; no re-interpretar desde cero.
+
+---
+
+## 2. UI (Web Admin / Web Local)
+
+- En **web-admin** y **web-local**, los **botones principales** deben ser **negros**.
+
+---
+
+## 3. Base de datos
+
+La fuente de verdad de la estructura es la carpeta `database/`. Cualquier cambio o propuesta que toque tablas, columnas, migraciones o consultas debe alinearse con lo que ya existe.
+
+### 3.1 Antes de cualquier operación de BD
+
+**Revisar siempre** los archivos SQL relevantes en `database/` antes de:
+
+- Crear tablas, columnas, índices o constraints
 - Modificar estructuras existentes
-- Crear nuevos endpoints que consulten la base de datos
-- Implementar servicios que interactúen con la base de datos
-- Crear DTOs o interfaces TypeScript basadas en esquemas de base de datos
-- **Proponer nuevas estructuras de base de datos o migraciones**
+- Crear endpoints o servicios que consulten la BD
+- Crear DTOs o interfaces TypeScript basados en el esquema
+- **Proponer** nuevas estructuras o migraciones
 
-### ⚠️ REGLA CRÍTICA: Propuestas de Base de Datos
+### 3.2 Propuestas de BD (regla crítica)
 
-**Cada vez que propongas una nueva estructura de base de datos (tablas, migraciones, funciones, triggers, etc.), DEBES:**
+En **cada propuesta** de nueva estructura (tablas, migraciones, funciones, triggers):
 
-1. **Revisar primero la carpeta `database/` completa** para entender:
-   - Los estándares y convenciones actuales
-   - Los patrones de nombres de tablas, columnas, índices
-   - Los tipos de datos utilizados
-   - La estructura de triggers y funciones existentes
-   - Los schemas y su organización
-   - Las relaciones y foreign keys existentes
+1. **Revisar** la carpeta `database/` para entender estándares, nombres, tipos, triggers, schemas y relaciones.
+2. **Alinear** la propuesta:
+   - Tipos: UUID, TEXT, DECIMAL, BOOLEAN, JSONB, TEXT[], etc.
+   - Nombres: snake_case; índices `idx_[tabla]_[columna]`; triggers `update_[tabla]_updated_at`.
+   - Metadata: `created_at`, `updated_at` (no `created_by`/`updated_by` salvo que existan en otras tablas).
+   - Triggers: usar la función existente `update_updated_at_column()`.
+   - Schemas: core, catalog, orders, communication, commerce, reviews, social.
+3. **Validar**: sin funciones duplicadas; migraciones con `DROP TRIGGER IF EXISTS` cuando aplique; schemas correctos.
 
-2. **Alinear tu propuesta con el estándar actual**:
-   - Usar los mismos tipos de datos (UUID, TEXT, DECIMAL, BOOLEAN, JSONB, TEXT[], etc.)
-   - Seguir las mismas convenciones de nombres (snake_case, prefijos de índices, etc.)
-   - Usar los mismos patrones de metadata (created_at, updated_at, sin created_by/updated_by a menos que existan en otras tablas)
-   - Aplicar triggers de la misma manera (usar `update_updated_at_column()` existente, no crear nuevas funciones)
-   - Seguir la misma estructura de comentarios (COMMENT ON TABLE, COMMENT ON COLUMN)
-   - Usar los mismos patrones de constraints (CHECK, UNIQUE, etc.)
-   - Organizar en los schemas correctos (core, catalog, orders, communication, etc.)
+### 3.3 Archivos de referencia en `database/`
 
-3. **Verificar consistencia**:
-   - Los nombres de triggers deben seguir el patrón: `update_[tabla]_updated_at`
-   - Los índices deben seguir el patrón: `idx_[tabla]_[columna]`
-   - Las foreign keys deben usar `ON DELETE CASCADE` o `ON DELETE SET NULL` según corresponda
-   - Los campos de estado deben usar `is_active`, `is_available`, o `status` (NO `deleted_at`)
-   - Los UUIDs deben usar `gen_random_uuid()` como DEFAULT
+| Qué | Dónde |
+|-----|--------|
+| Estructura base | `database/schema/schema.sql` (y otros en `database/schema/` si aplica) |
+| Migraciones recientes / estilo AGORA | `database/agora/` |
+| Migraciones generales | `database/migrations/` |
+| Segmentos de esquema | `database/segments/` |
+| Documentación y organización | `database/README.md` |
+| Seeds y catálogos | `database/seeds/`, `database/agora/seed_*.sql` |
 
-4. **Antes de crear cualquier query SQL de migración**:
-   - Revisa `database/schema/schema.sql` para ver la estructura base
-   - Revisa `database/agora/` para ver migraciones recientes y su estilo
-   - Revisa `database/migrations/` para ver patrones de migraciones
-   - Revisa `database/segments/` para ver cómo se organizan las estructuras
-   - Compara tu propuesta con estructuras similares existentes
+No asumir que solo `schema.sql` o el README bastan; revisar migraciones, fixes y seeds que puedan haber cambiado la estructura.
 
-5. **Validar que la propuesta sea compatible**:
-   - No crear funciones duplicadas (verificar si ya existen)
-   - No usar campos que no existen en el estándar (como `created_by`/`updated_by` si no se usan en otras tablas)
-   - No crear triggers sin usar `DROP TRIGGER IF EXISTS` primero (si es una migración)
-   - Asegurar que los schemas usados sean los correctos según la organización actual
+### 3.4 Convenciones de BD
 
-### Archivos y scripts de referencia obligatorios a revisar en `database/`:
+- **Schemas**: `core` (negocios, usuarios, direcciones), `catalog` (productos, categorías), `orders`, `reviews`, `communication`, `commerce`, `social`.
+- **IDs**: UUID con `gen_random_uuid()`. En scripts con UUIDs literales: **solo dígitos** (ej: `'00000001-0000-0000-0000-000000000001'`), sin letras en el UUID.
+- **Geolocalización**: tipo `POINT`; extraer con `(location)[0]` y `(location)[1]` (no ST_X/ST_Y).
+- **Eliminación**: lógica con `is_active`, `is_available` o `status`; **no** `deleted_at` ni borrado físico.
+- **Auth**: `auth.users` (Supabase); `core.user_profiles` extiende con mismo `id`.
+- **Wallet**: campos `wallet_*` son `VARCHAR(255)`; el wallet es proyecto externo, solo referencias.
 
-> **IMPORTANTE:**  
-> No basta con revisar solo los archivos principales (`schema.sql`, algunos seeds o el README).  
-> Es fundamental considerar que en la carpeta `database/` pueden existir múltiples archivos SQL involucrados en la evolución y migración del esquema, datos de ejemplo, catálogos, hotfixes, o migraciones específicas que afecten la estructura real y actual de la base de datos.
->
-> Siempre revisa TODOS los archivos relevantes en la carpeta `database/`, ya que las modificaciones a la estructura (tablas, columnas, índices, constraints, triggers, relaciones, etc.) pueden haberse realizado en diferentes scripts a lo largo del tiempo.
+### 3.5 Consultas SQL correctas
 
-1. **`database/schema.sql`**  
-   - Estructura base y principal de la base de datos  
-   - Define todos los schemas, tablas, columnas, constraints y tipos principales  
-   - Define índices, triggers, funciones, y relaciones
+- Siempre usar **schema prefix**: `core.user_profiles`, `catalog.products`, etc.
+- POINT: `(location)[0]` longitud, `(location)[1]` latitud.
 
-2. **Archivos de migración, fixes, y catálogos** (p. ej. `business_categories_catalog.sql`, `migrations_*.sql`, `update_*_table.sql`)  
-   - Contienen cambios incrementales, migraciones históricas, o alteraciones importantes sobre el schema base  
-   - Aquí pueden agregarse o modificarse columnas, constraints, relaciones o datos fundamentales  
-   - **SIEMPRE** revisa si hay nuevos scripts o migraciones ejecutadas posteriormente al schema base
+### 3.6 Backend (NestJS)
 
-3. **`database/README.md`**  
-   - Documentación sobre la organización por schemas  
-   - Listados de tablas, relaciones y ejemplos de consultas  
-   - Puede señalar convenciones o atajos importantes
+- DTOs y servicios alineados con la estructura real en `database/schema/schema.sql`.
+- Queries con schema prefix.
+- Mapeo de tipos: UUID→string, DECIMAL→number, BOOLEAN→boolean, JSONB→interface/any, TEXT[]→string[], POINT→{ longitude, latitude }.
 
-4. **Seeds y datos de ejemplo (`seed_*.sql`)**  
-   - Incluyen catálogos iniciales y ejemplos (ej: `seed_catalog.sql`, `seed_delivery_cycle.sql`)
-   - Ayudan a entender los datos típicos de la base, relaciones y flujos reales  
-   - Útiles para pruebas y comprensión de uso en producción real
+### 3.7 Frontend
 
-> **Resumen:**  
-> Antes de tomar cualquier decisión que involucre la base de datos, revisa el conjunto completo de archivos SQL y documentación presente en la carpeta `database/` para asegurarte de tener el contexto actualizado de la estructura, migraciones y datos, y evitar inconsistencias o perder rastros de cambios importantes.
+- Interfaces TypeScript alineadas con las tablas; formularios y filtros usando nombres de columnas exactos del schema.
 
-### Checklist antes de implementar:
+### 3.8 Fuente de verdad e inconsistencias
 
-- [ ] ¿Revisé todos los archivos relevantes en la carpeta `database/` (incluyendo `schema.sql`, migraciones, catálogos y seeds) para verificar la estructura y cambios de las tablas?
-- [ ] ¿Verifiqué los nombres exactos de las columnas (case-sensitive)?
-- [ ] ¿Confirmé los tipos de datos (UUID, TEXT, DECIMAL, BOOLEAN, JSONB, etc.)?
-- [ ] ¿Revisé las relaciones (foreign keys) y constraints?
-- [ ] ¿Verifiqué los ENUMs disponibles para campos específicos?
-- [ ] ¿Confirmé si hay triggers o funciones que afecten las operaciones?
-- [ ] ¿Revisé si hay índices que deba considerar en las consultas?
-- [ ] ¿Verifiqué si la tabla está en un schema específico (core, catalog, orders, etc.)?
+- Si el código y `database/schema/schema.sql` difieren, **priorizar el schema**.
+- Al modificar estructura: actualizar primero el schema (o migración) y luego el código.
 
-### Convenciones importantes:
+### 3.9 Ejecución de scripts SQL
 
-1. **Schemas**: Las tablas están organizadas en schemas:
-   - `core.*` - Entidades principales (user_profiles, businesses, repartidores, addresses)
-   - `catalog.*` - Catálogo (product_categories, products, collections)
-   - `orders.*` - Pedidos (orders, order_items, deliveries)
-   - `reviews.*` - Evaluaciones (reviews, tips)
-   - `communication.*` - Comunicación (notifications, messages)
-   - `commerce.*` - Comercio (promotions, subscriptions, ads)
-   - `social.*` - Red social (social_posts, social_likes, etc.)
+- **No ejecutar** scripts SQL en la base de datos desde el agente.
+- Solo **crear, editar o corregir** archivos SQL según lo que pida el usuario.
+- La ejecución la hace **siempre el usuario**.
 
-2. **Tipos de datos**:
-   - IDs: `UUID` (usar `gen_random_uuid()` o UUIDs válidos)
-   - **IMPORTANTE - UUIDs en scripts SQL**: Cuando especifiques UUIDs manualmente en scripts SQL (INSERT, UPDATE, etc.), **SIEMPRE usa solo números (0-9), sin letras**. Formato: `'00000001-0000-0000-0000-000000000001'`. NO uses letras como `'refacciones-0000-...'` o `'accesorios-0000-...'`.
-   - Geolocalización: `POINT` (PostgreSQL nativo, usar `(location)[0]` y `(location)[1]` para extraer coordenadas)
-   - JSON: `JSONB` para variantes, información nutricional, etc.
-   - Arrays: `TEXT[]` para alérgenos, tags, etc.
-   - Precios: `DECIMAL(10,2)` para montos monetarios
+---
 
-3. **Eliminación lógica**:
-   - **NUNCA** eliminar físicamente registros
-   - Usar campos `is_active`, `is_available`, o `status` para desactivar
-   - Las tablas NO tienen `deleted_at` por defecto, usar campos booleanos
+## 4. Formato obligatorio de scripts SQL
 
-4. **Autenticación**:
-   - Usar `auth.users` de Supabase para autenticación
-   - `core.user_profiles` extiende `auth.users` con roles y datos adicionales
-   - El `id` de `user_profiles` debe coincidir con `auth.users.id`
+Todo script SQL nuevo debe seguir esta estructura.
 
-5. **Wallet Integration**:
-   - Los campos `wallet_*` son `VARCHAR(255)`, NO `UUID`
-   - El wallet es un proyecto separado, solo se almacenan referencias
-
-### Ejemplos de consultas correctas:
-
-```sql
--- ✅ CORRECTO: Usar schema prefix
-SELECT * FROM core.user_profiles WHERE role = 'client';
-
--- ✅ CORRECTO: Extraer coordenadas de POINT
-SELECT (location)[0] as longitude, (location)[1] as latitude FROM core.businesses;
-
--- ✅ CORRECTO: Usar gen_random_uuid() para nuevos registros
-INSERT INTO catalog.products (id, business_id, name, price) 
-VALUES (gen_random_uuid(), $1, $2, $3);
-
--- ❌ INCORRECTO: No usar schema prefix
-SELECT * FROM user_profiles; -- FALLA si la tabla está en schema 'core'
-
--- ❌ INCORRECTO: Intentar usar ST_X/ST_Y con POINT
-SELECT ST_X(location) FROM core.businesses; -- FALLA, usar (location)[0] en su lugar
-```
-
-### Cuando trabajes con backend (NestJS):
-
-1. **DTOs**: Basa los DTOs en la estructura real de `schema.sql`
-2. **Services**: Usa los nombres exactos de columnas y schemas
-3. **Queries**: Siempre incluye el schema prefix en las consultas SQL
-4. **Tipos TypeScript**: Mapea correctamente los tipos PostgreSQL a TypeScript:
-   - `UUID` → `string`
-   - `DECIMAL` → `number`
-   - `BOOLEAN` → `boolean`
-   - `JSONB` → `any` o interface específica
-   - `TEXT[]` → `string[]`
-   - `POINT` → Extraer como `{ longitude: number, latitude: number }`
-
-### Cuando trabajes con frontend:
-
-1. **Interfaces TypeScript**: Deben coincidir exactamente con la estructura de las tablas
-2. **Formularios**: Validar tipos de datos según los constraints del schema
-3. **Filtros**: Usar los nombres exactos de columnas que existen en el schema
-
-## 📝 Notas adicionales
-
-- Si encuentras inconsistencias entre el código y `schema.sql`, **SIEMPRE** prioriza `schema.sql` como fuente de verdad
-- Si necesitas modificar el schema, actualiza `schema.sql` primero y luego el código
-- Para nuevos campos, verifica si hay triggers o funciones que los afecten
-- Para relaciones, verifica las foreign keys y constraints en `schema.sql`
-
-## ⚠️ IMPORTANTE: Ejecución de Scripts SQL
-
-**NUNCA ejecutes scripts SQL directamente en la base de datos.** 
-
-- El usuario es el único responsable de ejecutar todos los scripts SQL
-- Solo crea, modifica o corrige los archivos SQL según las instrucciones del usuario
-- NO uses herramientas para ejecutar comandos SQL en la base de datos
-- NO propongas ejecutar scripts SQL, solo crea o corrige los archivos
-
-## 📝 REGLA OBLIGATORIA: Estructura de Scripts SQL
-
-**TODOS los scripts SQL que crees DEBEN seguir esta estructura exacta:**
-
-### Encabezado obligatorio (al inicio del archivo):
+### 4.1 Encabezado (inicio del archivo)
 
 ```sql
 -- ============================================================================
 -- [TÍTULO DEL SCRIPT]
 -- ============================================================================
--- Descripción: [Descripción clara y detallada de qué hace el script]
+-- Descripción: [Descripción clara de qué hace el script]
 -- ============================================================================
--- Versión: [Número de versión, ej: 1.0, 1.1, 2.0]
--- Fecha: [Fecha en formato YYYY-MM-DD, ej: 2025-01-15]
--- Hora: [Hora en formato HH:MM:SS, ej: 14:30:00]
--- ============================================================================
-```
-
-### Ejemplo de encabezado correcto:
-
-```sql
--- ============================================================================
--- AGORA ECOSYSTEM - Recreate: Order Confirmation Email Template
--- ============================================================================
--- Descripción: Elimina el template existente de confirmación de pedido y
---              crea uno nuevo con diseño moderno similar a confirmaciones
---              de pago profesionales. Incluye logo de AGORA por defecto.
--- ============================================================================
--- Versión: 1.0
--- Fecha: 2025-01-15
--- Hora: 14:30:00
+-- Versión: X.Y (ej: 1.0)
+-- Fecha: YYYY-MM-DD
+-- Hora: HH:MM:SS (24h)
 -- ============================================================================
 ```
 
-### Estructura del script:
+Título sugerido: `[PROYECTO] - [Acción]: [Objeto]` (ej: `AGORA ECOSYSTEM - Recreate: Order Confirmation Email Template`).
 
-1. **Configuración inicial** (SET search_path, etc.)
-2. **Cuerpo del script** (comandos SQL)
-3. **Verificaciones** (DO blocks para validar resultados)
-4. **Notas finales** (comentarios explicativos)
+### 4.2 Cuerpo y cierre
 
-### Sección de notas (al final del archivo):
+1. Configuración inicial (SET search_path, etc.)
+2. Comandos SQL
+3. Verificaciones (DO blocks si aplica)
+4. Sección **NOTAS** al final con comentarios explicativos y advertencias.
 
-```sql
--- ============================================================================
--- NOTAS:
--- ============================================================================
--- 1. [Nota importante 1]
--- 2. [Nota importante 2]
--- 3. [Nota importante 3]
--- ...
--- ============================================================================
-```
+### 4.3 Reglas
 
-### Reglas específicas:
+- Fecha: `YYYY-MM-DD`. Hora: `HH:MM:SS` 24h.
+- Versión: semántica (1.0, 1.1, 2.0).
+- Descripción: al menos 2–3 líneas.
 
-- **Fecha**: SIEMPRE usar formato `YYYY-MM-DD` (ej: `2025-01-15`)
-- **Hora**: SIEMPRE usar formato `HH:MM:SS` en 24 horas (ej: `14:30:00`)
-- **Versión**: Usar formato semántico `X.Y` (ej: `1.0`, `1.1`, `2.0`)
-- **Título**: Debe ser descriptivo y seguir el patrón `[PROYECTO] - [Acción]: [Objeto]`
-- **Descripción**: Mínimo 2-3 líneas explicando qué hace el script
-- **Notas**: Incluir información relevante sobre variables, dependencias, advertencias, etc.
+---
 
-### Checklist antes de crear un script SQL:
+## 5. Checklist rápido antes de tocar BD
 
-- [ ] ¿Incluí el encabezado completo con título, descripción, versión, fecha y hora?
-- [ ] ¿La fecha está en formato YYYY-MM-DD?
-- [ ] ¿La hora está en formato HH:MM:SS?
-- [ ] ¿Incluí la sección de notas al final?
-- [ ] ¿El script tiene verificaciones para validar que funcionó correctamente?
-- [ ] ¿Los comentarios son claros y descriptivos?
-
+- [ ] Revisé `database/` (schema, migraciones, segments, seeds) según el alcance del cambio.
+- [ ] Nombres de columnas y tablas exactos (case-sensitive); tipos y schemas correctos.
+- [ ] Relaciones, triggers e índices considerados.
+- [ ] Si creo script SQL: encabezado, versión, fecha, hora y notas al final.

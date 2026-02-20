@@ -112,67 +112,28 @@ export class CartService {
         [cart.id]
       );
 
-      // Procesar items para agregar URLs de imágenes
-      // Usar la misma lógica que products.service.ts para generar primary_image_url
+      // Procesar items para agregar URLs de imágenes (path relativo -> URL pública)
       const processedItems = itemsResult.rows.map((item) => {
-        let productImageUrl = item.product_image_url_fallback || null;
-        
-        // Si hay una imagen principal de product_images, generar su URL pública
-        // Usar la misma lógica que products.service.ts para generar primary_image_url
-        if (item.primary_image_path && supabaseAdmin) {
+        let productImageUrl: string | null = null;
+        const sourcePath = item.primary_image_path || item.product_image_url_fallback || null;
+
+        if (sourcePath && supabaseAdmin) {
           try {
-            const originalPath = item.primary_image_path;
-            let finalPath: string | null = null;
-            
-            // Si ya es un path relativo (no empieza con http), usarlo directamente
-            if (!originalPath.startsWith('http')) {
-              finalPath = originalPath;
-            } else {
-              // Si es una URL completa, extraer directamente el patrón UUID/filename
-              // PRIORIDAD 1: Buscar el patrón UUID/filename con extensión
-              const uuidMatch = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
-              if (uuidMatch && uuidMatch[1]) {
-                finalPath = uuidMatch[1];
-              } else {
-                // PRIORIDAD 2: Buscar sin extensión
-                const uuidMatchNoExt = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
-                if (uuidMatchNoExt && uuidMatchNoExt[1]) {
-                  finalPath = uuidMatchNoExt[1];
-                } else {
-                  // Usar normalizeStoragePath como fallback
-                  finalPath = normalizeStoragePath(originalPath);
-                }
-              }
-            }
-            
-            // Solo generar URL si tenemos un path relativo válido (no empieza con http)
-            if (finalPath && !finalPath.startsWith('http') && !finalPath.startsWith('https') && finalPath.includes('/')) {
-              // Verificar que finalPath tenga el formato correcto (UUID/filename)
-              if (finalPath.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i)) {
-                // Asegurarse de que finalPath no contenga caracteres de URL
-                if (!finalPath.includes('://') && !finalPath.includes('.supabase.co') && !finalPath.includes('.storage.supabase.co')) {
-                  const { data: urlData } = supabaseAdmin.storage
-                    .from(this.BUCKET_NAME)
-                    .getPublicUrl(finalPath);
-                  productImageUrl = urlData.publicUrl;
-                } else {
-                  console.warn('⚠️ [CartService.getCart] finalPath contiene caracteres de URL, omitiendo:', finalPath);
-                }
-              } else {
-                console.warn('⚠️ [CartService.getCart] finalPath no tiene formato UUID/filename:', finalPath);
-              }
-            } else {
-              console.warn('⚠️ [CartService.getCart] finalPath inválido o vacío:', finalPath);
+            const normalized = normalizeStoragePath(
+              sourcePath.startsWith('http') && sourcePath.includes('/object/public/http')
+                ? sourcePath.replace(/^[^]*?\/object\/public\//, '')
+                : sourcePath
+            );
+            if (normalized && !normalized.startsWith('http') && normalized.includes('/')) {
+              const { data } = supabaseAdmin.storage.from(this.BUCKET_NAME).getPublicUrl(normalized);
+              productImageUrl = data.publicUrl;
+            } else if (normalized && normalized.startsWith('http')) {
+              productImageUrl = normalized;
+            } else if (item.product_image_url_fallback?.includes('/storage/v1/object/public/') && !item.product_image_url_fallback.includes('/object/public/http')) {
+              productImageUrl = item.product_image_url_fallback;
             }
           } catch (error) {
             console.error(`❌ [CartService.getCart] Error generando URL de imagen para producto ${item.product_id}:`, error);
-          }
-        } else {
-          if (!item.primary_image_path) {
-            console.warn('⚠️ [CartService.getCart] No hay primary_image_path para producto:', item.product_id);
-          }
-          if (!supabaseAdmin) {
-            console.warn('⚠️ [CartService.getCart] supabaseAdmin no está disponible');
           }
         }
 

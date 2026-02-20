@@ -14,6 +14,7 @@ export interface LandingSlider {
   id: string;
   business_group_id: string | null;
   business_id: string | null;
+  vehicle_brand_id: string | null;
   content: Record<string, any>;
   redirect_type: string | null;
   redirect_target_id: string | null;
@@ -30,15 +31,22 @@ export interface LandingSlider {
 @Injectable()
 export class LandingSlidersService {
   /**
-   * Verificar que el usuario tiene permiso para gestionar sliders del grupo/sucursal
+   * Verificar que el usuario tiene permiso para gestionar sliders del grupo/sucursal/marca/global
+   * Para contexto global o por marca (vehicle_brand_id) se permite a cualquier usuario autenticado (web-admin).
    */
   private async verifyUserAccess(
     userId: string,
-    businessGroupId?: string,
-    businessId?: string,
+    businessGroupId?: string | null,
+    businessId?: string | null,
+    vehicleBrandId?: string | null,
   ): Promise<void> {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const isGlobalOrBrand = !businessGroupId && !businessId;
+    if (isGlobalOrBrand) {
+      return; // Sliders globales o por marca: gestionados desde web-admin, permitir
     }
 
     try {
@@ -133,20 +141,22 @@ export class LandingSlidersService {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
-    // Validar que solo uno de los dos campos esté presente
-    if (createDto.business_group_id && createDto.business_id) {
-      throw new BadRequestException('Solo se puede especificar business_group_id o business_id, no ambos');
+    const hasGroup = !!createDto.business_group_id;
+    const hasBranch = !!createDto.business_id;
+    const hasBrand = !!createDto.vehicle_brand_id;
+    const count = [hasGroup, hasBranch, hasBrand].filter(Boolean).length;
+    if (count > 1) {
+      throw new BadRequestException('Solo se puede especificar un contexto: business_group_id, business_id o vehicle_brand_id');
+    }
+    if (count === 0) {
+      // Sin contexto = slider global (válido para web-admin)
     }
 
-    if (!createDto.business_group_id && !createDto.business_id) {
-      throw new BadRequestException('Debe especificar business_group_id o business_id');
-    }
-
-    // Verificar acceso del usuario
     await this.verifyUserAccess(
       userId,
-      createDto.business_group_id,
-      createDto.business_id,
+      createDto.business_group_id ?? null,
+      createDto.business_id ?? null,
+      createDto.vehicle_brand_id ?? null,
     );
 
     try {
@@ -154,6 +164,7 @@ export class LandingSlidersService {
         INSERT INTO commerce.landing_sliders (
           business_group_id,
           business_id,
+          vehicle_brand_id,
           content,
           redirect_type,
           redirect_target_id,
@@ -163,13 +174,14 @@ export class LandingSlidersService {
           start_date,
           end_date,
           created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
       `;
 
       const result = await dbPool.query(query, [
         createDto.business_group_id || null,
         createDto.business_id || null,
+        createDto.vehicle_brand_id || null,
         JSON.stringify(createDto.content),
         createDto.redirect_type || null,
         createDto.redirect_target_id || null,
@@ -220,16 +232,26 @@ export class LandingSlidersService {
       const params: any[] = [];
       let paramIndex = 1;
 
-      if (query.business_group_id) {
-        conditions.push(`business_group_id = $${paramIndex}`);
-        params.push(query.business_group_id);
-        paramIndex++;
-      }
+      if (query.only_global) {
+        conditions.push(`business_group_id IS NULL AND business_id IS NULL AND vehicle_brand_id IS NULL`);
+      } else {
+        if (query.business_group_id) {
+          conditions.push(`business_group_id = $${paramIndex}`);
+          params.push(query.business_group_id);
+          paramIndex++;
+        }
 
-      if (query.business_id) {
-        conditions.push(`business_id = $${paramIndex}`);
-        params.push(query.business_id);
-        paramIndex++;
+        if (query.business_id) {
+          conditions.push(`business_id = $${paramIndex}`);
+          params.push(query.business_id);
+          paramIndex++;
+        }
+
+        if (query.vehicle_brand_id) {
+          conditions.push(`vehicle_brand_id = $${paramIndex}`);
+          params.push(query.vehicle_brand_id);
+          paramIndex++;
+        }
       }
 
       if (onlyActive) {
@@ -296,11 +318,11 @@ export class LandingSlidersService {
 
       const slider = result.rows[0];
 
-      // Verificar acceso
       await this.verifyUserAccess(
         userId,
         slider.business_group_id,
         slider.business_id,
+        slider.vehicle_brand_id,
       );
 
       return {
@@ -331,18 +353,16 @@ export class LandingSlidersService {
     // Verificar que existe
     const existing = await this.findOne(userId, id);
 
-    // Validar que solo uno de los dos campos esté presente si se actualizan
-    if (updateDto.business_group_id && updateDto.business_id) {
-      throw new BadRequestException('Solo se puede especificar business_group_id o business_id, no ambos');
+    const newGroup = updateDto.business_group_id !== undefined ? updateDto.business_group_id : existing.business_group_id;
+    const newBranch = updateDto.business_id !== undefined ? updateDto.business_id : existing.business_id;
+    const newBrand = updateDto.vehicle_brand_id !== undefined ? updateDto.vehicle_brand_id : existing.vehicle_brand_id;
+    const count = [!!newGroup, !!newBranch, !!newBrand].filter(Boolean).length;
+    if (count > 1) {
+      throw new BadRequestException('Solo puede haber un contexto: business_group_id, business_id o vehicle_brand_id');
     }
 
-    // Si se actualiza el contexto, verificar acceso
-    if (updateDto.business_group_id || updateDto.business_id) {
-      await this.verifyUserAccess(
-        userId,
-        updateDto.business_group_id || existing.business_group_id,
-        updateDto.business_id || existing.business_id,
-      );
+    if (updateDto.business_group_id !== undefined || updateDto.business_id !== undefined || updateDto.vehicle_brand_id !== undefined) {
+      await this.verifyUserAccess(userId, newGroup, newBranch, newBrand);
     }
 
     try {
@@ -359,6 +379,12 @@ export class LandingSlidersService {
       if (updateDto.business_id !== undefined) {
         updates.push(`business_id = $${paramIndex}`);
         params.push(updateDto.business_id || null);
+        paramIndex++;
+      }
+
+      if (updateDto.vehicle_brand_id !== undefined) {
+        updates.push(`vehicle_brand_id = $${paramIndex}`);
+        params.push(updateDto.vehicle_brand_id || null);
         paramIndex++;
       }
 
@@ -458,11 +484,13 @@ export class LandingSlidersService {
   }
 
   /**
-   * Obtener sliders activos para un contexto (público, sin autenticación)
+   * Obtener sliders activos para un contexto (público, sin autenticación).
+   * Si todos los IDs son null = sliders globales.
    */
   async getActiveSlidersByContext(
     businessGroupId?: string,
     businessId?: string,
+    vehicleBrandId?: string,
   ): Promise<LandingSlider[]> {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
@@ -470,8 +498,8 @@ export class LandingSlidersService {
 
     try {
       const result = await dbPool.query(
-        `SELECT * FROM commerce.get_landing_sliders_by_context($1, $2, $3)`,
-        [businessGroupId || null, businessId || null, true]
+        `SELECT * FROM commerce.get_landing_sliders_by_context($1, $2, $3, $4)`,
+        [businessGroupId || null, businessId || null, vehicleBrandId || null, true]
       );
 
       return result.rows.map((row: any) => ({

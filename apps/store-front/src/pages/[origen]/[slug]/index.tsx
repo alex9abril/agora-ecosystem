@@ -21,7 +21,7 @@ import { collectionsService, StoreCollection } from '@/lib/collections';
 export default function StoreHomePage() {
   const router = useRouter();
   const { origen, slug } = router.query;
-  const { contextType, groupData, branchData, groupId, branchId, isLoading, error } = useStoreContext();
+  const { contextType, groupData, branchData, groupId, branchId, brandId, isLoading, error } = useStoreContext();
   const [sliders, setSliders] = useState<SlideContent[]>([]);
   const [loadingSliders, setLoadingSliders] = useState(true);
   const [collections, setCollections] = useState<StoreCollection[]>([]);
@@ -35,48 +35,40 @@ export default function StoreHomePage() {
   }, [contextType, branchId, isLoading]);
 
   useEffect(() => {
-    // Cargar sliders solo cuando tengamos el ID correspondiente
     if (contextType === 'grupo' && groupId && !isLoading) {
       loadSliders();
     } else if (contextType === 'sucursal' && branchId && !isLoading) {
       loadSliders();
+    } else if (contextType === 'brand' && brandId && !isLoading) {
+      loadSliders();
     }
-  }, [contextType, isLoading, groupId, branchId]);
+  }, [contextType, isLoading, groupId, branchId, brandId]);
 
   const loadSliders = async () => {
     try {
       setLoadingSliders(true);
-      
-      // Obtener sliders según el contexto
-      // Convertir null a undefined para cumplir con el tipo esperado por getActiveSliders
+
       const businessGroupId = contextType === 'grupo' ? (groupId ?? undefined) : undefined;
       const businessId = contextType === 'sucursal' ? (branchId ?? undefined) : undefined;
+      const vehicleBrandId = contextType === 'brand' ? (brandId ?? undefined) : undefined;
 
-      // Validar que tengamos el ID necesario
       if (contextType === 'grupo' && !businessGroupId) {
-        console.warn('⚠️ [loadSliders] No hay groupId disponible');
         setSliders([getDefaultSlider()]);
         return;
       }
       if (contextType === 'sucursal' && !businessId) {
-        console.warn('⚠️ [loadSliders] No hay branchId disponible');
+        setSliders([getDefaultSlider()]);
+        return;
+      }
+      if (contextType === 'brand' && !vehicleBrandId) {
         setSliders([getDefaultSlider()]);
         return;
       }
 
-      console.log('🔍 [loadSliders] Cargando sliders:', {
-        contextType,
-        businessGroupId,
-        businessId,
-        groupId,
-        branchId,
-        groupData: groupData?.id,
-        branchData: branchData?.id,
-      });
-
       const slidersData = await landingSlidersService.getActiveSliders(
         businessGroupId,
         businessId,
+        vehicleBrandId,
       );
 
       console.log('🔍 [loadSliders] Sliders recibidos del servicio:', slidersData);

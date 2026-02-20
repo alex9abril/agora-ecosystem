@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsEnum, IsUUID, IsBoolean, IsInt, IsDateString, IsObject, ValidateIf } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsEnum, IsBoolean, IsInt, IsDateString, IsObject, ValidateIf, Matches } from 'class-validator';
+
+// Formato UUID (cualquier versión)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export enum RedirectType {
   CATEGORY = 'category',
@@ -15,7 +18,7 @@ export class CreateLandingSliderDto {
     example: '00000001-0000-0000-0000-000000000001'
   })
   @IsOptional()
-  @IsUUID()
+  @Matches(UUID_REGEX, { message: 'business_group_id must be a UUID' })
   business_group_id?: string;
 
   @ApiPropertyOptional({ 
@@ -23,8 +26,16 @@ export class CreateLandingSliderDto {
     example: '00000001-0000-0000-0000-000000000001'
   })
   @IsOptional()
-  @IsUUID()
+  @Matches(UUID_REGEX, { message: 'business_id must be a UUID' })
   business_id?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'ID de la marca de vehículo (si el slider es por marca). Global si no se envía grupo, sucursal ni marca.',
+    example: '00000001-0000-0000-0000-000000000001'
+  })
+  @IsOptional()
+  @Matches(UUID_REGEX, { message: 'vehicle_brand_id must be a UUID' })
+  vehicle_brand_id?: string;
 
   @ApiProperty({ 
     description: 'Contenido del slider en formato JSONB (compatible con SlideContent)',
@@ -63,7 +74,7 @@ export class CreateLandingSliderDto {
     example: '00000001-0000-0000-0000-000000000001'
   })
   @IsOptional()
-  @IsUUID()
+  @Matches(UUID_REGEX, { message: 'redirect_target_id must be a UUID' })
   @ValidateIf((o) => o.redirect_type && o.redirect_type !== RedirectType.URL && o.redirect_type !== RedirectType.NONE)
   redirect_target_id?: string;
 

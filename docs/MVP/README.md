@@ -4,7 +4,7 @@ Esta carpeta contiene la documentación del **alcance mínimo viable (MVP)** del
 
 ## 📄 Documentos
 
-### [Alcance MVP](./alcance-mvp.md)
+### [Alcance MVP](./01-alcance-mvp.md)
 Documento principal que define:
 - ✅ Roles y actores del sistema
 - ✅ Diagrama de procesos completo
@@ -39,10 +39,10 @@ El documento principal incluye:
 
 ## 🔗 Referencias Relacionadas
 
-- [Arquitectura MVP](../03-arquitectura-mvp.md)
-- [Modelo de Operación](../02-modelo-operacion.md)
-- [Modelo Financiero](../04-modelo-financiero.md)
-- [Roles de Negocio](../22-roles-negocio-interfaces-diferenciadas.md)
+- [Arquitectura MVP](../vision-and-strategy/03-arquitectura-mvp.md)
+- [Modelo de Operación](../vision-and-strategy/02-modelo-operacion.md)
+- [Modelo Financiero](../vision-and-strategy/04-modelo-financiero.md)
+- [Roles de Negocio](../features/07-roles-negocio-interfaces-diferenciadas.md)
 
 ---
 

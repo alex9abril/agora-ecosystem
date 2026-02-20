@@ -49,19 +49,17 @@ export function normalizeStoragePath(filePath: string | null | undefined): strin
     return normalizeStoragePath(innerUrlMatch[1]);
   }
   
-  // PRIORIDAD 3: URL de Supabase Storage (s3) - extraer path después de /s3/
+  // PRIORIDAD 3: URL de Supabase Storage (s3) - extraer bucket + path como path relativo
   // Formato: https://[project].storage.supabase.co/storage/v1/s3/[bucket]/[path]
-  const s3Match = filePath.match(/\/storage\/v1\/s3\/[^\/]+\/(.+?)(?:\?|$)/);
+  // El "bucket" en S3 suele ser UUID; el path real en el bucket products es [uuid]/[filename]
+  const s3Match = filePath.match(/\/storage\/v1\/s3\/([^\/]+)\/(.+)$/);
   if (s3Match) {
-    const extractedPath = s3Match[1];
-    // Si el path extraído todavía contiene una URL completa, intentar extraer de nuevo
-    if (extractedPath.startsWith('http')) {
-      return normalizeStoragePath(extractedPath);
+    const bucket = s3Match[1];
+    const rest = s3Match[2];
+    if (rest.startsWith('http')) {
+      return normalizeStoragePath(rest);
     }
-    // Verificar que el path extraído tenga el formato UUID/filename
-    if (extractedPath.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\//i)) {
-      return extractedPath;
-    }
+    return `${bucket}/${rest}`;
   }
   
   // PRIORIDAD 4: URL estándar de Supabase Storage (object/public)
@@ -92,5 +90,81 @@ export function normalizeStoragePath(filePath: string | null | undefined): strin
     length: filePath.length,
   });
   return null;
+}
+
+/**
+ * Cliente Supabase mínimo necesario para construir URL pública (evita importar SupabaseClient aquí).
+ */
+export type SupabaseClientForStorage = {
+  storage: { from: (bucket: string) => { getPublicUrl: (path: string) => { data: { publicUrl: string } } } };
+};
+
+/**
+ * Resuelve la URL pública de imagen de producto con la misma lógica que
+ * GET /products/:id (primary_image_url) y GET /products/:id/images (public_url):
+ * unwrap de URL doble, path relativo o normalizado a uuid/filename, luego getPublicUrl(bucket, path).
+ * Usar desde el correo de confirmación para garantizar la misma URL que en las peticiones de catálogo.
+ */
+/** Asegura que el bucket sea solo el nombre (ej. "products"). Si viene como URL, devuelve "products". */
+function normalizeBucketForPublicUrl(bucket: string): string {
+  if (!bucket || bucket.startsWith('http') || bucket.includes('://') || bucket.includes('/storage/')) {
+    return 'products';
+  }
+  return bucket.trim();
+}
+
+export function resolveProductImagePublicUrl(
+  rawValue: string,
+  bucket: string,
+  supabase: SupabaseClientForStorage | null,
+): string | null {
+  if (!rawValue) return null;
+  const bucketName = normalizeBucketForPublicUrl(bucket);
+  let pathToNormalize = rawValue.trim();
+  while (pathToNormalize.includes('/object/public/http')) {
+    const inner = pathToNormalize.replace(/^[^]*?\/object\/public\//, '');
+    if (!inner || inner === pathToNormalize) break;
+    pathToNormalize = inner;
+  }
+  if (!supabase) {
+    return pathToNormalize.includes('/object/public/http') ? null : pathToNormalize;
+  }
+  try {
+    if (
+      pathToNormalize.includes('/storage/v1/object/public/') &&
+      !pathToNormalize.includes('/object/public/http')
+    ) {
+      return pathToNormalize;
+    }
+    let finalPath: string | null = null;
+    if (!pathToNormalize.startsWith('http')) {
+      finalPath = pathToNormalize;
+    } else {
+      const uuidMatch = pathToNormalize.match(
+        /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i,
+      );
+      if (uuidMatch) finalPath = uuidMatch[1];
+      else {
+        const uuidMatchNoExt = pathToNormalize.match(
+          /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i,
+        );
+        finalPath = uuidMatchNoExt ? uuidMatchNoExt[1] : normalizeStoragePath(pathToNormalize);
+      }
+    }
+    // Nunca pasar URL completa a getPublicUrl: concatena base+bucket+path y produce URL doble
+    if (finalPath && finalPath.includes('/')) {
+      if (finalPath.startsWith('http') || finalPath.startsWith('//')) {
+        const extracted = finalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i)?.[1];
+        finalPath = extracted || null;
+      }
+      if (finalPath && !finalPath.startsWith('http')) {
+        const { data } = supabase.storage.from(bucketName).getPublicUrl(finalPath);
+        return data.publicUrl;
+      }
+    }
+  } catch {
+    // ignorar
+  }
+  return pathToNormalize.includes('/object/public/http') ? null : pathToNormalize;
 }
 

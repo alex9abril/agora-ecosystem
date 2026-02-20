@@ -1,0 +1,258 @@
+[
+  {
+    "name": "Abarth",
+    "logo": "logo_Abarth.png"
+  },
+  {
+    "name": "Acura",
+    "logo": "logo_Acura.png"
+  },
+  {
+    "name": "Alfa Romeo",
+    "logo": "logo_Alfa Romeo.png"
+  },
+  {
+    "name": "Arra",
+    "logo": "logo_Arra.png"
+  },
+  {
+    "name": "Audi",
+    "logo": "logo_Audi.png"
+  },
+  {
+    "name": "Baic",
+    "logo": "logo_BAIC.png"
+  },
+  {
+    "name": "Bmw",
+    "logo": "logo_BMW.png"
+  },
+  {
+    "name": "Byd",
+    "logo": "logo_BYD.png"
+  },
+  {
+    "name": "Bestune",
+    "logo": "logo_Bestune.png"
+  },
+  {
+    "name": "Buick",
+    "logo": "logo_Buick.png"
+  },
+  {
+    "name": "Cupra",
+    "logo": "logo_CUPRA.png"
+  },
+  {
+    "name": "Cadillac",
+    "logo": "logo_Cadillac.png"
+  },
+  {
+    "name": "Changan",
+    "logo": "logo_Changan.png"
+  },
+  {
+    "name": "Chevrolet",
+    "logo": "logo_Chevrolet.png"
+  },
+  {
+    "name": "Chirey",
+    "logo": "logo_Chirey.png"
+  },
+  {
+    "name": "Dfsk",
+    "logo": "logo_DFSK.png"
+  },
+  {
+    "name": "Dodge",
+    "logo": "logo_Dodge.png"
+  },
+  {
+    "name": "Dongfeng",
+    "logo": "logo_DongFeng.png"
+  },
+  {
+    "name": "Foton",
+    "logo": "logo_FOTON.png"
+  },
+  {
+    "name": "Fiat",
+    "logo": "logo_Fiat.png"
+  },
+  {
+    "name": "Ford",
+    "logo": "logo_Ford.png"
+  },
+  {
+    "name": "Gac Motor",
+    "logo": "logo_GAC MOTOR.png"
+  },
+  {
+    "name": "Gmc",
+    "logo": "logo_GMC.png"
+  },
+  {
+    "name": "Gwm",
+    "logo": "logo_GWM.png"
+  },
+  {
+    "name": "Geely",
+    "logo": "logo_Geely.png"
+  },
+  {
+    "name": "Honda",
+    "logo": "logo_Honda.png"
+  },
+  {
+    "name": "Hyundai",
+    "logo": "logo_Hyundai.png"
+  },
+  {
+    "name": "Ineos",
+    "logo": "logo_Ineos.png"
+  },
+  {
+    "name": "Infiniti",
+    "logo": "logo_Infiniti.png"
+  },
+  {
+    "name": "Jac",
+    "logo": "logo_JAC.png"
+  },
+  {
+    "name": "Jim",
+    "logo": "logo_JIM.png"
+  },
+  {
+    "name": "Jmc",
+    "logo": "logo_JMC.png"
+  },
+  {
+    "name": "Jaecoo",
+    "logo": "logo_Jaecoo.png"
+  },
+  {
+    "name": "Jaguar",
+    "logo": "logo_Jaguar.png"
+  },
+  {
+    "name": "Jeep",
+    "logo": "logo_Jeep.png"
+  },
+  {
+    "name": "Jetour",
+    "logo": "logo_Jetour.png"
+  },
+  {
+    "name": "Kia",
+    "logo": "logo_Kia.png"
+  },
+  {
+    "name": "King Long",
+    "logo": "logo_King Long.png"
+  },
+  {
+    "name": "Land Rover",
+    "logo": "logo_Land Rover.png"
+  },
+  {
+    "name": "Lexus",
+    "logo": "logo_Lexus.png"
+  },
+  {
+    "name": "Lincoln",
+    "logo": "logo_Lincoln.png"
+  },
+  {
+    "name": "Mg",
+    "logo": "logo_MG.png"
+  },
+  {
+    "name": "Mini",
+    "logo": "logo_MINI.png"
+  },
+  {
+    "name": "Mazda",
+    "logo": "logo_Mazda.png"
+  },
+  {
+    "name": "Mercedes-benz",
+    "logo": "logo_Mercedes-Benz.png"
+  },
+  {
+    "name": "Mitsubishi",
+    "logo": "logo_Mitsubishi.png"
+  },
+  {
+    "name": "Nissan",
+    "logo": "logo_Nissan.png"
+  },
+  {
+    "name": "Omoda",
+    "logo": "logo_OMODA.png"
+  },
+  {
+    "name": "Peugeot",
+    "logo": "logo_Peugeot.png"
+  },
+  {
+    "name": "Porsche",
+    "logo": "logo_Porsche.png"
+  },
+  {
+    "name": "Ram",
+    "logo": "logo_Ram.png"
+  },
+  {
+    "name": "Renault",
+    "logo": "logo_Renault.png"
+  },
+  {
+    "name": "Seat",
+    "logo": "logo_SEAT.png"
+  },
+  {
+    "name": "Sev",
+    "logo": "logo_SEV.png"
+  },
+  {
+    "name": "Seres",
+    "logo": "logo_Seres.png"
+  },
+  {
+    "name": "Skywell",
+    "logo": "logo_Skywell.png"
+  },
+  {
+    "name": "Subaru",
+    "logo": "logo_Subaru.png"
+  },
+  {
+    "name": "Suzuki",
+    "logo": "logo_Suzuki.png"
+  },
+  {
+    "name": "Tesla",
+    "logo": "logo_Tesla.png"
+  },
+  {
+    "name": "Toyota",
+    "logo": "logo_Toyota.png"
+  },
+  {
+    "name": "Volkswagen",
+    "logo": "logo_Volkswagen.png"
+  },
+  {
+    "name": "Volvo",
+    "logo": "logo_Volvo.png"
+  },
+  {
+    "name": "Zeekr",
+    "logo": "logo_Zeekr.png"
+  },
+  {
+    "name": "Toyota",
+    "logo": "logotoyota.svg"
+  }
+]

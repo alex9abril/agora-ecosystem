@@ -17,6 +17,7 @@ import { EmailService } from '../email/email.service';
 import { BusinessesService } from '../businesses/businesses.service';
 import { KarbotService } from '../businesses/karbot.service';
 import { IntegrationLogsService } from '../settings/integration-logs.service';
+import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
 
 const DEFAULT_TAX_SETTINGS = {
   included_in_price: false,
@@ -300,6 +301,9 @@ export class OrdersService {
         const businessTipAmount = Math.round(tipAmount * subtotalRatio * 100) / 100;
         const businessTotalAmount = businessSubtotal + businessTaxAmount + businessDeliveryFee + businessTipAmount - discountAmount;
 
+        // Ruta de contexto de tienda (sucursal, grupo, marca o global) para URL en correo
+        const storeContext = (checkoutDto.storeContext || '').trim() || null;
+
         // Crear la orden
         const orderResult = await client.query(
           `INSERT INTO orders.orders (
@@ -308,8 +312,9 @@ export class OrdersService {
             subtotal, tax_amount, delivery_fee, discount_amount, tip_amount, total_amount,
             payment_method, payment_status,
             delivery_notes,
-            order_group_id
-          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            order_group_id,
+            store_context
+          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           RETURNING *`,
           [
             userId,
@@ -328,6 +333,7 @@ export class OrdersService {
             paymentStatus, // Estado de pago (paid si wallet cubre todo, pending si no)
             checkoutDto.deliveryNotes || null,
             orderGroupId, // ⭐ Relacionar con el grupo
+            storeContext, // Ruta para "Ver detalle" en correo (ej: /sucursal/toyota-satelite)
           ]
         );
 
@@ -458,6 +464,13 @@ export class OrdersService {
             );
           }
         }
+      }
+
+      // 16.5 Enviar correo de confirmación de pedido por cada orden creada (no bloquea la respuesta)
+      for (const order of createdOrders) {
+        this.sendOrderConfirmationEmail(order.id, order.business_id).catch((err) => {
+          console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, err);
+        });
       }
 
       // 17. Crear orden en Karlopay si el método de pago es karlopay o si hay método secundario karlopay (después del COMMIT)
@@ -2391,6 +2404,97 @@ export class OrdersService {
     }
   }
 
+  /** Formato de moneda con separador de miles (es-MX): 1,234.56 */
+  private formatCurrency(amount: number): string {
+    return amount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /**
+   * Construye la URL de "Ver detalle del pedido" conservando el contexto de tienda
+   * (sucursal, grupo, marca o global) desde el que se hizo el pedido.
+   */
+  private buildOrderDetailUrl(
+    frontendUrl: string,
+    orderId: string,
+    storeContext: string | null,
+    businessSlug: string | null,
+  ): string {
+    const base = frontendUrl.replace(/\/$/, '');
+    const pathPrefix = (storeContext || '').trim();
+    if (pathPrefix && pathPrefix.startsWith('/') && !pathPrefix.includes('//')) {
+      const prefix = pathPrefix.replace(/\/$/, '');
+      return `${base}${prefix}/orders/${orderId}`;
+    }
+    if (businessSlug) {
+      return `${base}/sucursal/${businessSlug}/orders/${orderId}`;
+    }
+    return `${base}/orders/${orderId}`;
+  }
+
+  /**
+   * Construye el HTML del detalle de items del pedido para el correo de confirmación
+   * Estilo tipo ecommerce (imagen + nombre + qty x precio, subtotal a la derecha)
+   */
+  private buildOrderItemsDetailHtml(
+    items: Array<{ item_name: string; quantity: number; item_subtotal: string; item_price: string; image_url: string | null }>
+  ): string {
+    const escapeHtml = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    if (!items || items.length === 0) {
+      return '<p style="font-size: 14px; color: #6b7280; margin: 0; font-family: Arial, sans-serif;">No hay items.</p>';
+    }
+
+    const rows = items
+      .map((item) => {
+        const unitPrice = parseFloat(item.item_price || item.item_subtotal || '0');
+        const subtotal = parseFloat(item.item_subtotal || '0');
+        const imageHtml = item.image_url
+          ? `<img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.item_name)}" style="width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; margin-right: 16px;" />`
+          : `<div style="width: 56px; height: 56px; border-radius: 8px; background-color: #f3f4f6; border: 1px solid #e5e7eb; margin-right: 16px;"></div>`;
+
+        return `
+        <tr>
+          <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              ${imageHtml}
+              <div style="padding-left: 4px;">
+                <div style="font-size: 14px; color: #111827; font-family: Arial, sans-serif; font-weight: 500;">
+                  ${escapeHtml(item.item_name)}
+                </div>
+                <div style="font-size: 12px; color: #6b7280; font-family: Arial, sans-serif; margin-top: 2px;">
+                  ${item.quantity} x $${this.formatCurrency(unitPrice)}
+                </div>
+              </div>
+            </div>
+          </td>
+          <td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-family: Arial, sans-serif;">
+            ${item.quantity}
+          </td>
+          <td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-family: Arial, sans-serif; font-weight: 600;">
+            $${this.formatCurrency(subtotal)}
+          </td>
+        </tr>`;
+      })
+      .join('');
+
+    return `
+    <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">
+      <thead>
+        <tr>
+          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb;">Producto</th>
+          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb;">Cant.</th>
+          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
   /**
    * Enviar correo de confirmación de pedido
    */
@@ -2400,7 +2504,7 @@ export class OrdersService {
     }
 
     try {
-      // Obtener datos del pedido
+      // Obtener datos del pedido (store_context y slug para URL de "Ver detalle")
       const orderResult = await dbPool.query(
         `SELECT 
           o.id,
@@ -2409,7 +2513,9 @@ export class OrdersService {
           o.payment_method,
           o.created_at,
           o.business_id,
-          b.business_group_id
+          o.store_context,
+          b.business_group_id,
+          b.slug AS business_slug
         FROM orders.orders o
         LEFT JOIN core.businesses b ON o.business_id = b.id
         WHERE o.id = $1`,
@@ -2422,6 +2528,61 @@ export class OrdersService {
       }
 
       const order = orderResult.rows[0];
+
+      // Obtener items del pedido para el detalle en el correo (imagen desde product_images o collections)
+      const itemsResult = await dbPool.query(
+        `SELECT 
+           oi.item_name,
+           oi.quantity,
+           oi.item_subtotal,
+           oi.item_price,
+           COALESCE(
+             (SELECT pi.file_path
+              FROM catalog.product_images pi
+              WHERE pi.product_id = oi.product_id AND pi.is_active = TRUE
+              ORDER BY pi.is_primary DESC NULLS LAST, pi.display_order ASC
+              LIMIT 1),
+             c.image_url,
+             p.image_url
+           ) AS image_url
+         FROM orders.order_items oi
+         LEFT JOIN catalog.products p ON oi.product_id = p.id
+         LEFT JOIN catalog.collections c ON oi.collection_id = c.id
+         WHERE oi.order_id = $1
+         ORDER BY oi.created_at, oi.id`,
+        [orderId]
+      );
+      console.log('🌺 itemsResult', itemsResult.rows);
+      const rawItems = itemsResult.rows as Array<{
+        item_name: string;
+        quantity: number;
+        item_subtotal: string;
+        item_price: string;
+        image_url: string | null;
+      }>;
+      // Misma lógica que GET /products/:id (primary_image_url) y GET /products/:id/images (public_url):
+      // path relativo o unwrap de URL doble → path uuid/filename → getPublicUrl(bucket, path).
+      const bucketProducts = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const items = rawItems.map((row) => {
+        const rawImageUrl = row.image_url || '';
+        const resolvedImageUrl = resolveProductImagePublicUrl(
+          rawImageUrl,
+          bucketProducts,
+          supabaseAdmin,
+        );
+        if (process.env.NODE_ENV !== 'production' && (rawImageUrl || resolvedImageUrl)) {
+          const isDoubleUrl = resolvedImageUrl?.includes('/object/public/http') ?? false;
+          console.debug('[sendOrderConfirmationEmail] imagen ítem:', {
+            item_name: row.item_name,
+            raw_from_db: rawImageUrl,
+            resolved_src: resolvedImageUrl ?? null,
+            ...(isDoubleUrl && { warning: 'URL doble detectada en resolved_src' }),
+          });
+        }
+        return { ...row, image_url: resolvedImageUrl };
+      });
+      const orderItemsDetailHtml = this.buildOrderItemsDetailHtml(items);
+
       const channels = await this.businessesService.getNotificationChannels(
         order.business_id,
         'order_confirmation',
@@ -2456,9 +2617,14 @@ export class OrdersService {
         hour: '2-digit',
         minute: '2-digit',
       });
-      const orderTotal = `$${parseFloat(order.total_amount).toFixed(2)}`;
+      const orderTotal = `$${this.formatCurrency(parseFloat(order.total_amount))}`;
       const paymentMethod = order.payment_method || 'No especificado';
-      const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
+      const orderUrl = this.buildOrderDetailUrl(
+        process.env.FRONTEND_URL || 'https://agoramp.mx',
+        order.id,
+        order.store_context ?? null,
+        order.business_slug ?? null,
+      );
 
       if (process.env.NODE_ENV !== 'production') {
         console.debug('[OrdersService.sendOrderConfirmationEmail] Payload:', {
@@ -2481,6 +2647,7 @@ export class OrdersService {
           orderTotal,
           paymentMethod,
           orderUrl,
+          orderItemsDetailHtml,
           order.business_id,
           order.business_group_id,
           { userId: order.client_id, orderId: order.id }
@@ -2539,13 +2706,15 @@ export class OrdersService {
     }
 
     try {
-      // Obtener datos del pedido
+      // Obtener datos del pedido (store_context y slug para URL)
       const orderResult = await dbPool.query(
         `SELECT 
           o.id,
           o.client_id,
           o.business_id,
-          b.business_group_id
+          o.store_context,
+          b.business_group_id,
+          b.slug AS business_slug
         FROM orders.orders o
         LEFT JOIN core.businesses b ON o.business_id = b.id
         WHERE o.id = $1`,
@@ -2598,7 +2767,12 @@ export class OrdersService {
 
       const statusMessage = statusMessages[newStatus] || `Tu pedido cambió de estado: ${oldStatus} → ${newStatus}`;
       const orderNumber = order.id.substring(0, 8).toUpperCase();
-      const orderUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${order.id}`;
+      const orderUrl = this.buildOrderDetailUrl(
+        process.env.FRONTEND_URL || 'https://agoramp.mx',
+        order.id,
+        order.store_context ?? null,
+        order.business_slug ?? null,
+      );
 
       if (process.env.NODE_ENV !== 'production') {
         console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {

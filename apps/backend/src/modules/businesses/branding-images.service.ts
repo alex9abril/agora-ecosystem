@@ -40,7 +40,12 @@ export class BrandingImagesService {
   /**
    * Genera la ruta del archivo en el bucket
    */
-  private generateFilePath(type: 'group' | 'business', id: string, imageType: 'logo' | 'logo_light' | 'logo_dark' | 'favicon', originalName: string): string {
+  private generateFilePath(
+    type: 'group' | 'business' | 'global' | 'vehicle_brand',
+    id: string,
+    imageType: 'logo' | 'logo_light' | 'logo_dark' | 'favicon',
+    originalName: string
+  ): string {
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 9);
     const ext = originalName.split('.').pop() || 'png';
@@ -52,7 +57,7 @@ export class BrandingImagesService {
    * Sube una imagen de branding
    */
   async uploadImage(
-    type: 'group' | 'business',
+    type: 'group' | 'business' | 'global' | 'vehicle_brand',
     id: string,
     imageType: 'logo' | 'logo_light' | 'logo_dark' | 'favicon',
     file: Express.Multer.File

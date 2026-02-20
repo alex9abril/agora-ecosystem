@@ -910,36 +910,28 @@ export class ProductsService {
           const originalPath = row.primary_image_path;
           let finalPath: string | null = null;
           
-          // Si ya es un path relativo (no empieza con http), usarlo directamente
-          if (!originalPath.startsWith('http')) {
-            finalPath = originalPath;
+          // Unwrap URL doble si aplica
+          const pathToNormalize =
+            originalPath.startsWith('http') && originalPath.includes('/object/public/http')
+              ? originalPath.replace(/^[^]*?\/object\/public\//, '')
+              : originalPath;
+          if (!pathToNormalize.startsWith('http')) {
+            finalPath = pathToNormalize;
           } else {
-            // Si es una URL completa, extraer directamente el patrón UUID/filename
-            // PRIORIDAD 1: Buscar el patrón UUID/filename con extensión
-            const uuidMatch = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
+            const uuidMatch = pathToNormalize.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+\.(jpg|jpeg|png|webp|gif|svg))/i);
             if (uuidMatch) {
               finalPath = uuidMatch[1];
             } else {
-              // PRIORIDAD 2: Buscar sin extensión
-              const uuidMatchNoExt = originalPath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
-              if (uuidMatchNoExt) {
-                finalPath = uuidMatchNoExt[1];
-              }
+              const uuidMatchNoExt = pathToNormalize.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^\/\?\s"']+)/i);
+              finalPath = uuidMatchNoExt ? uuidMatchNoExt[1] : normalizeStoragePath(pathToNormalize);
             }
           }
-          
-          // Solo generar URL si tenemos un path relativo válido (no empieza con http)
-          if (finalPath && !finalPath.startsWith('http')) {
+
+          if (finalPath && !finalPath.startsWith('http') && finalPath.includes('/')) {
             const { data: urlData } = supabaseAdmin.storage
               .from(this.BUCKET_NAME)
               .getPublicUrl(finalPath);
             primaryImageUrl = urlData.publicUrl;
-          } else {
-            console.error('❌ [findOne] No se pudo extraer path relativo de primary_image_path:', {
-              productId: row.id,
-              originalPath: originalPath?.substring(0, 200),
-              finalPath: finalPath?.substring(0, 200) || null,
-            });
           }
         } catch (error) {
           console.error('❌ [findOne] Error generando URL de imagen principal:', {

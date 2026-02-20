@@ -1,6 +1,8 @@
-# 📊 Base de Datos LOCALIA
+# 📊 Base de Datos — AGORA Ecosystem
 
-Este directorio contiene el esquema de base de datos para la plataforma LOCALIA.
+Este directorio contiene el esquema de base de datos para la plataforma **AGORA Ecosystem**.
+
+**📑 Para localizar scripts por tema o por carpeta:** [INDEX.md](INDEX.md)
 
 ## 📁 Estructura de Carpetas
 

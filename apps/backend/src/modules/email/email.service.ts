@@ -105,7 +105,12 @@ export class EmailService {
         available_variables: row.available_variables || [],
       };
     } catch (error: any) {
-      this.logger.error(`Error obteniendo template para ${triggerType}:`, error);
+      const params = { triggerType, businessId: businessId ?? null, businessGroupId: businessGroupId ?? null };
+      this.logger.error(
+        `Error obteniendo template para ${triggerType}. Parámetros de búsqueda: triggerType=${params.triggerType}, businessId=${params.businessId}, businessGroupId=${params.businessGroupId}. ` +
+          `Error PostgreSQL: ${error?.message ?? String(error)}${error?.code ? ` (código: ${error.code})` : ''}`,
+        error?.stack
+      );
       return null;
     }
   }
@@ -291,6 +296,18 @@ export class EmailService {
         this.logger.debug(
           `Contenido generado: subjectLength=${subject.length} htmlLength=${html.length}`
         );
+        // Log del template completo con datos del pedido (para diagnóstico de correo order_confirmation)
+        if (triggerType === 'order_confirmation') {
+          console.log('\n' + '='.repeat(80));
+          console.log('[Email] TEMPLATE ENVIADO POR CORREO (order_confirmation)');
+          console.log('='.repeat(80));
+          console.log('Subject:', subject);
+          console.log('HTML length:', html.length);
+          console.log('--- HTML completo (inicio) ---');
+          console.log(html);
+          console.log('--- HTML completo (fin) ---');
+          console.log('='.repeat(80) + '\n');
+        }
       }
 
       // Configurar el correo
@@ -368,6 +385,7 @@ export class EmailService {
 
   /**
    * Envía correo de confirmación de pedido
+   * @param orderItemsDetailHtml - HTML con la tabla/listado de items del pedido (variable {{order_items_detail}})
    */
   async sendOrderConfirmationEmail(
     userEmail: string,
@@ -376,6 +394,7 @@ export class EmailService {
     orderTotal: string,
     paymentMethod: string,
     orderUrl?: string,
+    orderItemsDetailHtml?: string,
     businessId?: string,
     businessGroupId?: string,
     context?: { userId?: string; orderId?: string }
@@ -389,6 +408,7 @@ export class EmailService {
         order_total: orderTotal,
         payment_method: paymentMethod,
         order_url: orderUrl || `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${orderNumber}`,
+        order_items_detail: orderItemsDetailHtml ?? '',
       },
       businessId,
       businessGroupId,

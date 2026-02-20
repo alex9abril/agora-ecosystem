@@ -270,6 +270,7 @@ export default function EmailsPage() {
     order_confirmation: null,
     order_status_change: null,
   });
+  const [showResolverInfoFor, setShowResolverInfoFor] = useState<EmailTriggerType | null>(null);
 
   const resolverBusinessId =
     managementMode === 'business' ? selectedBranchId || selectedBusiness?.business_id || null : null;
@@ -996,26 +997,35 @@ export default function EmailsPage() {
                                 <span><strong>Asunto:</strong> {template.subject}</span>
                                 <span><strong>Variables:</strong> {template.available_variables.join(', ')}</span>
                               </div>
-                              <div className="mt-2 text-xs text-gray-400">
-                                <span className="mr-3">
-                                  <strong className="font-normal">Template ID:</strong>{' '}
-                                  <span className="font-mono">
-                                    {resolvedInfo?.id || 'No disponible'}
-                                  </span>
-                                  {resolvedInfo?.level && (
-                                    <span className="ml-1 text-[11px] text-gray-400">
-                                      ({resolvedInfo.level})
-                                    </span>
-                                  )}
-                                </span>
-                                <span>
-                                  <strong className="font-normal">Resolver:</strong>{' '}
-                                  <span className="font-mono">
-                                    trigger_type={template.trigger_type} · business_id=
-                                    {formatResolverValue(resolverBusinessId)} · business_group_id=
-                                    {formatResolverValue(resolverBusinessGroupId)}
-                                  </span>
-                                </span>
+                              <div className="mt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowResolverInfoFor(prev => prev === template.trigger_type ? null : template.trigger_type)}
+                                  className="text-xs text-gray-500 hover:text-gray-700 underline focus:outline-none focus:ring-0"
+                                >
+                                  {showResolverInfoFor === template.trigger_type ? 'Ocultar info' : 'Ver info'}
+                                </button>
+                                {showResolverInfoFor === template.trigger_type && (
+                                  <div className="mt-1.5 text-xs text-gray-400 break-all">
+                                    <div>
+                                      <strong className="font-normal">Template ID:</strong>{' '}
+                                      <span className="font-mono">
+                                        {resolvedInfo?.id || 'No disponible'}
+                                      </span>
+                                      {resolvedInfo?.level && (
+                                        <span className="ml-1 text-[11px]">({resolvedInfo.level})</span>
+                                      )}
+                                    </div>
+                                    <div className="mt-0.5">
+                                      <strong className="font-normal">Resolver:</strong>{' '}
+                                      <span className="font-mono">
+                                        trigger_type={template.trigger_type} · business_id=
+                                        {formatResolverValue(resolverBusinessId)} · business_group_id=
+                                        {formatResolverValue(resolverBusinessGroupId)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 ml-4">

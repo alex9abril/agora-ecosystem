@@ -1,18 +1,18 @@
-# 🏙️ LOCALIA — Plataforma de Delivery Hiperlocal
+# 🛒 AGORA — Marketplace de Refacciones y Accesorios
 
-**LOCALIA** es una plataforma de *delivery hiperlocal* enfocada en conectar a **clientes, repartidores y negocios** dentro de un radio máximo de **3 km** (barrio o colonia).
+**AGORA** es un *marketplace y tienda en línea* de **refacciones y accesorios** con soporte para **múltiples tiendas**: sucursales, grupos empresariales, marcas de vehículo y vista global.
 
 ## 🎯 Propósito
 
-Fortalecer la economía local evitando intermediarios financieros y promoviendo sostenibilidad social y ambiental. A diferencia de las plataformas tradicionales (Uber Eats, Rappi, DiDi Food), LOCALIA busca crear **una economía circular local** con beneficios distribuidos de forma justa entre los tres actores principales.
+Conectar a **clientes, distribuidores y sucursales** en un solo ecosistema: catálogo de productos por sucursal, compatibilidad por marca de vehículo, grupos empresariales y pedidos con envío. AGORA permite a cada negocio tener su tienda (o varias sucursales bajo un grupo) y al cliente comprar en contexto global, por grupo, por sucursal o por marca.
 
 ## ✨ Características Principales
 
-- 🌍 **Economía barrial:** Impulsa el comercio local dentro de un radio de 3 km
-- 💰 **Sistema de créditos:** LocalCoins (LCs) como moneda digital del ecosistema
-- 🌱 **Sostenibilidad:** Entregas ecológicas, empaques biodegradables y repartidores en bicicleta
-- 🤝 **Sin intermediarios:** Pagos directos entre clientes, locales y repartidores
-- 🏆 **Responsabilidad social:** Apoyo a comercios locales y prácticas sostenibles
+- 🏪 **Multi-tiendas:** Cuatro contextos de compra: global, grupo empresarial, sucursal y marca (ej. Nissan, Toyota)
+- 📦 **Catálogo por sucursal:** Productos, precios y stock por negocio/sucursal; compatibilidad con marcas de vehículo
+- 🏢 **Grupos empresariales:** Varias sucursales bajo un mismo grupo (distribuidor / grupodealer)
+- 💳 **Pagos y envíos:** Integración con KarloPay, envíos y flujo de pedidos completo
+- 🌱 **Extensible:** Backend NestJS, store-front Next.js, web-admin y web-local; documentación y agentes en `docs/`
 
 ## 📚 Documentación
 
@@ -75,14 +75,14 @@ Esta documentación está organizada en las siguientes secciones:
 
 ## 🚀 Inicio Rápido
 
-Este repositorio contiene el **Panel de Administración** de LOCALIA. Para más información sobre el proyecto completo, consulta la [documentación completa](./docs/).
+Este repositorio es el **ecosistema completo de AGORA** (monorepo): backend, store-front, web-admin, web-local. Para más información, consulta la [documentación](./docs/) y el [stack tecnológico](./docs/stack-tecnologico.md).
 
 ## 📝 Próximos Pasos
 
 1. ✅ Documentación del proyecto
-2. 🔄 Setup técnico del backend
-3. 🔄 Desarrollo del MVP
-4. 🔄 Piloto en Roma Norte
+2. 🔄 Setup técnico del backend y aplicaciones
+3. 🔄 Desarrollo y despliegue (Jenkins, ver `docs/jenkins-deploy.md`)
+4. 🔄 Piloto con distribuidores y sucursales
 
 ## Product Collections (Colecciones)
 
@@ -97,4 +97,4 @@ Este repositorio contiene el **Panel de Administración** de LOCALIA. Para más 
 
 ---
 
-**LOCALIA** — *Comercio local, impacto global* 🌍
+**AGORA** — *Marketplace de refacciones y accesorios* 🛒

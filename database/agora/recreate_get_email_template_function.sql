@@ -5,9 +5,9 @@
 --              evitar ambigüedad de columnas y garantizar la jerarquía:
 --              sucursal -> grupo -> global.
 -- ============================================================================
--- Versión: 1.0
--- Fecha: 2026-01-16
--- Hora: 18:30:00
+-- Versión: 1.1
+-- Fecha: 2026-02-18
+-- Hora: 14:00:00
 -- ============================================================================
 
 SET search_path = communication, public;
@@ -33,10 +33,11 @@ DECLARE
     v_business_group_id UUID;
 BEGIN
     -- Si se proporciona business_id, obtener su business_group_id
+    -- (calificar con alias 'b' para evitar ambigüedad con variable de salida 'id' de RETURNS TABLE)
     IF p_business_id IS NOT NULL THEN
-        SELECT business_group_id INTO v_business_group_id
-        FROM core.businesses
-        WHERE id = p_business_id;
+        SELECT b.business_group_id INTO v_business_group_id
+        FROM core.businesses b
+        WHERE b.id = p_business_id;
     ELSE
         v_business_group_id := p_business_group_id;
     END IF;
@@ -127,5 +128,7 @@ END $$;
 -- 2. Respeta la jerarquía: sucursal -> grupo -> global.
 -- 3. Requiere que existan las tablas core.business_email_templates,
 --    core.business_group_email_templates y communication.email_templates.
+-- 4. v1.1: En el SELECT de core.businesses se usa alias 'b' (b.id, b.business_group_id)
+--    para evitar ERROR 42702: "id" ambiguo entre variable de RETURNS TABLE y columna.
 -- ============================================================================
 

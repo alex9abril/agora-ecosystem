@@ -106,7 +106,7 @@ Los productos de refacciones requieren información adicional:
 
 ## 🔗 Referencias
 
-- [Sistema de Catálogos Avanzado](../20-sistema-catalogos-productos-avanzado.md)
-- [Gestión de Catálogos](../16-catalogos-gestion.md)
+- [Sistema de Catálogos Avanzado](../features/05-sistema-catalogos-productos-avanzado.md)
+- [Gestión de Catálogos](../features/01-catalogos-gestion.md)
 - [Estructura de Base de Datos](../../database/README.md)
 

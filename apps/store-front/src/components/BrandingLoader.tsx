@@ -12,10 +12,11 @@ interface BrandingLoaderProps {
   backgroundColor?: string;
   branchId?: string | null;
   groupId?: string | null;
+  brandId?: string | null;
 }
 
 // Función helper para obtener el color guardado del contexto actual
-const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | null): string | null => {
+const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | null, brandId?: string | null): string | null => {
   if (typeof window === 'undefined') return null;
   
   try {
@@ -27,6 +28,14 @@ const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | n
       const stored = localStorage.getItem(`branding_bg_group_${groupId}`);
       if (stored) return stored;
     }
+    if (brandId) {
+      const stored = localStorage.getItem(`branding_bg_brand_${brandId}`);
+      if (stored) return stored;
+    }
+    if (!branchId && !groupId && !brandId) {
+      const stored = localStorage.getItem('branding_bg_global');
+      if (stored) return stored;
+    }
   } catch (error) {
     console.error('Error leyendo color guardado:', error);
   }
@@ -34,7 +43,7 @@ const getStoredBackgroundColor = (branchId?: string | null, groupId?: string | n
   return null;
 };
 
-export default function BrandingLoader({ isLoading, backgroundColor, branchId, groupId }: BrandingLoaderProps) {
+export default function BrandingLoader({ isLoading, backgroundColor, branchId, groupId, brandId }: BrandingLoaderProps) {
   const router = useRouter();
   const [hasMounted, setHasMounted] = useState(false);
   const [displayColor, setDisplayColor] = useState<string>('#f9fafb');
@@ -72,14 +81,14 @@ export default function BrandingLoader({ isLoading, backgroundColor, branchId, g
     if (backgroundColor) {
       setDisplayColor(backgroundColor);
     } else {
-      const storedColor = getStoredBackgroundColor(branchId, groupId);
+      const storedColor = getStoredBackgroundColor(branchId, groupId, brandId);
       if (storedColor) {
         setDisplayColor(storedColor);
       } else {
         setDisplayColor('#f9fafb'); // gray-50 por defecto
       }
     }
-  }, [backgroundColor, branchId, groupId]);
+  }, [backgroundColor, branchId, groupId, brandId]);
 
   // Aplicar el color al body inmediatamente
   useEffect(() => {

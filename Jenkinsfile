@@ -498,6 +498,9 @@ def deployApp(String appName, String port) {
                         # Asegurar que .next y .next/static sean accesibles
                         chmod 2750 ${deployPath}/.next
                         chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
+                        # Los estáticos deben ser legibles por el proceso que sirve la app (Node o nginx)
+                        find ${deployPath}/.next/static -type d -exec chmod 755 {} + 2>/dev/null || true
+                        find ${deployPath}/.next/static -type f -exec chmod 644 {} + 2>/dev/null || true
                         # Verificar permisos finales
                         echo "🔍 Verificando permisos finales:"
                         ls -ld ${deployPath}/.next
@@ -678,6 +681,9 @@ def deployApp(String appName, String port) {
                     # Asegurar que .next y .next/static sean accesibles
                     chmod 2750 ${deployPath}/.next
                     chmod 2750 ${deployPath}/.next/static 2>/dev/null || true
+                    # Los estáticos deben ser legibles por el proceso que sirve la app (Node o nginx)
+                    find ${deployPath}/.next/static -type d -exec chmod 755 {} + 2>/dev/null || true
+                    find ${deployPath}/.next/static -type f -exec chmod 644 {} + 2>/dev/null || true
                     # Verificar permisos finales
                     echo "🔍 Verificando permisos finales:"
                     ls -ld ${deployPath}/.next

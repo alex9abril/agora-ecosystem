@@ -29,20 +29,24 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import StoreMenu from '../StoreMenu';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
 import VehicleMenu from '../VehicleMenu';
 import { getStoredVehicle, getSelectedVehicle, setSelectedVehicle } from '@/lib/vehicle-storage';
 import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
+import { getSearchHistory, addSearchToHistory, removeSearchFromHistory, clearSearchHistory } from '@/lib/search-history';
 
 export default function Header() {
   const router = useRouter();
   const { 
     contextType, 
+    slug,
     branchData,
     groupId,
     branchId,
+    brandId,
     getStoreName,
   } = useStoreContext();
   const { isAuthenticated, user, signOut } = useAuth();
@@ -59,6 +63,15 @@ export default function Header() {
     }, 0);
   }, [cart]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchHistoryDropdown, setShowSearchHistoryDropdown] = useState(false);
+  const [searchHistoryHighlightIndex, setSearchHistoryHighlightIndex] = useState(-1);
+  const searchHistoryRef = useRef<HTMLDivElement>(null);
+  const searchHistoryItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [searchHistoryVersion, setSearchHistoryVersion] = useState(0);
+  const searchHistory = useMemo(() => {
+    if (typeof window === 'undefined') return [];
+    return getSearchHistory(contextType, slug ?? null);
+  }, [contextType, slug, showSearchHistoryDropdown, searchHistoryVersion]);
   const [showStoreSelector, setShowStoreSelector] = useState(false);
   const [showNavigationDialog, setShowNavigationDialog] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -76,7 +89,7 @@ export default function Header() {
   const [isCompactHeader, setIsCompactHeader] = useState(false);
   
   // Función helper para obtener el color guardado
-  const getStoredPrimaryColor = (branchId?: string | null, groupId?: string | null): string | null => {
+  const getStoredPrimaryColor = (branchId?: string | null, groupId?: string | null, brandId?: string | null): string | null => {
     if (typeof window === 'undefined') return null;
     try {
       if (branchId) {
@@ -87,6 +100,15 @@ export default function Header() {
         const stored = localStorage.getItem(`branding_primary_group_${groupId}`);
         if (stored) return stored;
       }
+      if (brandId) {
+        const stored = localStorage.getItem(`branding_primary_brand_${brandId}`);
+        if (stored) return stored;
+      }
+      // Tienda global (Agora global)
+      if (!branchId && !groupId && !brandId) {
+        const stored = localStorage.getItem('branding_primary_global');
+        if (stored) return stored;
+      }
     } catch (error) {
       console.error('Error leyendo color primario guardado:', error);
     }
@@ -94,13 +116,17 @@ export default function Header() {
   };
 
   // Función helper para guardar el color primario
-  const savePrimaryColor = (color: string, branchId?: string | null, groupId?: string | null) => {
+  const savePrimaryColor = (color: string, branchId?: string | null, groupId?: string | null, brandId?: string | null) => {
     if (typeof window === 'undefined') return;
     try {
       if (branchId) {
         localStorage.setItem(`branding_primary_${branchId}`, color);
       } else if (groupId) {
         localStorage.setItem(`branding_primary_group_${groupId}`, color);
+      } else if (brandId) {
+        localStorage.setItem(`branding_primary_brand_${brandId}`, color);
+      } else {
+        localStorage.setItem('branding_primary_global', color);
       }
     } catch (error) {
       console.error('Error guardando color primario:', error);
@@ -347,6 +373,24 @@ export default function Header() {
           }
         }
       }
+      // Si hay marca (brand), cargar branding por vehicle_brand_id
+      else if (contextType === 'brand' && brandId) {
+        try {
+          const brandingData = await brandingService.getVehicleBrandBranding(brandId);
+          console.log('🎨 [Header] Branding por marca cargado:', brandingData);
+          if (isMounted) {
+            setBranding(brandingData ?? null);
+            if (brandingData?.colors?.primary) {
+              savePrimaryColor(brandingData.colors.primary, null, null, brandId);
+            }
+          }
+        } catch (error) {
+          console.error('Error cargando branding por marca:', error);
+          if (isMounted) setBranding(null);
+        } finally {
+          if (isMounted) setIsBrandingLoading(false);
+        }
+      }
       // Si hay sucursal, intentar cargar branding de la sucursal primero, sino del grupo
       else if (contextType === 'sucursal' && branchId) {
         try {
@@ -423,7 +467,25 @@ export default function Header() {
           setIsBrandingLoading(false);
         }
       }
-      // Si no hay contexto de tienda, no cargar branding (mostrar logo de Agora)
+      // Tienda global (Agora global): cargar branding personalizado
+      else if (contextType === 'global') {
+        try {
+          const brandingData = await brandingService.getGlobalBranding();
+          console.log('🎨 [Header] Branding tienda global cargado:', brandingData);
+          if (isMounted) {
+            setBranding(brandingData ?? null);
+            if (brandingData?.colors?.primary) {
+              savePrimaryColor(brandingData.colors.primary, null, null, null);
+            }
+          }
+        } catch (error) {
+          console.error('Error cargando branding tienda global:', error);
+          if (isMounted) setBranding(null);
+        } finally {
+          if (isMounted) setIsBrandingLoading(false);
+        }
+      }
+      // Sin contexto reconocido
       else {
         setBranding(null);
         setIsBrandingLoading(false);
@@ -436,7 +498,7 @@ export default function Header() {
     return () => {
       isMounted = false;
     };
-  }, [contextType, groupId, branchId]);
+  }, [contextType, groupId, branchId, brandId]);
 
   // Determinar qué logo usar
   // CRÍTICO: El servidor y el cliente DEBEN renderizar EXACTAMENTE lo mismo inicialmente
@@ -504,13 +566,10 @@ export default function Header() {
     return `#${darken(r)}${darken(g)}${darken(b)}`;
   };
   
-  // Obtener color primario del branding, o usar color por defecto
-  // CRÍTICO: Solo usar color personalizado DESPUÉS de la hidratación para evitar diferencias
-  // entre servidor y cliente causadas por datos en localStorage
-  const shouldUseBrandingColor = isHydrated && !isBrandingLoading && (contextType === 'grupo' || contextType === 'sucursal');
-  const primaryColor = shouldUseBrandingColor && branding?.colors?.primary 
-    ? branding.colors.primary 
-    : '#254639'; // Verde oliva complementario al logo (#433835) por defecto
+  // Usar SIEMPRE el color configurado en branding cuando exista; solo usar default si no hay valor
+  const configuredPrimary = branding?.colors?.primary && String(branding.colors.primary).trim();
+  const primaryColor = configuredPrimary || '#254639';
+  const shouldUseBrandingColor = isHydrated && !isBrandingLoading && (contextType === 'global' || contextType === 'grupo' || contextType === 'sucursal' || contextType === 'brand');
   
   // Calcular color del borde (un tono más oscuro del color de fondo)
   const borderColor = darkenColor(primaryColor, 20);
@@ -532,25 +591,107 @@ export default function Header() {
         contextType,
         groupId,
         branchId,
+        brandId,
         finalColor: primaryColor,
       });
     }
-  }, [branding, contextType, groupId, branchId, primaryColor, shouldUseBrandingColor, isBrandingLoading]);
+  }, [branding, contextType, groupId, branchId, brandId, primaryColor, shouldUseBrandingColor, isBrandingLoading]);
+
+  const runSearch = (query: string) => {
+    const q = query.trim();
+    if (!q) return;
+    addSearchToHistory(contextType, slug ?? null, q);
+    const searchUrl = contextType === 'global'
+      ? `/products?search=${encodeURIComponent(q)}`
+      : `/${contextType}/${router.query.slug}/products?search=${encodeURIComponent(q)}`;
+    router.push(searchUrl);
+    setShowSearchHistoryDropdown(false);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      // Navegar a la página de búsqueda con el query
-      const searchUrl = contextType === 'global' 
-        ? `/products?search=${encodeURIComponent(searchQuery.trim())}`
-        : `/${contextType}/${router.query.slug}/products?search=${encodeURIComponent(searchQuery.trim())}`;
-      router.push(searchUrl);
+      runSearch(searchQuery);
+    }
+  };
+
+  const handleSearchFromHistory = (query: string) => {
+    setSearchQuery(query);
+    runSearch(query);
+  };
+
+  const handleRemoveSearchFromHistory = (e: React.MouseEvent, query: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    removeSearchFromHistory(contextType, slug ?? null, query);
+    setSearchHistoryVersion((v) => v + 1);
+  };
+
+  const handleClearSearchHistory = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearSearchHistory(contextType, slug ?? null);
+    setSearchHistoryVersion((v) => v + 1);
+    setShowSearchHistoryDropdown(false);
+  };
+
+  const handleSearchInputKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSearchHistoryDropdown || searchHistory.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSearchHistoryHighlightIndex((i) => Math.min(i + 1, searchHistory.length - 1));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSearchHistoryHighlightIndex((i) => Math.max(-1, i - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      // Solo usar el ítem del historial si el input está vacío; si el usuario escribió algo, buscar eso
+      if (!searchQuery.trim() && searchHistoryHighlightIndex >= 0 && searchHistory[searchHistoryHighlightIndex]) {
+        e.preventDefault();
+        handleSearchFromHistory(searchHistory[searchHistoryHighlightIndex]);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSearchHistoryDropdown(false);
+      setSearchHistoryHighlightIndex(-1);
+    }
+  };
+
+  useEffect(() => {
+    if (showSearchHistoryDropdown && searchHistory.length > 0) {
+      setSearchHistoryHighlightIndex(0);
+    } else {
+      setSearchHistoryHighlightIndex(-1);
+    }
+  }, [showSearchHistoryDropdown, searchHistory.length]);
+
+  useEffect(() => {
+    if (searchHistoryHighlightIndex >= 0 && searchHistoryItemRefs.current[searchHistoryHighlightIndex]) {
+      searchHistoryItemRefs.current[searchHistoryHighlightIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [searchHistoryHighlightIndex]);
+
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    if (value.trim() === '') {
+      if (searchHistory.length > 0) setShowSearchHistoryDropdown(true);
+    } else {
+      setShowSearchHistoryDropdown(false);
     }
   };
 
   const clearSearch = () => {
     setSearchQuery('');
+    if (searchHistory.length > 0) setShowSearchHistoryDropdown(true);
   };
+
+  const isSearchDropdownOpen = showSearchHistoryDropdown && searchHistory.length > 0;
 
   return (
     <>
@@ -939,35 +1080,80 @@ export default function Header() {
                 ) : null}
               </div>
 
-              {/* Barra de búsqueda - Ocupa todo el espacio disponible */}
-              <div className="flex-1 min-w-0 px-4">
-                <form onSubmit={handleSearch} className="relative w-full">
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar por nombre o número de parte"
-                    className="w-full pl-6 pr-14 py-3 border border-gray-300 rounded-full bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-base shadow-inner font-sans"
-                    style={{
-                      boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)',
-                    }}
-                  />
-                  {searchQuery ? (
-                    <button
-                      type="button"
-                      onClick={clearSearch}
-                      className="absolute inset-y-0 right-12 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      <CloseIcon className="h-5 w-5" />
-                    </button>
-                  ) : null}
-                  <button
-                    type="submit"
-                    className="absolute inset-y-0 right-0 flex items-center justify-center w-12 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
-                  >
-                    <SearchIcon className="h-5 w-5 text-gray-900" />
-                  </button>
-                </form>
+              {/* Barra de búsqueda - Dropdown flotante; un solo borde (input + dropdown) */}
+              <div className="flex-1 min-w-0 px-4" ref={searchHistoryRef}>
+                <div className={isSearchDropdownOpen ? 'relative w-full rounded-2xl bg-white z-50' : 'relative w-full'}>
+                  <form onSubmit={handleSearch} className="relative w-full">
+                    <div className="relative w-full">
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={handleSearchInputChange}
+                        onFocus={() => setShowSearchHistoryDropdown(true)}
+                        onBlur={() => setTimeout(() => { setShowSearchHistoryDropdown(false); setSearchHistoryHighlightIndex(-1); }, 200)}
+                        onKeyDown={handleSearchInputKeyDown}
+                        placeholder="Buscar por nombre o número de parte"
+                        className={`w-full pl-6 pr-14 py-3 bg-white text-gray-700 placeholder-gray-400 font-sans text-base ${isSearchDropdownOpen ? 'rounded-t-2xl border border-gray-100 border-b-0 shadow-none focus:outline-none focus:ring-0 focus:border-gray-100' : 'rounded-full border border-gray-300 shadow-inner focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400'}`}
+                        style={isSearchDropdownOpen ? undefined : { boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }}
+                      />
+                      {searchQuery ? (
+                        <button
+                          type="button"
+                          onClick={clearSearch}
+                          className="absolute inset-y-0 right-12 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          <CloseIcon className="h-5 w-5" />
+                        </button>
+                      ) : null}
+                      <button
+                        type="submit"
+                        className="absolute inset-y-0 right-0 flex items-center justify-center w-12 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
+                      >
+                        <SearchIcon className="h-5 w-5 text-gray-900" />
+                      </button>
+                    </div>
+                    {showSearchHistoryDropdown && searchHistory.length > 0 ? (
+                      <div className="absolute left-0 right-0 top-full -mt-px w-full py-1 max-h-60 overflow-auto bg-white rounded-b-2xl border-x border-b border-gray-100 z-50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
+                        <p className="px-3 py-1.5 text-[11px] font-semibold text-gray-500 tracking-wide">Búsquedas recientes</p>
+                        {searchHistory.map((item, idx) => (
+                          <div
+                            key={item}
+                            className={`flex items-center gap-1 w-full group ${idx === searchHistoryHighlightIndex ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+                          >
+                            <button
+                              ref={(el) => { searchHistoryItemRefs.current[idx] = el; }}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); handleSearchFromHistory(item); }}
+                              className={`flex-1 min-w-0 text-left px-3 py-2 text-sm truncate text-gray-700 ${idx === searchHistoryHighlightIndex ? 'text-gray-900' : ''}`}
+                            >
+                              {item}
+                            </button>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => handleRemoveSearchFromHistory(e, item)}
+                              className="flex-shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200/80 transition-colors"
+                              aria-label="Eliminar búsqueda"
+                            >
+                              <CloseIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                        {searchHistory.length > 0 ? (
+                          <div className="border-t border-gray-100 mt-0.5">
+                            <button
+                              type="button"
+                              onMouseDown={(e) => handleClearSearchHistory(e)}
+                              className="w-full flex items-center justify-start gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                            >
+                              <DeleteSweepIcon className="h-3.5 w-3.5" />
+                              Borrar historial
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </form>
+                </div>
               </div>
 
               {/* Información de tienda seleccionada - Alineado a la derecha */}
@@ -1091,33 +1277,80 @@ export default function Header() {
                   ) : null}
                 </div>
 
-                {/* Buscador */}
-                <div className="flex-1 min-w-0">
-                  <form onSubmit={handleSearch} className="relative w-full">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Buscar por nombre o número de parte"
-                      className="w-full pl-6 pr-12 py-2.5 border border-gray-300 rounded-full bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-sm shadow-inner font-sans"
-                      style={{ boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }}
-                    />
-                    {searchQuery ? (
-                      <button
-                        type="button"
-                        onClick={clearSearch}
-                        className="absolute inset-y-0 right-10 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        <CloseIcon className="h-4 w-4" />
-                      </button>
-                    ) : null}
-                    <button
-                      type="submit"
-                      className="absolute inset-y-0 right-0 flex items-center justify-center w-10 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
-                    >
-                      <SearchIcon className="h-4 w-4 text-gray-900" />
-                    </button>
-                  </form>
+                {/* Buscador - Dropdown flotante; un solo borde (input + dropdown) */}
+                <div className="flex-1 min-w-0 relative">
+                  <div className={isSearchDropdownOpen ? 'relative w-full rounded-2xl bg-white z-50' : 'relative w-full'}>
+                    <form onSubmit={handleSearch} className="relative w-full">
+                      <div className="relative w-full">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={handleSearchInputChange}
+                          onFocus={() => setShowSearchHistoryDropdown(true)}
+                          onBlur={() => setTimeout(() => { setShowSearchHistoryDropdown(false); setSearchHistoryHighlightIndex(-1); }, 200)}
+                          onKeyDown={handleSearchInputKeyDown}
+                          placeholder="Buscar por nombre o número de parte"
+                          className={`w-full pl-6 pr-12 py-2.5 bg-white text-gray-700 placeholder-gray-400 font-sans text-sm ${isSearchDropdownOpen ? 'rounded-t-2xl border border-gray-100 border-b-0 shadow-none focus:outline-none focus:ring-0 focus:border-gray-100' : 'rounded-full border border-gray-300 shadow-inner focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400'}`}
+                          style={isSearchDropdownOpen ? undefined : { boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }}
+                        />
+                        {searchQuery ? (
+                          <button
+                            type="button"
+                            onClick={clearSearch}
+                            className="absolute inset-y-0 right-10 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            <CloseIcon className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        <button
+                          type="submit"
+                          className="absolute inset-y-0 right-0 flex items-center justify-center w-10 h-full rounded-r-full hover:opacity-80 transition-opacity bg-transparent"
+                        >
+                          <SearchIcon className="h-4 w-4 text-gray-900" />
+                        </button>
+                      </div>
+                      {showSearchHistoryDropdown && searchHistory.length > 0 ? (
+                        <div className="absolute left-0 right-0 top-full -mt-px w-full py-1 max-h-60 overflow-auto bg-white rounded-b-2xl border-x border-b border-gray-100 z-50 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.06)]">
+                          <p className="px-3 py-1.5 text-[11px] font-semibold text-gray-500 tracking-wide">Búsquedas recientes</p>
+                          {searchHistory.map((item, idx) => (
+                            <div
+                              key={item}
+                              className={`flex items-center gap-1 w-full group ${idx === searchHistoryHighlightIndex ? 'bg-gray-200' : 'hover:bg-gray-100'}`}
+                            >
+                              <button
+                                ref={(el) => { searchHistoryItemRefs.current[idx] = el; }}
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); handleSearchFromHistory(item); }}
+                                className={`flex-1 min-w-0 text-left px-3 py-2 text-sm truncate text-gray-700 ${idx === searchHistoryHighlightIndex ? 'text-gray-900' : ''}`}
+                              >
+                                {item}
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => handleRemoveSearchFromHistory(e, item)}
+                                className="flex-shrink-0 p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200/80 transition-colors"
+                                aria-label="Eliminar búsqueda"
+                              >
+                                <CloseIcon className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                          {searchHistory.length > 0 ? (
+                            <div className="border-t border-gray-100 mt-0.5">
+                              <button
+                                type="button"
+                                onMouseDown={(e) => handleClearSearchHistory(e)}
+                                className="w-full flex items-center justify-start gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                              >
+                                <DeleteSweepIcon className="h-3.5 w-3.5" />
+                                Borrar historial
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </form>
+                  </div>
                 </div>
 
                 {/* Tienda */}

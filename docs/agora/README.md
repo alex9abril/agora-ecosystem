@@ -34,7 +34,10 @@ Documentación completa del sistema de compatibilidad de vehículos para refacci
 - Consultas SQL principales
 - Notas de implementación
 
-### 4. [Sistema de Configuraciones e Impuestos](./04-sistema-configuraciones-impuestos.md)
+### 4. [Recapitulación Compatibilidad Vehículos](./04-recapitulacion-compatibilidad-vehiculos.md)
+Recapitulación del sistema de compatibilidad de vehículos.
+
+### 5. [Sistema de Configuraciones e Impuestos](./05-sistema-configuraciones-impuestos.md)
 Documentación del sistema de configuraciones del sitio y específicamente la configuración de impuestos.
 
 **Contenido:**
@@ -44,7 +47,10 @@ Documentación del sistema de configuraciones del sitio y específicamente la co
 - Implementación técnica (backend y frontend)
 - Ejemplos de uso en storefront
 
-### 5. [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
+### 6. [Sistema de Roles (sucursales)](./06-sistema-roles-sucursales.md)
+Sistema de roles y permisos para sucursales.
+
+### 7. [Sistema de Personalización y Branding](./07-sistema-personalizacion-branding.md)
 Documentación del sistema completo de personalización y branding para grupos y sucursales.
 
 **Contenido:**
@@ -57,7 +63,7 @@ Documentación del sistema completo de personalización y branding para grupos y
 - Herencia de branding (grupo → sucursal)
 - Implementación técnica (backend y frontend)
 
-### 6. [Sistema de Roles y Permisos para Sucursales](./06-sistema-roles-sucursales.md)
+### 8. [Sistema de Roles y Permisos para Sucursales](./08-sistema-roles-sucursales.md)
 Documentación del sistema de roles y permisos para gestionar sucursales.
 
 **Contenido:**
@@ -68,20 +74,13 @@ Documentación del sistema de roles y permisos para gestionar sucursales.
 - Troubleshooting de problemas comunes
 - Consultas de verificación
 
-### 7. [Checklist de Alta de Sucursal - Tienda de Refacciones](./07-checklist-alta-sucursal-refacciones.md)
+### 9. [Checklist de Alta de Sucursal - Tienda de Refacciones](./09-checklist-alta-sucursal-refacciones.md)
 Checklist completo de todos los requisitos, información e insumos necesarios para dar de alta una sucursal activa y ponerla en operación.
 
-**Contenido:**
-- Información básica del negocio
-- Información de contacto y ubicación
-- Configuración de marcas de vehículos
-- Catálogo de productos
-- Configuración operativa (horarios, zonas de cobertura)
-- Usuarios y roles
-- Configuración de wallet
-- Documentos e imágenes
-- Configuración de comisiones y pagos
-- Verificaciones finales y pruebas recomendadas
+**Contenido:** Información del negocio, contacto, ubicación, marcas de vehículos, catálogo, horarios, usuarios, wallet, documentos, comisiones, verificaciones.
+
+### 10. [Mejoras Frontend Grupos Empresariales](./10-prompt-frontend-mejoras-grupos-empresariales.md)
+Prompt y especificación de mejoras en frontend para grupos empresariales (asignación automática, mensajes, endpoints).
 
 ## 🗂️ Organización
 
@@ -105,10 +104,10 @@ Checklist completo de todos los requisitos, información e insumos necesarios pa
 1. Leer [Transformación del Proyecto](./01-transformacion-refacciones.md)
 2. Revisar [Estructura de Categorías](./02-estructura-categorias-refacciones.md)
 3. Revisar [Sistema de Compatibilidad de Vehículos](./03-sistema-compatibilidad-vehiculos.md)
-4. Revisar [Sistema de Configuraciones e Impuestos](./04-sistema-configuraciones-impuestos.md)
-5. Revisar [Sistema de Personalización y Branding](./05-sistema-personalizacion-branding.md)
-6. Revisar [Sistema de Roles y Permisos para Sucursales](./06-sistema-roles-sucursales.md)
-7. **Para dar de alta una sucursal**: Consultar [Checklist de Alta de Sucursal](./07-checklist-alta-sucursal-refacciones.md)
+4. Revisar [Sistema de Configuraciones e Impuestos](./05-sistema-configuraciones-impuestos.md)
+5. Revisar [Sistema de Personalización y Branding](./07-sistema-personalizacion-branding.md)
+6. Revisar [Sistema de Roles y Permisos para Sucursales](./08-sistema-roles-sucursales.md)
+7. **Para dar de alta una sucursal**: Consultar [Checklist de Alta de Sucursal](./09-checklist-alta-sucursal-refacciones.md)
 8. Ejecutar scripts SQL en `/database/agora/` (ver orden en README)
 9. Adaptar formularios y frontend según sea necesario
 
@@ -121,6 +120,6 @@ Checklist completo de todos los requisitos, información e insumos necesarios pa
 ## 🔗 Referencias
 
 - [Documentación Principal de Base de Datos](../../database/README.md)
-- [Sistema de Catálogos Avanzado](../20-sistema-catalogos-productos-avanzado.md)
-- [Gestión de Catálogos](../16-catalogos-gestion.md)
+- [Sistema de Catálogos Avanzado](../features/05-sistema-catalogos-productos-avanzado.md)
+- [Gestión de Catálogos](../features/01-catalogos-gestion.md)
 

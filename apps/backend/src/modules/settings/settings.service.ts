@@ -534,5 +534,69 @@ export class SettingsService {
       show_tax_included_label: showLabel.value,
     };
   }
+
+  private static readonly KEY_BRANDING_GLOBAL = 'branding.global';
+  private static readonly KEY_BRANDING_VEHICLE_PREFIX = 'branding.vehicle_brand.';
+
+  /**
+   * Obtener branding de la tienda global (MultiTienda).
+   * Si no existe, devuelve { branding: {} }.
+   */
+  async getBrandingGlobal(): Promise<{ branding: Record<string, any> }> {
+    try {
+      const row = await this.findByKey(SettingsService.KEY_BRANDING_GLOBAL);
+      return { branding: row.value && typeof row.value === 'object' ? row.value : {} };
+    } catch (e: any) {
+      if (e instanceof NotFoundException) {
+        return { branding: {} };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Actualizar branding de la tienda global.
+   */
+  async updateBrandingGlobal(branding: Record<string, any>): Promise<{ branding: Record<string, any> }> {
+    await this.updateByKey(SettingsService.KEY_BRANDING_GLOBAL, {
+      value: branding,
+      label: 'Branding tienda global',
+      description: 'Logos, colores y textos de la tienda global',
+    });
+    return this.getBrandingGlobal();
+  }
+
+  /**
+   * Obtener branding de la tienda por marca (vehicle_brand_id).
+   * Si no existe, devuelve { branding: {} }.
+   */
+  async getBrandingVehicleBrand(vehicleBrandId: string): Promise<{ branding: Record<string, any> }> {
+    const key = `${SettingsService.KEY_BRANDING_VEHICLE_PREFIX}${vehicleBrandId}`;
+    try {
+      const row = await this.findByKey(key);
+      return { branding: row.value && typeof row.value === 'object' ? row.value : {} };
+    } catch (e: any) {
+      if (e instanceof NotFoundException) {
+        return { branding: {} };
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Actualizar branding de la tienda por marca.
+   */
+  async updateBrandingVehicleBrand(
+    vehicleBrandId: string,
+    branding: Record<string, any>,
+  ): Promise<{ branding: Record<string, any> }> {
+    const key = `${SettingsService.KEY_BRANDING_VEHICLE_PREFIX}${vehicleBrandId}`;
+    await this.updateByKey(key, {
+      value: branding,
+      label: `Branding tienda marca ${vehicleBrandId}`,
+      description: 'Logos, colores y textos de la tienda por marca',
+    });
+    return this.getBrandingVehicleBrand(vehicleBrandId);
+  }
 }
 

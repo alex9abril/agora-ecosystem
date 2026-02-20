@@ -8,6 +8,7 @@ export interface LandingSlider {
   id: string;
   business_group_id: string | null;
   business_id: string | null;
+  vehicle_brand_id: string | null;
   content: {
     imageUrl?: string;
     backgroundColor?: string;
@@ -33,20 +34,19 @@ export interface LandingSlider {
 
 export const landingSlidersService = {
   /**
-   * Obtener sliders activos para un contexto (público, sin autenticación)
+   * Obtener sliders activos para un contexto (público).
+   * Sin parámetros = sliders globales. Con vehicleBrandId = sliders por marca.
    */
   async getActiveSliders(
     businessGroupId?: string,
     businessId?: string,
+    vehicleBrandId?: string,
   ): Promise<LandingSlider[]> {
     try {
       const params = new URLSearchParams();
-      if (businessGroupId) {
-        params.append('business_group_id', businessGroupId);
-      }
-      if (businessId) {
-        params.append('business_id', businessId);
-      }
+      if (businessGroupId) params.append('business_group_id', businessGroupId);
+      if (businessId) params.append('business_id', businessId);
+      if (vehicleBrandId) params.append('vehicle_brand_id', vehicleBrandId);
 
       const url = `${API_URL}/landing-sliders/public?${params.toString()}`;
       console.log('🔍 [getActiveSliders] Llamando a:', url);

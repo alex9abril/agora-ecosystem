@@ -36,17 +36,35 @@ export interface Branding {
 
 class BrandingService {
   /**
+   * Asegura que un valor de color sea una cadena no vacía (hex o válida).
+   */
+  private toValidColor(value: any): string | undefined {
+    if (value == null) return undefined;
+    const s = String(value).trim();
+    return s.length > 0 ? s : undefined;
+  }
+
+  /**
    * Normalizar colores: convertir primary_color -> primary, etc.
+   * Acepta las claves que guarda web-admin (snake_case) y devuelve siempre valores válidos.
    */
   private normalizeColors(colors: any): Branding['colors'] | undefined {
-    if (!colors) return undefined;
-    
+    if (!colors || typeof colors !== 'object') return undefined;
+
+    const primary = this.toValidColor(colors.primary_color ?? colors.primary);
+    const secondary = this.toValidColor(colors.secondary_color ?? colors.secondary);
+    const accent = this.toValidColor(colors.accent_color ?? colors.accent);
+    const background = this.toValidColor(colors.background_color ?? colors.background);
+    const text = this.toValidColor(colors.text_color ?? colors.text ?? colors.text_primary);
+
+    if (!primary && !secondary && !accent && !background && !text) return undefined;
+
     return {
-      primary: colors.primary_color || colors.primary,
-      secondary: colors.secondary_color || colors.secondary,
-      accent: colors.accent_color || colors.accent,
-      background: colors.background_color || colors.background,
-      text: colors.text_color || colors.text,
+      primary,
+      secondary,
+      accent,
+      background,
+      text,
     };
   }
 
@@ -116,6 +134,48 @@ class BrandingService {
       return normalized;
     } catch (error) {
       console.error('Error obteniendo branding de la sucursal:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtener branding de la tienda global (Agora global - MultiTienda)
+   * Usado en store-front cuando el contexto es global (sin grupo/sucursal/marca)
+   */
+  async getGlobalBranding(): Promise<Branding | null> {
+    try {
+      const result = await apiRequest<{ branding: any }>(
+        `/settings/branding/global`,
+        { method: 'GET' }
+      );
+      const normalized = this.normalizeBranding(result?.branding);
+      if (normalized) {
+        console.log('🎨 [BrandingService] Branding tienda global cargado:', normalized);
+      }
+      return normalized ?? null;
+    } catch (error) {
+      console.error('Error obteniendo branding tienda global:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtener branding por marca de vehículo (vehicle_brand_id)
+   * Usado en store-front cuando el contexto es /brand/:code
+   */
+  async getVehicleBrandBranding(vehicleBrandId: string): Promise<Branding | null> {
+    try {
+      const result = await apiRequest<{ branding: any }>(
+        `/settings/branding/vehicle-brand/${vehicleBrandId}`,
+        { method: 'GET' }
+      );
+      const normalized = this.normalizeBranding(result?.branding);
+      if (normalized) {
+        console.log('🎨 [BrandingService] Branding por marca cargado:', normalized);
+      }
+      return normalized ?? null;
+    } catch (error) {
+      console.error('Error obteniendo branding por marca:', error);
       return null;
     }
   }

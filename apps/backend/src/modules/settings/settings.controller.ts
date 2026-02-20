@@ -9,12 +9,17 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { SettingsService, UpdateSettingDto } from './settings.service';
 import { IntegrationsService } from './integrations.service';
 import { BulkUpdateSettingsDto } from './dto/update-setting.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
+import { BrandingImagesService } from '../businesses/branding-images.service';
 
 @ApiTags('Settings')
 @ApiBearerAuth()
@@ -24,6 +29,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly integrationsService: IntegrationsService,
+    private readonly brandingImagesService: BrandingImagesService,
   ) {}
 
   @Get()
@@ -68,6 +74,124 @@ export class SettingsController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async getTaxSettings() {
     return this.settingsService.getTaxSettings();
+  }
+
+  @Public()
+  @Get('branding/global')
+  @ApiOperation({ summary: 'Obtener branding de la tienda global (MultiTienda)' })
+  @ApiResponse({ status: 200, description: 'Branding obtenido' })
+  async getBrandingGlobal() {
+    return this.settingsService.getBrandingGlobal();
+  }
+
+  @Put('branding/global')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Actualizar branding de la tienda global' })
+  @ApiResponse({ status: 200, description: 'Branding actualizado' })
+  async updateBrandingGlobal(@Body() body: { branding: Record<string, any> }) {
+    return this.settingsService.updateBrandingGlobal(body.branding || {});
+  }
+
+  @Public()
+  @Get('branding/vehicle-brand/:id')
+  @ApiOperation({ summary: 'Obtener branding de la tienda por marca (vehicle_brand_id)' })
+  @ApiParam({ name: 'id', description: 'ID de la marca de vehículo' })
+  @ApiResponse({ status: 200, description: 'Branding obtenido' })
+  async getBrandingVehicleBrand(@Param('id') id: string) {
+    return this.settingsService.getBrandingVehicleBrand(id);
+  }
+
+  @Put('branding/vehicle-brand/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Actualizar branding de la tienda por marca' })
+  @ApiParam({ name: 'id', description: 'ID de la marca de vehículo' })
+  @ApiResponse({ status: 200, description: 'Branding actualizado' })
+  async updateBrandingVehicleBrand(
+    @Param('id') id: string,
+    @Body() body: { branding: Record<string, any> },
+  ) {
+    return this.settingsService.updateBrandingVehicleBrand(id, body.branding || {});
+  }
+
+  @Post('branding/global/upload-logo')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGlobalLogo(@UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('global', 'global', 'logo', file);
+    const { branding } = await this.settingsService.getBrandingGlobal();
+    await this.settingsService.updateBrandingGlobal({ ...branding, logo_url: result.url });
+    return result;
+  }
+
+  @Post('branding/global/upload-logo-light')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGlobalLogoLight(@UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('global', 'global', 'logo_light', file);
+    const { branding } = await this.settingsService.getBrandingGlobal();
+    await this.settingsService.updateBrandingGlobal({ ...branding, logo_light_url: result.url });
+    return result;
+  }
+
+  @Post('branding/global/upload-logo-dark')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGlobalLogoDark(@UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('global', 'global', 'logo_dark', file);
+    const { branding } = await this.settingsService.getBrandingGlobal();
+    await this.settingsService.updateBrandingGlobal({ ...branding, logo_dark_url: result.url });
+    return result;
+  }
+
+  @Post('branding/global/upload-favicon')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadGlobalFavicon(@UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('global', 'global', 'favicon', file);
+    const { branding } = await this.settingsService.getBrandingGlobal();
+    await this.settingsService.updateBrandingGlobal({ ...branding, favicon_url: result.url });
+    return result;
+  }
+
+  @Post('branding/vehicle-brand/:id/upload-logo')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVehicleBrandLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('vehicle_brand', id, 'logo', file);
+    const { branding } = await this.settingsService.getBrandingVehicleBrand(id);
+    await this.settingsService.updateBrandingVehicleBrand(id, { ...branding, logo_url: result.url });
+    return result;
+  }
+
+  @Post('branding/vehicle-brand/:id/upload-logo-light')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVehicleBrandLogoLight(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('vehicle_brand', id, 'logo_light', file);
+    const { branding } = await this.settingsService.getBrandingVehicleBrand(id);
+    await this.settingsService.updateBrandingVehicleBrand(id, { ...branding, logo_light_url: result.url });
+    return result;
+  }
+
+  @Post('branding/vehicle-brand/:id/upload-logo-dark')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVehicleBrandLogoDark(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('vehicle_brand', id, 'logo_dark', file);
+    const { branding } = await this.settingsService.getBrandingVehicleBrand(id);
+    await this.settingsService.updateBrandingVehicleBrand(id, { ...branding, logo_dark_url: result.url });
+    return result;
+  }
+
+  @Post('branding/vehicle-brand/:id/upload-favicon')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVehicleBrandFavicon(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    const result = await this.brandingImagesService.uploadImage('vehicle_brand', id, 'favicon', file);
+    const { branding } = await this.settingsService.getBrandingVehicleBrand(id);
+    await this.settingsService.updateBrandingVehicleBrand(id, { ...branding, favicon_url: result.url });
+    return result;
   }
 
   @Get(':key')

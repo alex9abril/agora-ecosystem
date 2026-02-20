@@ -1,184 +1,56 @@
-# 📚 Documentación AGORA
+# Documentación AGORA Ecosystem
 
-Bienvenido a la documentación completa del proyecto AGORA. Esta documentación está organizada de manera secuencial para guiarte a través de todos los aspectos del proyecto.
-
-## 📖 Índice de Documentación
-
-### 1. [Visión General y Actores](./01-vision-general.md)
-- Objetivos clave del proyecto
-- Actores principales (Cliente, Local, Repartidor)
-- Modelo de operación básico
-- Flujo de interacción
-
-### 2. [Modelo de Operación y LocalCoins](./02-modelo-operacion.md)
-- Sistema de créditos LocalCoins (LC)
-- Conversión y beneficios
-- Seguridad financiera
-- Control de emisión de LCs
-- Reglas de sostenibilidad
-
-### 3. [Arquitectura y Roadmap MVP](./03-arquitectura-mvp.md)
-- Aplicaciones (Cliente, Repartidor, Local, Admin)
-- Stack tecnológico
-- Roadmap de 4 semanas
-- Infraestructura
-- Criterios de éxito
-
-### 3.5. [Gantt Conceptual](./GANTT-CONCEPTUAL.md)
-- Diagrama de Gantt visual (Mermaid)
-- 9 tareas principales del MVP
-- Distribución por semana y desarrollador
-- Fechas y entregables
-
-### 4. [Modelo Financiero y Monetización](./04-modelo-financiero.md)
-- Roles fiscales y estrategia
-- Control de precios
-- Fuentes de monetización diversificadas
-- Estrategia de precios
-- Métricas financieras clave
-
-### 5. [Estrategia Roma CDMX](./05-estrategia-roma.md)
-- Público internacional y nómadas digitales
-- Acciones clave para el lanzamiento
-- Métricas de validación
-- Estrategia de lanzamiento
-- Canales de adquisición
-
-### 6. [Responsabilidad Social y Sostenibilidad](./06-responsabilidad-social.md)
-- Modelo eco-social
-- Tipos de comercio (Estándar, Piloto Social)
-- Recompensas e incentivos verdes
-- Impacto esperado
-
-### 7. [Red Social Ecológica](./07-red-social-ecologica.md)
-- Feed de contenido ecológico
-- Sistema de tags automáticos (CO₂ y plástico)
-- Compartir impacto en redes sociales
-- Viralización y captación de usuarios
-- Gamificación y rankings
-
-### 8. [Expansión y Medición de Impacto](./08-expansion-impacto.md)
-- Estrategia de expansión por barrios
-- KPIs ESG (Environmental, Social, Governance)
-- Métricas de éxito del negocio
-- Dashboard de impacto
-- Casos de éxito esperados
-
-### 9. [Estructura del Repositorio](./09-estructura-repositorio.md)
-- Organización de carpetas y archivos
-- Estructura de monorepo
-- Convenciones de código
-
-### 10. [Recomendación Backend](./10-recomendacion-backend.md)
-- Stack tecnológico recomendado
-- Arquitectura del backend
-- Consideraciones técnicas
-
-### 11. [Configuración de Entorno](./11-configuracion-entorno.md)
-- Variables de entorno
-- Configuración de base de datos
-- Setup inicial del proyecto
-
-### 12. [Autenticación y Seguridad](./12-autenticacion-seguridad.md)
-- Sistema de autenticación
-- Roles y permisos
-- Medidas de seguridad
-
-### 13. [Swagger y Documentación API](./13-swagger-documentacion.md)
-- Documentación de API
-- Configuración de Swagger
-- Endpoints disponibles
-
-### 14. [API Keys y Autenticación](./14-api-keys-autenticacion.md)
-- Sistema de API Keys
-- Autenticación de servicios
-- Gestión de claves
-
-### 15. [Configuración Supabase Redirects](./15-configuracion-supabase-redirects.md)
-- Configuración de redirects
-- URLs de callback
-- Configuración de Supabase
-
-### 16. [Catálogos Disponibles para Gestión](./16-catalogos-gestion.md)
-- Lista de catálogos del sistema
-- Estructura de categorías y productos
-- Funcionalidades de gestión requeridas
-
-### 17. [Análisis de Tipos de Negocios de Alimentos](./17-analisis-tipos-negocios-alimentos.md)
-- Análisis exhaustivo de 12 tipos de negocios de alimentos
-- Categorías de productos por tipo de negocio
-- Recomendaciones para implementación de catálogos
-- Matriz comparativa y plantillas sugeridas
-
-### 18. [Roles de Negocio y Múltiples Tiendas por Cuenta](./18-roles-negocio-multi-tiendas.md)
-- Sistema de roles de negocio (superadmin, admin, operativo_aceptador, operativo_cocina)
-- Soporte para múltiples tiendas por cuenta
-- Configurador de permisos del superadmin
-- Funciones SQL para gestión de usuarios y permisos
-- Flujos de trabajo y casos de uso
-
-### 19. [Gestión de Zonas de Cobertura](./19-gestion-zonas-cobertura.md)
-- Conceptos de zonas de cobertura (service regions)
-- Herramientas para definir polígonos (geojson.io, Google My Maps)
-- Actualización de polígonos en la base de datos
-- Validación de ubicaciones dentro de zonas
-- Scripts SQL disponibles y casos de uso
-
-### 20. [Sistema de Catálogos de Productos Avanzado](./20-sistema-catalogos-productos-avanzado.md)
-- Investigación de prácticas de plataformas de delivery (Uber Eats, Rappi, DoorDash)
-- Identificación de tipo de producto (alimento vs. no alimento)
-- **Configuración de campos por tipo de producto** (campos visibles/requeridos personalizables)
-- Sistema de modificadores y complementos (obligatorios/opcionales con costos extras)
-- Mejora de paquetes y combinaciones (cantidades fraccionarias, price_override)
-- Sistema de sugerencias y cross-selling (categoría → categoría, producto → producto)
-- Productos de farmacia con restricciones especiales
-- Propuesta de implementación con cambios en base de datos, backend y frontend
-
-### 21. [Sistema de Impuestos Configurable](./21-sistema-impuestos-configurable.md)
-- Configuración de impuestos por negocio
-- Cálculo de impuestos incluidos vs agregados
-- Integración con checkout y facturación
-
-### 22. [Roles de Negocio e Interfaces Diferenciadas](./22-roles-negocio-interfaces-diferenciadas.md)
-- Roles específicos por tipo de negocio
-- Interfaces personalizadas según el rol
-- Permisos y funcionalidades diferenciadas
-
-### 23. [Proceso de Seguimiento de Pedidos y Políticas de Postventa](./23-proceso-seguimiento-pedidos-postventa.md)
-- Ciclo de vida completo de un pedido
-- Transiciones entre estados
-- Políticas de cancelación, devolución y reembolso
-- Modificaciones en base de datos
-
-### 24. [Configuración de Políticas RLS para Supabase Storage Buckets](./24-configuracion-storage-buckets.md)
-- Configuración correcta de políticas RLS para buckets de Supabase Storage
-- Estructura exacta de las 4 políticas requeridas (INSERT, SELECT, UPDATE, DELETE)
-- Template reutilizable para nuevos buckets
-- Solución de problemas comunes
-- Checklist completo para configuración de nuevos buckets
-
-### 25. [Sistema de Monedero Electrónico (Wallet)](./25-sistema-monedero-electronico-wallet.md)
-- Sistema completo de monedero electrónico integrado
-- Notas de crédito por falta de stock
-- Wallet como método de pago (parcial o total)
-- Registro completo de transacciones (entradas y salidas)
-- Integración con preparación de pedidos y checkout
-- Consulta de historial y saldo
-
-## 🗺️ Navegación
-
-Cada documento incluye enlaces de navegación al final para moverse entre secciones:
-- **Anterior:** Link al documento previo
-- **Siguiente:** Link al documento siguiente
-- **Volver al inicio:** Link al README principal
-
-## 📝 Notas
-
-- Esta documentación está en constante evolución
-- Las métricas y objetivos pueden ajustarse según resultados del MVP
-- Para preguntas o sugerencias, consulta el README principal del repositorio
+Punto de entrada a la documentación del proyecto **AGORA** (marketplace de refacciones y accesorios).
 
 ---
 
-**Volver al inicio:** [README Principal](../README.md)
+## Cómo empezar
 
+| Documento | Uso |
+|-----------|-----|
+| **[INTRODUCTION.md](./INTRODUCTION.md)** | Introducción a la documentación, propósito y uso de carpetas. |
+| **[INDEX.md](./INDEX.md)** | **Índice manual** — buscar cualquier documento por categoría o por tema. |
+
+---
+
+## Estructura por contenido
+
+La documentación está organizada en carpetas por tema. Para localizar un documento concreto, usar **[INDEX.md](./INDEX.md)**.
+
+| Carpeta | Contenido |
+|---------|-----------|
+| [vision-and-strategy/](./vision-and-strategy/) | Visión, modelo de operación, arquitectura MVP, financiero, estrategia, sostenibilidad, expansión, Gantt (01–08). |
+| [development/](./development/) | Estructura repo, backend, entorno, auth, Swagger, API keys, Supabase, setup rápido, stack (09–15 + guías). |
+| [operations/](./operations/) | Jenkins (configuración y deploy), nginx. |
+| [features/](./features/) | Catálogos, roles, zonas, impuestos, pedidos, storage, wallet, sliders, checkout (16–26 y procesos). |
+| [agora/](./agora/) | Refacciones: transformación, categorías, compatibilidad vehículos, impuestos, branding, roles sucursales, checklist alta. |
+| [store-front/](./store-front/) | Contexto de tienda (global/grupo/sucursal/marca), navegación, filtrado. |
+| [integrations/](./integrations/) | Skydropx, catálogo distribuidores, logística, envíos. |
+| [infrastructure/](./infrastructure/) | Storage (Supabase buckets), correo (confirmación pedido, imágenes). |
+| [security/](./security/) | Políticas de seguridad, cuestionario. |
+| [MVP/](./MVP/) | Alcance MVP, preguntas estratégicas. |
+| [reference/](./reference/) | Categorías Toyota Autoparts (referencia). |
+| [contexto-trabajo/](./contexto-trabajo/) | Estado actual de features; usar con `@docs/contexto-trabajo/...`. |
+| [agentes/](./agentes/) | Referencia estable por dominio (tiendas, etc.); usar con `@docs/agentes/...`. |
+
+---
+
+## Navegación rápida
+
+- **Visión y negocio:** [vision-and-strategy/](./vision-and-strategy/)
+- **Setup y desarrollo:** [development/](./development/) (incl. [10-stack-tecnologico.md](./development/10-stack-tecnologico.md), [08-setup-env.md](./development/08-setup-env.md))
+- **Deploy:** [operations/02-jenkins-deploy.md](./operations/02-jenkins-deploy.md), [operations/01-jenkins-setup.md](./operations/01-jenkins-setup.md)
+- **AGORA refacciones:** [agora/README.md](./agora/README.md)
+- **Store-front (contextos):** [store-front/](./store-front/)
+- **Consultar cualquier doc:** [INDEX.md](./INDEX.md)
+
+---
+
+## Notas
+
+- Algunos documentos conservan enlaces “Anterior / Siguiente” que pueden apuntar a rutas antiguas; usar [INDEX.md](./INDEX.md) para encontrar la ruta actual.
+- **CHANGELOG:** [CHANGELOG.md](./CHANGELOG.md).
+
+---
+
+**Volver al repo:** [README principal](../README.md)
