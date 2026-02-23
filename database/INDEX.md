@@ -204,6 +204,7 @@ Rutas relativas desde `database/`.
 | recreate_order_status_change_template.sql | Template cambio estado |
 | recreate_user_registration_template.sql | Template registro usuario |
 | query_email_template_detail.sql | Consulta detalle template |
+| [query_sucursales_activas_con_administradores.sql](agora/query_sucursales_activas_con_administradores.sql) | Sucursales activas con usuario administrador (email para entrar) |
 
 #### Integraciones (KarloPay, etc.)
 | Archivo | Descripción |

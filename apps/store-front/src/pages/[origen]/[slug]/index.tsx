@@ -189,7 +189,7 @@ export default function StoreHomePage() {
           <>
             {/* Slider Promocional Full Width */}
             {loadingSliders ? (
-              <div className="w-full h-[810px] bg-gray-200 animate-pulse flex items-center justify-center">
+              <div className="w-full h-[972px] bg-gray-200 animate-pulse flex items-center justify-center">
                 <p className="text-gray-500">Cargando sliders...</p>
               </div>
             ) : (
@@ -197,7 +197,7 @@ export default function StoreHomePage() {
                 slides={sliders}
                 autoPlay={true}
                 autoPlayInterval={5000}
-                height="810px"
+                height="972px"
               />
             )}
 
