@@ -2980,6 +2980,193 @@ export class BusinessesService {
   }
 
   // ============================================================================
+  // KARLOPAY SETTINGS
+  // ============================================================================
+
+  private readonly DEFAULT_KARLOPAY_SETTINGS = {
+    enabled: false,
+    environment: 'dev' as 'dev' | 'prod',
+    dev: {
+      domain: '',
+      login_endpoint: '',
+      orders_endpoint: '',
+      auth_email: '',
+      auth_password: '',
+      redirect_url: '',
+    },
+    prod: {
+      domain: '',
+      login_endpoint: '',
+      orders_endpoint: '',
+      auth_email: '',
+      auth_password: '',
+      redirect_url: '',
+    },
+  };
+
+  async getBusinessKarlopaySettings(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const businessResult = await pool.query(
+        `SELECT id, settings FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const businessSettings = businessResult.rows[0].settings || {};
+      const karlopaySettings = businessSettings.karlopay || this.DEFAULT_KARLOPAY_SETTINGS;
+
+      return {
+        karlopay: {
+          ...this.DEFAULT_KARLOPAY_SETTINGS,
+          ...karlopaySettings,
+          dev: { ...this.DEFAULT_KARLOPAY_SETTINGS.dev, ...(karlopaySettings.dev || {}) },
+          prod: { ...this.DEFAULT_KARLOPAY_SETTINGS.prod, ...(karlopaySettings.prod || {}) },
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion Karlopay de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion Karlopay: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessKarlopaySettingsBySlug(slug: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const result = await pool.query(
+        `SELECT id FROM core.businesses WHERE slug = $1 AND is_active = TRUE`,
+        [slug],
+      );
+
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      return this.getBusinessKarlopaySettings(result.rows[0].id);
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo Karlopay por slug:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion Karlopay: ${error.message}`,
+      );
+    }
+  }
+
+  async getBusinessKarlopaySettingsForUser(businessId: string, userId: string) {
+    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getBusinessKarlopaySettings(businessId);
+  }
+
+  async updateBusinessKarlopaySettings(
+    businessId: string,
+    userId: string,
+    updateDto: {
+      enabled?: boolean;
+      environment?: 'dev' | 'prod';
+      dev?: {
+        domain?: string;
+        login_endpoint?: string;
+        orders_endpoint?: string;
+        auth_email?: string;
+        auth_password?: string;
+        redirect_url?: string;
+      };
+      prod?: {
+        domain?: string;
+        login_endpoint?: string;
+        orders_endpoint?: string;
+        auth_email?: string;
+        auth_password?: string;
+        redirect_url?: string;
+      };
+    },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+
+      const currentSettingsResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings 
+         FROM core.businesses 
+         WHERE id = $1`,
+        [businessId],
+      );
+
+      if (currentSettingsResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+
+      const currentSettingsObj = currentSettingsResult.rows[0].settings || {};
+      const currentKarlopay = {
+        ...this.DEFAULT_KARLOPAY_SETTINGS,
+        ...(currentSettingsObj.karlopay || {}),
+        dev: { ...this.DEFAULT_KARLOPAY_SETTINGS.dev, ...((currentSettingsObj.karlopay || {}).dev || {}) },
+        prod: { ...this.DEFAULT_KARLOPAY_SETTINGS.prod, ...((currentSettingsObj.karlopay || {}).prod || {}) },
+      };
+
+      const updatedKarlopay = {
+        ...currentKarlopay,
+        ...updateDto,
+        dev: { ...currentKarlopay.dev, ...(updateDto.dev || {}) },
+        prod: { ...currentKarlopay.prod, ...(updateDto.prod || {}) },
+      };
+
+      const updatedSettings = {
+        ...currentSettingsObj,
+        karlopay: updatedKarlopay,
+      };
+
+      await pool.query(
+        `UPDATE core.businesses
+         SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [JSON.stringify(updatedSettings), businessId],
+      );
+
+      return this.getBusinessKarlopaySettings(businessId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error actualizando configuracion Karlopay de la sucursal:', error);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuracion Karlopay: ${error.message}`,
+      );
+    }
+  }
+
+  // ============================================================================
   // BRANDING / PERSONALIZACIÓN
   // ============================================================================
 

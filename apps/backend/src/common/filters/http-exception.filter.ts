@@ -31,6 +31,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Error interno del servidor';
 
+    // Ignorar errores de Socket.IO si no está configurado
+    // Estos errores son comunes cuando extensiones del navegador o scripts externos
+    // intentan conectarse a Socket.IO pero el servidor no lo tiene habilitado
+    if (
+      status === HttpStatus.NOT_FOUND &&
+      request.url?.includes('/socket.io/')
+    ) {
+      // Responder con 404 silenciosamente sin loggear
+      return response.status(status).json({
+        success: false,
+        statusCode: status,
+        message: 'Not Found',
+      });
+    }
+
     // Log detallado del error
     console.error('🔴 [EXCEPTION FILTER] ============================================');
     console.error('🔴 [EXCEPTION FILTER] Error capturado por HttpExceptionFilter');

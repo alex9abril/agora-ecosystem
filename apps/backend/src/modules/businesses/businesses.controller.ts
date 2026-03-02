@@ -41,6 +41,7 @@ import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
 import { UpdateBrandingDto } from './dto/branding.dto';
 import { UpdateBusinessTaxSettingsDto } from './dto/update-business-tax-settings.dto';
 import { UpdateBusinessKarbotSettingsDto } from './dto/update-business-karbot-settings.dto';
+import { UpdateBusinessKarlopaySettingsDto } from './dto/update-business-karlopay-settings.dto';
 import { UpdateBusinessNotificationSettingsDto } from './dto/update-business-notification-settings.dto';
 import { BrandingImagesService } from './branding-images.service';
 
@@ -302,6 +303,22 @@ export class BusinessesController {
     return this.businessesService.getBusinessKarbotSettingsBySlug(slug);
   }
 
+  @Get('branches/id/:id/karlopay-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion Karlopay de una sucursal por ID (Publico)' })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal' })
+  async getBranchKarlopaySettingsById(@Param('id') id: string) {
+    return this.businessesService.getBusinessKarlopaySettings(id);
+  }
+
+  @Get('branches/:slug/karlopay-settings')
+  @Public()
+  @ApiOperation({ summary: 'Obtener configuracion Karlopay de una sucursal por slug (Publico)' })
+  @ApiParam({ name: 'slug', description: 'Slug de la sucursal' })
+  async getBranchKarlopaySettingsBySlug(@Param('slug') slug: string) {
+    return this.businessesService.getBusinessKarlopaySettingsBySlug(slug);
+  }
+
   @Get('branches/id/:id/notification-settings')
   @Public()
   @ApiOperation({ summary: 'Obtener configuracion de notificaciones de una sucursal por ID (Publico)' })
@@ -391,6 +408,26 @@ export class BusinessesController {
     @CurrentUser() user: User,
   ) {
     return this.businessesService.updateBusinessKarbotSettings(id, user.id, updateDto);
+  }
+
+  @Get(':id/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion Karlopay de una sucursal (requiere permisos)' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async getBusinessKarlopaySettings(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getBusinessKarlopaySettingsForUser(id, user.id);
+  }
+
+  @Put(':id/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion Karlopay de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async updateBusinessKarlopaySettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessKarlopaySettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateBusinessKarlopaySettings(id, user.id, updateDto);
   }
 
   @Get(':id/notification-settings')

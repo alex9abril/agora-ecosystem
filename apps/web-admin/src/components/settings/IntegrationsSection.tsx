@@ -10,6 +10,7 @@ interface IntegrationsSectionProps {
 export default function IntegrationsSection({ settings, onUpdate, saving }: IntegrationsSectionProps) {
   const [devMode, setDevMode] = useState(false);
   const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
   // Organizar settings por proveedor
   useEffect(() => {
@@ -152,20 +153,41 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                         </ul>
                       </div>
                     )}
-                    <input
-                      type={type}
-                      value={value || ''}
-                      onChange={(e) => onUpdate(key, e.target.value)}
-                      disabled={saving}
-                      placeholder={setting?.description || ''}
-                      className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
-                        isActive
-                          ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
-                          : devMode
-                          ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
-                          : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 bg-gray-50'
-                      }`}
-                    />
+                    <div className="relative">
+                      <input
+                        type={type === 'password' ? (showPasswords[key] ? 'text' : 'password') : type}
+                        value={value || ''}
+                        onChange={(e) => onUpdate(key, e.target.value)}
+                        disabled={saving}
+                        placeholder={setting?.description || ''}
+                        className={`w-full px-3 py-2 ${type === 'password' ? 'pr-10' : ''} text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                          isActive
+                            ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                            : devMode
+                            ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 bg-gray-50'
+                        }`}
+                      />
+                      {type === 'password' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }))}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                          tabIndex={-1}
+                        >
+                          {showPasswords[key] ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -224,20 +246,41 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                         </ul>
                       </div>
                     )}
-                    <input
-                      type={type}
-                      value={value || ''}
-                      onChange={(e) => onUpdate(key, e.target.value)}
-                      disabled={saving}
-                      placeholder={setting?.description || ''}
-                      className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
-                        isActive
-                          ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
-                          : !devMode
-                          ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
-                          : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 bg-gray-50'
-                      }`}
-                    />
+                    <div className="relative">
+                      <input
+                        type={type === 'password' ? (showPasswords[key] ? 'text' : 'password') : type}
+                        value={value || ''}
+                        onChange={(e) => onUpdate(key, e.target.value)}
+                        disabled={saving}
+                        placeholder={setting?.description || ''}
+                        className={`w-full px-3 py-2 ${type === 'password' ? 'pr-10' : ''} text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                          isActive
+                            ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                            : !devMode
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 bg-gray-50'
+                        }`}
+                      />
+                      {type === 'password' && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords(prev => ({ ...prev, [key]: !prev[key] }))}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                          tabIndex={-1}
+                        >
+                          {showPasswords[key] ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

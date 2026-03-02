@@ -47,13 +47,69 @@ export class KarlopayService {
 
   /**
    * Obtener credenciales de Karlopay según el modo activo
+   * Intenta primero obtener credenciales a nivel branch, si no están disponibles usa las globales
    */
-  private async getCredentials(): Promise<KarlopayCredentials> {
+  private async getCredentials(businessId?: string): Promise<KarlopayCredentials> {
+    // Si hay businessId, intentar obtener credenciales a nivel branch
+    if (businessId) {
+      try {
+        const branchCredentials = await this.getBranchKarlopayCredentials(businessId);
+        if (branchCredentials) {
+          this.logger.debug(`✅ Usando credenciales Karlopay a nivel branch para business: ${businessId}`);
+          return branchCredentials;
+        }
+      } catch (error: any) {
+        // Si no hay configuración branch o no está habilitada, continuar con globales
+        this.logger.debug(`⚠️ No se encontraron credenciales branch para ${businessId}, usando globales: ${error.message}`);
+      }
+    }
+
+    // Fallback a credenciales globales
     try {
       return await this.integrationsService.getKarlopayCredentials();
     } catch (error) {
       this.logger.error('Error obteniendo credenciales de Karlopay:', error);
       throw new ServiceUnavailableException('Karlopay no está configurado o habilitado');
+    }
+  }
+
+  /**
+   * Obtener credenciales de Karlopay a nivel branch
+   */
+  private async getBranchKarlopayCredentials(businessId: string): Promise<KarlopayCredentials | null> {
+    try {
+      const branchSettings = await this.businessesService.getBusinessKarlopaySettings(businessId);
+      const karlopaySettings = branchSettings.karlopay;
+
+      // Si no está habilitado, retornar null para usar globales
+      if (!karlopaySettings.enabled) {
+        return null;
+      }
+
+      const mode = karlopaySettings.environment || 'dev';
+      const envSettings = mode === 'dev' ? karlopaySettings.dev : karlopaySettings.prod;
+
+      // Validar que tenga los campos mínimos
+      if (!envSettings.domain && !envSettings.login_endpoint) {
+        this.logger.warn(`Configuración Karlopay branch incompleta para ${businessId}, usando globales`);
+        return null;
+      }
+
+      return {
+        enabled: true,
+        domain: envSettings.domain || '',
+        loginEndpoint: envSettings.login_endpoint || '',
+        ordersEndpoint: envSettings.orders_endpoint || '',
+        authEmail: envSettings.auth_email || '',
+        authPassword: envSettings.auth_password || '',
+        redirectUrl: envSettings.redirect_url || '',
+        endpoint: envSettings.domain || '',
+        mode,
+      };
+    } catch (error: any) {
+      // Si hay error (ej: sucursal no encontrada), retornar null para usar globales
+      this.logger.debug(`Error obteniendo credenciales branch: ${error.message}`);
+      return null;
     }
   }
 
@@ -158,8 +214,8 @@ export class KarlopayService {
   /**
    * Crear o actualizar orden en Karlopay
    */
-  async createOrUpdateOrder(orderDto: CreateKarlopayOrderDto): Promise<KarlopayOrderResponse> {
-    const credentials = await this.getCredentials();
+  async createOrUpdateOrder(orderDto: CreateKarlopayOrderDto, businessId?: string): Promise<KarlopayOrderResponse> {
+    const credentials = await this.getCredentials(businessId);
     const token = await this.getAuthToken(credentials);
 
     this.logger.log(`📦 Creando/actualizando orden en Karlopay: ${orderDto.numberOfOrder} (modo: ${credentials.mode})`);
@@ -421,6 +477,10 @@ export class KarlopayService {
             ...(webhookDto.paymentMethod && { paymentMethod: webhookDto.paymentMethod }),
             ...(webhookDto.paymentForm && { paymentForm: webhookDto.paymentForm }),
             ...(webhookDto.paymentDate && { paymentDate: webhookDto.paymentDate }),
+            ...(webhookDto.postalCode && { postalCode: webhookDto.postalCode }),
+            ...(webhookDto.meses !== undefined && { meses: webhookDto.meses }),
+            ...(webhookDto.promotion !== undefined && { promotion: webhookDto.promotion }),
+            ...(webhookDto.taxData && { taxData: webhookDto.taxData }),
             ...(webhookDto.paymentInformation && { paymentInformation: webhookDto.paymentInformation }),
             webhook_received: true, // Marcar que el webhook fue recibido
             webhook_received_at: new Date().toISOString(),
@@ -480,6 +540,10 @@ export class KarlopayService {
                 paymentMethod: webhookDto.paymentMethod,
                 paymentForm: webhookDto.paymentForm,
                 paymentDate: webhookDto.paymentDate,
+                postalCode: webhookDto.postalCode,
+                meses: webhookDto.meses,
+                promotion: webhookDto.promotion,
+                taxData: webhookDto.taxData,
                 paymentInformation: webhookDto.paymentInformation,
               }),
             ]

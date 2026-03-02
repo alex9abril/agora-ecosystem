@@ -174,6 +174,27 @@ export interface BranchKarbotSettings {
   };
 }
 
+export interface BranchKarlopaySettings {
+  enabled: boolean;
+  environment: 'dev' | 'prod';
+  dev: {
+    domain?: string;
+    login_endpoint?: string;
+    orders_endpoint?: string;
+    auth_email?: string;
+    auth_password?: string;
+    redirect_url?: string;
+  };
+  prod: {
+    domain?: string;
+    login_endpoint?: string;
+    orders_endpoint?: string;
+    auth_email?: string;
+    auth_password?: string;
+    redirect_url?: string;
+  };
+}
+
 export type BranchNotificationType = 'user_registration' | 'order_confirmation' | 'order_status_change';
 
 export interface BranchNotificationSetting {
@@ -587,6 +608,30 @@ export const businessService = {
       body: JSON.stringify(data),
     });
     return response?.karbot || (response as any);
+  },
+
+  /**
+   * Obtener configuracion Karlopay de una sucursal
+   */
+  async getBranchKarlopaySettings(businessId: string): Promise<BranchKarlopaySettings> {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/${businessId}/karlopay-settings`, {
+      method: 'GET',
+    });
+    return response?.karlopay || (response as any);
+  },
+
+  /**
+   * Actualizar configuracion Karlopay de una sucursal
+   */
+  async updateBranchKarlopaySettings(
+    businessId: string,
+    data: BranchKarlopaySettings,
+  ): Promise<BranchKarlopaySettings> {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/${businessId}/karlopay-settings`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return response?.karlopay || (response as any);
   },
 
   /**

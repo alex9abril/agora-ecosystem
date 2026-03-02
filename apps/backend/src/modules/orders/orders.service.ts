@@ -260,7 +260,19 @@ export class OrdersService {
         }
       }
 
-      // 12. Crear una orden por cada sucursal
+      // 12. Verificar qué columnas existen en la tabla orders (una sola vez antes del loop)
+      const columnsCheck = await client.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_schema = 'orders' 
+           AND table_name = 'orders' 
+           AND column_name IN ('store_context', 'order_group_id')`
+      );
+      const existingColumns = new Set(columnsCheck.rows.map(row => row.column_name));
+      const hasStoreContext = existingColumns.has('store_context');
+      const hasOrderGroupId = existingColumns.has('order_group_id');
+
+      // 13. Crear una orden por cada sucursal
       const createdOrders: any[] = [];
       const businessSubtotals = new Map<string, number>();
 
@@ -269,6 +281,9 @@ export class OrdersService {
         const subtotal = items.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
         businessSubtotals.set(businessId, subtotal);
       }
+
+      // Ruta de contexto de tienda (sucursal, grupo, marca o global) para URL en correo
+      const storeContext = (checkoutDto.storeContext || '').trim() || null;
 
       // Crear órdenes para cada sucursal
       for (const [businessId, items] of itemsByBusiness.entries()) {
@@ -301,40 +316,69 @@ export class OrdersService {
         const businessTipAmount = Math.round(tipAmount * subtotalRatio * 100) / 100;
         const businessTotalAmount = businessSubtotal + businessTaxAmount + businessDeliveryFee + businessTipAmount - discountAmount;
 
-        // Ruta de contexto de tienda (sucursal, grupo, marca o global) para URL en correo
-        const storeContext = (checkoutDto.storeContext || '').trim() || null;
+        // Construir la query INSERT dinámicamente según las columnas que existen
+        const baseColumns = [
+          'client_id', 'business_id', 'status',
+          'delivery_address_id', 'delivery_address_text', 'delivery_location',
+          'subtotal', 'tax_amount', 'delivery_fee', 'discount_amount', 'tip_amount', 'total_amount',
+          'payment_method', 'payment_status',
+          'delivery_notes'
+        ];
+        const baseValues = [
+          userId,
+          businessId,
+          'pending',
+          checkoutDto.addressId,
+          addressText,
+          address.longitude, // Para ST_MakePoint
+          address.latitude,   // Para ST_MakePoint
+          businessSubtotal.toFixed(2),
+          businessTaxAmount.toFixed(2),
+          businessDeliveryFee.toFixed(2),
+          discountAmount.toFixed(2),
+          businessTipAmount.toFixed(2),
+          businessTotalAmount.toFixed(2),
+          paymentMethod,
+          paymentStatus,
+          checkoutDto.deliveryNotes || null
+        ];
 
-        // Crear la orden
+        const insertColumns = [...baseColumns];
+        const insertValues = [...baseValues];
+        let paramIndex = baseValues.length;
+
+        // Agregar order_group_id si existe la columna
+        if (hasOrderGroupId) {
+          insertColumns.push('order_group_id');
+          insertValues.push(orderGroupId);
+          paramIndex++;
+        }
+
+        // Agregar store_context si existe la columna
+        if (hasStoreContext) {
+          insertColumns.push('store_context');
+          insertValues.push(storeContext);
+          paramIndex++;
+        }
+
+        // Construir placeholders: delivery_location usa ST_MakePoint con 2 parámetros
+        const placeholders: string[] = [];
+        let currentParam = 1;
+        for (const col of insertColumns) {
+          if (col === 'delivery_location') {
+            placeholders.push(`ST_MakePoint($${currentParam}, $${currentParam + 1})::point`);
+            currentParam += 2;
+          } else {
+            placeholders.push(`$${currentParam}`);
+            currentParam++;
+          }
+        }
+
         const orderResult = await client.query(
-          `INSERT INTO orders.orders (
-            client_id, business_id, status,
-            delivery_address_id, delivery_address_text, delivery_location,
-            subtotal, tax_amount, delivery_fee, discount_amount, tip_amount, total_amount,
-            payment_method, payment_status,
-            delivery_notes,
-            order_group_id,
-            store_context
-          ) VALUES ($1, $2, 'pending', $3, $4, ST_MakePoint($5, $6)::point, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-          RETURNING *`,
-          [
-            userId,
-            businessId,
-            checkoutDto.addressId,
-            addressText,
-            address.longitude,
-            address.latitude,
-            businessSubtotal.toFixed(2),
-            businessTaxAmount.toFixed(2),
-            businessDeliveryFee.toFixed(2),
-            discountAmount.toFixed(2),
-            businessTipAmount.toFixed(2),
-            businessTotalAmount.toFixed(2),
-            paymentMethod, // Método de pago (wallet, card, cash, transfer)
-            paymentStatus, // Estado de pago (paid si wallet cubre todo, pending si no)
-            checkoutDto.deliveryNotes || null,
-            orderGroupId, // ⭐ Relacionar con el grupo
-            storeContext, // Ruta para "Ver detalle" en correo (ej: /sucursal/toyota-satelite)
-          ]
+          `INSERT INTO orders.orders (${insertColumns.join(', ')})
+           VALUES (${placeholders.join(', ')})
+           RETURNING *`,
+          insertValues
         );
 
         const order = orderResult.rows[0];
@@ -473,9 +517,13 @@ export class OrdersService {
         });
       }
 
-      // 17. Crear orden en Karlopay si el método de pago es karlopay o si hay método secundario karlopay (después del COMMIT)
+      // 17. Crear orden en Karlopay si el método de pago es karlopay/karlopay-branch o si hay método secundario karlopay/karlopay-branch (después del COMMIT)
       let karlopayPaymentUrl: string | null = null;
-      const needsKarlopay = paymentMethod === 'karlopay' || checkoutDto.payment?.secondary_method === 'karlopay';
+      const needsKarlopay = 
+        paymentMethod === 'karlopay' || 
+        paymentMethod === 'karlopay-branch' ||
+        checkoutDto.payment?.secondary_method === 'karlopay' ||
+        checkoutDto.payment?.secondary_method === 'karlopay-branch';
       if (needsKarlopay && createdOrders.length > 0) {
         try {
           // Obtener información del usuario desde user_profiles y auth.users
@@ -522,22 +570,41 @@ export class OrdersService {
           // Crear número de orden único (usar orderGroupId como base)
           const numberOfOrder = `AGORA_${orderGroupId.replace(/-/g, '').substring(0, 20).toUpperCase()}`;
 
+          // Determinar si se usa configuración branch y obtener businessId
+          const isBranchPayment = paymentMethod === 'karlopay-branch' || checkoutDto.payment?.secondary_method === 'karlopay-branch';
+          let karlopayBusinessId: string | undefined = undefined;
+          
+          if (isBranchPayment) {
+            // Obtener businessId desde el DTO o del primer item del carrito
+            if (paymentMethod === 'karlopay-branch' && checkoutDto.payment?.branchId) {
+              karlopayBusinessId = checkoutDto.payment.branchId;
+            } else if (checkoutDto.payment?.secondary_method === 'karlopay-branch' && checkoutDto.payment?.secondary_branchId) {
+              karlopayBusinessId = checkoutDto.payment.secondary_branchId;
+            } else if (createdOrders.length > 0 && createdOrders[0].business_id) {
+              // Fallback: usar el business_id de la primera orden
+              karlopayBusinessId = createdOrders[0].business_id;
+            }
+          }
+
           // Construir URL de redirección después del pago usando la configuración de Karlopay
-          // Esta URL se obtiene de la configuración en la base de datos (dev/prod)
+          // Esta URL se obtiene de la configuración en la base de datos (dev/prod) o branch si está disponible
           const storeContext = checkoutDto.storeContext || ''; // Ruta de tienda (ej: /grupo/toyota-group o /sucursal/toyota-satelite)
           const redirectUrl = await this.integrationsService.buildKarlopayRedirectUrl({
             sessionId: numberOfOrder,
             storePath: storeContext,
+            businessId: karlopayBusinessId,
           });
           
 
           // Determinar el monto a cobrar en Karlopay
           // Si hay método secundario, usar el monto secundario; si no, usar el total
-          const karlopayAmount = checkoutDto.payment?.secondary_method === 'karlopay' && checkoutDto.payment?.secondary_amount
-            ? checkoutDto.payment.secondary_amount
-            : totalAmount;
+          const karlopayAmount = 
+            (checkoutDto.payment?.secondary_method === 'karlopay' || checkoutDto.payment?.secondary_method === 'karlopay-branch') && 
+            checkoutDto.payment?.secondary_amount
+              ? checkoutDto.payment.secondary_amount
+              : totalAmount;
 
-          // Crear orden en Karlopay
+          // Crear orden en Karlopay (pasar businessId si es pago branch)
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
             businessArea: 'ventas', // ventas // pedidos agora
             numberOfOrder,
@@ -557,7 +624,7 @@ export class OrdersService {
               session_id: numberOfOrder,
               order_group_id: orderGroupId,
             },
-          });
+          }, karlopayBusinessId);
 
           karlopayPaymentUrl = karlopayOrder.urlPayment;
           
@@ -2505,6 +2572,17 @@ export class OrdersService {
 
     try {
       // Obtener datos del pedido (store_context y slug para URL de "Ver detalle")
+      // Verificar si store_context existe antes de seleccionarlo
+      const columnCheck = await dbPool.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_schema = 'orders' 
+           AND table_name = 'orders' 
+           AND column_name = 'store_context'`
+      );
+      const hasStoreContext = columnCheck.rows.length > 0;
+      const storeContextField = hasStoreContext ? 'o.store_context,' : 'NULL as store_context,';
+
       const orderResult = await dbPool.query(
         `SELECT 
           o.id,
@@ -2513,7 +2591,7 @@ export class OrdersService {
           o.payment_method,
           o.created_at,
           o.business_id,
-          o.store_context,
+          ${storeContextField}
           b.business_group_id,
           b.slug AS business_slug
         FROM orders.orders o
@@ -2706,13 +2784,24 @@ export class OrdersService {
     }
 
     try {
+      // Verificar si store_context existe antes de seleccionarlo
+      const columnCheck = await dbPool.query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_schema = 'orders' 
+           AND table_name = 'orders' 
+           AND column_name = 'store_context'`
+      );
+      const hasStoreContext = columnCheck.rows.length > 0;
+      const storeContextField = hasStoreContext ? 'o.store_context,' : 'NULL as store_context,';
+
       // Obtener datos del pedido (store_context y slug para URL)
       const orderResult = await dbPool.query(
         `SELECT 
           o.id,
           o.client_id,
           o.business_id,
-          o.store_context,
+          ${storeContextField}
           b.business_group_id,
           b.slug AS business_slug
         FROM orders.orders o

@@ -10,7 +10,7 @@ import {
   BusinessCategory,
   BranchTaxSettings,
 } from '@/lib/business';
-import type { BranchKarbotSettings, BranchNotificationSetting, BranchNotificationType } from '@/lib/business';
+import type { BranchKarbotSettings, BranchKarlopaySettings, BranchNotificationSetting, BranchNotificationType } from '@/lib/business';
 import LocationMapPicker from '@/components/LocationMapPicker';
 import BrandingManager from '@/components/branding/BrandingManager';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
@@ -26,6 +26,7 @@ export default function BranchesPage() {
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
   const [settingsPreviewBranch, setSettingsPreviewBranch] = useState<Business | null>(null);
   const [karbotBranch, setKarbotBranch] = useState<Business | null>(null);
+  const [karlopayBranch, setKarlopayBranch] = useState<Business | null>(null);
   const [notificationBranch, setNotificationBranch] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -157,6 +158,7 @@ export default function BranchesPage() {
                 !brandingBranch &&
                 !settingsPreviewBranch &&
                 !karbotBranch &&
+                !karlopayBranch &&
                 !notificationBranch && (
                 <div className="mb-6">
                   <button
@@ -223,6 +225,12 @@ export default function BranchesPage() {
                   onBack={() => setKarbotBranch(null)}
                   onUpdated={loadBranches}
                 />
+              ) : karlopayBranch ? (
+                <BranchKarlopaySettings
+                  branch={karlopayBranch}
+                  onBack={() => setKarlopayBranch(null)}
+                  onUpdated={loadBranches}
+                />
               ) : notificationBranch ? (
                 <BranchNotificationSettings
                   branch={notificationBranch}
@@ -236,6 +244,7 @@ export default function BranchesPage() {
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
+                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(branch);
@@ -243,6 +252,7 @@ export default function BranchesPage() {
                   onBranding={(branch) => {
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
+                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(null);
@@ -253,6 +263,7 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setKarbotBranch(null);
+                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setSettingsPreviewBranch(branch);
                   }}
@@ -261,8 +272,18 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
+                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setKarbotBranch(branch);
+                  }}
+                  onKarlopaySettings={(branch) => {
+                    setShowAddForm(false);
+                    setEditingBranch(null);
+                    setBrandingBranch(null);
+                    setSettingsPreviewBranch(null);
+                    setKarbotBranch(null);
+                    setNotificationBranch(null);
+                    setKarlopayBranch(branch);
                   }}
                   onNotificationSettings={(branch) => {
                     setShowAddForm(false);
@@ -289,6 +310,7 @@ interface BranchesListProps {
   onBranding?: (branch: Business) => void;
   onPreviewSettings?: (branch: Business) => void;
   onKarbotSettings?: (branch: Business) => void;
+  onKarlopaySettings?: (branch: Business) => void;
   onNotificationSettings?: (branch: Business) => void;
 }
 
@@ -299,6 +321,7 @@ function BranchesList({
   onBranding,
   onPreviewSettings,
   onKarbotSettings,
+  onKarlopaySettings,
   onNotificationSettings,
 }: BranchesListProps) {
   if (branches.length === 0) {
@@ -407,6 +430,14 @@ function BranchesList({
                   className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
                 >
                   Karbot
+                </button>
+              )}
+              {onKarlopaySettings && (
+                <button
+                  onClick={() => onKarlopaySettings(branch)}
+                  className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
+                >
+                  Karlopay
                 </button>
               )}
               {onNotificationSettings && (
@@ -1238,6 +1269,491 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
               )}
             </span>
           </label>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-normal text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {saving ? 'Guardando...' : 'Guardar configuracion'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface BranchKarlopaySettingsProps {
+  branch: Business;
+  onBack: () => void;
+  onUpdated?: () => void;
+}
+
+const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
+  enabled: false,
+  environment: 'dev',
+  dev: {
+    domain: '',
+    login_endpoint: '',
+    orders_endpoint: '',
+    auth_email: '',
+    auth_password: '',
+    redirect_url: '',
+  },
+  prod: {
+    domain: '',
+    login_endpoint: '',
+    orders_endpoint: '',
+    auth_email: '',
+    auth_password: '',
+    redirect_url: '',
+  },
+};
+
+function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySettingsProps) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<BranchKarlopaySettings>(DEFAULT_KARLOPAY_SETTINGS);
+
+  const loadSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await businessService.getBranchKarlopaySettings(branch.id);
+      setSettings({ ...DEFAULT_KARLOPAY_SETTINGS, ...response });
+    } catch (err: any) {
+      console.error('[BranchKarlopaySettings] Error cargando configuracion Karlopay:', err);
+      setError(err?.message || 'No se pudo cargar la configuracion de Karlopay.');
+      setSettings(DEFAULT_KARLOPAY_SETTINGS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, [branch.id]);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      await businessService.updateBranchKarlopaySettings(branch.id, settings);
+      if (onUpdated) onUpdated();
+    } catch (err: any) {
+      console.error('[BranchKarlopaySettings] Error guardando configuracion Karlopay:', err);
+      setError(err?.message || 'No se pudo guardar la configuracion de Karlopay.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateEnvField = (
+    env: 'dev' | 'prod',
+    key: 'domain' | 'login_endpoint' | 'orders_endpoint' | 'auth_email' | 'auth_password' | 'redirect_url',
+    value: string,
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      [env]: {
+        ...prev[env],
+        [key]: value,
+      },
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-gray-500">
+        Cargando configuracion de Karlopay...
+      </div>
+    );
+  }
+
+  const isDevMode = settings.environment === 'dev';
+  const isActiveMode = settings.enabled && isDevMode;
+  const isProdMode = settings.enabled && !isDevMode;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={onBack}
+            className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Volver a sucursales
+          </button>
+          <h2 className="text-xl font-normal text-gray-900">Integracion Karlopay</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            Configura endpoints y credenciales para la sucursal: <strong>{branch.name}</strong>
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
+              <span className="text-xs font-bold text-gray-700">KP</span>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Karlopay</h3>
+              <p className="text-xs text-gray-500">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input
+              id="karlopay-enabled"
+              type="checkbox"
+              checked={settings.enabled}
+              onChange={(e) => setSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            Habilitar
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Ambiente</label>
+          <select
+            value={settings.environment}
+            onChange={(e) => setSettings((prev) => ({ ...prev, environment: e.target.value as 'dev' | 'prod' }))}
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="dev">Desarrollo</option>
+            <option value="prod">Producción</option>
+          </select>
+        </div>
+
+        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'}`}>
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${isDevMode ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
+            <span className="text-xs font-medium">
+              {isDevMode ? 'Modo Desarrollo' : 'Modo Producción'}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">
+            {isDevMode
+              ? 'Se usarán las credenciales y endpoints de desarrollo.'
+              : 'Se usarán las credenciales y endpoints de producción.'}
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Desarrollo</h3>
+            {isDevMode && (
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded mb-3">
+                ACTIVO
+              </span>
+            )}
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Dominio</label>
+                  {isActiveMode && settings.dev.domain ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.dev.domain || ''}
+                  onChange={(e) => updateEnvField('dev', 'domain', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://dev.karlopay.com"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Login Endpoint</label>
+                  {isActiveMode && settings.dev.login_endpoint ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.dev.login_endpoint || ''}
+                  onChange={(e) => updateEnvField('dev', 'login_endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://dev.karlopay.com/api/auth/login"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Órdenes Endpoint</label>
+                  {isActiveMode && settings.dev.orders_endpoint ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.dev.orders_endpoint || ''}
+                  onChange={(e) => updateEnvField('dev', 'orders_endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://dev.karlopay.com/api/orders/create-or-update"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Auth Email</label>
+                  {isActiveMode && settings.dev.auth_email ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="email"
+                  value={settings.dev.auth_email || ''}
+                  onChange={(e) => updateEnvField('dev', 'auth_email', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Auth Password</label>
+                  {isActiveMode && settings.dev.auth_password ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : isActiveMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="password"
+                  value={settings.dev.auth_password || ''}
+                  onChange={(e) => updateEnvField('dev', 'auth_password', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Redirect URL</label>
+                  {isActiveMode && settings.dev.redirect_url ? (
+                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.dev.redirect_url || ''}
+                  onChange={(e) => updateEnvField('dev', 'redirect_url', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://example.com/payment/redirect"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Produccion</h3>
+            {!isDevMode && (
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded mb-3">
+                ACTIVO
+              </span>
+            )}
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Dominio</label>
+                  {isProdMode && settings.prod.domain ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.prod.domain || ''}
+                  onChange={(e) => updateEnvField('prod', 'domain', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://karlopay.com"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Login Endpoint</label>
+                  {isProdMode && settings.prod.login_endpoint ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.prod.login_endpoint || ''}
+                  onChange={(e) => updateEnvField('prod', 'login_endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://karlopay.com/api/auth/login"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Órdenes Endpoint</label>
+                  {isProdMode && settings.prod.orders_endpoint ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.prod.orders_endpoint || ''}
+                  onChange={(e) => updateEnvField('prod', 'orders_endpoint', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://karlopay.com/api/orders/create-or-update"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Auth Email</label>
+                  {isProdMode && settings.prod.auth_email ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="email"
+                  value={settings.prod.auth_email || ''}
+                  onChange={(e) => updateEnvField('prod', 'auth_email', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="user@example.com"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Auth Password</label>
+                  {isProdMode && settings.prod.auth_password ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : isProdMode ? (
+                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                  ) : null}
+                </div>
+                <input
+                  type="password"
+                  value={settings.prod.auth_password || ''}
+                  onChange={(e) => updateEnvField('prod', 'auth_password', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-gray-700">Redirect URL</label>
+                  {isProdMode && settings.prod.redirect_url ? (
+                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                  ) : null}
+                </div>
+                <input
+                  type="url"
+                  value={settings.prod.redirect_url || ''}
+                  onChange={(e) => updateEnvField('prod', 'redirect_url', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  }`}
+                  placeholder="https://example.com/payment/redirect"
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3">

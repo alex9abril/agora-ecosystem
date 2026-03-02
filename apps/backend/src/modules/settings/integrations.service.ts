@@ -4,6 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { SettingsService } from './settings.service';
+import { dbPool } from '../../config/database.config';
 
 export interface PaymentProviderCredentials {
   enabled: boolean;
@@ -36,6 +37,7 @@ export interface KarlopayCredentials extends PaymentProviderCredentials {
 export interface KarlopayRedirectUrlOptions {
   sessionId: string;
   storePath?: string; // Ej: '/grupo/toyota-group' o '/tienda/sucursal-centro'
+  businessId?: string; // ID de la sucursal para usar configuración branch
 }
 
 export interface MercadoPagoCredentials extends PaymentProviderCredentials {
@@ -164,8 +166,58 @@ export class IntegrationsService {
    * // Resultado: 'https://agoramp.com/grupo/toyota-group/karlopay-redirect?session_id=payses_01JJD1VWT2ESR3101A9Q3TMN5V'
    */
   async buildKarlopayRedirectUrl(options: KarlopayRedirectUrlOptions): Promise<string> {
-    const credentials = await this.getKarlopayCredentials();
-    let redirectUrl = credentials.redirectUrl;
+    let redirectUrl: string;
+    
+    // Si hay businessId, intentar usar configuración branch
+    if (options.businessId) {
+      try {
+        if (dbPool) {
+          const businessResult = await dbPool.query(
+            `SELECT settings FROM core.businesses WHERE id = $1`,
+            [options.businessId],
+          );
+
+          if (businessResult.rows.length > 0) {
+            const businessSettings = businessResult.rows[0].settings || {};
+            const karlopaySettings = businessSettings.karlopay;
+            
+            if (karlopaySettings && karlopaySettings.enabled) {
+              const mode = karlopaySettings.environment || 'dev';
+              const envSettings = mode === 'dev' ? karlopaySettings.dev : karlopaySettings.prod;
+              
+              if (envSettings && envSettings.redirect_url) {
+                redirectUrl = envSettings.redirect_url;
+              } else {
+                // Fallback a configuración global
+                const credentials = await this.getKarlopayCredentials();
+                redirectUrl = credentials.redirectUrl;
+              }
+            } else {
+              // Si no está habilitado, usar configuración global
+              const credentials = await this.getKarlopayCredentials();
+              redirectUrl = credentials.redirectUrl;
+            }
+          } else {
+            // Sucursal no encontrada, usar configuración global
+            const credentials = await this.getKarlopayCredentials();
+            redirectUrl = credentials.redirectUrl;
+          }
+        } else {
+          // No hay conexión a BD, usar configuración global
+          const credentials = await this.getKarlopayCredentials();
+          redirectUrl = credentials.redirectUrl;
+        }
+      } catch (error: any) {
+        // Si hay error, usar configuración global
+        console.debug(`[IntegrationsService] Error obteniendo configuración branch, usando global: ${error.message}`);
+        const credentials = await this.getKarlopayCredentials();
+        redirectUrl = credentials.redirectUrl;
+      }
+    } else {
+      // Usar configuración global
+      const credentials = await this.getKarlopayCredentials();
+      redirectUrl = credentials.redirectUrl;
+    }
 
     // Reemplazar {tienda} con la ruta de la tienda/grupo
     if (options.storePath) {

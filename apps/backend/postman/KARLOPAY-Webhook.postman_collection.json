@@ -1,0 +1,458 @@
+{
+	"info": {
+		"_postman_id": "karlopay-webhook-collection",
+		"name": "KarloPay - Webhook de Confirmación de Pago",
+		"description": "Colección para probar el webhook de confirmación de pago de KarloPay. Incluye ejemplos con el payload completo y diferentes escenarios de seguridad.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Webhook - Confirmación de Pago (Payload Completo)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Respuesta exitosa\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response).to.have.property('success');",
+							"    pm.expect(response.success).to.be.true;",
+							"    pm.expect(response).to.have.property('message');",
+							"});",
+							"",
+							"console.log(\"✅ Webhook procesado exitosamente\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-Karlopay-Signature",
+						"value": "{{webhook_signature}}",
+						"type": "text",
+						"disabled": true,
+						"description": "Firma del webhook (opcional, solo si KARLOPAY_WEBHOOK_SECRET está configurado)"
+					},
+					{
+						"key": "X-Forwarded-For",
+						"value": "{{karlopay_ip}}",
+						"type": "text",
+						"disabled": true,
+						"description": "IP de KarloPay (para testing, solo si KARLOPAY_WEBHOOK_ALLOWED_IPS está configurado)"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"HXYHR3WL\",\n  \"cardType\": \"CREDIT MASTERCARD\",\n  \"paymentDate\": \"2026-02-27T13:44:16\",\n  \"cardDC\": \"mastercard\",\n  \"bankName\": \"n/a\",\n  \"bankCode\": \"999\",\n  \"referenceNumber\": null,\n  \"cardHolder\": null,\n  \"postalCode\": \"63915\",\n  \"meses\": 0,\n  \"paymentMethod\": \"PUE\",\n  \"paymentForm\": \"04\",\n  \"promotion\": false,\n  \"taxData\": {\n    \"socialReason\": \"zuriel test\",\n    \"postalCodeTax\": \"63915\",\n    \"RFC\": \"XAXX010101000\",\n    \"taxRegime\": \"616\",\n    \"CFDI\": \"S01\",\n    \"email\": \"zuriel@karlo.io\"\n  },\n  \"paymentInformation\": {\n    \"percentageBaseComission\": 0.0175,\n    \"percentageBaseSurcharge\": 0,\n    \"commissions\": {\n      \"baseComission\": 211.83,\n      \"baseComissionIva\": 33.89,\n      \"baseComissionTotal\": 245.72\n    },\n    \"surcharges\": {\n      \"baseSurcharge\": 0,\n      \"baseSurchargeIva\": 0,\n      \"baseSurchargeTotal\": 0\n    },\n    \"originalAmount\": 12001,\n    \"totalCommissionForTerminalUse\": 103.62,\n    \"totalCommissionForDeferringToMonths\": 0,\n    \"totalCommissionToCustomer\": 103.62,\n    \"totalCommissionToBusiness\": 245.72,\n    \"totalToDepositBusiness\": 11858.9,\n    \"totalPaymentPerMonth\": 12104.62,\n    \"totalPayment\": 12104.62\n  },\n  \"additional\": {\n    \"session_id\": \"HXYHR3WL\",\n    \"order_group_id\": \"00000000-0000-0000-0000-000000000001\"\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Webhook de confirmación de pago con el payload completo proporcionado por KarloPay. Este es el formato real que se envía cuando un pago se completa exitosamente.\n\n**Notas:**\n- El `numberOfOrder` debe coincidir con el guardado en `payment_transactions.external_reference`\n- Si `KARLOPAY_WEBHOOK_ALLOWED_IPS` está configurado, solo se permiten IPs de esa lista\n- Si `KARLOPAY_WEBHOOK_SECRET` está configurado, se valida la firma del webhook\n- El campo `additional.order_group_id` ayuda a encontrar las órdenes relacionadas"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Webhook - Pago Mínimo (Solo Campos Requeridos)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Respuesta exitosa\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response).to.have.property('success');",
+							"    pm.expect(response.success).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"TEST123\",\n  \"paymentInformation\": {\n    \"originalAmount\": 10000,\n    \"totalPayment\": 10000\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Ejemplo mínimo del webhook con solo los campos requeridos. Útil para pruebas rápidas."
+			},
+			"response": []
+		},
+		{
+			"name": "3. Webhook - Con Información Fiscal Completa",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Respuesta exitosa\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response).to.have.property('success');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"FISCAL001\",\n  \"cardType\": \"CREDIT VISA\",\n  \"paymentDate\": \"2026-02-27T14:30:00\",\n  \"cardDC\": \"visa\",\n  \"bankName\": \"BBVA\",\n  \"bankCode\": \"012\",\n  \"referenceNumber\": \"123456789\",\n  \"cardHolder\": \"JUAN PEREZ\",\n  \"postalCode\": \"01234\",\n  \"meses\": 0,\n  \"paymentMethod\": \"PUE\",\n  \"paymentForm\": \"03\",\n  \"promotion\": false,\n  \"taxData\": {\n    \"socialReason\": \"EMPRESA SA DE CV\",\n    \"postalCodeTax\": \"01234\",\n    \"RFC\": \"ABC123456DEF\",\n    \"taxRegime\": \"601\",\n    \"CFDI\": \"G01\",\n    \"email\": \"facturacion@empresa.com\"\n  },\n  \"paymentInformation\": {\n    \"percentageBaseComission\": 0.025,\n    \"percentageBaseSurcharge\": 0,\n    \"commissions\": {\n      \"baseComission\": 250.00,\n      \"baseComissionIva\": 40.00,\n      \"baseComissionTotal\": 290.00\n    },\n    \"surcharges\": {\n      \"baseSurcharge\": 0,\n      \"baseSurchargeIva\": 0,\n      \"baseSurchargeTotal\": 0\n    },\n    \"originalAmount\": 10000,\n    \"totalCommissionForTerminalUse\": 0,\n    \"totalCommissionForDeferringToMonths\": 0,\n    \"totalCommissionToCustomer\": 0,\n    \"totalCommissionToBusiness\": 290.00,\n    \"totalToDepositBusiness\": 9710.00,\n    \"totalPaymentPerMonth\": 10000,\n    \"totalPayment\": 10000\n  },\n  \"additional\": {\n    \"session_id\": \"FISCAL001\",\n    \"order_group_id\": \"00000000-0000-0000-0000-000000000002\"\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Ejemplo con información fiscal completa (RFC, régimen fiscal, CFDI). Útil para probar el guardado de datos fiscales en `payment_data.taxData`."
+			},
+			"response": []
+		},
+		{
+			"name": "4. Webhook - Pago con Promoción",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"PROMO001\",\n  \"cardType\": \"CREDIT AMEX\",\n  \"paymentDate\": \"2026-02-27T15:00:00\",\n  \"cardDC\": \"amex\",\n  \"bankName\": \"n/a\",\n  \"bankCode\": \"999\",\n  \"postalCode\": \"12345\",\n  \"meses\": 0,\n  \"paymentMethod\": \"PUE\",\n  \"paymentForm\": \"04\",\n  \"promotion\": true,\n  \"paymentInformation\": {\n    \"originalAmount\": 5000,\n    \"totalPayment\": 5000,\n    \"totalToDepositBusiness\": 5000\n  },\n  \"additional\": {\n    \"session_id\": \"PROMO001\"\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Ejemplo de pago con promoción activa (`promotion: true`)."
+			},
+			"response": []
+		},
+		{
+			"name": "5. Webhook - Error: IP No Autorizada",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 401\", function () {",
+							"    pm.response.to.have.status(401);",
+							"});",
+							"",
+							"pm.test(\"Mensaje de error apropiado\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response.message).to.include('IP');",
+							"});",
+							"",
+							"console.log(\"⚠️ Este error es esperado si KARLOPAY_WEBHOOK_ALLOWED_IPS está configurado\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-Forwarded-For",
+						"value": "192.168.1.100",
+						"type": "text",
+						"description": "IP no autorizada para probar el guard de seguridad"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"UNAUTHORIZED_IP\",\n  \"paymentInformation\": {\n    \"originalAmount\": 1000,\n    \"totalPayment\": 1000\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Prueba del guard de seguridad: intenta acceder con una IP no autorizada. Este request debería fallar con 401 si `KARLOPAY_WEBHOOK_ALLOWED_IPS` está configurado y no incluye esta IP.\n\n**Nota:** Si `KARLOPAY_WEBHOOK_ALLOWED_IPS` está vacío o no configurado, este request funcionará normalmente."
+			},
+			"response": []
+		},
+		{
+			"name": "6. Webhook - Error: Firma Inválida",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 401\", function () {",
+							"    pm.response.to.have.status(401);",
+							"});",
+							"",
+							"pm.test(\"Mensaje de error apropiado\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response.message).to.include('firma');",
+							"});",
+							"",
+							"console.log(\"⚠️ Este error es esperado si KARLOPAY_WEBHOOK_SECRET está configurado\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "X-Karlopay-Signature",
+						"value": "firma_invalida_12345",
+						"type": "text",
+						"description": "Firma inválida para probar la validación"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"INVALID_SIGNATURE\",\n  \"paymentInformation\": {\n    \"originalAmount\": 1000,\n    \"totalPayment\": 1000\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Prueba del guard de seguridad: intenta acceder con una firma inválida. Este request debería fallar con 401 si `KARLOPAY_WEBHOOK_SECRET` está configurado.\n\n**Nota:** Si `KARLOPAY_WEBHOOK_SECRET` está vacío o no configurado, este request funcionará normalmente (sin validar firma)."
+			},
+			"response": []
+		},
+		{
+			"name": "7. Webhook - Error: Payload Inválido",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 400\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"console.log(\"⚠️ Error de validación esperado\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": null,\n  \"invalidField\": \"test\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Prueba de validación: envía un payload inválido (sin `numberOfOrder` requerido). Debería retornar 400 Bad Request."
+			},
+			"response": []
+		},
+		{
+			"name": "8. Webhook - Orden No Encontrada",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code es 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Respuesta exitosa (aunque no haya orden)\", function () {",
+							"    const response = pm.response.json();",
+							"    pm.expect(response).to.have.property('success');",
+							"});",
+							"",
+							"console.log(\"ℹ️ El webhook retorna 200 aunque no encuentre la orden (solo loguea warning)\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"numberOfOrder\": \"ORDER_NOT_FOUND_12345\",\n  \"paymentInformation\": {\n    \"originalAmount\": 1000,\n    \"totalPayment\": 1000\n  }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"payments",
+						"karlopay",
+						"webhook",
+						"payment"
+					]
+				},
+				"description": "Prueba con un `numberOfOrder` que no existe en la base de datos. El webhook retornará 200 OK pero registrará un warning en los logs de integración."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string",
+			"description": "URL base del backend (desarrollo: http://localhost:3000, producción: https://api.agoramp.mx)"
+		},
+		{
+			"key": "karlopay_ip",
+			"value": "192.168.1.1",
+			"type": "string",
+			"description": "IP de KarloPay para testing (solo si KARLOPAY_WEBHOOK_ALLOWED_IPS está configurado)"
+		},
+		{
+			"key": "webhook_signature",
+			"value": "",
+			"type": "string",
+			"description": "Firma del webhook (HMAC SHA256). Solo necesario si KARLOPAY_WEBHOOK_SECRET está configurado."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Pre-request script para calcular firma del webhook si es necesario",
+					"// Nota: En producción, KarloPay calculará esta firma automáticamente",
+					"",
+					"// Si necesitas calcular la firma manualmente para testing:",
+					"// const crypto = require('crypto');",
+					"// const secret = pm.environment.get('webhook_secret');",
+					"// const body = pm.request.body.raw;",
+					"// const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');",
+					"// pm.environment.set('webhook_signature', signature);"
+				]
+			}
+		}
+	]
+}
+

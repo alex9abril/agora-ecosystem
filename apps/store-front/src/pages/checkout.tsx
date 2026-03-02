@@ -304,7 +304,9 @@ export default function CheckoutPage() {
   const [useWallet, setUseWallet] = useState(false);
   const [walletAmount, setWalletAmount] = useState<number>(0);
   const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState<string | null>(null);
-  const [paymentMethods] = useState<PaymentMethod[]>([
+  const [branchKarlopayEnabled, setBranchKarlopayEnabled] = useState(false);
+  const [branchKarlopayBusinessId, setBranchKarlopayBusinessId] = useState<string | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
     { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
     { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
   ]);
@@ -479,6 +481,82 @@ export default function CheckoutPage() {
       setBranchTaxSettings({});
     }
   }, [cart]);
+
+  // Cargar configuracion de Karlopay a nivel branch
+  useEffect(() => {
+    const checkBranchKarlopay = async () => {
+      try {
+        // Obtener branchId del contexto o del primer item del carrito
+        let targetBranchId: string | null = null;
+        
+        if (branchId) {
+          targetBranchId = branchId;
+        } else if (cart && cart.items && cart.items.length > 0) {
+          // Usar el branch_id del primer item
+          const firstItem = cart.items[0];
+          targetBranchId = firstItem.branch_id || firstItem.business_id || null;
+        }
+
+        if (!targetBranchId) {
+          setBranchKarlopayEnabled(false);
+          setBranchKarlopayBusinessId(null);
+          return;
+        }
+
+        // Verificar si hay configuración de Karlopay para esta sucursal
+        try {
+          const response = await apiRequest<{ karlopay?: { enabled: boolean } }>(
+            `/businesses/branches/id/${targetBranchId}/karlopay-settings`,
+            { method: 'GET' }
+          );
+
+          const karlopayConfig = response?.karlopay;
+          if (karlopayConfig && karlopayConfig.enabled === true) {
+            setBranchKarlopayEnabled(true);
+            setBranchKarlopayBusinessId(targetBranchId);
+          } else {
+            setBranchKarlopayEnabled(false);
+            setBranchKarlopayBusinessId(null);
+          }
+        } catch (error: any) {
+          // Si no hay configuración o hay error, deshabilitar
+          console.debug('[Checkout] No hay configuración Karlopay branch o error:', error.message);
+          setBranchKarlopayEnabled(false);
+          setBranchKarlopayBusinessId(null);
+        }
+      } catch (error) {
+        console.warn('[Checkout] Error verificando configuración Karlopay branch:', error);
+        setBranchKarlopayEnabled(false);
+        setBranchKarlopayBusinessId(null);
+      }
+    };
+
+    if (cart && cart.items && cart.items.length > 0) {
+      checkBranchKarlopay();
+    } else {
+      setBranchKarlopayEnabled(false);
+      setBranchKarlopayBusinessId(null);
+    }
+  }, [cart, branchId]);
+
+  // Actualizar métodos de pago cuando cambia branchKarlopayEnabled
+  useEffect(() => {
+    const baseMethods: PaymentMethod[] = [
+      { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
+      { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
+    ];
+
+    if (branchKarlopayEnabled) {
+      // Agregar opción de pago directo a sucursal
+      baseMethods.push({
+        id: 'karlopay-branch',
+        type: 'card',
+        label: 'Tarjeta de crédito/débito (Pago directo a sucursal)',
+      });
+    }
+
+    setPaymentMethods(baseMethods);
+  }, [branchKarlopayEnabled]);
 
   // Calcular impuestos
   useEffect(() => {
@@ -1473,10 +1551,16 @@ export default function CheckoutPage() {
       
       // Preparar información de pago para el backend
       // Si se selecciona "Tarjeta de crédito/débito" (card), usar Karlopay internamente
+      // Si se selecciona "karlopay-branch", mantenerlo y agregar branchId
       const backendPaymentMethod = selectedPaymentMethod === 'card' ? 'karlopay' : selectedPaymentMethod;
       const paymentInfo: any = {
         method: backendPaymentMethod,
       };
+
+      // Si es karlopay-branch, agregar branchId
+      if (selectedPaymentMethod === 'karlopay-branch' && branchKarlopayBusinessId) {
+        paymentInfo.branchId = branchKarlopayBusinessId;
+      }
 
       // Si se usa wallet, agregar información de distribución
       if (selectedPaymentMethod === 'wallet' && useWallet && walletAmount > 0) {
@@ -1491,6 +1575,11 @@ export default function CheckoutPage() {
           const backendSecondaryMethod = secondaryPaymentMethod === 'card' ? 'karlopay' : secondaryPaymentMethod;
           paymentInfo.secondary_method = backendSecondaryMethod;
           paymentInfo.secondary_amount = total - walletAmount;
+          
+          // Si el método secundario es karlopay-branch, agregar branchId
+          if (secondaryPaymentMethod === 'karlopay-branch' && branchKarlopayBusinessId) {
+            paymentInfo.secondary_branchId = branchKarlopayBusinessId;
+          }
         }
       }
       
@@ -1536,10 +1625,10 @@ export default function CheckoutPage() {
         }),
       });
 
-      // Si el método de pago es Tarjeta (que usa Karlopay internamente) o hay método secundario Tarjeta, redirigir
+      // Si el método de pago es Tarjeta (que usa Karlopay internamente) o karlopay-branch, o hay método secundario Tarjeta, redirigir
       const needsPaymentRedirect = 
-        (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'karlopay') ||
-        (selectedPaymentMethod === 'wallet' && secondaryPaymentMethod === 'card');
+        (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'karlopay' || selectedPaymentMethod === 'karlopay-branch') ||
+        (selectedPaymentMethod === 'wallet' && (secondaryPaymentMethod === 'card' || secondaryPaymentMethod === 'karlopay-branch'));
       
       if (needsPaymentRedirect && order.karlopay_payment_url) {
         // Asegurar que la URL tenga protocolo
