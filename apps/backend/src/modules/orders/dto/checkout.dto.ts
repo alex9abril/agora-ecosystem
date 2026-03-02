@@ -2,44 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsString, IsOptional, IsNumber, Min, ValidateNested, IsObject, ValidateIf, ValidatorConstraint, ValidatorConstraintInterface, Validate, ValidationArguments } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// Validador personalizado para branchId: solo permitir cuando method es karlopay-branch
-@ValidatorConstraint({ name: 'branchIdAllowed', async: false })
-export class BranchIdAllowedConstraint implements ValidatorConstraintInterface {
-  validate(branchId: any, args: ValidationArguments) {
-    const obj = args.object as PaymentInfoDto;
-    // Si branchId está presente, solo es válido si method es karlopay-branch
-    if (branchId !== undefined && branchId !== null && branchId !== '') {
-      return obj.method === 'karlopay-branch';
-    }
-    // Si branchId no está presente o está vacío, es válido
-    return true;
-  }
-
-  defaultMessage(args: ValidationArguments) {
-    const obj = args.object as PaymentInfoDto;
-    return `branchId solo se permite cuando method es 'karlopay-branch'. Método actual: '${obj.method}'`;
-  }
-}
-
-// Validador personalizado para secondary_branchId: solo permitir cuando secondary_method es karlopay-branch
-@ValidatorConstraint({ name: 'secondaryBranchIdAllowed', async: false })
-export class SecondaryBranchIdAllowedConstraint implements ValidatorConstraintInterface {
-  validate(secondary_branchId: any, args: ValidationArguments) {
-    const obj = args.object as PaymentInfoDto;
-    // Si secondary_branchId está presente, solo es válido si secondary_method es karlopay-branch
-    if (secondary_branchId !== undefined && secondary_branchId !== null && secondary_branchId !== '') {
-      return obj.secondary_method === 'karlopay-branch';
-    }
-    // Si secondary_branchId no está presente o está vacío, es válido
-    return true;
-  }
-
-  defaultMessage(args: ValidationArguments) {
-    const obj = args.object as PaymentInfoDto;
-    return `secondary_branchId solo se permite cuando secondary_method es 'karlopay-branch'. Método secundario actual: '${obj.secondary_method || 'ninguno'}'`;
-  }
-}
-
 class WalletPaymentDto {
   @ApiProperty({ description: 'Monto a usar del wallet', example: 50.00 })
   @IsNumber()
@@ -49,6 +11,41 @@ class WalletPaymentDto {
   @ApiPropertyOptional({ description: 'Si se usa todo el saldo disponible', example: false })
   @IsOptional()
   use_full_balance?: boolean;
+}
+
+@ValidatorConstraint({ name: 'paymentInfoValid', async: false })
+export class PaymentInfoValidConstraint implements ValidatorConstraintInterface {
+  validate(value: any, args: ValidationArguments) {
+    const payment = value as PaymentInfoDto;
+    if (!payment) return true;
+
+    // Validar branchId: solo permitir si method es karlopay-branch
+    if (payment.branchId !== undefined && payment.branchId !== null && payment.branchId !== '') {
+      if (payment.method !== 'karlopay-branch') {
+        return false;
+      }
+    }
+
+    // Validar secondary_branchId: solo permitir si secondary_method es karlopay-branch
+    if (payment.secondary_branchId !== undefined && payment.secondary_branchId !== null && payment.secondary_branchId !== '') {
+      if (payment.secondary_method !== 'karlopay-branch') {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  defaultMessage(args: ValidationArguments) {
+    const payment = args.value as PaymentInfoDto;
+    if (payment.branchId && payment.method !== 'karlopay-branch') {
+      return `payment.branchId solo se permite cuando payment.method es 'karlopay-branch'. Método actual: '${payment.method}'`;
+    }
+    if (payment.secondary_branchId && payment.secondary_method !== 'karlopay-branch') {
+      return `payment.secondary_branchId solo se permite cuando payment.secondary_method es 'karlopay-branch'. Método secundario actual: '${payment.secondary_method || 'ninguno'}'`;
+    }
+    return 'payment contiene propiedades inválidas';
+  }
 }
 
 class PaymentInfoDto {
@@ -75,15 +72,13 @@ class PaymentInfoDto {
 
   @ApiPropertyOptional({ description: 'ID de la sucursal cuando se usa karlopay-branch', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @Validate(BranchIdAllowedConstraint) // Este validador se ejecuta siempre y prohíbe branchId si method no es karlopay-branch
-  @ValidateIf((o) => o.method === 'karlopay-branch') // Solo validar UUID si method es karlopay-branch
+  @ValidateIf((o) => o.method === 'karlopay-branch')
   @IsUUID('4', { message: 'branchId debe ser un UUID válido' })
   branchId?: string;
 
   @ApiPropertyOptional({ description: 'ID de la sucursal cuando se usa karlopay-branch como método secundario', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @Validate(SecondaryBranchIdAllowedConstraint) // Este validador se ejecuta siempre y prohíbe secondary_branchId si secondary_method no es karlopay-branch
-  @ValidateIf((o) => o.secondary_method === 'karlopay-branch') // Solo validar UUID si secondary_method es karlopay-branch
+  @ValidateIf((o) => o.secondary_method === 'karlopay-branch')
   @IsUUID('4', { message: 'secondary_branchId debe ser un UUID válido' })
   secondary_branchId?: string;
 }
@@ -113,6 +108,7 @@ export class CheckoutDto {
   @ApiPropertyOptional({ description: 'Información de pago (método, wallet, distribución)', type: PaymentInfoDto })
   @IsOptional()
   @ValidateNested()
+  @Validate(PaymentInfoValidConstraint) // Validar que branchId solo esté presente cuando method es karlopay-branch
   @Type(() => PaymentInfoDto)
   payment?: PaymentInfoDto;
 
