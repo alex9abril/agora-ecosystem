@@ -1824,25 +1824,25 @@ export default function OrderDetailPage() {
                                               {transaction.webhook_payload.paymentMethod != null && (
                                                 <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Método pago</td><td className="py-1.5">{String(transaction.webhook_payload.paymentMethod)}</td></tr>
                                               )}
-                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).totalPayment != null && (
+                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).totalPayment != null ? (
                                                 <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Total cobrado</td><td className="py-1.5">{formatCurrency(Number((transaction.webhook_payload.paymentInformation as any).totalPayment))}</td></tr>
-                                              )}
-                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).originalAmount != null && (
+                                              ) : null}
+                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).originalAmount != null ? (
                                                 <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Monto original</td><td className="py-1.5">{formatCurrency(Number((transaction.webhook_payload.paymentInformation as any).originalAmount))}</td></tr>
-                                              )}
-                                              {transaction.webhook_payload.additional && typeof transaction.webhook_payload.additional === 'object' && (transaction.webhook_payload.additional as any).order_group_id != null && (
+                                              ) : null}
+                                              {transaction.webhook_payload.additional && typeof transaction.webhook_payload.additional === 'object' && (transaction.webhook_payload.additional as any).order_group_id != null ? (
                                                 <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Grupo pedido</td><td className="py-1.5 font-mono text-gray-700">{String((transaction.webhook_payload.additional as any).order_group_id)}</td></tr>
-                                              )}
-                                              {transaction.webhook_payload.taxData && typeof transaction.webhook_payload.taxData === 'object' && (
+                                              ) : null}
+                                              {transaction.webhook_payload.taxData && typeof transaction.webhook_payload.taxData === 'object' ? (
                                                 <>
-                                                  {(transaction.webhook_payload.taxData as any).socialReason != null && (
-                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Razón social</td><td className="py-1.5">{(transaction.webhook_payload.taxData as any).socialReason}</td></tr>
-                                                  )}
-                                                  {(transaction.webhook_payload.taxData as any).RFC != null && (
-                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">RFC</td><td className="py-1.5 font-mono">{(transaction.webhook_payload.taxData as any).RFC}</td></tr>
-                                                  )}
+                                                  {(transaction.webhook_payload.taxData as any).socialReason != null ? (
+                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Razón social</td><td className="py-1.5">{String((transaction.webhook_payload.taxData as any).socialReason)}</td></tr>
+                                                  ) : null}
+                                                  {(transaction.webhook_payload.taxData as any).RFC != null ? (
+                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">RFC</td><td className="py-1.5 font-mono">{String((transaction.webhook_payload.taxData as any).RFC)}</td></tr>
+                                                  ) : null}
                                                 </>
-                                              )}
+                                              ) : null}
                                             </tbody>
                                           </table>
                                         </div>
