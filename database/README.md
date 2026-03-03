@@ -409,6 +409,8 @@ La base de datos está organizada en **7 schemas** para mejor mantenibilidad:
 
 **Nota:** La autenticación se maneja mediante Supabase Auth (`auth.users`). Esta tabla solo contiene información de perfil y roles.
 
+**Flujo de alta de sucursal (web-local):** El esquema actual soporta la creación de sucursales desde web-local sin migraciones adicionales. Se usan `core.businesses` (con `owner_id`, `business_group_id`, `slug`, `accepts_pickup`, etc.), `core.addresses` (si se envía dirección), `core.business_groups` (asignación automática si el owner tiene grupo) y `core.business_users`. Regla DBA: al dar de alta una sucursal debe existir un registro en `core.business_users` con rol `superadmin` para el `owner_id` de la sucursal; el backend lo crea en el mismo flujo de creación.
+
 ### Schema: `catalog`
 - `product_categories` - Categorías de productos (normalizadas, con jerarquía)
 - `products` - Productos del menú de cada local

@@ -7,10 +7,13 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import * as crypto from 'crypto';
+import { WebhookSecretsService } from '../../modules/settings/webhook-secrets.service';
 
 @Injectable()
 export class KarlopayWebhookGuard implements CanActivate {
   private readonly logger = new Logger(KarlopayWebhookGuard.name);
+
+  constructor(private readonly webhookSecretsService: WebhookSecretsService) {}
   private readonly rateLimitMap = new Map<string, { count: number; resetAt: number }>();
   private readonly RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minuto
   private readonly RATE_LIMIT_MAX_REQUESTS = 100; // Máximo 100 requests por minuto por IP
@@ -37,14 +40,16 @@ export class KarlopayWebhookGuard implements CanActivate {
       throw new UnauthorizedException('Demasiadas solicitudes. Intenta más tarde.');
     }
 
-    // 3. Validar Webhook Secret (si está configurado)
-    const webhookSecret = await this.getWebhookSecret();
-    if (webhookSecret) {
-      const isValid = await this.validateWebhookSignature(request, webhookSecret);
+    // 3. Validar Webhook Secret: exigir key o firma cuando hay claves activas
+    const activeSecrets = await this.getActiveWebhookSecrets();
+    if (activeSecrets.length > 0) {
+      const isValid = await this.validateWebhookKeyOrSignature(request, activeSecrets);
       if (!isValid) {
-        this.logger.warn(`❌ Firma de webhook inválida desde IP: ${clientIp}`);
-        await this.logUnauthorizedAccess(clientIp, 'INVALID_SIGNATURE');
-        throw new UnauthorizedException('Firma de webhook inválida');
+        this.logger.warn(`❌ Webhook sin key válida o firma inválida desde IP: ${clientIp}`);
+        await this.logUnauthorizedAccess(clientIp, 'INVALID_KEY_OR_SIGNATURE');
+        throw new UnauthorizedException(
+          'Se requiere header X-Webhook-Secret (o Authorization: Bearer <clave>) con una clave de webhook válida, o firma HMAC correcta'
+        );
       }
     }
 
@@ -95,77 +100,69 @@ export class KarlopayWebhookGuard implements CanActivate {
   }
 
   /**
-   * Obtiene el webhook secret desde configuración
+   * Obtiene todas las claves activas para validar el webhook: BD (karlopay) + env KARLOPAY_WEBHOOK_SECRET.
    */
-  private async getWebhookSecret(): Promise<string | null> {
+  private async getActiveWebhookSecrets(): Promise<string[]> {
     try {
-      // Primero intentar desde variables de entorno
+      const fromDb = await this.webhookSecretsService.getActiveSecrets('karlopay');
       const envSecret = process.env.KARLOPAY_WEBHOOK_SECRET;
-      if (envSecret) {
-        return envSecret;
+      const combined = [...fromDb];
+      if (envSecret && !combined.includes(envSecret)) {
+        combined.push(envSecret);
       }
-
-      // Si no hay en env, intentar desde settings (si está implementado)
-      // Por ahora retornamos null si no hay configuración (no valida firma)
-      return null;
+      return combined;
     } catch (error) {
-      this.logger.warn('Error obteniendo webhook secret, omitiendo validación de firma:', error);
-      return null;
+      this.logger.warn('Error obteniendo webhook secrets, omitiendo validación:', error);
+      return [];
     }
   }
 
   /**
-   * Valida la firma del webhook
-   * Nota: La implementación depende de cómo KarloPay firme los webhooks
-   * Por ahora, si hay un secret configurado, validamos un header X-Signature o similar
+   * Valida el webhook: (1) key en header X-Webhook-Secret o Authorization Bearer, o (2) firma HMAC.
+   * Acepta cualquiera de las claves activas.
    */
-  private async validateWebhookSignature(
+  private async validateWebhookKeyOrSignature(
     request: Request,
-    secret: string
+    activeSecrets: string[]
   ): Promise<boolean> {
-    try {
-      // Intentar obtener la firma desde headers comunes
-      const signature = 
-        (request.headers['x-karlopay-signature'] as string) ||
-        (request.headers['x-signature'] as string) ||
-        (request.headers['signature'] as string);
-
-      if (!signature) {
-        this.logger.warn('No se encontró header de firma en el webhook');
-        return false;
+    // 1) Key en header: X-Webhook-Secret o Authorization: Bearer <clave>
+    const pickFirst = (v: string | string[] | undefined): string =>
+      typeof v === 'string' ? v : Array.isArray(v) && v[0] ? String(v[0]) : '';
+    const rawKey =
+      pickFirst(request.headers['x-webhook-secret']) ||
+      pickFirst(request.headers['x-karlopay-secret']) ||
+      (() => {
+        const auth = request.headers.authorization;
+        if (auth?.startsWith('Bearer ')) return auth.slice(7);
+        return '';
+      })();
+    const keyFromHeader = rawKey.trim();
+    if (keyFromHeader) {
+      for (const secret of activeSecrets) {
+        const s = (secret ?? '').trim();
+        if (s.length > 0 && s.length === keyFromHeader.length && crypto.timingSafeEqual(Buffer.from(s, 'utf8'), Buffer.from(keyFromHeader, 'utf8'))) {
+          return true;
+        }
       }
-
-      // Obtener el body como string para calcular el hash
-      // Nota: Si necesitas el raw body (sin parsear), necesitarías configurar rawBody: true en main.ts
-      // Por ahora usamos el body parseado
-      const body = JSON.stringify(request.body);
-      
-      // Calcular HMAC SHA256 (método común para firmar webhooks)
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(body)
-        .digest('hex');
-
-      // Normalizar firmas (pueden venir en diferentes formatos)
-      const normalizedSignature = signature.toLowerCase().trim();
-      const normalizedExpected = expectedSignature.toLowerCase().trim();
-
-      // Comparar firmas de forma segura (timing-safe)
-      // Si las firmas tienen diferente longitud, timingSafeEqual lanzará error
-      if (normalizedSignature.length !== normalizedExpected.length) {
-        return false;
-      }
-
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(normalizedSignature),
-        Buffer.from(normalizedExpected)
-      );
-
-      return isValid;
-    } catch (error) {
-      this.logger.error('Error validando firma del webhook:', error);
-      return false;
     }
+
+    // 2) Firma HMAC en header
+    const signature =
+      (request.headers['x-karlopay-signature'] as string) ||
+      (request.headers['x-signature'] as string) ||
+      (request.headers['signature'] as string);
+    if (signature) {
+      const body = JSON.stringify(request.body);
+      const normalizedSignature = signature.toLowerCase().trim();
+      for (const secret of activeSecrets) {
+        const expected = crypto.createHmac('sha256', secret).update(body).digest('hex').toLowerCase();
+        if (normalizedSignature.length === expected.length && crypto.timingSafeEqual(Buffer.from(normalizedSignature), Buffer.from(expected))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**

@@ -614,7 +614,7 @@ export const businessService = {
    * Obtener configuracion Karlopay de una sucursal
    */
   async getBranchKarlopaySettings(businessId: string): Promise<BranchKarlopaySettings> {
-    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/${businessId}/karlopay-settings`, {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/branch/${businessId}/karlopay-settings`, {
       method: 'GET',
     });
     return response?.karlopay || (response as any);
@@ -627,7 +627,7 @@ export const businessService = {
     businessId: string,
     data: BranchKarlopaySettings,
   ): Promise<BranchKarlopaySettings> {
-    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/${businessId}/karlopay-settings`, {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(`/businesses/branch/${businessId}/karlopay-settings`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });

@@ -5,7 +5,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
@@ -14,7 +13,6 @@ import { Public } from '../../../common/decorators/public.decorator';
 import { KarlopayService } from './karlopay.service';
 import { CreateKarlopayOrderDto } from './dto/create-karlopay-order.dto';
 import { KarlopayPaymentWebhookDto } from './dto/karlopay-payment-webhook.dto';
-import { Request } from 'express';
 
 @ApiTags('Payments - Karlopay')
 @Controller('payments/karlopay')
@@ -40,8 +38,8 @@ export class KarlopayController {
   @ApiResponse({ status: 200, description: 'Webhook procesado exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 401, description: 'IP no autorizada o firma inválida' })
-  async paymentWebhook(@Body() webhookDto: KarlopayPaymentWebhookDto, @Req() request: Request) {
-    await this.karlopayService.processPaymentWebhook(webhookDto);
+  async paymentWebhook(@Body() body: Record<string, any>) {
+    await this.karlopayService.processPaymentWebhook(body as KarlopayPaymentWebhookDto, body);
     return { success: true, message: 'Webhook procesado exitosamente' };
   }
 

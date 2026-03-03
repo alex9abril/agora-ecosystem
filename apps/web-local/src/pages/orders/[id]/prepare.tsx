@@ -65,10 +65,20 @@ export default function PrepareOrderPage() {
       const orderData = await ordersService.getOrder(businessId, id as string);
       setOrder(orderData);
 
-      console.log('🔵 [PREPARE] Pedido cargado:', { 
-        orderId: orderData.id, 
+      const paymentStatus = (orderData as any).payment_status ?? orderData.payment_status;
+      const hasPendingTx = (orderData.payment_transactions ?? []).some(
+        (t: any) => (t.status ?? t.transaction_status ?? '') === 'pending'
+      );
+      if (paymentStatus !== 'paid' || hasPendingTx) {
+        setError('No se puede surtir este pedido: el pago no está totalmente verificado. Todas las transacciones deben estar confirmadas (p. ej. por webhook de Karlopay) antes de surtir.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔵 [PREPARE] Pedido cargado:', {
+        orderId: orderData.id,
         itemsCount: orderData.items?.length || 0,
-        items: orderData.items 
+        items: orderData.items,
       });
 
       if (!orderData.items || orderData.items.length === 0) {

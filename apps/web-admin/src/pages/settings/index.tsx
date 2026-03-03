@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import AdminLayout from '@/components/layout/AdminLayout';
 import { settingsService, type SiteSetting, type TaxSettings } from '@/lib/settings';
 import { useAuth } from '@/contexts/AuthContext';
@@ -97,6 +98,7 @@ const categories: CategoryInfo[] = [
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { token } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState<SettingsCategory>('taxes');
   const [settings, setSettings] = useState<Record<string, SiteSetting[]>>({});
@@ -106,6 +108,14 @@ export default function SettingsPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Abrir categoría Integraciones si viene ?category=integrations (ej. desde menú "Claves de webhook")
+  useEffect(() => {
+    const cat = router.query.category as string | undefined;
+    if (cat === 'integrations' && selectedCategory !== 'integrations') {
+      setSelectedCategory('integrations');
+    }
+  }, [router.query.category]);
 
   // Cargar configuraciones
   useEffect(() => {

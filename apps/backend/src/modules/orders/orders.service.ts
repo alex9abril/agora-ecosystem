@@ -640,22 +640,16 @@ export class OrdersService {
             [numberOfOrder, karlopayNumberOfOrder, karlopayPaymentUrl, createdOrders[0].id]
           );
 
-          // Guardar transacción de KarloPay en payment_transactions para todas las órdenes del grupo
-          // Distribuir el monto de KarloPay proporcionalmente entre las órdenes
-          
+          // Guardar transacción de KarloPay en payment_transactions para todas las órdenes del grupo.
+          // Usar numberOfOrder (el mismo enviado a la pasarela) en transaction_id y external_reference
+          // para que el webhook haga match directo cuando Karlopay devuelva ese identificador.
           const totalOrderAmount = createdOrders.reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
-          
+
           for (const order of createdOrders) {
             const orderRatio = parseFloat(order.total_amount) / totalOrderAmount;
             const karlopayAmountForOrder = Math.round(karlopayAmount * orderRatio * 100) / 100;
-            
-            // Para pagos con tarjeta (pasarela automática), el pago se procesa inmediatamente
-            // Por lo tanto, marcamos la transacción como 'completed' desde el inicio
-            // El webhook solo actualizará información adicional (últimos 4 dígitos, etc.)
-            const karlopayTransactionStatus = 'completed';
-            const karlopayCompletedAt = new Date();
-            
-            const insertResult = await dbPool.query(
+
+            await dbPool.query(
               `INSERT INTO orders.payment_transactions (
                 order_id,
                 payment_method,
@@ -665,60 +659,27 @@ export class OrdersService {
                 status,
                 payment_data,
                 completed_at
-              ) VALUES ($1, 'karlopay', $2, $3, $4, $5, $6, $7)
+              ) VALUES ($1, 'karlopay', $2, $3, $4, $5, $6, NULL)
               RETURNING id`,
               [
                 order.id,
-                karlopayNumberOfOrder, // Usar el numberOfOrder que devuelve Karlopay como transaction_id
-                karlopayNumberOfOrder, // Usar el numberOfOrder que devuelve Karlopay como external_reference (este es el que vendrá en el webhook)
+                numberOfOrder,
+                numberOfOrder,
                 karlopayAmountForOrder,
-                karlopayTransactionStatus, // 'completed' porque el pago con tarjeta se procesa automáticamente
+                'pending', // Pendiente hasta que el webhook confirme el pago
                 JSON.stringify({
                   karlopay_order_id: karlopayOrder.id,
                   karlopay_number_of_order: karlopayNumberOfOrder,
-                  karlopay_number_of_order_sent: numberOfOrder, // Guardar también el que enviamos por si acaso
+                  karlopay_number_of_order_sent: numberOfOrder,
                   karlopay_payment_url: karlopayPaymentUrl,
                   order_group_id: orderGroupId,
-                  auto_completed: true, // Indicar que se completó automáticamente al crear
+                  pending_webhook: true, // Será actualizado por el webhook al confirmar
                 }),
-                karlopayCompletedAt,
               ]
             );
-            
           }
-          
-          // Verificar si todas las transacciones están completadas y actualizar payment_status
-          // Esto aplica tanto para pagos solo con Karlopay como para wallet + Karlopay
-          for (const order of createdOrders) {
-            const allTransactionsResult = await dbPool.query(
-              `SELECT COUNT(*) as total, 
-                      COUNT(*) FILTER (WHERE status = 'completed') as completed,
-                      SUM(amount) FILTER (WHERE status = 'completed') as total_completed_amount
-               FROM orders.payment_transactions
-               WHERE order_id = $1`,
-              [order.id]
-            );
-
-            const { total, completed, total_completed_amount } = allTransactionsResult.rows[0];
-            const totalCompleted = parseFloat(total_completed_amount || '0');
-            const orderTotal = parseFloat(order.total_amount || '0');
-            
-            // Si todas las transacciones están completadas Y el monto coincide, marcar la orden como pagada
-            if (parseInt(total) > 0 && parseInt(completed) === parseInt(total)) {
-              if (totalCompleted >= orderTotal - 0.01) { // Tolerancia de centavos
-                await dbPool.query(
-                  `UPDATE orders.orders
-                   SET payment_status = 'paid',
-                       updated_at = CURRENT_TIMESTAMP
-                   WHERE id = $1`,
-                  [order.id]
-                );
-                
-              } else {
-                console.warn(`⚠️ [CHECKOUT] Orden ${order.id} no marcada como 'paid': monto completado (${totalCompleted}) < total orden (${orderTotal})`);
-              }
-            }
-          }
+          // No actualizar payment_status aquí: la orden permanece 'pending' hasta que el webhook
+          // de Karlopay invoque y confirme el pago (o falle).
 
         } catch (karlopayError: any) {
           console.error('❌ Error creando orden en Karlopay:', karlopayError);
@@ -1187,6 +1148,23 @@ export class OrdersService {
       const validPaymentStatuses = ['pending', 'paid', 'failed', 'refund_pending', 'refunded', 'partially_refunded'];
       if (!validPaymentStatuses.includes(newPaymentStatus)) {
         throw new BadRequestException(`Estado de pago inválido: ${newPaymentStatus}`);
+      }
+
+      // Si se intenta marcar como 'paid' y la orden tiene transacciones Karlopay pendientes,
+      // solo el webhook de Karlopay puede confirmar el pago. Rechazar actualización manual.
+      if (newPaymentStatus === 'paid') {
+        const karlopayPending = await client.query(
+          `SELECT 1 FROM orders.payment_transactions
+           WHERE order_id = $1 AND payment_method = 'karlopay' AND status = 'pending'
+           LIMIT 1`,
+          [orderId]
+        );
+        if (karlopayPending.rows.length > 0) {
+          await client.query('ROLLBACK');
+          throw new BadRequestException(
+            'No se puede marcar como pagado manualmente. El pago con Karlopay solo se confirma cuando el webhook de Karlopay notifica el pago exitoso.'
+          );
+        }
       }
 
       // Actualizar estado de pago - SIMPLE Y DIRECTO
@@ -2038,11 +2016,20 @@ export class OrdersService {
         );
       }
 
-      // Validar requisitos adicionales
+      // Validar requisitos adicionales: confirmar solo si está totalmente pagado y ninguna transacción pendiente
       if (newStatus === 'confirmed' && transitionRules.requires?.payment_status) {
         if (paymentStatus !== 'paid') {
           throw new BadRequestException(
             'No se puede confirmar el pedido sin pago verificado'
+          );
+        }
+        const pendingTx = await client.query(
+          `SELECT 1 FROM orders.payment_transactions WHERE order_id = $1 AND status = 'pending' LIMIT 1`,
+          [orderId]
+        );
+        if (pendingTx.rows.length > 0) {
+          throw new BadRequestException(
+            'No se puede confirmar el pedido: hay transacciones de pago aún pendientes. El pago debe estar totalmente confirmado (p. ej. por webhook de Karlopay) antes de confirmar.'
           );
         }
       }
@@ -2210,9 +2197,25 @@ export class OrdersService {
 
       const order = orderResult.rows[0];
       const clientId = order.client_id;
-      
+
       if (order.status !== 'confirmed') {
         throw new BadRequestException(`El pedido debe estar en estado 'confirmed' para comenzar la preparación. Estado actual: ${order.status}`);
+      }
+
+      if (order.payment_status !== 'paid') {
+        throw new BadRequestException(
+          'No se puede surtir el pedido: el pago no está verificado. Solo se puede surtir cuando el pedido está totalmente pagado.'
+        );
+      }
+
+      const pendingTxPrepare = await client.query(
+        `SELECT 1 FROM orders.payment_transactions WHERE order_id = $1 AND status = 'pending' LIMIT 1`,
+        [orderId]
+      );
+      if (pendingTxPrepare.rows.length > 0) {
+        throw new BadRequestException(
+          'No se puede surtir el pedido: hay transacciones de pago aún pendientes. Todas las transacciones deben estar confirmadas (p. ej. por webhook de Karlopay) antes de surtir.'
+        );
       }
 
       // 1. Actualizar cantidades de items del pedido y calcular diferencias para acreditar al wallet

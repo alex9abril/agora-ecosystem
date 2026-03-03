@@ -113,6 +113,15 @@ const menuItems: MenuItem[] = [
     ),
   },
   {
+    name: 'Claves de webhook',
+    href: '/settings/webhook-secrets',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+      </svg>
+    ),
+  },
+  {
     name: 'Personalización Tienda Global',
     href: '/settings/branding-global',
     icon: (
@@ -170,8 +179,11 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-3">
           {menuItems.map((item) => {
-            const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
-            
+            const isActive =
+              item.href === '/settings'
+                ? router.pathname === '/settings'
+                : router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href + '/'));
+
             return (
               <li key={item.href}>
                 <Link

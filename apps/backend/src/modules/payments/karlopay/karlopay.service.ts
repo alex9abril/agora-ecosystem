@@ -318,9 +318,14 @@ export class KarlopayService {
   }
 
   /**
-   * Procesar webhook de confirmación de pago
+   * Procesar webhook de confirmación de pago.
+   * @param webhookDto - Datos validados del webhook (pueden venir del body parseado).
+   * @param rawPayload - Payload completo recibido (intacto) para guardar en webhook_payload; si no se pasa, se usa webhookDto.
    */
-  async processPaymentWebhook(webhookDto: KarlopayPaymentWebhookDto): Promise<void> {
+  async processPaymentWebhook(webhookDto: KarlopayPaymentWebhookDto, rawPayload?: Record<string, any>): Promise<void> {
+    if (!webhookDto?.numberOfOrder) {
+      throw new BadRequestException('numberOfOrder is required');
+    }
     this.logger.log(`💰 Procesando webhook de pago de Karlopay para orden: ${webhookDto.numberOfOrder}`);
 
     const { dbPool } = await import('../../../config/database.config');
@@ -329,7 +334,8 @@ export class KarlopayService {
     }
 
     const client = await dbPool.connect();
-    
+    const webhookReceivedAt = new Date();
+
     try {
       await client.query('BEGIN');
       await this.integrationLogs.log({
@@ -345,6 +351,9 @@ export class KarlopayService {
           additional: webhookDto.additional || null,
         },
       });
+
+      // Payload intacto para guardar en transacciones (auditoría)
+      const payloadToStore = rawPayload != null ? rawPayload : (webhookDto as unknown as Record<string, any>);
 
       // Buscar órdenes relacionadas con este numberOfOrder
       // El numberOfOrder se guarda en delivery_notes como "Karlopay Order: {numberOfOrder}"
@@ -363,7 +372,7 @@ export class KarlopayService {
       if (orderGroupId) {
         // Buscar por order_group_id
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id, o.status
            FROM orders.orders o
            WHERE o.order_group_id = $1`,
           [orderGroupId]
@@ -374,7 +383,7 @@ export class KarlopayService {
       // Si no se encontraron por order_group_id, buscar por numberOfOrder en delivery_notes
       if (!ordersResult || ordersResult.rows.length === 0) {
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id, o.status
            FROM orders.orders o
            WHERE o.delivery_notes LIKE $1`,
           [`%Karlopay Order: ${numberOfOrder}%`]
@@ -385,7 +394,7 @@ export class KarlopayService {
       // Si aún no se encontraron, buscar por external_reference en payment_transactions
       if (!ordersResult || ordersResult.rows.length === 0) {
         ordersResult = await client.query(
-          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id
+          `SELECT DISTINCT o.id, o.order_group_id, o.total_amount, o.payment_status, o.payment_method, o.business_id, o.client_id, o.status
            FROM orders.orders o
            INNER JOIN orders.payment_transactions pt ON pt.order_id = o.id
            WHERE pt.external_reference = $1 OR pt.transaction_id = $1`,
@@ -440,12 +449,27 @@ export class KarlopayService {
 
       // Procesar cada orden encontrada
       for (const order of ordersResult.rows) {
-        // Verificar si ya existe una transacción de pago para esta orden con este transaction_id
-        const existingTx = await client.query(
+        // 1) Buscar transacción por external_reference o transaction_id = numberOfOrder (lo que envía el webhook)
+        let existingTx = await client.query(
           `SELECT id FROM orders.payment_transactions
-           WHERE order_id = $1 AND external_reference = $2`,
+           WHERE order_id = $1 AND (external_reference = $2 OR transaction_id = $2)`,
           [order.id, webhookDto.numberOfOrder]
         );
+        // 2) Si no hay match: Karlopay puede devolver en el webhook el order_id/session_id en vez del AGORA_xxx que enviamos al crear.
+        //    Hacer match con la transacción pendiente de Karlopay de esta orden para actualizarla (no insertar otra).
+        if (existingTx.rows.length === 0) {
+          const pendingTx = await client.query(
+            `SELECT id FROM orders.payment_transactions
+             WHERE order_id = $1 AND payment_method = 'karlopay' AND status = 'pending'
+             ORDER BY created_at ASC
+             LIMIT 1`,
+            [order.id]
+          );
+          if (pendingTx.rows.length > 0) {
+            existingTx = pendingTx;
+            this.logger.log(`🔗 Match por transacción pendiente Karlopay para orden ${order.id} (webhook numberOfOrder distinto al external_reference guardado)`);
+          }
+        }
 
         if (existingTx.rows.length > 0) {
           // Obtener el estado actual de la transacción
@@ -459,10 +483,10 @@ export class KarlopayService {
           // Si la transacción ya está completada, solo actualizar información adicional (no cambiar status)
           // Esto es para pagos con tarjeta que ya se marcaron como completados al crear la orden
           const finalStatus = currentStatus === 'completed' ? 'completed' : paymentStatus;
-          const finalCompletedAt = currentStatus === 'completed' 
-            ? currentTxResult.rows[0]?.completed_at 
+          const finalCompletedAt = currentStatus === 'completed'
+            ? currentTxResult.rows[0]?.completed_at
             : (paymentStatus === 'completed' ? new Date() : null);
-          
+
           // Combinar payment_data existente con los nuevos datos del webhook
           const updatedPaymentData = {
             ...(typeof currentPaymentData === 'string' ? JSON.parse(currentPaymentData) : currentPaymentData),
@@ -485,24 +509,35 @@ export class KarlopayService {
             webhook_received: true, // Marcar que el webhook fue recibido
             webhook_received_at: new Date().toISOString(),
           };
-          
-          // Actualizar transacción existente
-          await client.query(
-            `UPDATE orders.payment_transactions
-             SET status = $1,
-                 amount = $2,
-                 payment_data = $3,
-                 completed_at = CASE WHEN $4 IS NOT NULL THEN $4::timestamp ELSE completed_at END,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $5`,
-            [
-              finalStatus,
-              paymentAmount,
-              JSON.stringify(updatedPaymentData),
-              finalCompletedAt,
-              existingTx.rows[0].id,
-            ]
-          );
+
+          const txId = existingTx.rows[0].id;
+          const baseParams = [
+            finalStatus,
+            paymentAmount,
+            JSON.stringify(updatedPaymentData),
+            JSON.stringify(payloadToStore),
+            webhookReceivedAt,
+            txId,
+          ];
+          // Dos UPDATEs: cuando hay completed_at pasamos timestamp (evita "could not determine data type of parameter $4" con null)
+          if (finalCompletedAt != null) {
+            await client.query(
+              `UPDATE orders.payment_transactions
+               SET status = $1, amount = $2, payment_data = $3,
+                   completed_at = $4::timestamp,
+                   webhook_payload = $5, webhook_received_at = $6::timestamp, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $7`,
+              [baseParams[0], baseParams[1], baseParams[2], finalCompletedAt, baseParams[3], baseParams[4], baseParams[5]],
+            );
+          } else {
+            await client.query(
+              `UPDATE orders.payment_transactions
+               SET status = $1, amount = $2, payment_data = $3,
+                   webhook_payload = $4, webhook_received_at = $5::timestamp, updated_at = CURRENT_TIMESTAMP
+               WHERE id = $6`,
+              [baseParams[0], baseParams[1], baseParams[2], baseParams[3], baseParams[4], baseParams[5]],
+            );
+          }
           
           if (currentStatus === 'completed') {
             this.logger.log(`✅ Transacción ya estaba completada, solo se actualizó información adicional para orden ${order.id}`);
@@ -510,7 +545,9 @@ export class KarlopayService {
             this.logger.log(`✅ Transacción actualizada de '${currentStatus}' a '${finalStatus}' para orden ${order.id}`);
           }
         } else {
-          // Crear nueva transacción
+          // Crear nueva transacción (guardar payload intacto y fecha de recepción del webhook)
+          // completed_at se calcula en JS para evitar inconsistencia de tipos con $6 en PostgreSQL (text vs varchar)
+          const completedAt = paymentStatus === 'completed' ? webhookReceivedAt : null;
           await client.query(
             `INSERT INTO orders.payment_transactions (
               order_id,
@@ -520,8 +557,10 @@ export class KarlopayService {
               amount,
               status,
               payment_data,
-              completed_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $6 = 'completed' THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+              completed_at,
+              webhook_payload,
+              webhook_received_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::timestamp)`,
             [
               order.id,
               'karlopay',
@@ -546,6 +585,9 @@ export class KarlopayService {
                 taxData: webhookDto.taxData,
                 paymentInformation: webhookDto.paymentInformation,
               }),
+              completedAt,
+              JSON.stringify(payloadToStore),
+              webhookReceivedAt,
             ]
           );
           this.logger.log(`✅ Nueva transacción creada para orden ${order.id}`);
@@ -588,6 +630,21 @@ export class KarlopayService {
                 [order.id]
               );
               this.logger.log(`✅ Orden ${order.id} marcada como pagada (todas las transacciones completadas)`);
+
+              // Fulfillment: si la orden está en pending, pasarla a confirmed para que el negocio pueda surtir
+              const orderStatus = order.status;
+              if (orderStatus === 'pending') {
+                const confirmResult = await client.query(
+                  `UPDATE orders.orders
+                   SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = $1 AND business_id = $2 AND status = 'pending'
+                   RETURNING id`,
+                  [order.id, order.business_id]
+                );
+                if (confirmResult.rowCount && confirmResult.rowCount > 0) {
+                  this.logger.log(`✅ Orden ${order.id} actualizada a confirmed (fulfillment automático por webhook)`);
+                }
+              }
 
               await this.integrationLogs.log({
                 integration: 'karlopay',

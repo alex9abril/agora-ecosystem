@@ -805,7 +805,10 @@ export class BusinessesService {
   }
 
   /**
-   * Crear un nuevo negocio
+   * Crear un nuevo negocio (sucursal). Usado desde web-local; owner = usuario autenticado.
+   * Validaciones (GRIANT/DBA): ubicación en zona de cobertura (validateLocationInRegion),
+   * categoría validada contra core.business_categories si se envía category_id o category (nombre),
+   * slug opcional (triggers BD garantizan unicidad). Tras INSERT se asigna superadmin en core.business_users.
    */
   async create(ownerId: string, createDto: CreateBusinessDto) {
     if (!dbPool) {

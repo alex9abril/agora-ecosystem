@@ -99,6 +99,27 @@ export class BusinessesController {
     return business;
   }
 
+  /** Karlopay settings por branch (ruta explícita para evitar conflicto con :id) */
+  @Get('branch/:branchId/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion Karlopay de una sucursal por ID (requiere permisos)' })
+  @ApiParam({ name: 'branchId', description: 'ID de la sucursal', type: String })
+  async getBranchKarlopaySettingsForUser(@Param('branchId') branchId: string, @CurrentUser() user: User) {
+    return this.businessesService.getBusinessKarlopaySettingsForUser(branchId, user.id);
+  }
+
+  @Put('branch/:branchId/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion Karlopay de una sucursal' })
+  @ApiParam({ name: 'branchId', description: 'ID de la sucursal', type: String })
+  async updateBranchKarlopaySettingsForUser(
+    @Param('branchId') branchId: string,
+    @Body() updateDto: UpdateBusinessKarlopaySettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateBusinessKarlopaySettings(branchId, user.id, updateDto);
+  }
+
   @Post()
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Crear un nuevo negocio' })

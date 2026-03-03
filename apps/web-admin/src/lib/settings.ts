@@ -33,6 +33,65 @@ export interface TaxSettings {
   show_tax_included_label: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Webhook secrets (claves para validar webhooks, p. ej. Karlopay)
+// ---------------------------------------------------------------------------
+
+export interface WebhookSecretListItem {
+  id: string;
+  name: string;
+  secret_prefix: string | null;
+  secret: string | null;
+  provider: string;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookSecretCreated {
+  id: string;
+  name: string;
+  secret: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface CreateWebhookSecretDto {
+  name: string;
+  no_expira?: boolean;
+  expires_at?: string | null;
+}
+
+export interface PatchWebhookSecretDto {
+  name?: string;
+  is_active?: boolean;
+  expires_at?: string | null;
+}
+
+export const webhookSecretsService = {
+  list: (): Promise<WebhookSecretListItem[]> =>
+    apiRequest<WebhookSecretListItem[]>('/settings/webhook-secrets', { method: 'GET' }),
+
+  /** Obtener el valor completo del secret por id (para copiar cuando el listado no lo incluye). */
+  getSecret: (id: string): Promise<{ secret: string }> =>
+    apiRequest<{ secret: string }>(`/settings/webhook-secrets/${id}/secret`, { method: 'GET' }),
+
+  create: (dto: CreateWebhookSecretDto): Promise<WebhookSecretCreated> =>
+    apiRequest<WebhookSecretCreated>('/settings/webhook-secrets', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    }),
+
+  patch: (id: string, dto: PatchWebhookSecretDto): Promise<WebhookSecretListItem> =>
+    apiRequest<WebhookSecretListItem>(`/settings/webhook-secrets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(dto),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+
 export const settingsService = {
   /**
    * Obtener todas las configuraciones agrupadas por categoría

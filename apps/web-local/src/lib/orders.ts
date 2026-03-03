@@ -62,6 +62,8 @@ export interface PaymentTransaction {
   card_type?: string;
   last_four?: string;
   reference_number?: string;
+  webhook_payload?: Record<string, unknown> | null;
+  webhook_received_at?: string | null;
 }
 
 export interface OrderItem {

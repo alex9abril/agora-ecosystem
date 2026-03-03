@@ -1,0 +1,76 @@
+{
+  "info": {
+    "name": "KarloPay Webhook Payment (minimal)",
+    "description": "Una sola petición al webhook de pago.\n\n**Variables de colección (editar en los tres puntos → Edit → Variables):**\n- `base_url`: URL base del API (ej. http://localhost:3000 o https://api.tudominio.com).\n- `webhook_secret`: Clave completa desde Configuración → Claves de webhook (copiar una clave activa; formato ago_secret_...).\n\nSin una clave real en webhook_secret obtendrás 401.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "webhook_secret",
+      "value": "ago_secret_xxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  ],
+  "item": [
+    {
+      "name": "POST Webhook Payment",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "const secret = pm.collectionVariables.get('webhook_secret') || '';",
+              "if (!secret || secret === 'ago_secret_xxxxxxxxxxxxxxxxxxxxxxxx' || secret.length < 50) {",
+              "    console.warn('⚠️ Reemplaza webhook_secret por tu clave real (Configuración → Claves de webhook). Clave actual parece placeholder.');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has success and message', function () {",
+              "    const json = pm.response.json();",
+              "    const data = json.data || json;",
+              "    pm.expect(data).to.have.property('success', true);",
+              "    pm.expect(data).to.have.property('message');",
+              "    pm.expect(data.message).to.include('Webhook procesado');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Webhook-Secret",
+            "value": "{{webhook_secret}}",
+            "description": "Clave de webhook (una de las activas en Claves de webhook). Alternativa: Authorization: Bearer {{webhook_secret}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"numberOfOrder\": \"bdcad4ad-ed00-463b-a25e-aa105e9962f2\",\n  \"cardType\": \"CREDIT MASTERCARD\",\n  \"paymentDate\": \"2026-03-02T16:21:22\",\n  \"cardDC\": \"mastercard\",\n  \"bankName\": \"n/a\",\n  \"bankCode\": \"999\",\n  \"referenceNumber\": null,\n  \"cardHolder\": null,\n  \"postalCode\": \"63915\",\n  \"meses\": 0,\n  \"paymentMethod\": \"PUE\",\n  \"paymentForm\": \"04\",\n  \"promotion\": false,\n  \"taxData\": {\n    \"socialReason\": \"zuriel test\",\n    \"postalCodeTax\": \"63915\",\n    \"RFC\": \"XAXX010101000\",\n    \"taxRegime\": \"616\",\n    \"CFDI\": \"S01\",\n    \"email\": \"zuriel@karlo.io\"\n  },\n  \"paymentInformation\": {\n    \"percentageBaseComission\": 0.0175,\n    \"percentageBaseSurcharge\": 0,\n    \"commissions\": {\n      \"baseComission\": 19.89,\n      \"baseComissionIva\": 3.18,\n      \"baseComissionTotal\": 23.07\n    },\n    \"surcharges\": {\n      \"baseSurcharge\": 0,\n      \"baseSurchargeIva\": 0,\n      \"baseSurchargeTotal\": 0\n    },\n    \"originalAmount\": 1136.71,\n    \"totalCommissionForTerminalUse\": 9.81,\n    \"totalCommissionForDeferringToMonths\": 0,\n    \"totalCommissionToCustomer\": 9.81,\n    \"totalCommissionToBusiness\": 23.07,\n    \"totalToDepositBusiness\": 1113.64,\n    \"totalPaymentPerMonth\": 1146.52,\n    \"totalPayment\": 1146.52\n  },\n  \"additional\": {\n    \"session_id\": \"bdcad4ad-ed00-463b-a25e-aa105e9962f2\",\n    \"order_group_id\": \"b8514522-6db1-4cb2-8b21-549f0e5583fc\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/payments/karlopay/webhook/payment",
+          "host": ["{{base_url}}"],
+          "path": ["api", "payments", "karlopay", "webhook", "payment"]
+        },
+        "description": "POST al webhook de pago. Requiere header **X-Webhook-Secret** con una clave activa de Configuración → Claves de webhook. Si falta o es inválida: 401."
+      }
+    }
+  ]
+}

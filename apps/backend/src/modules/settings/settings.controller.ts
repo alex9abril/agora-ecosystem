@@ -3,6 +3,7 @@ import {
   Get,
   Put,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -16,7 +17,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { SettingsService, UpdateSettingDto } from './settings.service';
 import { IntegrationsService } from './integrations.service';
+import { WebhookSecretsService } from './webhook-secrets.service';
 import { BulkUpdateSettingsDto } from './dto/update-setting.dto';
+import { CreateWebhookSecretDto } from './dto/create-webhook-secret.dto';
+import { PatchWebhookSecretDto } from './dto/patch-webhook-secret.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { BrandingImagesService } from '../businesses/branding-images.service';
@@ -29,6 +33,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly integrationsService: IntegrationsService,
+    private readonly webhookSecretsService: WebhookSecretsService,
     private readonly brandingImagesService: BrandingImagesService,
   ) {}
 
@@ -192,6 +197,49 @@ export class SettingsController {
     const { branding } = await this.settingsService.getBrandingVehicleBrand(id);
     await this.settingsService.updateBrandingVehicleBrand(id, { ...branding, favicon_url: result.url });
     return result;
+  }
+
+  // ============================================================================
+  // WEBHOOK SECRETS (claves para validar webhooks, p. ej. Karlopay)
+  // ============================================================================
+
+  @Get('webhook-secrets')
+  @ApiOperation({ summary: 'Listar claves de webhook (incluye secret para copiar en admin)' })
+  @ApiResponse({ status: 200, description: 'Listado de claves' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async listWebhookSecrets() {
+    return this.webhookSecretsService.list();
+  }
+
+  @Post('webhook-secrets')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Crear clave de webhook; el secret se devuelve solo en esta respuesta' })
+  @ApiResponse({ status: 201, description: 'Clave creada; incluye secret (mostrar una sola vez)' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async createWebhookSecret(@Body() dto: CreateWebhookSecretDto) {
+    return this.webhookSecretsService.create(dto);
+  }
+
+  @Get('webhook-secrets/:id/secret')
+  @ApiOperation({ summary: 'Obtener el valor completo del secret (para copiar en admin)' })
+  @ApiParam({ name: 'id', description: 'ID de la clave' })
+  @ApiResponse({ status: 200, description: 'Secret completo' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Clave no encontrada' })
+  async getWebhookSecretValue(@Param('id') id: string) {
+    return this.webhookSecretsService.getSecretById(id);
+  }
+
+  @Patch('webhook-secrets/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Revocar o editar clave (nombre, expires_at); nunca devuelve secret' })
+  @ApiParam({ name: 'id', description: 'ID de la clave' })
+  @ApiResponse({ status: 200, description: 'Clave actualizada' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 404, description: 'Clave no encontrada' })
+  async patchWebhookSecret(@Param('id') id: string, @Body() dto: PatchWebhookSecretDto) {
+    return this.webhookSecretsService.patch(id, dto);
   }
 
   @Get(':key')

@@ -30,6 +30,9 @@ export default function OrderDetailPage() {
   const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
   const [loadingTrackingEvents, setLoadingTrackingEvents] = useState(false);
   const [showTrackingTimeline, setShowTrackingTimeline] = useState(false);
+  const [showKarlopayJsonModal, setShowKarlopayJsonModal] = useState(false);
+  const [expandedPayloadTxId, setExpandedPayloadTxId] = useState<string | null>(null);
+  const [payloadViewTab, setPayloadViewTab] = useState<'resumen' | 'json'>('resumen');
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -472,6 +475,77 @@ export default function OrderDetailPage() {
     }).format(amount);
   };
 
+  /** Genera el JSON de simulación de webhook Karlopay para este pedido (importe = total del pedido). */
+  const buildKarlopayWebhookJson = (orderData: Order) => {
+    const originalAmount = Math.round(parseFloat(String(orderData.total_amount)) * 100) / 100;
+    const pctBase = 0.0175;
+    const baseComission = Math.round(originalAmount * pctBase * 100) / 100;
+    const baseComissionIva = Math.round(baseComission * 0.16 * 100) / 100;
+    const baseComissionTotal = Math.round((baseComission + baseComissionIva) * 100) / 100;
+    const totalCommissionToBusiness = baseComissionTotal;
+    const totalToDepositBusiness = Math.round((originalAmount - totalCommissionToBusiness) * 100) / 100;
+    const customerCommissionRatio = 103.62 / 12001;
+    const totalCommissionToCustomer = Math.round(originalAmount * customerCommissionRatio * 100) / 100;
+    const totalPayment = Math.round((originalAmount + totalCommissionToCustomer) * 100) / 100;
+    const now = new Date();
+    const paymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const orderGroupId = (orderData as any).order_group_id ?? '00000000-0000-0000-0000-000000000001';
+    const karlopayTx = (orderData.payment_transactions ?? []).find(
+      (t: any) => (t.payment_method ?? '').toLowerCase() === 'karlopay'
+    );
+    const refForWebhook = karlopayTx?.external_reference ?? orderData.id;
+
+    return {
+      numberOfOrder: refForWebhook,
+      cardType: 'CREDIT MASTERCARD',
+      paymentDate,
+      cardDC: 'mastercard',
+      bankName: 'n/a',
+      bankCode: '999',
+      referenceNumber: null,
+      cardHolder: null,
+      postalCode: '63915',
+      meses: 0,
+      paymentMethod: 'PUE',
+      paymentForm: '04',
+      promotion: false,
+      taxData: {
+        socialReason: 'zuriel test',
+        postalCodeTax: '63915',
+        RFC: 'XAXX010101000',
+        taxRegime: '616',
+        CFDI: 'S01',
+        email: 'zuriel@karlo.io',
+      },
+      paymentInformation: {
+        percentageBaseComission: pctBase,
+        percentageBaseSurcharge: 0,
+        commissions: {
+          baseComission,
+          baseComissionIva,
+          baseComissionTotal,
+        },
+        surcharges: {
+          baseSurcharge: 0,
+          baseSurchargeIva: 0,
+          baseSurchargeTotal: 0,
+        },
+        originalAmount,
+        totalCommissionForTerminalUse: totalCommissionToCustomer,
+        totalCommissionForDeferringToMonths: 0,
+        totalCommissionToCustomer,
+        totalCommissionToBusiness,
+        totalToDepositBusiness,
+        totalPaymentPerMonth: totalPayment,
+        totalPayment,
+      },
+      additional: {
+        session_id: refForWebhook,
+        order_group_id: orderGroupId,
+      },
+    };
+  };
+
   const getStatusTimeline = (orderData: Order) => {
     if (!orderData) return [];
 
@@ -589,23 +663,30 @@ export default function OrderDetailPage() {
         });
         break;
       
-      case 'confirmed':
-        // Botón para ir a la interfaz de preparación/surtido
-        actions.push({ 
-          status: 'prepare', 
-          label: 'Surtir pedido', 
-          color: 'bg-black hover:bg-gray-800 text-white', 
-          isPrimary: true,
-          isNavigationAction: true // Indica que debe navegar en lugar de cambiar estado
-        });
-        actions.push({ 
-          status: 'cancelled', 
-          label: 'Cancelar pedido', 
-          color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300', 
+      case 'confirmed': {
+        const paymentStatus = (orderData as any).payment_status ?? orderData.payment_status;
+        const hasPendingTx = (orderData.payment_transactions ?? []).some(
+          (t: any) => (t.status ?? t.transaction_status ?? '') === 'pending'
+        );
+        // Solo permitir surtir si está totalmente pagado y ninguna transacción pendiente
+        if (paymentStatus === 'paid' && !hasPendingTx) {
+          actions.push({
+            status: 'prepare',
+            label: 'Surtir pedido',
+            color: 'bg-black hover:bg-gray-800 text-white',
+            isPrimary: true,
+            isNavigationAction: true,
+          });
+        }
+        actions.push({
+          status: 'cancelled',
+          label: 'Cancelar pedido',
+          color: 'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300',
           isPrimary: false,
-          requiresConfirmation: true
+          requiresConfirmation: true,
         });
         break;
+      }
       
       case 'completed':
         // El pedido está surtido, listo para entregar al proveedor de logística
@@ -742,6 +823,14 @@ export default function OrderDetailPage() {
                     {action.label}
                   </button>
                 ))}
+              <button
+                type="button"
+                onClick={() => setShowKarlopayJsonModal(true)}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Ver JSON de simulación de webhook Karlopay"
+              >
+                JSON Karlopay
+              </button>
               {/* ⚠️ Botón temporal para eliminar pedido */}
               <button
                 onClick={handleDeleteOrder}
@@ -1436,18 +1525,17 @@ export default function OrderDetailPage() {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Resumen de pago</h2>
-                    {/* Botón para confirmar pago - Solo se muestra si hay transacciones pendientes */}
+                    {/* Botón para confirmar pago - Solo se muestra si hay transacciones pendientes que NO sean Karlopay (Karlopay solo se confirma por webhook) */}
                     {(() => {
-                      // Verificar si hay transacciones pendientes
                       const hasPendingTransactions = order.payment_transactions?.some(
                         (tx) => tx.status === 'pending' || tx.status === 'failed'
                       ) || false;
-                      
-                      // Solo mostrar el botón si hay transacciones pendientes
-                      // No mostrar si todas las transacciones están completadas (wallet + karlopay completados)
-                      const canShowButton = hasPendingTransactions && 
+                      const hasPendingNonKarlopay = order.payment_transactions?.some(
+                        (tx) => (tx.status === 'pending' || tx.status === 'failed') && tx.payment_method !== 'karlopay'
+                      ) || false;
+                      const canShowButton =
+                        hasPendingNonKarlopay &&
                         (order.payment_status === 'pending' || order.payment_status === 'failed');
-                      
                       return canShowButton ? (
                         <button
                           onClick={handleConfirmPayment}
@@ -1476,22 +1564,27 @@ export default function OrderDetailPage() {
                     })()}
                   </div>
                   <p className="text-xs text-gray-500 mb-4">Un resumen de todos los pagos de las transacciones registradas</p>
-                  <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-sm">
                     <div className="mb-2 space-y-2">
                       <div className="flex items-center gap-2 flex-wrap">
+                        {(() => {
+                          const paymentStatus = (order as any).payment_status ?? order.payment_status;
+                          return (
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          order.payment_status === 'paid' || order.payment_status === 'overcharged'
+                          paymentStatus === 'paid' || paymentStatus === 'overcharged'
                             ? 'text-green-700 bg-green-50'
-                            : order.payment_status === 'failed'
+                            : paymentStatus === 'failed'
                             ? 'text-red-700 bg-red-50'
                             : 'text-yellow-700 bg-yellow-50'
                         }`}>
-                          {order.payment_status === 'paid' ? 'Totalmente Pagado' :
-                           order.payment_status === 'overcharged' ? 'Overcharged' :
-                           order.payment_status === 'failed' ? 'Fallido' :
-                           order.payment_status === 'refunded' ? 'Reembolsado' :
+                          {paymentStatus === 'paid' ? 'Totalmente Pagado' :
+                           paymentStatus === 'overcharged' ? 'Overcharged' :
+                           paymentStatus === 'failed' ? 'Fallido' :
+                           paymentStatus === 'refunded' ? 'Reembolsado' :
                            'Pendiente'}
                         </span>
+                          );
+                        })()}
                         {order.payment_method && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium text-gray-700 bg-gray-100">
                             Método: {order.payment_method}
@@ -1652,25 +1745,38 @@ export default function OrderDetailPage() {
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const txStatus = (transaction as any).status ?? (transaction as any).transaction_status ?? '';
+                                    return (
                                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                    transaction.status === 'completed' 
-                                      ? 'bg-green-50 text-green-700' 
-                                      : transaction.status === 'pending'
+                                    txStatus === 'completed'
+                                      ? 'bg-green-50 text-green-700'
+                                      : txStatus === 'pending'
                                       ? 'bg-yellow-50 text-yellow-700'
                                       : 'bg-red-50 text-red-700'
                                   }`}>
-                                    {transaction.status === 'completed' ? 'SUCCESS' : 
-                                     transaction.status === 'pending' ? 'PENDING' : 'FAILED'}
+                                    {txStatus === 'completed' ? 'SUCCESS' : txStatus === 'pending' ? 'PENDING' : 'FAILED'}
                                   </span>
+                                    );
+                                  })()}
                                   <span className="text-sm font-medium text-gray-900">
                                     {formatCurrency(transaction.amount)}
                                   </span>
                                   <span className="text-xs text-gray-500">Capture</span>
                                 </div>
                                 <div className="text-right">
-                                  <span className="text-xs text-blue-600 font-mono">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const next = expandedPayloadTxId === transaction.id ? null : transaction.id;
+                                      setExpandedPayloadTxId(next);
+                                      if (next) setPayloadViewTab('resumen');
+                                    }}
+                                    className="text-xs text-blue-600 font-mono hover:text-blue-800 hover:underline cursor-pointer"
+                                    title="Ver payload recibido del webhook"
+                                  >
                                     {transaction.transaction_id?.slice(0, 8) || transaction.external_reference?.slice(0, 8) || transaction.id.slice(0, 8)}...
-                                  </span>
+                                  </button>
                                   <p className="text-xs text-gray-500 mt-1">
                                     {transaction.completed_at ? formatDate(transaction.completed_at) : formatDate(transaction.created_at)}
                                   </p>
@@ -1681,6 +1787,76 @@ export default function OrderDetailPage() {
                                 {transaction.last_four && ` • ${transaction.last_four}`}
                                 {transaction.card_type && ` • ${transaction.card_type}`}
                               </p>
+                              {expandedPayloadTxId === transaction.id && (
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                  <p className="text-xs font-medium text-gray-700 mb-2">Payload recibido del webhook</p>
+                                  {transaction.webhook_payload ? (
+                                    <>
+                                      <div className="flex gap-1 mb-3 border-b border-gray-200">
+                                        <button
+                                          type="button"
+                                          onClick={() => setPayloadViewTab('resumen')}
+                                          className={`px-3 py-1.5 text-xs font-medium rounded-t ${payloadViewTab === 'resumen' ? 'bg-gray-100 text-gray-900 border border-gray-200 border-b-0 -mb-px' : 'text-gray-600 hover:text-gray-900'}`}
+                                        >
+                                          Resumen
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setPayloadViewTab('json')}
+                                          className={`px-3 py-1.5 text-xs font-medium rounded-t ${payloadViewTab === 'json' ? 'bg-gray-100 text-gray-900 border border-gray-200 border-b-0 -mb-px' : 'text-gray-600 hover:text-gray-900'}`}
+                                        >
+                                          JSON
+                                        </button>
+                                      </div>
+                                      {payloadViewTab === 'resumen' ? (
+                                        <div className="text-xs overflow-x-auto max-h-64 overflow-y-auto">
+                                          <table className="w-full border-collapse">
+                                            <tbody>
+                                              {transaction.webhook_payload.numberOfOrder != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium w-40">Nº orden</td><td className="py-1.5 font-mono">{String(transaction.webhook_payload.numberOfOrder)}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.paymentDate != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Fecha pago</td><td className="py-1.5">{String(transaction.webhook_payload.paymentDate)}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.cardType != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Tipo tarjeta</td><td className="py-1.5">{String(transaction.webhook_payload.cardType)}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.paymentMethod != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Método pago</td><td className="py-1.5">{String(transaction.webhook_payload.paymentMethod)}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).totalPayment != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Total cobrado</td><td className="py-1.5">{formatCurrency(Number((transaction.webhook_payload.paymentInformation as any).totalPayment))}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.paymentInformation && typeof transaction.webhook_payload.paymentInformation === 'object' && (transaction.webhook_payload.paymentInformation as any).originalAmount != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Monto original</td><td className="py-1.5">{formatCurrency(Number((transaction.webhook_payload.paymentInformation as any).originalAmount))}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.additional && typeof transaction.webhook_payload.additional === 'object' && (transaction.webhook_payload.additional as any).order_group_id != null && (
+                                                <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Grupo pedido</td><td className="py-1.5 font-mono text-gray-700">{String((transaction.webhook_payload.additional as any).order_group_id)}</td></tr>
+                                              )}
+                                              {transaction.webhook_payload.taxData && typeof transaction.webhook_payload.taxData === 'object' && (
+                                                <>
+                                                  {(transaction.webhook_payload.taxData as any).socialReason != null && (
+                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">Razón social</td><td className="py-1.5">{(transaction.webhook_payload.taxData as any).socialReason}</td></tr>
+                                                  )}
+                                                  {(transaction.webhook_payload.taxData as any).RFC != null && (
+                                                    <tr className="border-b border-gray-100"><td className="py-1.5 pr-3 text-gray-500 font-medium">RFC</td><td className="py-1.5 font-mono">{(transaction.webhook_payload.taxData as any).RFC}</td></tr>
+                                                  )}
+                                                </>
+                                              )}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      ) : (
+                                        <pre className="text-xs text-gray-800 bg-gray-50 p-3 rounded border border-gray-200 overflow-x-auto whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                                          {JSON.stringify(transaction.webhook_payload, null, 2)}
+                                        </pre>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-gray-500 italic">No se guardó payload de webhook para esta transacción.</p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
@@ -1808,6 +1984,53 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal JSON Karlopay (simulación webhook) */}
+      {showKarlopayJsonModal && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowKarlopayJsonModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">JSON simulación webhook Karlopay</h3>
+              <button
+                type="button"
+                onClick={() => setShowKarlopayJsonModal(false)}
+                className="p-1 rounded text-gray-500 hover:bg-gray-100"
+                aria-label="Cerrar"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-xs text-gray-800 bg-gray-50 p-4 rounded border border-gray-200 overflow-x-auto whitespace-pre-wrap font-mono">
+                {JSON.stringify(buildKarlopayWebhookJson(order), null, 2)}
+              </pre>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(JSON.stringify(buildKarlopayWebhookJson(order), null, 2));
+                    alert('JSON copiado al portapapeles');
+                  } catch (e) {
+                    alert('No se pudo copiar: ' + (e instanceof Error ? e.message : 'Error'));
+                  }
+                }}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-black hover:bg-gray-800 text-white"
+              >
+                Copiar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowKarlopayJsonModal(false)}
+                className="px-4 py-2 rounded-md text-sm font-medium bg-white hover:bg-gray-50 text-gray-900 border border-gray-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </LocalLayout>
   );
 }

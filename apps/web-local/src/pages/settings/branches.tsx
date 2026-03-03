@@ -21,6 +21,7 @@ export default function BranchesPage() {
   const [branches, setBranches] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Business | null>(null);
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
@@ -73,9 +74,12 @@ export default function BranchesPage() {
       
       await loadBranches();
       setShowAddForm(false);
+      setSuccessMessage('Sucursal creada correctamente. Puedes configurar branding, impuestos y marcas desde la lista.');
+      setTimeout(() => setSuccessMessage(null), 5000);
     } catch (err: any) {
       console.error('Error creando sucursal:', err);
-      alert(err.message || 'Error al crear la sucursal');
+      const message = err?.message || err?.response?.data?.message || 'Error al crear la sucursal';
+      alert(message);
     } finally {
       setSaving(false);
     }
@@ -176,6 +180,12 @@ export default function BranchesPage() {
               {error && (
                 <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
                   <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
+              {successMessage && !showAddForm && (
+                <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800">{successMessage}</p>
                 </div>
               )}
 
@@ -1832,6 +1842,9 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
   const [businessGroup, setBusinessGroup] = useState<{ id: string; name: string } | null>(null);
   const [loadingGroup, setLoadingGroup] = useState(true);
 
+  // Estado para validación manual de ubicación
+  const [validatingLocation, setValidatingLocation] = useState(false);
+
   // Cargar categorías al montar el componente
   useEffect(() => {
     const loadCategories = async () => {
@@ -1897,6 +1910,22 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
   const handleRemoveBrand = (brandId: string) => {
     setSelectedBrands(selectedBrands.filter(b => b.id !== brandId));
+  };
+
+  const handleValidateLocation = async () => {
+    if (!formData.longitude || !formData.latitude) return;
+    setValidatingLocation(true);
+    try {
+      const result = await businessService.validateLocation(formData.longitude, formData.latitude);
+      const message = result.isValid && result.regionName
+        ? `Ubicación válida - Zona: ${result.regionName}`
+        : result.message || (result.isValid ? 'Ubicación válida' : 'La ubicación está fuera de la zona de cobertura activa.');
+      setLocationValidation({ isValid: result.isValid, message });
+    } catch (err: any) {
+      setLocationValidation({ isValid: false, message: err?.message || 'Error al validar la ubicación' });
+    } finally {
+      setValidatingLocation(false);
+    }
   };
 
   const handleLocationChange = (
@@ -2100,11 +2129,21 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
                     <strong>Dirección detectada:</strong> {selectedAddress}
                   </p>
                 )}
-                {locationValidation.message && (
-                  <p className={`mt-2 text-sm ${locationValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
-                    {locationValidation.message}
-                  </p>
-                )}
+                <div className="mt-2 flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleValidateLocation}
+                    disabled={validatingLocation}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {validatingLocation ? 'Validando...' : 'Validar ubicación'}
+                  </button>
+                  {locationValidation.message && (
+                    <span className={`text-sm ${locationValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                      {locationValidation.message}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
