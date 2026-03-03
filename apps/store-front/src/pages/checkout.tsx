@@ -539,24 +539,35 @@ export default function CheckoutPage() {
     }
   }, [cart, branchId]);
 
-  // Actualizar métodos de pago cuando cambia branchKarlopayEnabled
+  // Actualizar métodos de pago: priorizar sucursal. Si hay config por sucursal solo mostramos esa opción; si no, la global.
   useEffect(() => {
-    const baseMethods: PaymentMethod[] = [
-      { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
-      { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
-    ];
+    const walletMethod: PaymentMethod = { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' };
 
     if (branchKarlopayEnabled) {
-      // Agregar opción de pago directo a sucursal
-      baseMethods.push({
-        id: 'karlopay-branch',
-        type: 'card',
-        label: 'Tarjeta de crédito/débito (Pago directo a sucursal)',
-      });
+      // Solo opción de pago directo a sucursal (mismo método de pago, config por sucursal)
+      setPaymentMethods([
+        { id: 'karlopay-branch', type: 'card', label: 'Tarjeta de crédito/débito (Pago directo a sucursal)' },
+        walletMethod,
+      ]);
+    } else {
+      // Solo opción global
+      setPaymentMethods([
+        { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
+        walletMethod,
+      ]);
     }
-
-    setPaymentMethods(baseMethods);
   }, [branchKarlopayEnabled]);
+
+  // Mantener selección válida: si la actual no está en la lista, o no hay selección y solo hay una tarjeta, elegir la opción de tarjeta
+  useEffect(() => {
+    const ids = paymentMethods.map((m) => m.id);
+    const cardMethods = paymentMethods.filter((m) => m.type === 'card');
+    if (selectedPaymentMethod && !ids.includes(selectedPaymentMethod)) {
+      setSelectedPaymentMethod(cardMethods[0] ? cardMethods[0].id : null);
+    } else if (!selectedPaymentMethod && cardMethods.length === 1) {
+      setSelectedPaymentMethod(cardMethods[0].id);
+    }
+  }, [paymentMethods]);
 
   // Calcular impuestos
   useEffect(() => {

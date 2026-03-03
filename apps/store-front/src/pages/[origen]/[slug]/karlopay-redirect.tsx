@@ -51,10 +51,9 @@ export default function KarlopayRedirectPage() {
           const responseStatus = response?.status || 'ok';
           setConfirmMessage(response?.message || 'Confirmación procesada');
 
-          if (responseStatus === 'ok') {
+          // ok o pending: mostramos "Pedido realizado con éxito" (no implica pago confirmado, solo pedido registrado)
+          if (responseStatus === 'ok' || responseStatus === 'pending') {
             setPaymentStatus('success');
-          } else if (responseStatus === 'pending') {
-            setPaymentStatus('pending');
           } else {
             setPaymentStatus('error');
             setErrorMessage(response?.message || 'No se pudo confirmar el pago');
@@ -91,7 +90,7 @@ export default function KarlopayRedirectPage() {
         console.error('Error redirigiendo a /orders:', err);
         window.location.href = ordersUrl;
       });
-    }, 5000);
+    }, 3000);
 
     return () => clearTimeout(timeoutId);
   }, [paymentStatus, redirected, getContextualUrl, router]);
@@ -122,7 +121,7 @@ export default function KarlopayRedirectPage() {
   return (
     <>
       <Head>
-        <title>Procesando Pago - Agora</title>
+        <title>Pedido realizado - Agora</title>
       </Head>
       <StoreLayout>
         <div className="max-w-2xl mx-auto py-12 px-4">
@@ -137,38 +136,12 @@ export default function KarlopayRedirectPage() {
               <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-green-100 mb-6">
                 <CheckCircleIcon className="w-16 h-16 text-green-600" />
               </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">¡Pago Exitoso!</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-3">Pedido realizado con éxito</h1>
               <p className="text-lg text-gray-600 mb-4">
-                Tu pago ha sido procesado correctamente.
-              </p>
-              <div className="text-xs text-gray-500 mb-4 space-y-1">
-                <p>session_id: {String(session_id || '')}</p>
-                <p>id: {String(id || '')}</p>
-                <p>status: {String(status || '')}</p>
-                <p>error: {String(error || '')}</p>
-                {confirmMessage && <p>confirm: {confirmMessage}</p>}
-              </div>
-              <p className="text-sm text-gray-500 mb-6">
-                Serás redirigido a tus pedidos en unos segundos...
-              </p>
-              <button
-                onClick={handleGoToOrders}
-                className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors font-medium"
-              >
-                Ver Mis Pedidos
-              </button>
-            </div>
-          ) : paymentStatus === 'pending' ? (
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-yellow-100 mb-6">
-                <CheckCircleIcon className="w-16 h-16 text-yellow-600" />
-              </div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-3">Pago en validación</h1>
-              <p className="text-lg text-gray-600 mb-4">
-                Estamos validando tu pago con el proveedor.
+                Tu pedido fue registrado correctamente. El pago se validará con el proveedor; puedes revisar el estado en Mis pedidos.
               </p>
               <p className="text-sm text-gray-500 mb-6">
-                Puedes esperar unos minutos o revisar tus pedidos más tarde.
+                Redirigiendo a tus pedidos en unos segundos...
               </p>
               <button
                 onClick={handleGoToOrders}
