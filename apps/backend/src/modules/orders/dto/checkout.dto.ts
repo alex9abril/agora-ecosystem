@@ -117,6 +117,11 @@ export class CheckoutDto {
   @IsString()
   storeContext?: string;
 
+  @ApiPropertyOptional({ description: 'ID del canal de venta (core.stores). Si se envía, se guarda en orders.store_id; si no, se resuelve desde storeContext.', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @IsUUID('4', { message: 'storeId debe ser un UUID válido' })
+  storeId?: string;
+
   @ApiPropertyOptional({ description: 'Mapa de quotation_id por business_id (para Skydropx)', example: { "business-id-1": "quotation-id-123" } })
   @IsOptional()
   @IsObject()

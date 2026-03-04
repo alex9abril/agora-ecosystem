@@ -7,9 +7,10 @@ import { KarlopayModule } from '../payments/karlopay/karlopay.module';
 import { SettingsModule } from '../settings/settings.module';
 import { EmailModule } from '../email/email.module';
 import { BusinessesModule } from '../businesses/businesses.module';
+import { StoresModule } from '../stores/stores.module';
 
 @Module({
-  imports: [TaxesModule, WalletModule, KarlopayModule, SettingsModule, EmailModule, BusinessesModule],
+  imports: [TaxesModule, WalletModule, KarlopayModule, SettingsModule, EmailModule, BusinessesModule, StoresModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

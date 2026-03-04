@@ -26,6 +26,7 @@ export const SETTINGS_KEYS = [
   'emails',
   'users',
   'permissions_groups',
+  'channel_stores',
 ] as const;
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[number];
@@ -56,6 +57,7 @@ const emptySettings: Record<SettingsKey, boolean> = {
   emails: false,
   users: false,
   permissions_groups: false,
+  channel_stores: false,
 };
 
 export const EMPTY_OPERATOR_PERMISSIONS: OperatorPermissions = {
@@ -86,6 +88,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   emails: 'Correos',
   users: 'Usuarios y permisos',
   permissions_groups: 'Grupos de permisos',
+  channel_stores: 'Tiendas por grupo/marca',
 };
 
 /**

@@ -272,6 +272,12 @@ export default function EmailsPage() {
   });
   const [showResolverInfoFor, setShowResolverInfoFor] = useState<EmailTriggerType | null>(null);
 
+  const router = useRouter();
+  const isEmbedded = Boolean(router.query.embedded === '1');
+  const embeddedLevel = router.query.level as 'group' | 'branch' | undefined;
+  const embeddedBusinessGroupId = typeof router.query.businessGroupId === 'string' ? router.query.businessGroupId : undefined;
+  const embeddedBusinessId = typeof router.query.businessId === 'string' ? router.query.businessId : undefined;
+
   const resolverBusinessId =
     managementMode === 'business' ? selectedBranchId || selectedBusiness?.business_id || null : null;
   const resolverBusinessGroupId = businessGroup?.id || null;
@@ -297,8 +303,61 @@ export default function EmailsPage() {
     setLoading(loadingContext || loadingGlobalTemplates || loadingTemplates);
   }, [loadingContext, loadingGlobalTemplates, loadingTemplates]);
 
-  // Cargar contexto inicial (grupo y sucursales)
+  // Cargar contexto cuando la página se usa embebida (ej. pestaña Correos en Tiendas)
   useEffect(() => {
+    if (!isEmbedded || !router.isReady) return;
+    const level = embeddedLevel;
+    const groupId = embeddedBusinessGroupId;
+    const businessId = embeddedBusinessId;
+
+    if (level === 'group' && groupId) {
+      const load = async () => {
+        try {
+          setLoadingContext(true);
+          setError(null);
+          const group = await businessService.getBusinessGroupById(groupId);
+          setBusinessGroup({ id: group.id, name: group.name });
+          setManagementMode('group');
+          setBranches([]);
+          setSelectedBranchId(null);
+        } catch (err: any) {
+          console.error('Error cargando grupo (embedded):', err);
+          setError(err.message || 'Error al cargar el grupo');
+        } finally {
+          setLoadingContext(false);
+        }
+      };
+      load();
+      return;
+    }
+
+    if ((level === 'branch' || level === 'business') && businessId) {
+      const load = async () => {
+        try {
+          setLoadingContext(true);
+          setError(null);
+          const branch = await businessService.getBranchById(businessId);
+          setBranches([{ id: branch.id, name: branch.name }]);
+          setSelectedBranchId(branch.id);
+          setManagementMode('business');
+          setBusinessGroup(null);
+        } catch (err: any) {
+          console.error('Error cargando sucursal (embedded):', err);
+          setError(err.message || 'Error al cargar la sucursal');
+        } finally {
+          setLoadingContext(false);
+        }
+      };
+      load();
+    } else {
+      setLoadingContext(false);
+    }
+  }, [isEmbedded, router.isReady, embeddedLevel, embeddedBusinessGroupId, embeddedBusinessId]);
+
+  // Cargar contexto inicial (grupo y sucursales) — no ejecutar en modo embebido
+  useEffect(() => {
+    if (router.query.embedded === '1') return;
+
     const loadContext = async () => {
       if (!user) {
         setLoadingContext(false);
@@ -366,7 +425,7 @@ export default function EmailsPage() {
     } else {
       setLoadingContext(false);
     }
-  }, [user, availableBusinesses]);
+  }, [user, availableBusinesses, router.query.embedded]);
 
   // Cargar templates globales una vez al inicio
   useEffect(() => {
@@ -857,105 +916,104 @@ export default function EmailsPage() {
 
   // Mostrar loading solo cuando todas las peticiones estén completas
   if (loading) {
+    const loadingContent = (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    );
     return (
       <>
         <Head>
           <title>Correos - AGORA Local</title>
         </Head>
-        <LocalLayout>
-          <div className="flex h-full bg-gray-50">
-            <SettingsSidebar />
-            <div className="flex-1 min-w-0 overflow-y-auto">
-              <div className="max-w-7xl mx-auto px-6 py-8">
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                </div>
+        {isEmbedded ? (
+          <div className="min-h-[400px] p-4 bg-white dark:bg-neutral-800">{loadingContent}</div>
+        ) : (
+          <LocalLayout>
+            <div className="flex h-full bg-gray-50">
+              <SettingsSidebar />
+              <div className="flex-1 min-w-0 overflow-y-auto">
+                <div className="max-w-7xl mx-auto px-6 py-8">{loadingContent}</div>
               </div>
             </div>
-          </div>
-        </LocalLayout>
+          </LocalLayout>
+        )}
       </>
     );
   }
 
-  return (
+  const contentArea = (
     <>
-      <Head>
-        <title>Correos - AGORA Local</title>
-      </Head>
-      <LocalLayout>
-        <div className="flex h-full bg-gray-50">
-          <SettingsSidebar />
+      {/* Header */}
+      <div className={isEmbedded ? 'mb-4' : 'mb-8'}>
+        {!isEmbedded && (
+          <>
+            <h1 className="text-xl font-normal text-gray-900 dark:text-neutral-100 mb-2">Correos</h1>
+            <p className="text-sm text-gray-600 dark:text-neutral-400 mb-4">
+              Gestiona los templates de correos electrónicos que se envían automáticamente
+            </p>
+          </>
+        )}
 
-          <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-8">
-              {/* Header */}
-              <div className="mb-8">
-                <h1 className="text-xl font-normal text-gray-900 mb-2">Correos</h1>
-                <p className="text-sm text-gray-600 mb-4">
-                  Gestiona los templates de correos electrónicos que se envían automáticamente
-                </p>
-
-                {/* Tabs de gestión: Grupo y Sucursales */}
-                <div className="mb-6">
-                  <div className="border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
-                      {/* Tab de Grupo Empresarial (solo si es superadmin y hay grupo) */}
-                      {businessGroup && isSuperadmin && (
-                        <button
-                          type="button"
-                          onClick={() => setManagementMode('group')}
-                          className={`whitespace-nowrap py-4 px-1 border-b-2 font-normal text-sm transition-colors ${
-                            managementMode === 'group'
-                              ? 'border-indigo-500 text-indigo-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
-                        >
-                          Grupo Empresarial
-                          <span className="ml-2 text-xs text-gray-400">({businessGroup.name})</span>
-                        </button>
-                      )}
-
-                      {/* Tabs de Sucursales */}
-                      {branches.map((branch) => (
-                        <button
-                          key={branch.id}
-                          type="button"
-                          onClick={() => {
-                            setManagementMode('business');
-                            setSelectedBranchId(branch.id);
-                          }}
-                          className={`whitespace-nowrap py-4 px-1 border-b-2 font-normal text-sm transition-colors ${
-                            managementMode === 'business' && selectedBranchId === branch.id
-                              ? 'border-indigo-500 text-indigo-600'
-                              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                          }`}
-                        >
-                          {branch.name}
-                        </button>
-                      ))}
-                    </nav>
-                  </div>
-                </div>
-
-                {/* Información del contexto actual */}
-                <div className="mb-4">
-                  <p className="text-xs text-gray-500">
-                    {managementMode === 'group' && businessGroup && (
-                      <>Gestionando templates del grupo: <strong>{businessGroup.name}</strong></>
-                    )}
-                    {managementMode === 'business' && selectedBranchId && (
-                      <>Gestionando templates de la sucursal: <strong>{branches.find(b => b.id === selectedBranchId)?.name || 'N/A'}</strong></>
-                    )}
-                  </p>
-                </div>
-
-                {error && (
-                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-sm text-red-800">{error}</p>
-                  </div>
+        {/* Tabs de gestión: Grupo y Sucursales — ocultos en modo embebido */}
+        {!isEmbedded && (
+          <div className="mb-6">
+            <div className="border-b border-gray-200 dark:border-neutral-700">
+              <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+                {businessGroup && isSuperadmin && (
+                  <button
+                    type="button"
+                    onClick={() => setManagementMode('group')}
+                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-normal text-sm transition-colors ${
+                      managementMode === 'group'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Grupo Empresarial
+                    <span className="ml-2 text-xs text-gray-400">({businessGroup.name})</span>
+                  </button>
                 )}
-              </div>
+                {branches.map((branch) => (
+                  <button
+                    key={branch.id}
+                    type="button"
+                    onClick={() => {
+                      setManagementMode('business');
+                      setSelectedBranchId(branch.id);
+                    }}
+                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-normal text-sm transition-colors ${
+                      managementMode === 'business' && selectedBranchId === branch.id
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    {branch.name}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+        )}
+
+        {/* Información del contexto actual */}
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 dark:text-neutral-400">
+            {managementMode === 'group' && businessGroup && (
+              <>Gestionando templates del grupo: <strong>{businessGroup.name}</strong></>
+            )}
+            {managementMode === 'business' && selectedBranchId && (
+              <>Gestionando templates de la sucursal: <strong>{branches.find(b => b.id === selectedBranchId)?.name || 'N/A'}</strong></>
+            )}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </div>
+        )}
+      </div>
 
               {!selectedTemplate && !editingTemplate && (
                 <div className="bg-white rounded-lg border border-gray-200">
@@ -1376,10 +1434,28 @@ export default function EmailsPage() {
                   </div>
                 </div>
               )}
+            </>
+          );
+
+  return (
+    <>
+      <Head>
+        <title>Correos - AGORA Local</title>
+      </Head>
+      {isEmbedded ? (
+        <div className="min-h-[400px] p-4 bg-white dark:bg-neutral-800">
+          <div className="max-w-7xl mx-auto">{contentArea}</div>
+        </div>
+      ) : (
+        <LocalLayout>
+          <div className="flex h-full bg-gray-50">
+            <SettingsSidebar />
+            <div className="flex-1 min-w-0 overflow-y-auto">
+              <div className="max-w-7xl mx-auto px-6 py-8">{contentArea}</div>
             </div>
           </div>
-        </div>
-      </LocalLayout>
+        </LocalLayout>
+      )}
     </>
   );
 }

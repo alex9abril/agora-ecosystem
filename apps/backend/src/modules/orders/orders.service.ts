@@ -17,6 +17,7 @@ import { EmailService } from '../email/email.service';
 import { BusinessesService } from '../businesses/businesses.service';
 import { KarbotService } from '../businesses/karbot.service';
 import { IntegrationLogsService } from '../settings/integration-logs.service';
+import { StoresService } from '../stores/stores.service';
 import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
 
 const DEFAULT_TAX_SETTINGS = {
@@ -39,6 +40,7 @@ export class OrdersService {
     private readonly businessesService: BusinessesService,
     private readonly karbotService: KarbotService,
     private readonly integrationLogs: IntegrationLogsService,
+    private readonly storesService: StoresService,
   ) {}
 
   /**
@@ -266,11 +268,12 @@ export class OrdersService {
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name IN ('store_context', 'order_group_id')`
+           AND column_name IN ('store_context', 'order_group_id', 'store_id')`
       );
       const existingColumns = new Set(columnsCheck.rows.map(row => row.column_name));
       const hasStoreContext = existingColumns.has('store_context');
       const hasOrderGroupId = existingColumns.has('order_group_id');
+      const hasStoreId = existingColumns.has('store_id');
 
       // 13. Crear una orden por cada sucursal
       const createdOrders: any[] = [];
@@ -284,6 +287,16 @@ export class OrdersService {
 
       // Ruta de contexto de tienda (sucursal, grupo, marca o global) para URL en correo
       const storeContext = (checkoutDto.storeContext || '').trim() || null;
+      // Resolver store_id: del DTO o desde storeContext
+      let storeIdToSave: string | null = checkoutDto.storeId?.trim() || null;
+      if (!storeIdToSave && storeContext && hasStoreId) {
+        try {
+          const resolved = await this.storesService.resolveStoreFromPath(storeContext);
+          if (resolved) storeIdToSave = resolved.id;
+        } catch {
+          // ignorar si no se resuelve
+        }
+      }
 
       // Crear órdenes para cada sucursal
       for (const [businessId, items] of itemsByBusiness.entries()) {
@@ -358,6 +371,13 @@ export class OrdersService {
         if (hasStoreContext) {
           insertColumns.push('store_context');
           insertValues.push(storeContext);
+          paramIndex++;
+        }
+
+        // Agregar store_id si existe la columna
+        if (hasStoreId && storeIdToSave) {
+          insertColumns.push('store_id');
+          insertValues.push(storeIdToSave);
           paramIndex++;
         }
 

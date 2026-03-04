@@ -489,6 +489,24 @@ export const businessService = {
   },
 
   /**
+   * Obtener un grupo empresarial por ID
+   */
+  async getBusinessGroupById(groupId: string): Promise<BusinessGroup> {
+    return apiRequest<BusinessGroup>(`/businesses/groups/${groupId}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * Obtener una sucursal por ID
+   */
+  async getBranchById(branchId: string): Promise<Business> {
+    return apiRequest<Business>(`/businesses/branches/id/${branchId}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
    * Obtener sucursales con filtros (público)
    */
   async getBranches(filters?: {

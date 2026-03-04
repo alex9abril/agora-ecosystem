@@ -6,19 +6,21 @@
 
 ---
 
-## 1. Los 4 tipos de tienda (contextos)
+## 1. Los 5 tipos de tienda (canales de venta)
 
-El marketplace tiene **cuatro niveles de contexto**. Tres pueden tener **múltiples instancias** (varios distribuidores, varios grupos, varias marcas); el cuarto **engloba todo**.
+El marketplace tiene **cinco tipos de canal de venta** ("tiendas"). Cada uno es un contexto desde el que se puede vender; **quien surte el pedido (fulfillment) es siempre la sucursal** (`orders.business_id`).
 
-| Tipo        | Prefijo URL (store-front) | Descripción breve | Múltiples |
-|------------|---------------------------|--------------------|-----------|
-| **Global** | Sin prefijo (`/`)         | Tienda que muestra productos de todas las sucursales. Contexto por defecto. | No (uno solo: "todo") |
-| **Grupo**  | `/grupo/{slug}`           | Grupo empresarial (ej: Grupo Andrade). Agrupa varias sucursales. Productos y búsquedas filtrados por el grupo. | Sí (varios grupos) |
-| **Sucursal** | `/sucursal/{slug}`     | Sucursal / distribuidor concreto (ej: Toyota Satélite). Productos, precios y stock por sucursal. | Sí (varias sucursales) |
-| **Marca**  | `/brand/{code}`           | Marca de vehículo (ej: Nissan, Toyota). Filtra productos compatibles con esa marca. En la app la ruta usa `brand`, no `marca`. | Sí (varias marcas) |
+| Tipo            | Prefijo URL (store-front)     | Descripción breve | Gestión |
+|-----------------|-------------------------------|-------------------|---------|
+| **Global**      | Sin prefijo (`/`)             | Agora: todo el catálogo. No se gestiona en web-local. | web-admin |
+| **Grupo**       | `/grupo/{slug}`               | Tienda por grupo/corporativo. Productos del grupo. | web-local |
+| **Sucursal**    | `/sucursal/{slug}`            | Tienda por distribuidor (normalmente 1 marca por sucursal). | web-local |
+| **Grupo+marca** | `/grupo/{slug}/marca/{code}`  | Varias sucursales del mismo grupo, una marca. Multimarca. | web-local |
+| **Marca global**| `/brand/{code}`               | Tienda global por marca (todas las sucursales que venden esa marca). | No en web-local (cuenta marca) |
 
 - **Global:** no se agrega prefijo a las rutas (`/products`, `/cart`, `/orders`, etc.).
 - **Grupo, Sucursal, Marca:** las rutas internas llevan el prefijo del contexto (ej: `/sucursal/toyota-satelite/products`, `/grupo/grupo-andrade/cart`, `/brand/nissan/products`).
+- Los **canales** están modelados en la tabla **`core.stores`**; al generar el pedido se guarda el canal en **`orders.orders.store_id`** y la ruta en **`orders.orders.store_context`**.
 
 ---
 
@@ -55,10 +57,16 @@ Resumen:
   Campos: `id`, `name`, `code` (para URL, ej: `nissan`), `display_order`, `is_active`.  
   Relacionada con compatibilidad de productos (vehicle_models, product_vehicle_compatibility, etc.) en `database/agora/migration_vehicle_compatibility.sql` y schema de catálogo.
 
-- **Pedidos y contexto de tienda**  
-  - `orders.orders`: cada pedido tiene `business_id` (sucursal que surte).  
-  - `orders.orders.store_context` (TEXT, nullable): ruta de contexto desde la que se hizo el pedido (ej: `/sucursal/toyota-satelite`, `/grupo/grupo-andrade`, `/brand/nissan`) para construir en el correo el enlace "Ver detalle" a la misma tienda.  
-  Migración: `database/agora/migration_add_store_context_to_orders.sql`.
+- **`core.stores`**  
+  Canales de venta (una fila por tienda/canal).  
+  Campos: `id`, `type` ('global' | 'group' | 'branch' | 'group_brand' | 'global_brand'), `business_group_id`, `business_id`, `vehicle_brand_id` (según tipo), `slug`, `name`, `is_active`, `settings` (JSONB).  
+  Migración: `database/agora/migration_stores.sql`. Seed: `database/agora/seed_stores_from_groups_branches_brands.sql`.
+
+- **Pedidos y canal de venta**  
+  - `orders.orders`: cada pedido tiene `business_id` (sucursal que surte / fulfillment).  
+  - `orders.orders.store_id` (UUID, nullable, FK a `core.stores`): canal de venta desde el que se realizó el pedido.  
+  - `orders.orders.store_context` (TEXT, nullable): ruta de contexto (ej: `/sucursal/toyota-satelite`, `/grupo/grupo-andrade`) para construir en el correo el enlace "Ver detalle" a la misma tienda.  
+  Migraciones: `database/agora/migration_add_store_context_to_orders.sql`, `database/agora/migration_orders_store_id.sql`.
 
 - **Carrito multi-sucursal**  
   - `orders.shopping_cart`, `orders.shopping_cart_items`.  
@@ -92,9 +100,10 @@ Resumen:
 - **Links y rutas:**  
   - Usar `ContextualLink` o `getContextualUrl()` para que productos, carrito, checkout, órdenes y "Ver detalle" del correo mantengan el mismo contexto (sucursal, grupo, marca o global).
 
-- **Checkout y store_context:**  
-  - Al hacer checkout se envía `storeContext` (ej: `/sucursal/toyota-satelite` o `/grupo/grupo-andrade`).  
-  - Se persiste en `orders.orders.store_context` y se usa para construir la URL del botón "Ver detalle del pedido" en el correo (mismo contexto de tienda).
+- **Checkout, store_context y store_id:**  
+  - Al hacer checkout se envía `storeContext` (ej: `/grupo/toyota-group` o `/sucursal/toyota-satelite`) y opcionalmente `storeId`.  
+  - Se persiste en `orders.orders.store_context` (ruta) y en `orders.orders.store_id` (FK a `core.stores` cuando existe); el backend resuelve `store_id` desde `storeContext` si no se envía `storeId`.  
+  - Se usa para construir la URL del botón "Ver detalle del pedido" en el correo (mismo contexto de tienda).
 
 Documentación detallada:  
 - `docs/store-front/01-resumen-solucion-contexto.md`  
@@ -109,18 +118,20 @@ Documentación detallada:
 - **Grupos:** APIs que usan `core.business_groups` (por slug, por id) y listan sucursales del grupo.
 - **Marcas:** catálogo y compatibilidad con `catalog.vehicle_brands`; endpoints que filtran productos por marca de vehículo cuando el contexto es "brand".
 - **Pedidos:**  
-  - Siempre asociados a una sucursal (`orders.orders.business_id`).  
+  - Siempre asociados a una sucursal (`orders.orders.business_id` = fulfillment).  
+  - `orders.store_id` identifica el canal de venta; `store_context` conserva la ruta para el correo.  
   - Si existe `store_context`, se usa para generar la URL de "Ver detalle" en el correo (mismo tipo de tienda: sucursal, grupo, marca o global).
+- **Tiendas (canales):** módulo `StoresModule` en backend: `GET /stores` (filtros por tipo, grupo, etc.), `GET /stores/by-path?path=...`, `GET /stores/:id`, `PATCH /stores/:id`. Resolución de `store_id` desde path en checkout.
 
 ---
 
 ## 6. Resumen rápido para el agente
 
-- **4 tipos de tienda:** global (todo), grupo, sucursal, marca. Tres con múltiples instancias; global es uno solo "que engloba todo".
-- **BD:** `core.business_groups`, `core.businesses` (con `business_group_id` y `slug`), `catalog.vehicle_brands` (code para URL), `orders.orders.store_context` para enlace en correo.
-- **URLs:** global sin prefijo; grupo `/grupo/{slug}`; sucursal `/sucursal/{slug}`; marca `/brand/{code}`.
-- **Store-front:** StoreContext + getContextualUrl + ContextualLink; checkout envía storeContext y se guarda en orders para el correo.
-- **Al implementar o cambiar algo de "tiendas":** mantener esta jerarquía, prefijos y convenciones de BD; si tocas rutas o correos, seguir usando `store_context` para que el usuario vuelva a la misma tienda (sucursal, grupo, marca o global).
+- **5 tipos de tienda (canales):** global, grupo, sucursal, grupo+marca, marca global. Fulfillment siempre es la sucursal (`orders.business_id`).
+- **BD:** `core.stores` (canales de venta), `core.business_groups`, `core.businesses` (con `business_group_id` y `slug`), `catalog.vehicle_brands` (code para URL), `orders.orders.store_id` (canal) y `orders.orders.store_context` (ruta para correo).
+- **URLs:** global sin prefijo; grupo `/grupo/{slug}`; sucursal `/sucursal/{slug}`; marca `/brand/{code}`; grupo+marca `/grupo/{slug}/marca/{code}` (fase 2 en store-front).
+- **Store-front:** StoreContext + getContextualUrl + ContextualLink; checkout envía storeContext (y opcionalmente storeId); backend guarda `store_id` y `store_context` en el pedido.
+- **Al implementar o cambiar algo de "tiendas":** mantener esta jerarquía, prefijos y convenciones de BD; si tocas rutas o correos, seguir usando `store_context`; para reportes y atribución usar `store_id`.
 
 ---
 
@@ -137,4 +148,4 @@ Resumen: el grupo gestiona solo branding grupo y sucursal; la tienda por **marca
 ## 8. Documentación y DB de referencia
 
 - Docs: `docs/store-front/01-resumen-solucion-contexto.md`, `02-contexto-navegacion-mini-tienda.md`, `03-ejemplos-implementacion-contexto.md`, `docs/features/12-proceso-checkout-multi-sucursal.md`, `docs/features/03-roles-negocio-multi-tiendas.md`.
-- DB: `database/schema/schema.sql`, `database/agora/migration_business_groups.sql`, `database/agora/migration_branch_fields.sql`, `database/agora/migration_vehicle_compatibility.sql`, `database/agora/migration_add_store_context_to_orders.sql`, `database/README.md`.
+- DB: `database/schema/schema.sql`, `database/agora/migration_business_groups.sql`, `database/agora/migration_branch_fields.sql`, `database/agora/migration_vehicle_compatibility.sql`, `database/agora/migration_stores.sql`, `database/agora/migration_orders_store_id.sql`, `database/agora/seed_stores_from_groups_branches_brands.sql`, `database/agora/migration_add_store_context_to_orders.sql`, `database/README.md`.

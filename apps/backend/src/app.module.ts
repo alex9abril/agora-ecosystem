@@ -32,6 +32,7 @@ import { LogisticsModule } from './modules/logistics/logistics.module';
 import { LandingSlidersModule } from './modules/commerce/landing-sliders/landing-sliders.module';
 import { EmailTemplatesModule } from './modules/email-templates/email-templates.module';
 import { EmailModule } from './modules/email/email.module';
+import { StoresModule } from './modules/stores/stores.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { EmailModule } from './modules/email/email.module';
     LandingSlidersModule,
     EmailTemplatesModule,
     EmailModule,
+    StoresModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.
