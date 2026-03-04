@@ -323,6 +323,7 @@ export const businessService = {
     slug?: string;
     accepts_pickup?: boolean;
     is_active?: boolean;
+    settings?: Record<string, any>;
   }): Promise<Business> {
     return apiRequest<Business>(`/businesses/${businessId}`, {
       method: 'PATCH',

@@ -32,6 +32,8 @@ import {
   ProductCollection,
 } from "@/lib/product-collections";
 import { businessService } from "@/lib/business";
+import { Skeleton, SkeletonFilters, SkeletonTable } from "@/components/ui/Skeleton";
+import TableFilters, { type FilterRow, type FilterColumn } from "@/components/TableFilters";
 
 // Formateador de precios con separación de miles (ej: 6,589.32)
 const priceFormatter = new Intl.NumberFormat("es-MX", {
@@ -103,6 +105,10 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Filtros acumulables por columna (campo, operador, valor)
+  const [advancedFilters, setAdvancedFilters] = useState<FilterRow[]>([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState<number>(() => {
@@ -896,6 +902,124 @@ export default function ProductsPage() {
   // Verificar si el producto es de farmacia
   const isMedicine = formData.product_type === "medicine";
 
+  // Columnas filtrables para la tabla de productos
+  const productFilterColumns: FilterColumn[] = useMemo(
+    () => [
+      { id: "name", label: "Producto", type: "text" },
+      { id: "sku", label: "SKU", type: "text" },
+      { id: "description", label: "Descripción", type: "text" },
+      { id: "price", label: "Precio", type: "number" },
+      {
+        id: "product_type",
+        label: "Tipo",
+        type: "enum",
+        options: [
+          { value: "food", label: "Alimento" },
+          { value: "beverage", label: "Bebida" },
+          { value: "medicine", label: "Medicamento" },
+          { value: "grocery", label: "Abarrotes" },
+          { value: "non_food", label: "No Alimenticio" },
+          { value: "refaccion", label: "Refacción" },
+        ],
+      },
+      {
+        id: "is_available",
+        label: "Disponibilidad",
+        type: "enum",
+        options: [
+          { value: "true", label: "Disponible" },
+          { value: "false", label: "No disponible" },
+        ],
+      },
+    ],
+    []
+  );
+
+  // Sugerencias para autocomplete a partir de los productos actuales
+  const filterValueSuggestions = useMemo(() => {
+    const nameSet = new Set<string>();
+    const skuSet = new Set<string>();
+    const descSet = new Set<string>();
+    products.forEach((p) => {
+      if (p.name?.trim()) nameSet.add(p.name.trim());
+      if (p.sku?.trim()) skuSet.add(p.sku.trim());
+      if (p.description?.trim()) {
+        const snippet = p.description.trim().slice(0, 80);
+        descSet.add(snippet.length < p.description.length ? `${snippet}…` : snippet);
+      }
+    });
+    return {
+      name: Array.from(nameSet).sort(),
+      sku: Array.from(skuSet).sort(),
+      description: Array.from(descSet).sort(),
+    };
+  }, [products]);
+
+  // Aplicar un solo filtro a un producto
+  const productMatchesFilter = (product: Product, row: FilterRow): boolean => {
+    if (!row.field || String(row.value).trim() === "") return true;
+    const v = String(row.value).trim().toLowerCase();
+    const raw = row.value;
+
+    switch (row.field) {
+      case "name": {
+        const val = (product.name ?? "").toLowerCase();
+        if (row.operator === "contains") return val.includes(v);
+        if (row.operator === "equals") return val === v;
+        if (row.operator === "starts_with") return val.startsWith(v);
+        if (row.operator === "not_contains") return !val.includes(v);
+        if (row.operator === "not_equals") return val !== v;
+        return true;
+      }
+      case "sku": {
+        const val = (product.sku ?? "").toLowerCase();
+        if (row.operator === "contains") return val.includes(v);
+        if (row.operator === "equals") return val === v;
+        if (row.operator === "starts_with") return val.startsWith(v);
+        if (row.operator === "not_contains") return !val.includes(v);
+        if (row.operator === "not_equals") return val !== v;
+        return true;
+      }
+      case "description": {
+        const val = (product.description ?? "").toLowerCase();
+        if (row.operator === "contains") return val.includes(v);
+        if (row.operator === "equals") return val === v;
+        if (row.operator === "starts_with") return val.startsWith(v);
+        if (row.operator === "not_contains") return !val.includes(v);
+        if (row.operator === "not_equals") return val !== v;
+        return true;
+      }
+      case "price": {
+        const num = Number(raw);
+        if (Number.isNaN(num)) return true;
+        const price = Number(product.price);
+        if (row.operator === "=") return price === num;
+        if (row.operator === "!=") return price !== num;
+        if (row.operator === "<") return price < num;
+        if (row.operator === ">") return price > num;
+        if (row.operator === "<=") return price <= num;
+        if (row.operator === ">=") return price >= num;
+        return true;
+      }
+      case "product_type": {
+        const val = (product.product_type ?? "").toLowerCase();
+        const target = v;
+        if (row.operator === "=") return val === target;
+        if (row.operator === "!=") return val !== target;
+        return true;
+      }
+      case "is_available": {
+        const target = raw === "true";
+        const val = Boolean(product.is_available);
+        if (row.operator === "=") return val === target;
+        if (row.operator === "!=") return val !== target;
+        return true;
+      }
+      default:
+        return true;
+    }
+  };
+
   // Filtrar y ordenar productos
   const filteredAndSortedProducts = products
     .filter((product) => {
@@ -915,10 +1039,15 @@ export default function ProductsPage() {
         const hasSelectedBranch = Array.from(selectedBranchFilters).some(
           (branchId) => productBranches.has(branchId),
         );
-        return hasSelectedBranch;
+        if (!hasSelectedBranch) return false;
       }
 
-      // Si no hay filtros activos, mostrar todos
+      // Filtros avanzados acumulables (todas las condiciones con AND)
+      for (const row of advancedFilters) {
+        if (!row.field) continue;
+        if (!productMatchesFilter(product, row)) return false;
+      }
+
       return true;
     })
     .sort((a, b) => {
@@ -943,8 +1072,21 @@ export default function ProductsPage() {
   if (loading) {
     return (
       <LocalLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">Cargando productos...</div>
+        <Head>
+          <title>Productos - AGORA Local</title>
+        </Head>
+        <div className="w-full h-full flex flex-col p-4">
+          <div className="flex justify-between items-center mb-6">
+            <Skeleton className="h-7 w-32" />
+            <div className="flex gap-3">
+              <Skeleton className="h-9 w-24 rounded border" />
+              <Skeleton className="h-9 w-28 rounded border" />
+            </div>
+          </div>
+          <div className="mb-4">
+            <SkeletonFilters />
+          </div>
+          <SkeletonTable rows={12} cols={6} />
         </div>
       </LocalLayout>
     );
@@ -956,9 +1098,9 @@ export default function ProductsPage() {
         <title>Productos - AGORA Local</title>
       </Head>
 
-      <div className="w-full h-full flex flex-col p-6">
+      <div className="w-full h-full flex flex-col p-4">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-lg font-medium text-gray-900">Productos</h1>
+          <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100">Productos</h1>
           {!showForm && (
             <div className="flex items-center gap-3">
               {/* Botón de Filtros */}
@@ -1250,12 +1392,12 @@ export default function ProductsPage() {
           /* Lista de productos en tabla */
           <div className="flex-1 flex flex-col min-h-0">
             {/* Barra de búsqueda */}
-            <form className="mb-4" onSubmit={handleSearchSubmit}>
+            <form className="mb-2" onSubmit={handleSearchSubmit}>
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <svg
-                      className="h-5 w-5 text-gray-400"
+                      className="h-5 w-5 text-gray-400 dark:text-gray-500"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -1278,7 +1420,7 @@ export default function ProductsPage() {
                         handleSearchSubmit(e);
                       }
                     }}
-                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-gray-400 focus:border-gray-400 text-sm"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md leading-5 bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 text-sm"
                   />
                 </div>
                 <button
@@ -1291,14 +1433,56 @@ export default function ProductsPage() {
             </form>
 
             {/* Tabla de productos */}
-            <div className="bg-white rounded border border-gray-200 overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 overflow-hidden flex-1 flex flex-col min-h-0">
+              {/* Esquina superior: botón Filtros (panel flotante, igual que pedidos) */}
+              <div className="flex items-center border-b border-gray-200 dark:border-neutral-700 px-4 py-2 flex-shrink-0 relative">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded-md border transition-colors ${
+                    advancedFilters.some((f) => f.field && String(f.value).trim())
+                      ? "bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-600 dark:border-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-600"
+                      : showAdvancedFilters
+                        ? "bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white"
+                        : "bg-white dark:bg-neutral-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-neutral-600 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                  </svg>
+                  {(() => {
+                  const n = advancedFilters.filter((f) => f.field && String(f.value).trim()).length;
+                  return n > 0 ? `Filtrado por ${n} regla${n === 1 ? "" : "s"}` : "Filtros por columna";
+                })()}
+                </button>
+
+                {/* Panel flotante de filtros (igual que en pedidos) */}
+                {showAdvancedFilters && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      aria-hidden
+                      onClick={() => setShowAdvancedFilters(false)}
+                    />
+                    <div className="absolute left-4 top-full mt-1 z-50 min-w-[320px] max-w-[90vw] rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-800 shadow-xl p-4">
+                      <TableFilters
+                        columns={productFilterColumns}
+                        filters={advancedFilters}
+                        onChange={setAdvancedFilters}
+                        valueSuggestions={filterValueSuggestions}
+                        applyOnChange={true}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
               <div className="overflow-x-auto flex-1 min-h-0">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-neutral-700">
+                  <thead className="bg-gray-50 dark:bg-neutral-700/50">
                     <tr>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         <input
                           type="checkbox"
@@ -1307,7 +1491,7 @@ export default function ProductsPage() {
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                         onClick={() => {
                           if (sortBy === "name") {
                             setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -1338,25 +1522,25 @@ export default function ProductsPage() {
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         Imagen
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         Disponibilidad
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         Descripción
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
                         onClick={() => {
                           if (sortBy === "price") {
                             setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -1387,19 +1571,13 @@ export default function ProductsPage() {
                       </th>
                       <th
                         scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         Tipo
                       </th>
-                      <th
-                        scope="col"
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        Acciones
-                      </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white dark:bg-neutral-800 divide-y divide-gray-200 dark:divide-neutral-700">
                     {filteredAndSortedProducts.map((product) => {
                       const productTypeLabels: Record<
                         ProductType,
@@ -1436,7 +1614,7 @@ export default function ProductsPage() {
                       return (
                         <tr
                           key={product.id}
-                          className="hover:bg-gray-50 cursor-pointer"
+                          className="hover:bg-gray-50 dark:hover:bg-neutral-700 cursor-pointer"
                           onClick={(e) => {
                             // Evitar que el click en checkbox o botones active la navegación
                             const target = e.target as HTMLElement;
@@ -1451,7 +1629,7 @@ export default function ProductsPage() {
                           }}
                         >
                           <td
-                            className="px-6 py-4 whitespace-nowrap"
+                            className="px-3 py-2 whitespace-nowrap"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <input
@@ -1459,27 +1637,27 @@ export default function ProductsPage() {
                               className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
                             />
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900 max-w-md">
+                          <td className="px-3 py-2">
+                            <div className="text-xs font-medium text-gray-900 dark:text-gray-100 max-w-md">
                               {product.name}
                             </div>
                             {product.sku && (
-                              <div className="text-xs text-gray-500 mt-1">
+                              <div className="text-[10px] font-light text-gray-500 dark:text-gray-400 mt-0.5">
                                 SKU: {product.sku}
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             {product.image_url || product.primary_image_url ? (
                               <img
                                 src={product.image_url || product.primary_image_url}
                                 alt={product.name}
-                                className="h-10 w-10 rounded object-cover border border-gray-200"
+                                className="h-8 w-8 rounded object-cover border border-gray-200"
                               />
                             ) : (
-                              <div className="h-10 w-10 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400">
+                              <div className="h-8 w-8 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400">
                                 <svg
-                                  className="h-5 w-5"
+                                  className="h-4 w-4"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
@@ -1494,105 +1672,34 @@ export default function ProductsPage() {
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             <div className="flex items-center">
                               <div
-                                className={`h-2 w-2 rounded-full mr-2 ${product.is_available ? "bg-green-500" : "bg-gray-400"}`}
+                                className={`h-2 w-2 rounded-full mr-1.5 ${product.is_available ? "bg-green-500" : "bg-gray-400"}`}
                               ></div>
-                              <span className="text-sm text-gray-600">
+                              <span className="text-xs font-light text-gray-600 dark:text-gray-300">
                                 {product.is_available
                                   ? "Disponible"
                                   : "No disponible"}
                               </span>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-gray-500 max-w-xs truncate">
+                          <td className="px-3 py-2">
+                            <div className="text-xs font-light text-gray-500 dark:text-gray-400 max-w-xs truncate">
                               {product.description || "-"}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="text-xs font-medium text-gray-900 dark:text-gray-100">
                               ${priceFormatter.format(product.price || 0)}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-3 py-2 whitespace-nowrap">
                             <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${typeInfo.color}`}
+                              className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${typeInfo.color}`}
                             >
                               {typeInfo.label}
                             </span>
-                          </td>
-                          <td
-                            className="px-6 py-4 whitespace-nowrap text-sm font-medium"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleEdit(product)}
-                                className="text-gray-600 hover:text-gray-900"
-                                title="Editar"
-                              >
-                                <svg
-                                  className="h-5 w-5"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                  />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleToggleAvailability(product)
-                                }
-                                className={
-                                  product.is_available
-                                    ? "text-gray-600 hover:text-gray-900"
-                                    : "text-green-600 hover:text-green-900"
-                                }
-                                title={
-                                  product.is_available
-                                    ? "Desactivar"
-                                    : "Activar"
-                                }
-                              >
-                                {product.is_available ? (
-                                  <svg
-                                    className="h-5 w-5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-                                    />
-                                  </svg>
-                                ) : (
-                                  <svg
-                                    className="h-5 w-5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth={2}
-                                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
                           </td>
                         </tr>
                       );
@@ -1602,8 +1709,8 @@ export default function ProductsPage() {
               </div>
 
               {filteredAndSortedProducts.length === 0 && (
-                <div className="text-center py-12">
-                  <p className="text-sm text-gray-500">
+                <div className="text-center py-6">
+                  <p className="text-xs font-light text-gray-500 dark:text-gray-400">
                     {searchTerm
                       ? "No se encontraron productos que coincidan con la búsqueda"
                       : "No hay productos registrados"}
@@ -1620,9 +1727,9 @@ export default function ProductsPage() {
               )}
 
               {filteredAndSortedProducts.length > 0 && (
-                <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+                <div className="px-6 py-3 border-t border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 flex-shrink-0">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
                       Mostrando {(currentPage - 1) * pageSize + 1} -{" "}
                       {Math.min(currentPage * pageSize, totalProducts)} de{" "}
                       {totalProducts} productos
@@ -1630,7 +1737,7 @@ export default function ProductsPage() {
                     <div className="flex items-center gap-2">
                       {/* Selector de tamaño de página */}
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-500">
+                        <label className="text-sm text-gray-500 dark:text-gray-400">
                           Mostrar:
                         </label>
                         <select
@@ -1639,7 +1746,7 @@ export default function ProductsPage() {
                             setPageSize(Number(e.target.value));
                             setCurrentPage(1); // Resetear a la primera página
                           }}
-                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                          className="text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500"
                         >
                           {PAGE_SIZE_OPTIONS.map((option) => (
                             <option key={option} value={option}>
@@ -1654,7 +1761,7 @@ export default function ProductsPage() {
                         <button
                           onClick={() => setCurrentPage(1)}
                           disabled={currentPage === 1}
-                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Primera página"
                         >
                           ««
@@ -1662,18 +1769,18 @@ export default function ProductsPage() {
                         <button
                           onClick={() => setCurrentPage(currentPage - 1)}
                           disabled={currentPage === 1}
-                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Página anterior"
                         >
                           «
                         </button>
-                        <span className="px-3 py-1 text-sm text-gray-700">
+                        <span className="px-3 py-1 text-sm text-gray-700 dark:text-gray-300">
                           Página {currentPage} de {totalPages || 1}
                         </span>
                         <button
                           onClick={() => setCurrentPage(currentPage + 1)}
                           disabled={currentPage >= totalPages}
-                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Página siguiente"
                         >
                           »
@@ -1681,7 +1788,7 @@ export default function ProductsPage() {
                         <button
                           onClick={() => setCurrentPage(totalPages)}
                           disabled={currentPage >= totalPages}
-                          className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Última página"
                         >
                           »»
@@ -2386,54 +2493,54 @@ export function ProductForm({
       <form onSubmit={onSubmit} className="space-y-8">
         {editingProduct && !isFichaEditable && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 space-y-4 rounded border border-gray-200 bg-gray-50 p-5">
-              <div className="flex items-center justify-between">
+            <div className="lg:col-span-1 space-y-4 rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm border-l-4 border-l-indigo-200 dark:border-l-indigo-500">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900 uppercase tracking-wide">
+                  <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Ficha técnica del producto
                   </h3>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                     Consulta la información general del producto.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsFichaEditable(true)}
-                  className="px-3 py-1.5 text-xs font-normal border border-gray-200 rounded bg-white text-gray-700 hover:bg-gray-100 transition-colors"
+                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-indigo-200 dark:border-indigo-600 bg-indigo-50/80 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-800/50 transition-colors shrink-0"
                 >
                   Editar producto
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-lg font-semibold text-gray-900">
+              <div className="space-y-2 pt-1">
+                <p className="text-base font-medium text-gray-800 dark:text-gray-200 leading-snug">
                   {formData.name || "Producto sin nombre"}
                 </p>
-                <p className="text-xs text-gray-500">SKU: {formData.sku || "Sin SKU"}</p>
-                <p className="text-xl font-semibold text-gray-900">
+                <p className="text-xs text-gray-400 dark:text-gray-500">SKU: {formData.sku || "Sin SKU"}</p>
+                <p className="text-lg font-medium text-emerald-700 dark:text-emerald-400">
                   ${priceFormatter.format(formData.price || 0)}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <span className="inline-flex items-center rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-600">
+                  <span className="inline-flex items-center rounded-full border border-sky-100 dark:border-sky-800 bg-sky-50/70 dark:bg-sky-900/40 px-2.5 py-1 text-xs text-sky-700 dark:text-sky-300">
                     {categoryLabel}
                   </span>
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                  <span className="inline-flex items-center rounded-full border border-amber-100 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-900/40 px-2.5 py-1 text-xs text-amber-800 dark:text-amber-200">
                     {productTypeLabel}
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-gray-900">Descripción</p>
-                <p className="text-sm text-gray-700 whitespace-pre-line">
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line leading-relaxed">
                   {formData.description || "Sin descripción"}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-gray-900">Galería</p>
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Galería</p>
                 {productImages.length > 0 ? (
-                  <div className="aspect-square w-full overflow-hidden rounded border border-gray-200 bg-white">
+                  <div className="aspect-square w-full overflow-hidden rounded-lg border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-700 ring-1 ring-gray-100 dark:ring-neutral-600">
                     <img
                       src={productImages[0].public_url}
                       alt={productImages[0].alt_text || formData.name || "Producto"}
@@ -2441,7 +2548,7 @@ export function ProductForm({
                     />
                   </div>
                 ) : (
-                  <div className="rounded border border-dashed border-gray-200 p-4 text-center text-xs text-gray-500">
+                  <div className="rounded-lg border border-dashed border-gray-200 dark:border-neutral-600 bg-gray-50/50 dark:bg-neutral-700/50 p-4 text-center text-xs text-gray-400 dark:text-gray-500">
                     Sin imágenes registradas.
                   </div>
                 )}
@@ -4416,8 +4523,8 @@ function VehicleCompatibilitySection({
 
       <div className="space-y-4">
         {/* Formulario para agregar compatibilidad */}
-        <div className="p-4 border border-gray-200 rounded bg-gray-50">
-          <h4 className="text-xs font-medium text-gray-700 mb-3">
+        <div className="p-4 border border-gray-200 dark:border-neutral-700 rounded bg-gray-50 dark:bg-neutral-800">
+          <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3">
             Agregar Compatibilidad
           </h4>
 
@@ -4426,7 +4533,7 @@ function VehicleCompatibilitySection({
             <label className="flex items-center">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                className="h-4 w-4 rounded border-gray-300 dark:border-neutral-500 text-gray-600 focus:ring-gray-400 dark:focus:ring-neutral-500"
                 checked={isUniversal}
                 onChange={(e) => {
                   setIsUniversal(e.target.checked);
@@ -4438,7 +4545,7 @@ function VehicleCompatibilitySection({
                   }
                 }}
               />
-              <span className="ml-2 text-sm text-gray-700">
+              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
                 Producto Universal (compatible con todos los vehículos)
               </span>
             </label>
@@ -4447,7 +4554,7 @@ function VehicleCompatibilitySection({
               <>
                 {/* Marca */}
                 <div>
-                  <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                  <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-1.5">
                     Marca <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -4475,7 +4582,7 @@ function VehicleCompatibilitySection({
                 {/* Modelo */}
                 {selectedBrand && (
                   <div>
-                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                    <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-1.5">
                       Modelo (Opcional)
                     </label>
                     <select
@@ -4505,7 +4612,7 @@ function VehicleCompatibilitySection({
                 {/* Año/Generación */}
                 {selectedModel && (
                   <div>
-                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                    <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-1.5">
                       Año / Generación (Opcional)
                     </label>
                     <select
@@ -4536,7 +4643,7 @@ function VehicleCompatibilitySection({
                 {/* Especificación */}
                 {selectedYear && (
                   <div>
-                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                    <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-1.5">
                       Especificación (Opcional)
                     </label>
                     <select
@@ -4564,7 +4671,7 @@ function VehicleCompatibilitySection({
 
             {/* Notas */}
             <div>
-              <label className="block text-xs font-normal text-gray-600 mb-1.5">
+              <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-1.5">
                 Notas (Opcional)
               </label>
               <textarea
@@ -4591,14 +4698,14 @@ function VehicleCompatibilitySection({
         {/* Lista de compatibilidades */}
         {compatibilities.length > 0 ? (
           <div>
-            <label className="block text-xs font-normal text-gray-600 mb-2">
+            <label className="block text-xs font-normal text-gray-600 dark:text-gray-400 mb-2">
               Compatibilidades Asignadas
             </label>
             <div className="space-y-2">
               {compatibilities.map((compatibility, index) => (
                 <div
                   key={index}
-                  className="flex items-start justify-between p-3 border border-gray-200 rounded bg-white hover:bg-gray-50 transition-colors"
+                  className="flex items-start justify-between p-3 border border-gray-200 dark:border-neutral-700 rounded bg-white dark:bg-neutral-800 hover:bg-gray-50 dark:hover:bg-neutral-700 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2">
@@ -4606,11 +4713,11 @@ function VehicleCompatibilitySection({
                         {compatibility.is_universal ? "🌐" : "🚗"}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 break-words">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
                           {getCompatibilityLabel(compatibility)}
                         </p>
                         {compatibility.notes && (
-                          <p className="text-xs text-gray-500 mt-1 italic break-words">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic break-words">
                             📝 {compatibility.notes}
                           </p>
                         )}
@@ -4620,7 +4727,7 @@ function VehicleCompatibilitySection({
                   <button
                     type="button"
                     onClick={() => handleRemoveCompatibility(index)}
-                    className="ml-3 flex-shrink-0 text-red-600 hover:text-red-800 transition-colors"
+                    className="ml-3 flex-shrink-0 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
                     title="Eliminar compatibilidad"
                   >
                     <svg
@@ -4749,13 +4856,17 @@ function BranchAvailabilitySection({
   };
 
   const handlePriceChange = (branchId: string, price: string) => {
-    const numPrice = price === "" ? null : parseFloat(price);
+    const cleaned = price.replace(/,/g, "");
+    const numPrice = cleaned === "" ? null : parseFloat(cleaned);
     setBranchAvailabilities((prev) =>
       prev.map((avail) =>
         avail.branch_id === branchId ? { ...avail, price: numPrice } : avail,
       ),
     );
   };
+
+  const formatPriceForInput = (value: number | null) =>
+    value !== null ? priceFormatter.format(value) : "";
 
   const handleStockChange = (branchId: string, stock: string) => {
     const numStock = stock === "" ? null : parseInt(stock, 10);
@@ -4910,22 +5021,22 @@ function BranchAvailabilitySection({
                   return (
                     <div
                       key={availability.branch_id}
-                      className={`w-full rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${
+                      className={`w-full rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 shadow-sm ${
                         !isBranchActive ? "opacity-70" : ""
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {availability.branch_name}
                           </p>
                           {!isBranchActive && (
-                            <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                            <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/50 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-300">
                               Inactiva
                             </span>
                           )}
                         </div>
-                        <label className="flex items-center gap-2 text-xs text-gray-600">
+                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                           <input
                             type="checkbox"
                             checked={availability.is_enabled}
@@ -4941,38 +5052,33 @@ function BranchAvailabilitySection({
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                             Precio en sucursal
                           </label>
                           <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={
-                              availability.price !== null
-                                ? availability.price
-                                : ""
-                            }
+                            type="text"
+                            inputMode="decimal"
+                            value={formatPriceForInput(availability.price)}
                             onChange={(e) =>
                               handlePriceChange(
                                 availability.branch_id,
                                 e.target.value,
                               )
                             }
-                            placeholder={`${globalPrice.toFixed(2)} (global)`}
+                            placeholder={`${priceFormatter.format(globalPrice)} (global)`}
                             disabled={
                               !availability.is_enabled || !isBranchActive
                             }
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-full px-3 py-2 text-sm text-right border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 disabled:bg-gray-100 dark:disabled:bg-neutral-800 disabled:text-gray-500 tabular-nums"
                           />
                           {availability.price === null && (
-                            <p className="mt-1 text-xs text-gray-400">
+                            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                               Se usa el precio global.
                             </p>
                           )}
                         </div>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                             Stock disponible
                           </label>
                           <input
@@ -4991,13 +5097,13 @@ function BranchAvailabilitySection({
                             }
                             placeholder="Sin límite"
                             disabled={!availability.is_enabled || !isBranchActive}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 disabled:bg-gray-100 dark:disabled:bg-neutral-800 disabled:text-gray-500"
                           />
                         </div>
                       </div>
 
                       <div className="mt-4 space-y-3">
-                        <label className="flex items-center gap-2 text-xs text-gray-600">
+                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                           <input
                             type="checkbox"
                             checked={availability.allow_backorder || false}
@@ -5005,12 +5111,12 @@ function BranchAvailabilitySection({
                               handleBackorderToggle(availability.branch_id)
                             }
                             disabled={!availability.is_enabled || !isBranchActive}
-                            className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400 disabled:opacity-50"
+                            className="h-4 w-4 rounded border-gray-300 dark:border-neutral-500 text-gray-600 focus:ring-gray-400 dark:focus:ring-neutral-500 disabled:opacity-50"
                           />
                           Permitir backorder
                         </label>
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                             Días estimados de backorder
                           </label>
                           <input
@@ -5034,35 +5140,35 @@ function BranchAvailabilitySection({
                               !availability.allow_backorder ||
                               !isBranchActive
                             }
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-100 disabled:text-gray-500"
+                            className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 disabled:bg-gray-100 dark:disabled:bg-neutral-800 disabled:text-gray-500"
                           />
                         </div>
                       </div>
 
-                      <div className="mt-4 border-t border-gray-100 pt-4">
+                      <div className="mt-4 border-t border-gray-100 dark:border-neutral-700 pt-4">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                             Colecciones
                           </p>
                           {loadingCollections && (
-                            <span className="text-xs text-gray-400">
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
                               Cargando...
                             </span>
                           )}
                         </div>
                         {branchCollections.length === 0 ? (
-                          <p className="mt-2 text-xs text-gray-500">
+                          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                             Sin colecciones para esta sucursal.
                           </p>
                         ) : (
                           <ul className="mt-3 space-y-2">
                             {branchCollections.map((collection) => (
                               <li key={collection.id}>
-                                <div className="flex items-center gap-2 text-sm text-gray-700">
+                                <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                                   <label className="flex items-center gap-2">
                                     <input
                                       type="checkbox"
-                                      className="h-4 w-4 rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                                      className="h-4 w-4 rounded border-gray-300 dark:border-neutral-500 text-gray-600 focus:ring-gray-400 dark:focus:ring-neutral-500"
                                       checked={selectedIds.includes(collection.id)}
                                       onChange={(e) =>
                                         onToggleCollection?.(
@@ -5077,8 +5183,8 @@ function BranchAvailabilitySection({
                                   </label>
                                   <Link
                                     href={`/catalog/collections/${collection.id}/products`}
-                                    className="hover:text-gray-900"
-                                  >
+className="hover:text-gray-900 dark:hover:text-gray-100"
+                                    >
                                     {collection.name}
                                   </Link>
                                 </div>

@@ -1,12 +1,14 @@
 import { ReactNode, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProfilePanel } from '@/contexts/ProfilePanelContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { businessService } from '@/lib/business';
 import Topbar from './Topbar';
 import Sidebar from './Sidebar';
 import BusinessSetupWizard from '../BusinessSetupWizard';
 import BusinessSelector from '../BusinessSelector';
+import ProfilePanel from '../profile/ProfilePanel';
 
 interface LocalLayoutProps {
   children: ReactNode;
@@ -14,8 +16,17 @@ interface LocalLayoutProps {
 
 export default function LocalLayout({ children }: LocalLayoutProps) {
   const { isAuthenticated, loading, token, user } = useAuth();
+  const { isProfilePanelOpen, setProfilePanelOpen, closeProfilePanel } = useProfilePanel();
   const { selectedBusiness, availableBusinesses, isLoading: loadingBusinesses } = useSelectedBusiness();
   const router = useRouter();
+
+  // Abrir panel de perfil desde URL /?profile=open (p. ej. al venir de /profile)
+  useEffect(() => {
+    if (router.query.profile === 'open') {
+      setProfilePanelOpen(true);
+      router.replace(router.pathname, undefined, { shallow: true });
+    }
+  }, [router.query.profile, router.pathname, setProfilePanelOpen, router]);
   const [checkingBusiness, setCheckingBusiness] = useState(true);
   const [hasBusiness, setHasBusiness] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
@@ -195,8 +206,8 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
     if (availableBusinesses.length === 0) {
       // No tiene tiendas: mostrar mensaje y bloquear acceso
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-neutral-900 px-4">
+          <div className="max-w-md w-full bg-white dark:bg-neutral-800 rounded-lg shadow-lg p-6 text-center">
             <div className="mb-4">
               <svg
                 className="mx-auto h-12 w-12 text-yellow-400"
@@ -212,10 +223,10 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
                 />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
               No tienes tiendas asignadas
             </h2>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
               No tienes acceso a ninguna tienda. Por favor, contacta al administrador para que te asigne una tienda.
             </p>
             <button
@@ -243,10 +254,10 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
     if (availableBusinesses.length === 1 && !selectedBusiness) {
       // El contexto debería autoseleccionarla, pero si no, esperar un momento
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-neutral-900">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Configurando tienda...</p>
+            <p className="mt-4 text-gray-600 dark:text-gray-300">Configurando tienda...</p>
           </div>
         </div>
       );
@@ -278,7 +289,7 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
   // Si tiene tienda seleccionada, es superadmin (puede trabajar sin tienda), o tiene una sola tienda, mostrar layout normal
   if (selectedBusiness || userRole === 'superadmin' || availableBusinesses.length === 1) {
     return (
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-screen bg-gray-50 dark:bg-neutral-900">
         {/* Sidebar izquierdo */}
         <Sidebar />
 
@@ -287,11 +298,14 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
           {/* Topbar */}
           <Topbar />
 
-          {/* Contenido principal */}
-          <main className="flex-1 overflow-y-auto">
+          {/* Contenido principal: tono distinto al nav/header */}
+          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-neutral-900">
             {children}
           </main>
         </div>
+
+        {/* Panel flotante de perfil (no interrumpe la vista actual) */}
+        <ProfilePanel open={isProfilePanelOpen} onClose={closeProfilePanel} />
       </div>
     );
   }
@@ -299,11 +313,11 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
   // Si llegamos aquí y no hay negocio ni rol conocido, mostrar mensaje
   // Esto no debería pasar normalmente, pero es un fallback
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-neutral-900 px-4">
+      <div className="max-w-md w-full bg-white dark:bg-neutral-800 rounded-lg shadow-lg p-6 text-center">
         <div className="mb-4">
           <svg
-            className="mx-auto h-12 w-12 text-yellow-400"
+            className="mx-auto h-12 w-12 text-yellow-400 dark:text-yellow-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -316,10 +330,10 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
             />
           </svg>
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
           Configuración requerida
         </h2>
-        <p className="text-gray-600 mb-6">
+        <p className="text-gray-600 dark:text-gray-300 mb-6">
           Por favor, configura tu negocio para continuar.
         </p>
         <button

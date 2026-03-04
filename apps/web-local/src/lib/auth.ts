@@ -107,13 +107,45 @@ export const authService = {
   /**
    * Obtener perfil del usuario autenticado
    */
-  async getProfile(token: string): Promise<any> {
+  async getProfile(token?: string): Promise<any> {
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     return apiRequest('/auth/me', {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      ...(headers && { headers }),
     });
+  },
+
+  /**
+   * Actualizar perfil (nombre, apellido, teléfono). No permite cambiar email.
+   */
+  async updateProfile(data: { first_name?: string; last_name?: string; phone?: string }): Promise<any> {
+    return apiRequest('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Registrar una conexión (acceso al sitio). Se llama al abrir perfil o tras login.
+   */
+  async recordConnection(user_agent?: string): Promise<{ ok: boolean }> {
+    return apiRequest('/auth/me/connection', {
+      method: 'POST',
+      body: JSON.stringify({ user_agent: user_agent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : undefined) }),
+    });
+  },
+
+  /**
+   * Obtener últimas conexiones del usuario.
+   */
+  async getMyConnections(limit: number = 20): Promise<Array<{
+    id: string;
+    connected_at: string;
+    ip_address: string | null;
+    user_agent: string | null;
+  }>> {
+    const q = limit ? `?limit=${limit}` : '';
+    return apiRequest(`/auth/me/connections${q}`, { method: 'GET' });
   },
 
   /**

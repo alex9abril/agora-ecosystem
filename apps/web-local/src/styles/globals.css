@@ -16,6 +16,30 @@ body {
   font-family: 'Roboto', sans-serif;
 }
 
+html.dark body {
+  background-color: #0f0f0f;
+}
+
+/* Inputs, selects y textareas en tema oscuro (fondo negro/gris) */
+html.dark input:not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #171717;
+  color: #fafafa;
+  border-color: #525252;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #a3a3a3;
+}
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  outline: none;
+  border-color: #737373;
+  box-shadow: 0 0 0 1px #737373;
+}
+
 a {
   color: inherit;
   text-decoration: none;

@@ -85,10 +85,18 @@ export default function BranchesPage() {
     }
   };
 
-  const handleUpdateBranch = async (branchId: string, formData: CreateBusinessData) => {
+  const handleUpdateBranch = async (
+    branchId: string,
+    formData: CreateBusinessData,
+    options?: { timezone?: string; time_format?: '12h' | '24h' }
+  ) => {
     try {
       setSaving(true);
-      // Actualizar información básica (incluyendo nuevos campos)
+      const settings: { timezone?: string; time_format?: '12h' | '24h' } = {};
+      if (options?.timezone !== undefined) settings.timezone = options.timezone;
+      if (options?.time_format !== undefined) settings.time_format = options.time_format;
+      const hasSettings = Object.keys(settings).length > 0;
+      // Actualizar información básica (incluyendo settings: timezone y formato de hora)
       await businessService.updateBusiness(branchId, {
         name: formData.name,
         legal_name: formData.legal_name,
@@ -100,6 +108,7 @@ export default function BranchesPage() {
         slug: formData.slug,
         accepts_pickup: formData.accepts_pickup,
         is_active: formData.is_active,
+        ...(hasSettings && { settings }),
       });
       
       // Actualizar dirección si cambió
@@ -142,7 +151,7 @@ export default function BranchesPage() {
         <title>Sucursales - AGORA Local</title>
       </Head>
       <LocalLayout>
-        <div className="flex h-full bg-gray-50">
+        <div className="flex h-full bg-gray-50 dark:bg-neutral-900">
           {/* Sidebar: Categorías */}
           <SettingsSidebar />
 
@@ -151,8 +160,8 @@ export default function BranchesPage() {
             <div className="max-w-7xl mx-auto px-6 py-8">
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-xl font-normal text-gray-900 mb-2">Sucursales</h1>
-                <p className="text-sm text-gray-600">
+                <h1 className="text-xl font-normal text-gray-900 dark:text-gray-100 mb-2">Sucursales</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Gestiona las sucursales de tu tienda y agrega nuevas ubicaciones
                 </p>
               </div>
@@ -178,14 +187,14 @@ export default function BranchesPage() {
               )}
 
               {error && (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
                 </div>
               )}
 
               {successMessage && !showAddForm && (
-                <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-                  <p className="text-sm text-green-800">{successMessage}</p>
+                <div className="mb-6 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <p className="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
                 </div>
               )}
 
@@ -208,16 +217,16 @@ export default function BranchesPage() {
                     <div>
                       <button
                         onClick={() => setBrandingBranch(null)}
-                        className="text-sm text-indigo-600 hover:text-indigo-800 mb-3 flex items-center"
+                        className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 mb-3 flex items-center"
                       >
                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                         Volver a sucursales
                       </button>
-                      <h2 className="text-xl font-normal text-gray-900">Personalizacion</h2>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Ajusta logos, colores y mensajes para la sucursal: <strong>{brandingBranch.name}</strong>
+                      <h2 className="text-xl font-normal text-gray-900 dark:text-gray-100">Personalizacion</h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Ajusta logos, colores y mensajes para la sucursal: <strong className="text-gray-900 dark:text-gray-100">{brandingBranch.name}</strong>
                       </p>
                     </div>
                   </div>
@@ -336,9 +345,9 @@ function BranchesList({
 }: BranchesListProps) {
   if (branches.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
         <svg
-          className="mx-auto h-12 w-12 text-gray-400"
+          className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -350,8 +359,8 @@ function BranchesList({
             d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
           />
         </svg>
-        <h3 className="mt-4 text-base font-normal text-gray-900">No hay sucursales</h3>
-        <p className="mt-2 text-sm text-gray-500">
+        <h3 className="mt-4 text-base font-normal text-gray-900 dark:text-gray-100">No hay sucursales</h3>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
           Comienza agregando tu primera sucursal adicional.
         </p>
       </div>
@@ -363,16 +372,16 @@ function BranchesList({
       {branches.map((branch) => (
         <div
           key={branch.id}
-          className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-sm transition-shadow"
+          className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-sm transition-shadow"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <h3 className="text-base font-normal text-gray-900">{branch.name}</h3>
+              <h3 className="text-base font-normal text-gray-900 dark:text-gray-100">{branch.name}</h3>
               {branch.legal_name && (
-                <p className="text-sm text-gray-600 mt-1">{branch.legal_name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{branch.legal_name}</p>
               )}
               {branch.business_address && (
-                <p className="text-sm text-gray-500 mt-2 flex items-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 flex items-center">
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
@@ -394,24 +403,24 @@ function BranchesList({
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal ${
                     branch.is_active
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
+                      ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                   }`}
                 >
                   {branch.is_active ? 'Activa' : 'Inactiva'}
                 </span>
                 {branch.accepts_orders && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-blue-100 text-blue-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
                     Acepta pedidos
                   </span>
                 )}
                 {branch.accepts_pickup && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-purple-100 text-purple-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300">
                     Acepta recolección
                   </span>
                 )}
                 {branch.slug && (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-indigo-100 text-indigo-800">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300">
                     Slug: {branch.slug}
                   </span>
                 )}
@@ -421,7 +430,7 @@ function BranchesList({
               {onBranding && (
                 <button
                   onClick={() => onBranding(branch)}
-                  className="px-3 py-1.5 text-sm text-purple-700 bg-purple-50 rounded hover:bg-purple-100 transition-colors"
+                  className="px-3 py-1.5 text-sm text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/40 rounded hover:bg-purple-100 dark:hover:bg-purple-800/50 transition-colors"
                 >
                   Personalizar
                 </button>
@@ -429,7 +438,7 @@ function BranchesList({
               {onPreviewSettings && (
                 <button
                   onClick={() => onPreviewSettings(branch)}
-                  className="px-3 py-1.5 text-sm text-indigo-700 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
+                  className="px-3 py-1.5 text-sm text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/40 rounded hover:bg-indigo-100 dark:hover:bg-indigo-800/50 transition-colors"
                 >
                   Impuestos
                 </button>
@@ -437,7 +446,7 @@ function BranchesList({
               {onKarbotSettings && (
                 <button
                   onClick={() => onKarbotSettings(branch)}
-                  className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
+                  className="px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 rounded hover:bg-emerald-100 dark:hover:bg-emerald-800/50 transition-colors"
                 >
                   Karbot
                 </button>
@@ -445,7 +454,7 @@ function BranchesList({
               {onKarlopaySettings && (
                 <button
                   onClick={() => onKarlopaySettings(branch)}
-                  className="px-3 py-1.5 text-sm text-emerald-700 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors"
+                  className="px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 rounded hover:bg-emerald-100 dark:hover:bg-emerald-800/50 transition-colors"
                 >
                   Karlopay
                 </button>
@@ -453,14 +462,14 @@ function BranchesList({
               {onNotificationSettings && (
                 <button
                   onClick={() => onNotificationSettings(branch)}
-                  className="px-3 py-1.5 text-sm text-white bg-black rounded hover:bg-gray-900 transition-colors"
+                  className="px-3 py-1.5 text-sm text-white dark:text-black bg-black dark:bg-white rounded hover:bg-gray-900 dark:hover:bg-gray-200 transition-colors"
                 >
                   Notificaciones
                 </button>
               )}
               <button
                 onClick={() => onEdit(branch)}
-                className="px-3 py-1.5 text-sm text-gray-700 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
               >
                 Editar
               </button>
@@ -2448,7 +2457,7 @@ function AddBranchForm({ onSave, onCancel, saving }: AddBranchFormProps) {
 
 interface EditBranchFormProps {
   branch: Business;
-  onSave: (data: CreateBusinessData) => Promise<void>;
+  onSave: (data: CreateBusinessData, options?: { timezone?: string; time_format?: '12h' | '24h' }) => Promise<void>;
   onCancel: () => void;
   saving: boolean;
 }
@@ -2505,7 +2514,13 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(
     branch.slug ? branch.slug !== autoGeneratedSlug : false
   );
-  
+
+  // Zona horaria y formato de hora para la app (pedidos, etc.)
+  const [timezone, setTimezone] = useState<string>(branch.settings?.timezone ?? 'America/Mexico_City');
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>(
+    branch.settings?.time_format === '12h' ? '12h' : '24h'
+  );
+
   // Estados para gestión de marcas
   const [availableBrands, setAvailableBrands] = useState<Array<{ id: string; name: string; code: string; display_order: number }>>([]);
   const [assignedBrands, setAssignedBrands] = useState<Array<{ brand_id: string; brand_name: string; brand_code: string; display_order: number }>>([]);
@@ -2643,8 +2658,18 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
       alert('Por favor completa todos los campos requeridos');
       return;
     }
-    await onSave(formData);
+    await onSave(formData, { timezone, time_format: timeFormat });
   };
+
+  const TIMEZONE_OPTIONS = [
+    { value: 'America/Mexico_City', label: 'Ciudad de México (Centro)' },
+    { value: 'America/Tijuana', label: 'Tijuana (Pacífico)' },
+    { value: 'America/Hermosillo', label: 'Hermosillo (Mountain)' },
+    { value: 'America/Chihuahua', label: 'Chihuahua (Centro-Norte)' },
+    { value: 'America/Monterrey', label: 'Monterrey (Centro)' },
+    { value: 'America/Cancun', label: 'Cancún (Este)' },
+    { value: 'America/Mazatlan', label: 'Mazatlán (Pacific)' },
+  ];
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -2991,6 +3016,59 @@ function EditBranchForm({ branch, onSave, onCancel, saving }: EditBranchFormProp
               <h3 className="text-sm font-normal text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
                 Configuración
               </h3>
+
+              {/* Zona horaria: usada para fechas/horas en pedidos (no la del navegador) */}
+              <div>
+                <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                  Zona horaria
+                </label>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                >
+                  {TIMEZONE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Fechas y horas en pedidos se muestran en esta zona (no la del navegador)
+                </p>
+              </div>
+
+              {/* Formato de hora: 12h (AM/PM) o 24h */}
+              <div>
+                <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                  Formato de hora
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="time_format_edit"
+                      checked={timeFormat === '24h'}
+                      onChange={() => setTimeFormat('24h')}
+                      className="h-4 w-4 text-indigo-600 focus:ring-gray-400 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-600">24 horas (ej. 14:30)</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="time_format_edit"
+                      checked={timeFormat === '12h'}
+                      onChange={() => setTimeFormat('12h')}
+                      className="h-4 w-4 text-indigo-600 focus:ring-gray-400 border-gray-300"
+                    />
+                    <span className="ml-2 text-sm text-gray-600">12 horas (ej. 2:30 p.m.)</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Cómo se muestra la hora en pedidos cuando es hoy
+                </p>
+              </div>
 
               {/* Slug */}
               <div>

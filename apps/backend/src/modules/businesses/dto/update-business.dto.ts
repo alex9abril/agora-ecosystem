@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsArray, MaxLength, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsArray, MaxLength, IsBoolean, IsUUID, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateBusinessDto {
@@ -75,5 +75,10 @@ export class UpdateBusinessDto {
   @IsOptional()
   @IsUUID()
   business_group_id?: string | null;
+
+  @ApiPropertyOptional({ description: 'Configuración adicional (ej. timezone para fechas/horas)', example: { timezone: 'America/Mexico_City' } })
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, any>;
 }
 

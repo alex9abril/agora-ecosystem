@@ -5,10 +5,13 @@ import {
   Patch,
   Body,
   Param,
+  Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -250,6 +253,40 @@ export class AuthController {
       ...user,
       profile,
     };
+  }
+
+  /**
+   * Endpoint protegido: Registrar una conexión (acceso al sitio).
+   */
+  @Post('me/connection')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Registrar conexión del usuario (web-local)' })
+  @ApiResponse({ status: 201, description: 'Conexión registrada' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async recordConnection(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Body() body?: { user_agent?: string },
+  ) {
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket?.remoteAddress;
+    await this.authService.recordConnection(user.id, ip, body?.user_agent);
+    return { ok: true };
+  }
+
+  /**
+   * Endpoint protegido: Listar últimas conexiones del usuario.
+   */
+  @Get('me/connections')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener últimas conexiones del usuario' })
+  @ApiResponse({ status: 200, description: 'Lista de conexiones' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async getMyConnections(
+    @CurrentUser() user: User,
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = limit ? Math.min(parseInt(limit, 10) || 20, 100) : 20;
+    return this.authService.getMyConnections(user.id, limitNum);
   }
 
   /**

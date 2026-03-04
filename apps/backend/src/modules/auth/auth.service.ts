@@ -138,6 +138,43 @@ export class AuthService {
     }
   }
 
+  /**
+   * Registra una conexión del usuario (acceso al sitio).
+   */
+  async recordConnection(userId: string, ip?: string, userAgent?: string): Promise<void> {
+    if (!dbPool) return;
+    try {
+      await dbPool.query(
+        `INSERT INTO core.user_connections (user_id, ip_address, user_agent, app_context)
+         VALUES ($1, $2, $3, 'web-local')`,
+        [userId, ip || null, userAgent || null]
+      );
+    } catch (err: any) {
+      console.error('Error registrando conexión:', err?.message);
+    }
+  }
+
+  /**
+   * Obtiene las últimas conexiones del usuario.
+   */
+  async getMyConnections(
+    userId: string,
+    limit: number = 20,
+  ): Promise<Array<{ id: string; connected_at: Date; ip_address: string | null; user_agent: string | null }>> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    const result = await dbPool.query(
+      `SELECT id, connected_at, ip_address, user_agent
+       FROM core.user_connections
+       WHERE user_id = $1
+       ORDER BY connected_at DESC
+       LIMIT $2`,
+      [userId, Math.min(limit, 100)]
+    );
+    return result.rows;
+  }
+
   async getUserProfile(userId: string) {
     // Usar conexión directa a PostgreSQL porque la tabla está en el schema 'core'
     if (!dbPool) {

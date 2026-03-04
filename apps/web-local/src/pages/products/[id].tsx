@@ -631,7 +631,7 @@ export default function ProductDetailPage() {
 
       <div className="w-full h-full flex flex-col p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-lg font-medium text-gray-900">Editar Producto</h1>
+          <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100">Editar Producto</h1>
           <button
             onClick={handleCancel}
             className="px-3 py-1.5 text-sm font-normal border border-gray-200 text-gray-600 rounded hover:bg-gray-50 transition-colors"

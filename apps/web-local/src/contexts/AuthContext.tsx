@@ -32,7 +32,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   isAuthenticated: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<AuthResponse | void>;
   signUp: (data: any) => Promise<AuthResponse>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -269,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Redirigir al dashboard
       router.push('/dashboard');
+      return response;
     } catch (error: any) {
       console.error('[Auth] Error al iniciar sesión:', error);
       throw error;

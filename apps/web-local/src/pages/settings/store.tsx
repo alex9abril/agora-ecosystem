@@ -235,8 +235,8 @@ export default function StoreSettingsPage() {
     return (
       <LocalLayout>
         <div className="max-w-7xl mx-auto">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-800">{error}</p>
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
+            <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         </div>
       </LocalLayout>
@@ -254,15 +254,15 @@ export default function StoreSettingsPage() {
           <div className="mb-6">
             <button
               onClick={() => router.push('/settings')}
-              className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center"
+              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-4 flex items-center"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
               Volver a Configuraciรณn
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Configuraciรณn de Grupo Empresarial</h1>
-            <p className="mt-2 text-sm text-gray-600">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Configuraciรณn de Grupo Empresarial</h1>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               Gestiona la informaciรณn de tu grupo empresarial
             </p>
           </div>
@@ -272,21 +272,21 @@ export default function StoreSettingsPage() {
             <div className="max-w-7xl mx-auto px-6 py-8">
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-xl font-normal text-gray-900 mb-2">Configuraciรณn de Grupo Empresarial</h1>
-                <p className="text-sm text-gray-600">
+                <h1 className="text-xl font-normal text-gray-900 dark:text-gray-100 mb-2">Configuraciรณn de Grupo Empresarial</h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Gestiona la informaciรณn de tu grupo empresarial
                 </p>
               </div>
 
               {/* Business Group Information Card */}
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-normal text-gray-900">
+                <h2 className="text-lg font-normal text-gray-900 dark:text-gray-100">
                   {businessGroup ? 'Informaciรณn del Grupo Empresarial' : 'Crear Grupo Empresarial'}
                 </h2>
                 {!isEditing && businessGroup && (
                   <button
                     onClick={handleEdit}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-600 rounded-md hover:bg-gray-50 dark:hover:bg-neutral-700"
                   >
                     Editar
                   </button>
@@ -296,56 +296,56 @@ export default function StoreSettingsPage() {
               {!isEditing && businessGroup ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-normal text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                     Nombre del Grupo
                   </label>
-                  <p className="text-gray-900">{businessGroup.name}</p>
+                  <p className="text-gray-900 dark:text-gray-100">{businessGroup.name}</p>
                 </div>
 
                 {businessGroup.legal_name && (
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Razรณn Social
                     </label>
-                    <p className="text-gray-900">{businessGroup.legal_name}</p>
+                    <p className="text-gray-900 dark:text-gray-100">{businessGroup.legal_name}</p>
                   </div>
                 )}
 
                 {businessGroup.description && (
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Descripciรณn
                     </label>
-                    <p className="text-gray-900">{businessGroup.description}</p>
+                    <p className="text-gray-900 dark:text-gray-100">{businessGroup.description}</p>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-normal text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                     Slug (URL)
                   </label>
-                  <p className="text-gray-900 font-mono text-sm">{businessGroup.slug}</p>
+                  <p className="text-gray-900 dark:text-gray-100 font-mono text-sm">{businessGroup.slug}</p>
                 </div>
 
                 {businessGroup.tax_id && (
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       RFC / Tax ID
                     </label>
-                    <p className="text-gray-900">{businessGroup.tax_id}</p>
+                    <p className="text-gray-900 dark:text-gray-100">{businessGroup.tax_id}</p>
                   </div>
                 )}
 
                 {businessGroup.website_url && (
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Sitio Web
                     </label>
                     <a 
                       href={businessGroup.website_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-indigo-600 hover:text-indigo-800"
+                      className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
                     >
                       {businessGroup.website_url}
                     </a>
@@ -353,14 +353,14 @@ export default function StoreSettingsPage() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-normal text-gray-700 mb-2">
+                  <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                     Estado
                   </label>
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-normal ${
                       businessGroup.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                        ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+                        : 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'
                     }`}
                   >
                     {businessGroup.is_active ? 'Activo' : 'Inactivo'}
@@ -371,18 +371,18 @@ export default function StoreSettingsPage() {
                 <>
                   {/* Preview de sucursales que serรกn asignadas al crear grupo */}
                   {!businessGroup && branchesWithoutGroup.length > 0 && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
                       <div className="flex items-start">
                         <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="h-5 w-5 text-blue-400 dark:text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                           </svg>
                         </div>
                         <div className="ml-3 flex-1">
-                          <p className="text-sm font-normal text-blue-900 mb-2">
+                          <p className="text-sm font-normal text-blue-900 dark:text-blue-200 mb-2">
                             Al crear este grupo, se asignarรกn automรกticamente <strong>{branchesWithoutGroup.length} sucursal{branchesWithoutGroup.length > 1 ? 'es' : ''}</strong> sin grupo:
                           </p>
-                          <ul className="list-disc list-inside text-sm text-blue-800 space-y-1">
+                          <ul className="list-disc list-inside text-sm text-blue-800 dark:text-blue-300 space-y-1">
                             {branchesWithoutGroup.map(branch => (
                               <li key={branch.id}>{branch.name}</li>
                             ))}
@@ -392,8 +392,8 @@ export default function StoreSettingsPage() {
                     </div>
                   )}
                   {!businessGroup && branchesWithoutGroup.length === 0 && !loadingBranches && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-                      <p className="text-sm text-gray-700">
+                    <div className="bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-4 mb-6">
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
                         No hay sucursales sin grupo para asignar. Todas tus sucursales ya tienen un grupo asignado.
                       </p>
                     </div>
@@ -401,7 +401,7 @@ export default function StoreSettingsPage() {
                   <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Nombre del Grupo <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -409,39 +409,39 @@ export default function StoreSettingsPage() {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="Ej: Grupo Andrade"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Razรณn Social
                     </label>
                     <input
                       type="text"
                       value={formData.legal_name}
                       onChange={(e) => setFormData({ ...formData, legal_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="Ej: Grupo Andrade S.A. de C.V."
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Descripciรณn
                     </label>
                     <textarea
                       rows={3}
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="Descripciรณn del grupo empresarial..."
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Slug (URL amigable) <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -457,56 +457,56 @@ export default function StoreSettingsPage() {
                           .replace(/^-|-$/g, '');
                         setFormData({ ...formData, slug: slugValue });
                       }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-mono text-sm placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="grupo-andrade"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Se genera automรกticamente desde el nombre si no lo editas manualmente
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       RFC / Tax ID
                     </label>
                     <input
                       type="text"
                       value={formData.tax_id}
                       onChange={(e) => setFormData({ ...formData, tax_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="GAN850101ABC"
                       maxLength={50}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       URL del Logo
                     </label>
                     <input
                       type="url"
                       value={formData.logo_url}
                       onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="https://example.com/logo.png"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Sitio Web
                     </label>
                     <input
                       type="url"
                       value={formData.website_url}
                       onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       placeholder="https://grupoandrade.com"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
+                    <label className="block text-sm font-normal text-gray-700 dark:text-gray-300 mb-2">
                       Estado
                     </label>
                     <div className="space-y-2">
@@ -516,9 +516,9 @@ export default function StoreSettingsPage() {
                           name="is_active"
                           checked={formData.is_active === true}
                           onChange={() => setFormData({ ...formData, is_active: true })}
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-600"
                         />
-                        <span className="ml-2 text-sm text-gray-700">Activo</span>
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Activo</span>
                       </label>
                       <label className="flex items-center">
                         <input
@@ -526,9 +526,9 @@ export default function StoreSettingsPage() {
                           name="is_active"
                           checked={formData.is_active === false}
                           onChange={() => setFormData({ ...formData, is_active: false })}
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-600"
                         />
-                        <span className="ml-2 text-sm text-gray-700">Inactivo</span>
+                        <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Inactivo</span>
                       </label>
                     </div>
                   </div>
@@ -540,7 +540,7 @@ export default function StoreSettingsPage() {
                       type="button"
                       onClick={handleCancel}
                       disabled={saving}
-                      className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-normal text-gray-700 dark:text-gray-300 bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-600 rounded-md hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50"
                     >
                       Cancelar
                     </button>

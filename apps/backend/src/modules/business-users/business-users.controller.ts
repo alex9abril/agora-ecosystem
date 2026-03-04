@@ -26,6 +26,7 @@ import { BusinessUsersService } from './business-users.service';
 import { AssignUserDto } from './dto/assign-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { BulkAssignUserDto } from './dto/bulk-assign.dto';
 
 @ApiTags('business-users')
 @Controller('business-users')
@@ -108,6 +109,18 @@ export class BusinessUsersController {
     }
 
     return this.businessUsersService.assignUserToBusiness(businessId, user.id, assignDto);
+  }
+
+  @Post('superadmin/bulk-assign')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Asignar usuario a varias sucursales (solo superadmin de cada una)' })
+  @ApiResponse({ status: 201, description: 'Resultado por sucursal' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  async bulkAssignUser(
+    @Body() dto: BulkAssignUserDto,
+    @CurrentUser() user: User
+  ) {
+    return this.businessUsersService.bulkAssignUserToBusinesses(user.id, dto);
   }
 
   @Patch('business/:businessId/user/:userId/role')

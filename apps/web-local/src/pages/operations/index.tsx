@@ -12,6 +12,7 @@ import { ordersService, Order, OrderFilters } from '@/lib/orders';
 import OperationsLayout from '@/components/operations/OperationsLayout';
 import OperationsDashboard from '@/components/operations/OperationsDashboard';
 import OrdersKanban from '@/components/operations/OrdersKanban';
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export default function OperationsPage() {
   useRouteGuard('canManageOrders');
@@ -208,8 +209,23 @@ export default function OperationsPage() {
             )}
 
             {loading ? (
-              <div className="flex items-center justify-center h-64">
-                <div className="text-gray-500">Cargando órdenes...</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {['Pendientes', 'Confirmadas', 'En preparación', 'Listas', 'En tránsito'].map((_, i) => (
+                  <div key={i} className="bg-white rounded-lg border border-gray-200 p-4">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16" />
+                  </div>
+                ))}
+                <div className="lg:col-span-4 mt-4 flex gap-4 overflow-x-auto pb-2">
+                  {[1, 2, 3, 4].map((col) => (
+                    <div key={col} className="flex-shrink-0 w-72 space-y-3">
+                      <Skeleton className="h-6 w-28 rounded" />
+                      {[1, 2, 3].map((row) => (
+                        <Skeleton key={row} className="h-24 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <OrdersKanban

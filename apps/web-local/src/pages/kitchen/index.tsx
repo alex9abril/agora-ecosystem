@@ -12,6 +12,7 @@ import { ordersService, Order } from '@/lib/orders';
 import { productsService, Product, ProductVariant } from '@/lib/products';
 import KitchenLayout from '@/components/kitchen/KitchenLayout';
 import KitchenTimer from '@/components/kitchen/KitchenTimer';
+import { Skeleton, SkeletonPanelList } from '@/components/ui/Skeleton';
 
 export default function KitchenPage() {
   useRouteGuard('canPrepareOrders');
@@ -592,8 +593,8 @@ export default function KitchenPage() {
                 )}
 
                 {loading ? (
-                  <div className="flex items-center justify-center h-64">
-                    <div className="text-gray-500">Cargando órdenes...</div>
+                  <div className="p-4">
+                    <SkeletonPanelList rows={6} />
                   </div>
                 ) : orders.length === 0 ? (
                   <div className="flex items-center justify-center h-64">
@@ -649,7 +650,17 @@ export default function KitchenPage() {
 
             {/* Panel derecho: Detalle de orden seleccionada */}
             <div className="flex-1 bg-gray-50 flex flex-col">
-              {selectedOrder ? (
+              {loading ? (
+                <div className="p-6 space-y-4">
+                  <Skeleton className="h-7 w-40" />
+                  <Skeleton className="h-4 w-full max-w-sm" />
+                  <div className="space-y-2 pt-4">
+                    {[1, 2, 3, 4].map((i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded-lg" />
+                    ))}
+                  </div>
+                </div>
+              ) : selectedOrder ? (
                 <>
                   {/* Header del detalle */}
                   <div className="bg-white border-b border-gray-200 px-4 py-3">

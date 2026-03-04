@@ -29,7 +29,7 @@ export default function KitchenLayout({ children }: KitchenLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header minimalista */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white sticky top-0 z-10">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-lg font-semibold text-gray-900">Cocina</h1>

@@ -14,6 +14,10 @@ interface BusinessSummary {
   // Campos opcionales que pueden venir del backend completo
   category?: string;
   business_address?: string;
+  /** Zona horaria IANA para mostrar fechas/horas (ej. America/Mexico_City) */
+  timezone?: string;
+  /** Formato de hora: 12h (AM/PM) o 24h */
+  time_format?: '12h' | '24h';
 }
 
 interface SelectedBusinessContextType {
@@ -143,6 +147,8 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
                   ...savedBusiness,
                   category: fullBusiness.category || (savedBusinessData?.category),
                   business_address: fullBusiness.business_address,
+                  timezone: fullBusiness.settings?.timezone,
+                  time_format: fullBusiness.settings?.time_format,
                 } as BusinessSummary);
                 // Guardar datos actualizados en localStorage
                 saveBusinessDataToStorage(savedBusinessId, fullBusiness.name, fullBusiness.category);
@@ -181,6 +187,8 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
                 ...business,
                 category: fullBusiness.category,
                 business_address: fullBusiness.business_address,
+                timezone: fullBusiness.settings?.timezone,
+                time_format: fullBusiness.settings?.time_format,
               });
               saveBusinessDataToStorage(business.business_id, fullBusiness.name, fullBusiness.category);
             }
@@ -243,6 +251,8 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
               ...business,
               category: fullBusiness.category || business.category,
               business_address: fullBusiness.business_address,
+              timezone: fullBusiness.settings?.timezone,
+              time_format: fullBusiness.settings?.time_format,
             });
             saveBusinessDataToStorage(businessId, fullBusiness.name, fullBusiness.category);
           }

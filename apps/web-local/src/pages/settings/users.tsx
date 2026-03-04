@@ -6,6 +6,17 @@ import SettingsSidebar from '@/components/settings/SettingsSidebar';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
+import {
+  EMPTY_OPERATOR_PERMISSIONS,
+  MODULE_KEYS,
+  SETTINGS_KEYS,
+  MODULE_LABELS,
+  SETTINGS_LABELS,
+  normalizeOperatorPermissions,
+  type OperatorPermissions,
+  type ModuleKey,
+  type SettingsKey,
+} from '@/lib/operator-permissions';
 
 interface Business {
   business_id: string;
@@ -25,6 +36,7 @@ interface UserWithBusinesses extends BusinessUser {
     business_name: string;
     role: BusinessRole;
     is_active: boolean;
+    permissions?: Record<string, unknown>;
   }>;
 }
 
@@ -41,6 +53,13 @@ export default function UsersSettingsPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedBusinesses, setSelectedBusinesses] = useState<string[]>([]);
   const [selectedRole, setSelectedRole] = useState<BusinessRole>('operations_staff');
+  const [branchPermissions, setBranchPermissions] = useState<Record<string, OperatorPermissions>>({});
+  const [editPermissionsFor, setEditPermissionsFor] = useState<{
+    userId: string;
+    businessId: string;
+    businessName: string;
+  } | null>(null);
+  const [editPermissionsValue, setEditPermissionsValue] = useState<OperatorPermissions>(EMPTY_OPERATOR_PERMISSIONS);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
@@ -118,6 +137,7 @@ export default function UsersSettingsPage() {
               business_name: u.business_name,
               role: u.role,
               is_active: u.is_active,
+              permissions: u.permissions,
             });
           }
         });
@@ -165,29 +185,73 @@ export default function UsersSettingsPage() {
       setError(null);
       setSuccess(null);
 
-      // Asignar usuario a cada tienda seleccionada
-      const assignments = await Promise.all(
-        selectedBusinesses.map((businessId) =>
-          usersService.assignUserToBusiness(businessId, {
-            user_id: selectedUser.id,
-            role: selectedRole,
-          })
-        )
-      );
+      const assignments = selectedBusinesses.map((businessId) => ({
+        business_id: businessId,
+        role: selectedRole,
+        permissions:
+          selectedRole === 'operations_staff' || selectedRole === 'kitchen_staff'
+            ? (branchPermissions[businessId] ?? EMPTY_OPERATOR_PERMISSIONS)
+            : {},
+      }));
 
-      setSuccess(`Usuario asignado exitosamente a ${assignments.length} tienda(s)`);
+      const result = await usersService.bulkAssignUser({
+        user_id: selectedUser.id,
+        assignments,
+      });
 
-      // Recargar datos
+      const successCount = result.assignments.filter((a) => a.success).length;
+      const failCount = result.assignments.filter((a) => !a.success).length;
+      if (failCount > 0) {
+        setError(`${successCount} asignación(es) correcta(s). ${failCount} fallaron.`);
+      } else {
+        setSuccess(`Usuario asignado exitosamente a ${successCount} tienda(s)`);
+      }
+
       await reloadData();
-
-      // Cerrar modal
       setShowAssignModal(false);
       setSelectedUser(null);
       setSelectedBusinesses([]);
       setSelectedRole('operations_staff');
+      setBranchPermissions({});
     } catch (err: any) {
       console.error('Error asignando usuario:', err);
-      setError(err.message || 'Error al asignar usuario');
+      setError(err?.message || 'Error al asignar usuario');
+    }
+  };
+
+  const setPermissionForBranch = (
+    businessId: string,
+    kind: 'modules' | 'settings',
+    key: ModuleKey | SettingsKey,
+    value: boolean
+  ) => {
+    setBranchPermissions((prev) => {
+      const current = prev[businessId] ?? { ...EMPTY_OPERATOR_PERMISSIONS };
+      const next = { ...current, [kind]: { ...(current[kind] ?? {}), [key]: value } };
+      return { ...prev, [businessId]: next };
+    });
+  };
+
+  const setEditPermission = (kind: 'modules' | 'settings', key: ModuleKey | SettingsKey, value: boolean) => {
+    setEditPermissionsValue((prev) => ({
+      ...prev,
+      [kind]: { ...(prev[kind] ?? {}), [key]: value },
+    }));
+  };
+
+  const handleSaveEditPermissions = async () => {
+    if (!editPermissionsFor) return;
+    try {
+      setError(null);
+      await usersService.changeUserRole(editPermissionsFor.businessId, editPermissionsFor.userId, {
+        role: 'operations_staff',
+        permissions: editPermissionsValue,
+      });
+      setSuccess('Permisos actualizados');
+      setEditPermissionsFor(null);
+      await reloadData();
+    } catch (err: any) {
+      setError(err?.message || 'Error al guardar permisos');
     }
   };
 
@@ -225,6 +289,7 @@ export default function UsersSettingsPage() {
             business_name: u.business_name,
             role: u.role,
             is_active: u.is_active,
+            permissions: u.permissions,
           });
         }
       });
@@ -296,13 +361,8 @@ export default function UsersSettingsPage() {
   };
 
   const getRoleLabel = (role: BusinessRole): string => {
-    const labels: Record<BusinessRole, string> = {
-      superadmin: 'Super Administrador',
-      admin: 'Administrador',
-      operations_staff: 'Operations Staff',
-      kitchen_staff: 'Kitchen Staff',
-    };
-    return labels[role];
+    if (role === 'superadmin' || role === 'admin') return 'Administrador';
+    return 'Operador';
   };
 
   const getRoleColor = (role: BusinessRole): string => {
@@ -486,7 +546,7 @@ export default function UsersSettingsPage() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <select
-                                        value={business.role}
+                                        value={business.role === 'kitchen_staff' ? 'operations_staff' : business.role}
                                         onChange={(e) =>
                                           handleChangeRole(
                                             business.business_id,
@@ -498,9 +558,27 @@ export default function UsersSettingsPage() {
                                         className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                       >
                                         <option value="admin">Administrador</option>
-                                        <option value="operations_staff">Operations Staff</option>
-                                        <option value="kitchen_staff">Kitchen Staff</option>
+                                        <option value="operations_staff">Operador</option>
                                       </select>
+                                      {(business.role === 'operations_staff' || business.role === 'kitchen_staff') && (
+                                        <button
+                                          onClick={() => {
+                                            setEditPermissionsValue(
+                                              normalizeOperatorPermissions(
+                                                (business.permissions as Record<string, unknown>) ?? {}
+                                              )
+                                            );
+                                            setEditPermissionsFor({
+                                              userId: user.user_id,
+                                              businessId: business.business_id,
+                                              businessName: business.business_name ?? business.business_id,
+                                            });
+                                          }}
+                                          className="text-indigo-600 hover:text-indigo-900 text-sm"
+                                        >
+                                          Editar permisos
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => handleRemoveUser(user.user_id, business.business_id)}
                                         disabled={business.role === 'superadmin'}
@@ -645,17 +723,76 @@ export default function UsersSettingsPage() {
                         Rol para las tiendas seleccionadas
                       </label>
                       <select
-                        value={selectedRole}
+                        value={selectedRole === 'kitchen_staff' ? 'operations_staff' : selectedRole}
                         onChange={(e) => setSelectedRole(e.target.value as BusinessRole)}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
                       >
                         <option value="admin">Administrador</option>
-                        <option value="operations_staff">Operations Staff</option>
-                        <option value="kitchen_staff">Kitchen Staff</option>
+                        <option value="operations_staff">Operador</option>
                       </select>
                       <p className="mt-1 text-xs text-gray-500">
-                        Este rol se aplicará a todas las tiendas seleccionadas
+                        Operador: define permisos por sucursal abajo. Administrador: acceso total en cada sucursal.
                       </p>
+                    </div>
+                  )}
+
+                  {/* Per-branch permissions (Operator only) */}
+                  {selectedUser && selectedBusinesses.length > 0 && (selectedRole === 'operations_staff' || selectedRole === 'kitchen_staff') && (
+                    <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <label className="block text-sm font-normal text-gray-700 mb-3">
+                        Permisos por sucursal (Operador)
+                      </label>
+                      <div className="space-y-4 max-h-64 overflow-y-auto">
+                        {selectedBusinesses.map((businessId) => {
+                          const business = businesses.find((b) => b.business_id === businessId);
+                          const perms = normalizeOperatorPermissions(
+                            branchPermissions[businessId] ?? EMPTY_OPERATOR_PERMISSIONS
+                          );
+                          return (
+                            <div key={businessId} className="bg-white rounded border border-gray-200 p-3">
+                              <p className="text-sm font-medium text-gray-900 mb-2">{business?.business_name ?? businessId}</p>
+                              <div className="grid grid-cols-1 gap-2 text-sm">
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase mb-1">Módulos</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {MODULE_KEYS.map((key) => (
+                                      <label key={key} className="inline-flex items-center gap-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={perms.modules?.[key] === true}
+                                          onChange={(e) =>
+                                            setPermissionForBranch(businessId, 'modules', key, e.target.checked)
+                                          }
+                                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span>{MODULE_LABELS[key]}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase mb-1 mt-2">Configuración</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {SETTINGS_KEYS.map((key) => (
+                                      <label key={key} className="inline-flex items-center gap-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={perms.settings?.[key] === true}
+                                          onChange={(e) =>
+                                            setPermissionForBranch(businessId, 'settings', key, e.target.checked)
+                                          }
+                                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span>{SETTINGS_LABELS[key]}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
@@ -666,6 +803,7 @@ export default function UsersSettingsPage() {
                         setShowAssignModal(false);
                         setSelectedUser(null);
                         setSelectedBusinesses([]);
+                        setBranchPermissions({});
                         setSearchTerm('');
                       }}
                       className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
@@ -675,9 +813,69 @@ export default function UsersSettingsPage() {
                     <button
                       onClick={handleAssignUser}
                       disabled={!selectedUser || selectedBusinesses.length === 0}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Asignar a {selectedBusinesses.length} tienda{selectedBusinesses.length !== 1 ? 's' : ''}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Permissions Modal (Operador) */}
+          {editPermissionsFor && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                  <h2 className="text-xl font-normal text-gray-900 mb-2">Editar permisos (Operador)</h2>
+                  <p className="text-sm text-gray-500 mb-4">{editPermissionsFor.businessName}</p>
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Módulos</p>
+                      <div className="flex flex-wrap gap-2">
+                        {MODULE_KEYS.map((key) => (
+                          <label key={key} className="inline-flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={editPermissionsValue.modules?.[key] === true}
+                              onChange={(e) => setEditPermission('modules', key, e.target.checked)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{MODULE_LABELS[key]}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Configuración</p>
+                      <div className="flex flex-wrap gap-2">
+                        {SETTINGS_KEYS.map((key) => (
+                          <label key={key} className="inline-flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={editPermissionsValue.settings?.[key] === true}
+                              onChange={(e) => setEditPermission('settings', key, e.target.checked)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{SETTINGS_LABELS[key]}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setEditPermissionsFor(null)}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleSaveEditPermissions}
+                      className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+                    >
+                      Guardar
                     </button>
                   </div>
                 </div>

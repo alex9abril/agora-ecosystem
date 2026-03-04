@@ -3,15 +3,19 @@
  */
 
 import { apiRequest } from './api';
+import type { OperatorPermissions } from './operator-permissions';
 
 export type BusinessRole = 'superadmin' | 'admin' | 'operations_staff' | 'kitchen_staff';
+
+export type { OperatorPermissions };
 
 export interface BusinessUser {
   id: string;
   business_id: string;
   user_id: string;
   role: BusinessRole;
-  permissions: Record<string, any>;
+  /** For operator role: granular modules/settings; see OperatorPermissions */
+  permissions: Record<string, unknown> | OperatorPermissions;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -33,12 +37,12 @@ export interface User {
 export interface AssignUserData {
   user_id: string;
   role: BusinessRole;
-  permissions?: Record<string, any>;
+  permissions?: OperatorPermissions | Record<string, unknown>;
 }
 
 export interface UpdateUserRoleData {
   role: BusinessRole;
-  permissions?: Record<string, any>;
+  permissions?: OperatorPermissions | Record<string, unknown>;
 }
 
 export const usersService = {
@@ -124,6 +128,23 @@ export const usersService = {
     data: AssignUserData
   ): Promise<BusinessUser> {
     return apiRequest(`/business-users/business/${businessId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Asignar usuario a varias sucursales en una petición (solo superadmin de cada una).
+   */
+  async bulkAssignUser(data: {
+    user_id: string;
+    assignments: Array<{
+      business_id: string;
+      role: BusinessRole;
+      permissions?: OperatorPermissions | Record<string, unknown>;
+    }>;
+  }): Promise<{ assignments: Array<{ business_id: string; success: boolean; data?: BusinessUser; error?: string }> }> {
+    return apiRequest('/business-users/superadmin/bulk-assign', {
       method: 'POST',
       body: JSON.stringify(data),
     });

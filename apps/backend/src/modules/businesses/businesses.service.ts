@@ -561,6 +561,17 @@ export class BusinessesService {
       }
     }
 
+    if (updateDto.settings !== undefined) {
+      const currentSettingsResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) AS settings FROM core.businesses WHERE id = $1`,
+        [id]
+      );
+      const currentSettings = currentSettingsResult.rows[0]?.settings || {};
+      const mergedSettings = { ...currentSettings, ...updateDto.settings };
+      updateFields.push(`settings = $${paramIndex++}::jsonb`);
+      updateValues.push(JSON.stringify(mergedSettings));
+    }
+
     if (updateFields.length === 0) {
       throw new BadRequestException('No se proporcionaron campos para actualizar');
     }

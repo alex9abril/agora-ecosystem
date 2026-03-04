@@ -3,8 +3,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { businessService } from '@/lib/business';
 import { useState, useEffect } from 'react';
+import { isOperatorRole } from '@/lib/operator-permissions';
+import { normalizeOperatorPermissions } from '@/lib/operator-permissions';
+import type { SettingsKey } from '@/lib/operator-permissions';
 
 type SettingsCategory = 'store' | 'branches' | 'wallet' | 'users' | 'permissions' | 'vehicle' | 'emails';
+
+const CATEGORY_TO_SETTINGS_KEY: Record<SettingsCategory, SettingsKey> = {
+  store: 'store',
+  branches: 'branches',
+  wallet: 'wallet',
+  vehicle: 'vehicle',
+  users: 'users',
+  permissions: 'permissions_groups',
+  emails: 'emails',
+};
 
 interface CategoryInfo {
   id: SettingsCategory;
@@ -186,29 +199,40 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
     },
   ];
 
-  // Agrupar categorías por sección
+  const role = selectedBusiness?.role ?? 'operations_staff';
+  const isOperator = isOperatorRole(role);
+  const operatorPerms = selectedBusiness?.permissions
+    ? normalizeOperatorPermissions(selectedBusiness.permissions as Record<string, unknown>)
+    : null;
+
+  const canShowCategory = (c: CategoryInfo): boolean => {
+    if (isOperator && operatorPerms) {
+      const key = CATEGORY_TO_SETTINGS_KEY[c.id];
+      return operatorPerms.settings?.[key] === true;
+    }
+    return !c.requiresSuperadmin || isSuperadmin;
+  };
+
   const settingsSections: CategorySection[] = [
     {
       title: 'PROJECT SETTINGS',
-      categories: allCategories.filter(c => c.section === 'PROJECT SETTINGS' && (!c.requiresSuperadmin || isSuperadmin)),
+      categories: allCategories.filter(c => c.section === 'PROJECT SETTINGS' && canShowCategory(c)),
     },
     {
       title: 'CONFIGURATION',
-      categories: allCategories.filter(c => c.section === 'CONFIGURATION' && (!c.requiresSuperadmin || isSuperadmin)),
+      categories: allCategories.filter(c => c.section === 'CONFIGURATION' && canShowCategory(c)),
     },
   ];
 
-  const categories = allCategories;
-
   if (loading) {
     return (
-      <div className="w-64 flex-shrink-0 bg-white border-r border-gray-200">
+      <div className="w-64 flex-shrink-0 bg-white dark:bg-neutral-800">
         <div className="p-4">
           <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
+            <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-24 mb-4"></div>
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-gray-200 rounded"></div>
+                <div key={i} className="h-10 bg-gray-200 dark:bg-gray-600 rounded"></div>
               ))}
             </div>
           </div>
@@ -220,13 +244,13 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
   const activePath = currentPath || router.pathname;
 
   return (
-    <div className="w-64 flex-shrink-0 bg-white border-r border-gray-200">
+    <div className="w-64 flex-shrink-0 bg-white dark:bg-neutral-800">
       <div className="sticky top-0 p-4">
-        <h2 className="text-xs font-normal text-gray-500 uppercase tracking-wider mb-4">Settings</h2>
+        <h2 className="text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Settings</h2>
         <nav className="space-y-6">
           {settingsSections.map((section) => (
             <div key={section.title}>
-              <h3 className="text-xs font-normal text-gray-500 uppercase tracking-wider mb-2 px-3">
+              <h3 className="text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3">
                 {section.title}
               </h3>
               <div className="space-y-0.5">
@@ -239,11 +263,11 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
                       onClick={() => router.push(category.href)}
                       className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center space-x-2 transition-colors ${
                         isActive
-                          ? 'bg-gray-100 text-gray-900 font-normal'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          ? 'bg-gray-100 dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-normal'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-neutral-700 hover:text-gray-900 dark:hover:text-gray-100'
                       }`}
                     >
-                      <span className={isActive ? 'text-gray-900' : 'text-gray-400'}>
+                      <span className={isActive ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
                         {category.icon}
                       </span>
                       <span className="flex-1">{category.name}</span>

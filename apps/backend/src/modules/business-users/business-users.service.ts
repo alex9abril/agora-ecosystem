@@ -11,6 +11,7 @@ import { supabaseAdmin } from '../../config/supabase.config';
 import { AssignUserDto, BusinessRole } from './dto/assign-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { BulkAssignUserDto } from './dto/bulk-assign.dto';
 
 @Injectable()
 export class BusinessUsersService {
@@ -175,6 +176,36 @@ export class BusinessUsersService {
   }
 
   /**
+   * Asignar usuario a varias sucursales en una sola petición (solo superadmin de cada una).
+   */
+  async bulkAssignUserToBusinesses(superadminId: string, dto: BulkAssignUserDto) {
+    const results: Array<{ business_id: string; success: boolean; data?: any; error?: string }> = [];
+    for (const item of dto.assignments) {
+      const isSuperadmin = await this.isSuperadminOfBusiness(superadminId, item.business_id);
+      if (!isSuperadmin) {
+        results.push({ business_id: item.business_id, success: false, error: 'No eres superadmin de esta sucursal' });
+        continue;
+      }
+      try {
+        const assignDto: AssignUserDto = {
+          user_id: dto.user_id,
+          role: item.role,
+          permissions: item.permissions ?? {},
+        };
+        const data = await this.assignUserToBusiness(item.business_id, superadminId, assignDto);
+        results.push({ business_id: item.business_id, success: true, data });
+      } catch (err: any) {
+        results.push({
+          business_id: item.business_id,
+          success: false,
+          error: err?.message || 'Error al asignar',
+        });
+      }
+    }
+    return { assignments: results };
+  }
+
+  /**
    * Cambiar rol de usuario en un negocio
    */
   async changeUserRole(
@@ -192,6 +223,14 @@ export class BusinessUsersService {
         `SELECT core.change_user_role_in_business($1, $2, $3, $4)`,
         [superadminId, businessId, userId, updateDto.role]
       );
+
+      if (updateDto.permissions !== undefined) {
+        await dbPool.query(
+          `UPDATE core.business_users SET permissions = $1, updated_at = CURRENT_TIMESTAMP
+           WHERE business_id = $2 AND user_id = $3`,
+          [JSON.stringify(updateDto.permissions), businessId, userId]
+        );
+      }
 
       // Obtener el usuario actualizado
       const userResult = await dbPool.query(
@@ -330,14 +369,24 @@ export class BusinessUsersService {
       );
 
       if (functionExists.rows[0]?.exists) {
-        // Usar la función SQL si existe
         const result = await dbPool.query(
           `SELECT * FROM core.get_superadmin_account_users($1)`,
           [superadminId]
         );
-        return result.rows;
+        const rows = result.rows as Array<{ business_id: string; user_id: string }>;
+        if (rows.length === 0) return rows;
+        const pairs = rows.map((r) => [r.business_id, r.user_id]);
+        const permsResult = await dbPool.query(
+          `SELECT business_id, user_id, permissions FROM core.business_users
+           WHERE (business_id, user_id) IN (${pairs.map((_, i) => `($${i * 2 + 1}::uuid, $${i * 2 + 2}::uuid)`).join(', ')})`,
+          pairs.flat()
+        );
+        const permsMap = new Map<string, Record<string, unknown>>();
+        for (const p of permsResult.rows as Array<{ business_id: string; user_id: string; permissions: Record<string, unknown> }>) {
+          permsMap.set(`${p.business_id}:${p.user_id}`, p.permissions || {});
+        }
+        return rows.map((r) => ({ ...r, permissions: permsMap.get(`${r.business_id}:${r.user_id}`) ?? {} }));
       } else {
-        // Fallback: consulta directa si la función no existe
         console.warn('Función get_superadmin_account_users no existe, usando consulta directa');
         const result = await dbPool.query(
           `SELECT DISTINCT
@@ -357,7 +406,8 @@ export class BusinessUsersService {
             bu.business_id,
             b.name AS business_name,
             bu.is_active,
-            bu.created_at
+            bu.created_at,
+            bu.permissions
           FROM core.business_users bu
           INNER JOIN core.businesses b ON bu.business_id = b.id
           INNER JOIN auth.users au ON bu.user_id = au.id

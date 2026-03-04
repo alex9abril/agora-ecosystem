@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import UserMenu from './UserMenu';
+import NotificationsDropdown from './NotificationsDropdown';
 
 export default function Topbar() {
   const { user } = useAuth();
@@ -25,8 +25,9 @@ export default function Topbar() {
           </h1>
         </div>
 
-        {/* Menú de usuario */}
+        {/* Notificaciones y menú de usuario */}
         <div className="flex items-center space-x-4">
+          <NotificationsDropdown />
           <UserMenu user={user} />
         </div>
       </div>

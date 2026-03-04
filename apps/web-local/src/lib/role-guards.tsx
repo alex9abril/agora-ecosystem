@@ -8,15 +8,15 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { BusinessRole, hasPermission, canAccessRoute, getDefaultRouteForRole } from './permissions';
 
 /**
- * Hook para verificar si el usuario tiene un permiso específico
+ * Hook para verificar si el usuario tiene un permiso específico.
+ * Para operador, usa permissions del negocio seleccionado.
  */
 export function usePermission(permission: keyof import('./permissions').RolePermissions): boolean {
   const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
-  
-  // Si no hay tienda seleccionada pero hay tiendas disponibles con rol superadmin, usar superadmin
   const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
   const role = (selectedBusiness?.role || (hasSuperadminRole ? 'superadmin' : 'operations_staff')) as BusinessRole;
-  return hasPermission(role, permission);
+  const operatorPermissions = selectedBusiness?.permissions ?? null;
+  return hasPermission(role, permission, operatorPermissions);
 }
 
 /**
@@ -35,7 +35,8 @@ export function useRouteGuard(requiredPermission: keyof import('./permissions').
     }
 
     const role = selectedBusiness.role as BusinessRole;
-    const hasAccess = hasPermission(role, requiredPermission);
+    const operatorPermissions = selectedBusiness.permissions ?? null;
+    const hasAccess = hasPermission(role, requiredPermission, operatorPermissions);
 
     if (!hasAccess) {
       router.push('/unauthorized');
@@ -59,8 +60,9 @@ export function useRouteAccessGuard() {
     }
 
     const role = selectedBusiness.role as BusinessRole;
+    const operatorPermissions = selectedBusiness.permissions ?? null;
     const currentRoute = router.pathname;
-    const hasAccess = canAccessRoute(role, currentRoute);
+    const hasAccess = canAccessRoute(role, currentRoute, operatorPermissions);
 
     if (!hasAccess) {
       router.push('/unauthorized');
