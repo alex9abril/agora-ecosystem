@@ -39,7 +39,7 @@ export default function ClientsPage() {
   });
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  
+
   // Filtros
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -336,14 +336,12 @@ export default function ClientsPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              const name = [client.first_name, client.last_name].filter(Boolean).join(' ').trim() || client.email;
-                              if (typeof window !== 'undefined' && window.confirm(`¿Eliminar cliente "${name}"? Esta acción es temporal y no está conectada al backend.`)) {
-                                // TODO: llamar a API delete cuando exista
-                                console.warn('Eliminar cliente (no implementado):', client.id);
+                              if (typeof window !== 'undefined') {
+                                window.alert('No tienes permisos para efectuar esta acción.');
                               }
                             }}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                            title="Eliminar (temporal)"
+                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 disabled:opacity-50"
+                            title="Eliminar cliente"
                           >
                             Eliminar
                           </button>

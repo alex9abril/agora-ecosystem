@@ -316,5 +316,27 @@ export class ClientsService {
       throw new ServiceUnavailableException('Error al obtener estadísticas');
     }
   }
+
+  /**
+   * Eliminar cliente (eliminación lógica: is_active = false)
+   * @param id ID del cliente (user_profiles.id con role = 'client')
+   */
+  async remove(id: string): Promise<void> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const result = await dbPool.query(
+      `UPDATE core.user_profiles
+       SET is_active = false, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND role = 'client'
+       RETURNING id`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      throw new NotFoundException('Cliente no encontrado');
+    }
+  }
 }
 

@@ -91,5 +91,15 @@ export const clientsService = {
     const queryString = params.toString();
     return apiRequest<Order[]>(`/orders/client/${clientId}${queryString ? `?${queryString}` : ''}`);
   },
+
+  /**
+   * Eliminar cliente (eliminación lógica: is_active = false en backend)
+   * @param clientId ID del cliente
+   */
+  async deleteClient(clientId: string): Promise<void> {
+    await apiRequest<void>(`/clients/remove/${clientId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 

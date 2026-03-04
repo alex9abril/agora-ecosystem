@@ -1,6 +1,9 @@
 import {
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Query,
   UseGuards,
@@ -40,6 +43,17 @@ export class ClientsController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async getStatistics() {
     return this.clientsService.getStatistics();
+  }
+
+  @Delete('remove/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Eliminar cliente (eliminación lógica: is_active = false)' })
+  @ApiParam({ name: 'id', description: 'ID del cliente (UUID)' })
+  @ApiResponse({ status: 204, description: 'Cliente eliminado' })
+  @ApiResponse({ status: 404, description: 'Cliente no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async remove(@Param('id') id: string): Promise<void> {
+    await this.clientsService.remove(id);
   }
 
   @Get(':id')
