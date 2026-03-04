@@ -406,10 +406,6 @@ export default function UsersSettingsPage() {
       });
 
       setUsers(formattedUsers);
-
-      // Recargar usuarios disponibles
-      const available = await usersService.getAvailableUsersForSuperadminAccount();
-      setAvailableUsers(available);
     } catch (err: any) {
       console.error('Error recargando datos:', err);
     }
