@@ -407,6 +407,8 @@ export default function PrepareOrderPage() {
     );
   }
 
+  const canFulfill = (selectedBusiness as { capabilities?: { can_fulfill?: boolean } } | null)?.capabilities?.can_fulfill !== false;
+
   return (
     <LocalLayout>
       <Head>
@@ -592,7 +594,7 @@ export default function PrepareOrderPage() {
             </button>
             <button
               onClick={handleMarkAsCompleted}
-              disabled={saving}
+              disabled={saving || !canFulfill}
               className="px-4 py-2 bg-black text-white rounded-md text-sm font-normal hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? 'Completando...' : 'Marcar como completado'}

@@ -156,6 +156,7 @@ export class AuthService {
 
   /**
    * Obtiene las últimas conexiones del usuario.
+   * Si la tabla core.user_connections no existe (migración no aplicada), devuelve [].
    */
   async getMyConnections(
     userId: string,
@@ -164,15 +165,23 @@ export class AuthService {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
-    const result = await dbPool.query(
-      `SELECT id, connected_at, ip_address, user_agent
-       FROM core.user_connections
-       WHERE user_id = $1
-       ORDER BY connected_at DESC
-       LIMIT $2`,
-      [userId, Math.min(limit, 100)]
-    );
-    return result.rows;
+    try {
+      const result = await dbPool.query(
+        `SELECT id, connected_at, ip_address, user_agent
+         FROM core.user_connections
+         WHERE user_id = $1
+         ORDER BY connected_at DESC
+         LIMIT $2`,
+        [userId, Math.min(limit, 100)]
+      );
+      return result.rows;
+    } catch (err: any) {
+      // Tabla no existe (migración no aplicada) o relación no encontrada
+      if (err?.code === '42P01' || (typeof err?.message === 'string' && err.message.includes('user_connections') && err.message.includes('does not exist'))) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   async getUserProfile(userId: string) {

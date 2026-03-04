@@ -31,9 +31,13 @@ export const SETTINGS_KEYS = [
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
+export const CAPABILITIES_KEYS = ['can_fulfill', 'can_assign_fulfillment'] as const;
+export type CapabilityKey = (typeof CAPABILITIES_KEYS)[number];
+
 export interface OperatorPermissions {
   modules?: Partial<Record<ModuleKey, boolean>>;
   settings?: Partial<Record<SettingsKey, boolean>>;
+  capabilities?: Partial<Record<CapabilityKey, boolean>>;
 }
 
 const emptyModules: Record<ModuleKey, boolean> = {
@@ -60,9 +64,15 @@ const emptySettings: Record<SettingsKey, boolean> = {
   channel_stores: false,
 };
 
+const emptyCapabilities: Record<CapabilityKey, boolean> = {
+  can_fulfill: false,
+  can_assign_fulfillment: false,
+};
+
 export const EMPTY_OPERATOR_PERMISSIONS: OperatorPermissions = {
   modules: { ...emptyModules },
   settings: { ...emptySettings },
+  capabilities: { ...emptyCapabilities },
 };
 
 /** Labels para UI (módulos) */
@@ -91,6 +101,12 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   channel_stores: 'Tiendas por grupo/marca',
 };
 
+/** Labels para UI (capabilities - surtir / asignar surtidores) */
+export const CAPABILITIES_LABELS: Record<CapabilityKey, string> = {
+  can_fulfill: 'Puede surtir pedidos',
+  can_assign_fulfillment: 'Puede asignar pedidos a surtidores',
+};
+
 /**
  * Normaliza un objeto permissions del backend al formato OperatorPermissions.
  */
@@ -102,9 +118,11 @@ export function normalizeOperatorPermissions(
   }
   const modules = (raw.modules as Partial<Record<ModuleKey, boolean>>) || {};
   const settings = (raw.settings as Partial<Record<SettingsKey, boolean>>) || {};
+  const capabilities = (raw.capabilities as Partial<Record<CapabilityKey, boolean>>) || {};
   return {
     modules: { ...emptyModules, ...modules },
     settings: { ...emptySettings, ...settings },
+    capabilities: { ...emptyCapabilities, ...capabilities },
   };
 }
 

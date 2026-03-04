@@ -26,9 +26,11 @@ interface TiendasSidebarProps {
   currentStoreId?: string | null;
   /** Overrides is_active por store id para reflejar cambios sin recargar */
   storeStatusOverrides?: Record<string, boolean>;
+  /** Incrementar para forzar recarga de la lista (ej. tras archivar una tienda) */
+  refreshTrigger?: number;
 }
 
-export default function TiendasSidebar({ currentSection = 'home', currentStoreId, storeStatusOverrides }: TiendasSidebarProps) {
+export default function TiendasSidebar({ currentSection = 'home', currentStoreId, storeStatusOverrides, refreshTrigger }: TiendasSidebarProps) {
   const router = useRouter();
   const [businessGroup, setBusinessGroup] = useState<BusinessGroup | null>(null);
   const [storesByGroup, setStoresByGroup] = useState<Store[]>([]);
@@ -73,7 +75,7 @@ export default function TiendasSidebar({ currentSection = 'home', currentStoreId
       }
     };
     loadStores();
-  }, [businessGroup?.id]);
+  }, [businessGroup?.id, refreshTrigger]);
 
   const setSection = (section: TiendasSection, storeId?: string) => {
     const query: Record<string, string> = { section };

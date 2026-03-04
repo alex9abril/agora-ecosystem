@@ -272,9 +272,8 @@ export default function EmailsPage() {
   });
   const [showResolverInfoFor, setShowResolverInfoFor] = useState<EmailTriggerType | null>(null);
 
-  const router = useRouter();
   const isEmbedded = Boolean(router.query.embedded === '1');
-  const embeddedLevel = router.query.level as 'group' | 'branch' | undefined;
+  const embeddedLevel = router.query.level as 'group' | 'branch' | 'business' | undefined;
   const embeddedBusinessGroupId = typeof router.query.businessGroupId === 'string' ? router.query.businessGroupId : undefined;
   const embeddedBusinessId = typeof router.query.businessId === 'string' ? router.query.businessId : undefined;
 

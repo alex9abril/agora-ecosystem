@@ -6,16 +6,20 @@ import SettingsSidebar from '@/components/settings/SettingsSidebar';
 import { useState, useEffect } from 'react';
 import { usersService, BusinessUser, User, BusinessRole } from '@/lib/users';
 import { businessService } from '@/lib/business';
+import { apiRequest } from '@/lib/api';
 import {
   EMPTY_OPERATOR_PERMISSIONS,
   MODULE_KEYS,
   SETTINGS_KEYS,
   MODULE_LABELS,
   SETTINGS_LABELS,
+  CAPABILITIES_KEYS,
+  CAPABILITIES_LABELS,
   normalizeOperatorPermissions,
   type OperatorPermissions,
   type ModuleKey,
   type SettingsKey,
+  type CapabilityKey,
 } from '@/lib/operator-permissions';
 
 interface Business {
@@ -24,9 +28,26 @@ interface Business {
   business_email: string;
   business_phone: string;
   business_address?: string;
+  business_group_id?: string | null;
   is_active: boolean;
   total_users: number;
   created_at: string;
+}
+
+/** Fila de tienda (canal) para el formulario de invitar usuario */
+interface InviteStoreRow {
+  storeId: string;
+  storeName: string;
+  storeType: string;
+  businessIds: string[];
+}
+
+/** Permisos por tienda para invitar usuario */
+interface InviteStorePerms {
+  hasAccess: boolean;
+  canFulfill: boolean;
+  canAddProducts: boolean;
+  canAccessConfig: boolean;
 }
 
 interface UserWithBusinesses extends BusinessUser {
@@ -45,41 +66,24 @@ export default function UsersSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [users, setUsers] = useState<UserWithBusinesses[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedBusinessFilter, setSelectedBusinessFilter] = useState<string>('all');
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [selectedBusinesses, setSelectedBusinesses] = useState<string[]>([]);
-  const [selectedRole, setSelectedRole] = useState<BusinessRole>('operations_staff');
-  const [branchPermissions, setBranchPermissions] = useState<Record<string, OperatorPermissions>>({});
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteStoreRows, setInviteStoreRows] = useState<InviteStoreRow[]>([]);
+  const [inviteStorePerms, setInviteStorePerms] = useState<Record<string, InviteStorePerms>>({});
+  const [loadingInviteStores, setLoadingInviteStores] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteUserNotFound, setInviteUserNotFound] = useState(false);
+  const [inviteCreateData, setInviteCreateData] = useState({ password: 'AGORA1*', firstName: '', lastName: '' });
   const [editPermissionsFor, setEditPermissionsFor] = useState<{
     userId: string;
     businessId: string;
     businessName: string;
+    currentRole: BusinessRole;
   } | null>(null);
   const [editPermissionsValue, setEditPermissionsValue] = useState<OperatorPermissions>(EMPTY_OPERATOR_PERMISSIONS);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
-  // Form data para crear usuario
-  const [createUserData, setCreateUserData] = useState({
-    email: '',
-    password: 'AGORA1*',
-    confirmPassword: 'AGORA1*',
-    firstName: '',
-    lastName: '',
-    phone: '',
-    role: 'operations_staff' as BusinessRole,
-    businessIds: [] as string[],
-  });
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
-  const [emailValid, setEmailValid] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -150,10 +154,6 @@ export default function UsersSettingsPage() {
         });
 
         setUsers(formattedUsers);
-
-        // Cargar usuarios disponibles para la cuenta del superadmin
-        const available = await usersService.getAvailableUsersForSuperadminAccount();
-        setAvailableUsers(available);
       } catch (err: any) {
         console.error('Error cargando usuarios:', err);
         setError('Error al cargar los usuarios');
@@ -165,74 +165,179 @@ export default function UsersSettingsPage() {
     loadData();
   }, []);
 
-  const handleSearch = async () => {
-    try {
-      const results = await usersService.getAvailableUsersForSuperadminAccount(searchTerm);
-      setAvailableUsers(results);
-    } catch (err: any) {
-      console.error('Error buscando usuarios:', err);
-      setError('Error al buscar usuarios');
-    }
+  // Cargar tiendas (stores) al abrir el modal Invitar usuario
+  useEffect(() => {
+    if (!showInviteModal) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoadingInviteStores(true);
+      setInviteStoreRows([]);
+      setInviteStorePerms({});
+      try {
+        const group = await businessService.getMyBusinessGroup();
+        if (!group?.id) {
+          setInviteStoreRows([]);
+          return;
+        }
+        const [storesRes, bizList] = await Promise.all([
+          apiRequest<{ data?: Array<{ id: string; type: string; name: string; business_group_id?: string; business_id?: string }> }>(
+            `/stores?businessGroupId=${group.id}&limit=100`
+          ),
+          usersService.getSuperadminBusinesses(),
+        ]);
+        if (cancelled) return;
+        const stores = storesRes?.data ?? [];
+        const businessesWithGroup = bizList as Array<{ business_id: string; business_name: string; business_group_id?: string | null }>;
+        const rows: InviteStoreRow[] = [];
+        for (const s of stores) {
+          let businessIds: string[] = [];
+          if (s.type === 'branch' && s.business_id) {
+            businessIds = [s.business_id];
+          } else if ((s.type === 'group' || s.type === 'group_brand') && (s.business_group_id || (s as any).business_group_id)) {
+            const gid = s.business_group_id ?? (s as any).business_group_id;
+            businessIds = businessesWithGroup
+              .filter((b) => b.business_group_id === gid)
+              .map((b) => b.business_id);
+          }
+          if (businessIds.length > 0) {
+            rows.push({
+              storeId: s.id,
+              storeName: s.name,
+              storeType: s.type,
+              businessIds,
+            });
+            setInviteStorePerms((prev) => ({
+              ...prev,
+              [s.id]: prev[s.id] ?? { hasAccess: false, canFulfill: false, canAddProducts: false, canAccessConfig: false },
+            }));
+          }
+        }
+        setInviteStoreRows(rows);
+      } catch (e) {
+        console.error('Error cargando tiendas para invitar:', e);
+        setInviteStoreRows([]);
+      } finally {
+        if (!cancelled) setLoadingInviteStores(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [showInviteModal]);
+
+  const setInvitePerm = (storeId: string, key: keyof InviteStorePerms, value: boolean) => {
+    setInviteStorePerms((prev) => ({
+      ...prev,
+      [storeId]: { ...(prev[storeId] ?? { hasAccess: false, canFulfill: false, canAddProducts: false, canAccessConfig: false }), [key]: value },
+    }));
   };
 
-  const handleAssignUser = async () => {
-    if (!selectedUser || selectedBusinesses.length === 0) {
-      setError('Selecciona al menos una tienda');
+  const handleInviteSubmit = async (createUserIfMissing: boolean = false) => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      setError('Indica el correo del usuario');
       return;
     }
-
+    const storeIdsWithAccess = inviteStoreRows.filter((r) => inviteStorePerms[r.storeId]?.hasAccess);
+    if (storeIdsWithAccess.length === 0) {
+      setError('Selecciona al menos una tienda con acceso');
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setInviteSubmitting(true);
     try {
-      setError(null);
-      setSuccess(null);
-
-      const assignments = selectedBusinesses.map((businessId) => ({
-        business_id: businessId,
-        role: selectedRole,
-        permissions:
-          selectedRole === 'operations_staff' || selectedRole === 'kitchen_staff'
-            ? (branchPermissions[businessId] ?? EMPTY_OPERATOR_PERMISSIONS)
-            : {},
-      }));
-
-      const result = await usersService.bulkAssignUser({
-        user_id: selectedUser.id,
-        assignments,
-      });
-
-      const successCount = result.assignments.filter((a) => a.success).length;
-      const failCount = result.assignments.filter((a) => !a.success).length;
-      if (failCount > 0) {
-        setError(`${successCount} asignación(es) correcta(s). ${failCount} fallaron.`);
-      } else {
-        setSuccess(`Usuario asignado exitosamente a ${successCount} tienda(s)`);
+      let userId: string | null = null;
+      const available = await usersService.getAvailableUsersForSuperadminAccount(email);
+      const existing = available.find((u) => u.email?.toLowerCase() === email);
+      if (existing) {
+        userId = existing.id;
+      } else if (createUserIfMissing && inviteCreateData.password.length >= 6) {
+        const created = await usersService.createUserForSuperadminAccount({
+          email,
+          password: inviteCreateData.password,
+          firstName: inviteCreateData.firstName || undefined,
+          lastName: inviteCreateData.lastName || undefined,
+          role: 'operations_staff',
+          businessIds: [],
+        });
+        userId = created.user?.id ?? (created as any).created_user?.id;
       }
-
+      if (!userId) {
+        setInviteUserNotFound(true);
+        setInviteSubmitting(false);
+        return;
+      }
+      setInviteUserNotFound(false);
+      const businessPermMap = new Map<string, OperatorPermissions>();
+      for (const row of storeIdsWithAccess) {
+        const p = inviteStorePerms[row.storeId];
+        if (!p) continue;
+        const perms: OperatorPermissions = {
+          ...EMPTY_OPERATOR_PERMISSIONS,
+          modules: {
+            ...EMPTY_OPERATOR_PERMISSIONS.modules,
+            products: p.canAddProducts,
+          },
+          settings: {
+            ...EMPTY_OPERATOR_PERMISSIONS.settings,
+            store: p.canAccessConfig,
+            branches: p.canAccessConfig,
+            users: p.canAccessConfig,
+            emails: p.canAccessConfig,
+          },
+          capabilities: {
+            ...EMPTY_OPERATOR_PERMISSIONS.capabilities,
+            can_fulfill: p.canFulfill,
+          },
+        };
+        for (const bid of row.businessIds) {
+          const existing = businessPermMap.get(bid);
+          if (!existing) {
+            businessPermMap.set(bid, perms);
+            continue;
+          }
+          const merged: OperatorPermissions = {
+            modules: {} as any,
+            settings: {} as any,
+            capabilities: {} as any,
+          };
+          for (const k of Object.keys(emptyM) as (keyof typeof emptyM)[]) {
+            (merged.modules as any)[k] = (existing.modules?.[k] ?? false) || (perms.modules?.[k] ?? false);
+          }
+          for (const k of Object.keys(emptyS) as (keyof typeof emptyS)[]) {
+            (merged.settings as any)[k] = (existing.settings?.[k] ?? false) || (perms.settings?.[k] ?? false);
+          }
+          for (const k of Object.keys(emptyC) as (keyof typeof emptyC)[]) {
+            (merged.capabilities as any)[k] = (existing.capabilities?.[k] ?? false) || (perms.capabilities?.[k] ?? false);
+          }
+          businessPermMap.set(bid, merged);
+        }
+      }
+      const assignments = Array.from(businessPermMap.entries()).map(([business_id, permissions]) => ({
+        business_id,
+        role: 'operations_staff' as BusinessRole,
+        permissions,
+      }));
+      const result = await usersService.bulkAssignUser({ user_id: userId, assignments });
+      const ok = result.assignments.filter((a) => a.success).length;
+      setSuccess(`Usuario invitado correctamente a ${ok} sucursal(es).`);
       await reloadData();
-      setShowAssignModal(false);
-      setSelectedUser(null);
-      setSelectedBusinesses([]);
-      setSelectedRole('operations_staff');
-      setBranchPermissions({});
+      setShowInviteModal(false);
+      setInviteEmail('');
+      setInviteStorePerms({});
+      setInviteUserNotFound(false);
     } catch (err: any) {
-      console.error('Error asignando usuario:', err);
-      setError(err?.message || 'Error al asignar usuario');
+      setError(err?.message || 'Error al invitar usuario');
+    } finally {
+      setInviteSubmitting(false);
     }
   };
 
-  const setPermissionForBranch = (
-    businessId: string,
-    kind: 'modules' | 'settings',
-    key: ModuleKey | SettingsKey,
-    value: boolean
-  ) => {
-    setBranchPermissions((prev) => {
-      const current = prev[businessId] ?? { ...EMPTY_OPERATOR_PERMISSIONS };
-      const next = { ...current, [kind]: { ...(current[kind] ?? {}), [key]: value } };
-      return { ...prev, [businessId]: next };
-    });
-  };
+  const emptyM = EMPTY_OPERATOR_PERMISSIONS.modules!;
+  const emptyS = EMPTY_OPERATOR_PERMISSIONS.settings!;
+  const emptyC = EMPTY_OPERATOR_PERMISSIONS.capabilities!;
 
-  const setEditPermission = (kind: 'modules' | 'settings', key: ModuleKey | SettingsKey, value: boolean) => {
+  const setEditPermission = (kind: 'modules' | 'settings' | 'capabilities', key: ModuleKey | SettingsKey | CapabilityKey, value: boolean) => {
     setEditPermissionsValue((prev) => ({
       ...prev,
       [kind]: { ...(prev[kind] ?? {}), [key]: value },
@@ -244,7 +349,7 @@ export default function UsersSettingsPage() {
     try {
       setError(null);
       await usersService.changeUserRole(editPermissionsFor.businessId, editPermissionsFor.userId, {
-        role: 'operations_staff',
+        role: editPermissionsFor.currentRole,
         permissions: editPermissionsValue,
       });
       setSuccess('Permisos actualizados');
@@ -418,16 +523,15 @@ export default function UsersSettingsPage() {
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        type="button"
+                        onClick={() => {
+                          setShowInviteModal(true);
+                          setInviteEmail('');
+                          setInviteUserNotFound(false);
+                        }}
+                        className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
                       >
-                        Crear Usuario
-                      </button>
-                      <button
-                        onClick={() => setShowAssignModal(true)}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        Asignar Usuario Existente
+                        Invitar usuario
                       </button>
                     </div>
                   </div>
@@ -572,6 +676,7 @@ export default function UsersSettingsPage() {
                                               userId: user.user_id,
                                               businessId: business.business_id,
                                               businessName: business.business_name ?? business.business_id,
+                                              currentRole: business.role,
                                             });
                                           }}
                                           className="text-indigo-600 hover:text-indigo-900 text-sm"
@@ -602,220 +707,138 @@ export default function UsersSettingsPage() {
             )}
           </div>
 
-          {/* Assign User Modal */}
-          {showAssignModal && (
+          {/* Modal Invitar usuario */}
+          {showInviteModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="p-6">
-                  <h2 className="text-xl font-normal text-gray-900 mb-4">Asignar Usuario</h2>
+                  <h2 className="text-xl font-normal text-gray-900 mb-2">Invitar usuario</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Indica el correo y las tiendas a las que tendrá acceso. Por cada tienda (canal) defines si puede hacer fulfillment, agregar productos o entrar a configuración.
+                  </p>
 
-                  {/* Search */}
                   <div className="mb-4">
-                    <label className="block text-sm font-normal text-gray-700 mb-2">
-                      Buscar Usuario
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                        placeholder="Buscar por email, nombre o teléfono..."
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                      <button
-                        onClick={handleSearch}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                      >
-                        Buscar
-                      </button>
-                    </div>
+                    <label className="block text-sm font-normal text-gray-700 mb-2">Correo <span className="text-red-500">*</span></label>
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => { setInviteEmail(e.target.value); setInviteUserNotFound(false); }}
+                      placeholder="usuario@ejemplo.com"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                    />
                   </div>
 
-                  {/* Available Users List */}
-                  <div className="mb-4 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-                    {availableUsers.length === 0 ? (
-                      <p className="text-gray-500 text-center py-8">No se encontraron usuarios</p>
+                  <div className="mb-4">
+                    <label className="block text-sm font-normal text-gray-700 mb-2">Tiendas y permisos</label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      La tienda es el canal (configuración, personalizaciones). La sucursal/distribuidor es quien surte pedidos y gestiona precios y disponibilidad.
+                    </p>
+                    {loadingInviteStores ? (
+                      <p className="text-gray-500 py-4">Cargando tiendas...</p>
+                    ) : inviteStoreRows.length === 0 ? (
+                      <p className="text-gray-500 py-4">No hay tiendas disponibles para tu cuenta.</p>
                     ) : (
-                      <div className="divide-y divide-gray-200">
-                        {availableUsers.map((user) => (
-                          <button
-                            key={user.id}
-                            onClick={() => setSelectedUser(user)}
-                            className={`w-full px-4 py-3 text-left hover:bg-gray-50 ${
-                              selectedUser?.id === user.id ? 'bg-indigo-50' : ''
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">
-                                  {user.first_name || user.last_name
-                                    ? `${user.first_name || ''} ${user.last_name || ''}`.trim()
-                                    : 'Sin nombre'}
-                                </p>
-                                <p className="text-sm text-gray-500">{user.email}</p>
-                              </div>
-                              {(user as any).is_already_assigned && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  <div>Ya asignado</div>
-                                  {(user as any).assigned_businesses && (user as any).assigned_businesses.length > 0 && (
-                                    <div className="mt-1">
-                                      {(user as any).assigned_businesses.map((business: string, idx: number) => (
-                                        <span key={idx} className="inline-block mr-2">
-                                          {business} ({getRoleLabel((user as any).assigned_roles?.[idx] || 'operations_staff')})
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                      <div className="space-y-4 max-h-80 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                        {inviteStoreRows.map((row) => {
+                          const p = inviteStorePerms[row.storeId] ?? { hasAccess: false, canFulfill: false, canAddProducts: false, canAccessConfig: false };
+                          return (
+                            <div key={row.storeId} className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                              <label className="flex items-center gap-2 font-medium text-gray-900 mb-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={p.hasAccess}
+                                  onChange={(e) => setInvitePerm(row.storeId, 'hasAccess', e.target.checked)}
+                                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                {row.storeName}
+                                <span className="text-xs font-normal text-gray-500">({row.storeType === 'branch' ? 'Sucursal' : row.storeType === 'group' ? 'Grupo' : 'Tienda'})</span>
+                              </label>
+                              {p.hasAccess && (
+                                <div className="ml-6 space-y-2 text-sm">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={p.canFulfill}
+                                      onChange={(e) => setInvitePerm(row.storeId, 'canFulfill', e.target.checked)}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Puede hacer fulfillment (surtir pedidos, validar precios y disponibilidad)
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={p.canAddProducts}
+                                      onChange={(e) => setInvitePerm(row.storeId, 'canAddProducts', e.target.checked)}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Puede agregar productos
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={p.canAccessConfig}
+                                      onChange={(e) => setInvitePerm(row.storeId, 'canAccessConfig', e.target.checked)}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Puede entrar a configuración (tienda, sucursales, usuarios, correos)
+                                  </label>
                                 </div>
                               )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Business Selection */}
-                  {selectedUser && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Seleccionar Tienda(s)
-                      </label>
-                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                        {businesses.length === 0 ? (
-                          <p className="text-sm text-gray-500">No hay tiendas disponibles</p>
-                        ) : (
-                          businesses.map((business) => (
-                            <label
-                              key={business.business_id}
-                              className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedBusinesses.includes(business.business_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedBusinesses([...selectedBusinesses, business.business_id]);
-                                  } else {
-                                    setSelectedBusinesses(
-                                      selectedBusinesses.filter((id) => id !== business.business_id)
-                                    );
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">{business.business_name}</p>
-                                <p className="text-xs text-gray-500">{business.business_address || 'Sin dirección'}</p>
-                              </div>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Role Selection */}
-                  {selectedUser && selectedBusinesses.length > 0 && (
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Rol para las tiendas seleccionadas
-                      </label>
-                      <select
-                        value={selectedRole === 'kitchen_staff' ? 'operations_staff' : selectedRole}
-                        onChange={(e) => setSelectedRole(e.target.value as BusinessRole)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        <option value="admin">Administrador</option>
-                        <option value="operations_staff">Operador</option>
-                      </select>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Operador: define permisos por sucursal abajo. Administrador: acceso total en cada sucursal.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Per-branch permissions (Operator only) */}
-                  {selectedUser && selectedBusinesses.length > 0 && (selectedRole === 'operations_staff' || selectedRole === 'kitchen_staff') && (
-                    <div className="mb-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
-                      <label className="block text-sm font-normal text-gray-700 mb-3">
-                        Permisos por sucursal (Operador)
-                      </label>
-                      <div className="space-y-4 max-h-64 overflow-y-auto">
-                        {selectedBusinesses.map((businessId) => {
-                          const business = businesses.find((b) => b.business_id === businessId);
-                          const perms = normalizeOperatorPermissions(
-                            branchPermissions[businessId] ?? EMPTY_OPERATOR_PERMISSIONS
-                          );
-                          return (
-                            <div key={businessId} className="bg-white rounded border border-gray-200 p-3">
-                              <p className="text-sm font-medium text-gray-900 mb-2">{business?.business_name ?? businessId}</p>
-                              <div className="grid grid-cols-1 gap-2 text-sm">
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase mb-1">Módulos</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {MODULE_KEYS.map((key) => (
-                                      <label key={key} className="inline-flex items-center gap-1">
-                                        <input
-                                          type="checkbox"
-                                          checked={perms.modules?.[key] === true}
-                                          onChange={(e) =>
-                                            setPermissionForBranch(businessId, 'modules', key, e.target.checked)
-                                          }
-                                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <span>{MODULE_LABELS[key]}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase mb-1 mt-2">Configuración</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {SETTINGS_KEYS.map((key) => (
-                                      <label key={key} className="inline-flex items-center gap-1">
-                                        <input
-                                          type="checkbox"
-                                          checked={perms.settings?.[key] === true}
-                                          onChange={(e) =>
-                                            setPermissionForBranch(businessId, 'settings', key, e.target.checked)
-                                          }
-                                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <span>{SETTINGS_LABELS[key]}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
                             </div>
                           );
                         })}
                       </div>
+                    )}
+                  </div>
+
+                  {inviteUserNotFound && (
+                    <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800 mb-2">No hay usuario registrado con este correo.</p>
+                      <p className="text-sm text-amber-700 mb-3">Créalo y asígnalo con los permisos elegidos:</p>
+                      <div className="space-y-2">
+                        <input
+                          type="password"
+                          value={inviteCreateData.password}
+                          onChange={(e) => setInviteCreateData({ ...inviteCreateData, password: e.target.value })}
+                          placeholder="Contraseña (mín. 6 caracteres)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={inviteCreateData.firstName}
+                          onChange={(e) => setInviteCreateData({ ...inviteCreateData, firstName: e.target.value })}
+                          placeholder="Nombre"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        />
+                        <input
+                          type="text"
+                          value={inviteCreateData.lastName}
+                          onChange={(e) => setInviteCreateData({ ...inviteCreateData, lastName: e.target.value })}
+                          placeholder="Apellido"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        />
+                      </div>
                     </div>
                   )}
 
-                  {/* Actions */}
                   <div className="flex justify-end gap-3">
                     <button
+                      type="button"
                       onClick={() => {
-                        setShowAssignModal(false);
-                        setSelectedUser(null);
-                        setSelectedBusinesses([]);
-                        setBranchPermissions({});
-                        setSearchTerm('');
+                        setShowInviteModal(false);
+                        setInviteUserNotFound(false);
                       }}
                       className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
                     >
                       Cancelar
                     </button>
                     <button
-                      onClick={handleAssignUser}
-                      disabled={!selectedUser || selectedBusinesses.length === 0}
+                      type="button"
+                      onClick={() => inviteUserNotFound ? handleInviteSubmit(true) : handleInviteSubmit(false)}
+                      disabled={inviteSubmitting || !inviteEmail.trim() || inviteStoreRows.filter((r) => inviteStorePerms[r.storeId]?.hasAccess).length === 0 || (inviteUserNotFound && inviteCreateData.password.length < 6)}
                       className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Asignar a {selectedBusinesses.length} tienda{selectedBusinesses.length !== 1 ? 's' : ''}
+                      {inviteSubmitting ? 'Enviando...' : inviteUserNotFound ? 'Crear usuario e invitar' : 'Invitar'}
                     </button>
                   </div>
                 </div>
@@ -863,6 +886,22 @@ export default function UsersSettingsPage() {
                         ))}
                       </div>
                     </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Capacidades</p>
+                      <div className="flex flex-wrap gap-2">
+                        {CAPABILITIES_KEYS.map((key) => (
+                          <label key={key} className="inline-flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={editPermissionsValue.capabilities?.[key] === true}
+                              onChange={(e) => setEditPermission('capabilities', key, e.target.checked)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{CAPABILITIES_LABELS[key]}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex justify-end gap-3">
                     <button
@@ -883,372 +922,6 @@ export default function UsersSettingsPage() {
             </div>
           )}
 
-          {/* Create User Modal */}
-          {showCreateModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="p-6">
-                  <h2 className="text-xl font-normal text-gray-900 mb-4">Crear Nuevo Usuario</h2>
-
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setError(null);
-                      setSuccess(null);
-
-                      // Validaciones
-                      if (createUserData.password !== createUserData.confirmPassword) {
-                        setError('Las contraseñas no coinciden');
-                        return;
-                      }
-
-                      if (createUserData.password.length < 6) {
-                        setError('La contraseña debe tener al menos 6 caracteres');
-                        return;
-                      }
-
-                      if (!createUserData.email) {
-                        setError('El email es requerido');
-                        return;
-                      }
-
-                      if (emailError || !emailValid) {
-                        setError('Por favor, verifica que el email sea válido y no esté registrado');
-                        return;
-                      }
-
-                      setIsCreatingUser(true);
-                      setError(null);
-                      setSuccess(null);
-
-                      try {
-                        const result = await usersService.createUserForSuperadminAccount({
-                          email: createUserData.email,
-                          password: createUserData.password,
-                          firstName: createUserData.firstName || undefined,
-                          lastName: createUserData.lastName || undefined,
-                          phone: createUserData.phone || undefined,
-                          role: createUserData.role,
-                          businessIds: createUserData.businessIds.length > 0 ? createUserData.businessIds : undefined,
-                        });
-
-                        setSuccess(result.message || 'Usuario creado exitosamente');
-
-                        // Recargar datos
-                        await reloadData();
-
-                        // Cerrar modal y resetear formulario
-                        setShowCreateModal(false);
-                        setCreateUserData({
-                          email: '',
-                          password: 'AGORA1*',
-                          confirmPassword: 'AGORA1*',
-                          firstName: '',
-                          lastName: '',
-                          phone: '',
-                          role: 'operations_staff',
-                          businessIds: [],
-                        });
-                        setEmailError(null);
-                        setEmailValid(false);
-                        setShowPassword(false);
-                        setShowConfirmPassword(false);
-                      } catch (err: any) {
-                        console.error('Error creando usuario:', err);
-                        setError(err.message || 'Error al crear usuario');
-                      } finally {
-                        setIsCreatingUser(false);
-                      }
-                    }}
-                  >
-                    {/* Email */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Email <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={createUserData.email}
-                        onChange={(e) => {
-                          setCreateUserData({ ...createUserData, email: e.target.value });
-                          setEmailError(null);
-                          setEmailValid(false);
-                        }}
-                        onBlur={async () => {
-                          const email = createUserData.email.trim();
-                          if (!email) {
-                            setEmailError(null);
-                            setEmailValid(false);
-                            return;
-                          }
-
-                          // Validar formato de email básico
-                          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                          if (!emailRegex.test(email)) {
-                            setEmailError('Formato de email inválido');
-                            setEmailValid(false);
-                            return;
-                          }
-
-                          setIsCheckingEmail(true);
-                          setEmailError(null);
-
-                          try {
-                            const exists = await usersService.checkEmailExists(email);
-                            if (exists) {
-                              setEmailError('Este email ya está registrado. Por favor, usa otro email.');
-                              setEmailValid(false);
-                            } else {
-                              setEmailError(null);
-                              setEmailValid(true);
-                            }
-                          } catch (err: any) {
-                            console.error('Error verificando email:', err);
-                            setEmailError('Error al verificar el email. Intenta de nuevo.');
-                            setEmailValid(false);
-                          } finally {
-                            setIsCheckingEmail(false);
-                          }
-                        }}
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-indigo-500 focus:border-indigo-500 ${
-                          emailError
-                            ? 'border-red-300 bg-red-50'
-                            : emailValid
-                            ? 'border-green-300 bg-green-50'
-                            : 'border-gray-300'
-                        }`}
-                        placeholder="usuario@example.com"
-                      />
-                      {isCheckingEmail && (
-                        <p className="mt-1 text-xs text-gray-500">Verificando email...</p>
-                      )}
-                      {emailError && (
-                        <p className="mt-1 text-xs text-red-600">{emailError}</p>
-                      )}
-                      {emailValid && !emailError && (
-                        <p className="mt-1 text-xs text-green-600">✓ Email disponible</p>
-                      )}
-                    </div>
-
-                    {/* Password */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Contraseña <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required
-                          value={createUserData.password}
-                          onChange={(e) => setCreateUserData({ ...createUserData, password: e.target.value })}
-                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                          placeholder="Mínimo 6 caracteres"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                        >
-                          {showPassword ? (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          ) : (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">Contraseña autogenerada. El usuario puede cambiarla después.</p>
-                    </div>
-
-                    {/* Confirm Password */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Confirmar Contraseña <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          required
-                          value={createUserData.confirmPassword}
-                          onChange={(e) => setCreateUserData({ ...createUserData, confirmPassword: e.target.value })}
-                          className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                          placeholder="Repite la contraseña"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                        >
-                          {showConfirmPassword ? (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          ) : (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* First Name */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Nombre
-                      </label>
-                      <input
-                        type="text"
-                        value={createUserData.firstName}
-                        onChange={(e) => setCreateUserData({ ...createUserData, firstName: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Juan"
-                      />
-                    </div>
-
-                    {/* Last Name */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Apellido
-                      </label>
-                      <input
-                        type="text"
-                        value={createUserData.lastName}
-                        onChange={(e) => setCreateUserData({ ...createUserData, lastName: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Pérez"
-                      />
-                    </div>
-
-                    {/* Phone */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Teléfono
-                      </label>
-                      <input
-                        type="tel"
-                        value={createUserData.phone}
-                        onChange={(e) => setCreateUserData({ ...createUserData, phone: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="+525512345678"
-                      />
-                    </div>
-
-                    {/* Business Selection */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Seleccionar Tienda(s) (opcional - si no seleccionas, se asignará a todas)
-                      </label>
-                      <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                        {businesses.length === 0 ? (
-                          <p className="text-sm text-gray-500">No hay tiendas disponibles</p>
-                        ) : (
-                          businesses.map((business) => (
-                            <label
-                              key={business.business_id}
-                              className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={createUserData.businessIds.includes(business.business_id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setCreateUserData({
-                                      ...createUserData,
-                                      businessIds: [...createUserData.businessIds, business.business_id],
-                                    });
-                                  } else {
-                                    setCreateUserData({
-                                      ...createUserData,
-                                      businessIds: createUserData.businessIds.filter((id) => id !== business.business_id),
-                                    });
-                                  }
-                                }}
-                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-gray-900">{business.business_name}</p>
-                                <p className="text-xs text-gray-500">{business.business_address || 'Sin dirección'}</p>
-                              </div>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Role Selection */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-normal text-gray-700 mb-2">
-                        Rol <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        required
-                        value={createUserData.role}
-                        onChange={(e) => setCreateUserData({ ...createUserData, role: e.target.value as BusinessRole })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                      >
-                        <option value="admin">Administrador</option>
-                        <option value="operations_staff">Operations Staff</option>
-                        <option value="kitchen_staff">Kitchen Staff</option>
-                      </select>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowCreateModal(false);
-                          setCreateUserData({
-                            email: '',
-                            password: 'AGORA1*',
-                            confirmPassword: 'AGORA1*',
-                            firstName: '',
-                            lastName: '',
-                            phone: '',
-                            role: 'operations_staff',
-                            businessIds: [],
-                          });
-                          setError(null);
-                          setEmailError(null);
-                          setEmailValid(false);
-                          setIsCheckingEmail(false);
-                          setShowPassword(false);
-                          setShowConfirmPassword(false);
-                        }}
-                        className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={!emailValid || isCheckingEmail || !!emailError || isCreatingUser}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {isCreatingUser ? (
-                          <React.Fragment>
-                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Creando...
-                          </React.Fragment>
-                        ) : (
-                          'Crear Usuario'
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          )}
                 </div>
               </div>
             </div>

@@ -60,16 +60,6 @@ const menuItems: MenuItem[] = [
     requiredPermission: 'canManageClients',
   },
   {
-    name: 'Sliders',
-    href: '/sliders',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-    requiredPermission: 'canManageSliders',
-  },
-  {
     name: 'Tiendas',
     href: '/tiendas',
     icon: (
@@ -248,7 +238,7 @@ export default function Sidebar() {
     <>
       {/* Sidebar base (siempre visible, mantiene su ancho para no afectar el layout) */}
       <aside 
-        className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-neutral-900 flex flex-col h-screen transition-all duration-200 relative z-40 ${
+        className={`${isCollapsed ? 'w-16' : 'w-64'} bg-white dark:bg-neutral-900 flex flex-col h-screen sticky top-0 self-start transition-all duration-200 relative z-40 ${
           isCollapsed && isHovered ? 'opacity-0 pointer-events-none' : ''
         }`}
         onMouseEnter={() => isCollapsed && setIsHovered(true)}

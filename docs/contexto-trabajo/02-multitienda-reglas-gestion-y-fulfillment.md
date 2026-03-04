@@ -5,11 +5,13 @@
 
 Este documento fija **quién gestiona qué**, **quién cumple las ventas** y **quién ve qué**, para los cuatro niveles de tienda (global, grupo, sucursal, marca). Complementa al agente [01-multitienda-contexto-global-grupo-sucursal.md](../agentes/01-multitienda-contexto-global-grupo-sucursal.md).
 
+**Tienda vs distribuidor:** En este documento, **tienda** = canal de venta (donde se vende); **distribuidor** = quien tiene el producto en almacén y surte el pedido. Un distribuidor puede no tener tienda propia y estar montado en una o más tiendas. Definición completa: [03-tiendas-y-distribuidores.md](./03-tiendas-y-distribuidores.md).
+
 ---
 
 ## 1. Resumen en una frase
 
-Cada entidad (tienda global, grupo, sucursal, marca) hace su esfuerzo para **promover** ventas; pero **quien recibe y realiza la venta** (fulfillment) es siempre el **almacén que despacha el producto**, es decir la **sucursal**. La sucursal pertenece a un dealer (grupo) y **cada sucursal vende una sola marca**. La gestión (branding, config) y las cuentas se separan: grupo/dealer gestiona grupo y sucursales; la tienda por **marca** la gestiona una **cuenta distinta** (corporativo/planta de la marca).
+Cada **tienda** (canal: global, grupo, sucursal, marca) promueve ventas; **quien recibe y realiza la venta** (fulfillment) es el **distribuidor** — en el modelo actual, el **almacén que despacha** (sucursal). Un distribuidor puede no tener tienda propia y operar montado en otra(s) tienda(s). La sucursal pertenece a un dealer (grupo) y **cada sucursal vende una sola marca**. La gestión (branding, config) y las cuentas se separan: grupo/dealer gestiona grupo y sucursales; la tienda por **marca** la gestiona una **cuenta distinta** (corporativo/planta de la marca).
 
 ---
 
@@ -34,12 +36,13 @@ Cada entidad (tienda global, grupo, sucursal, marca) hace su esfuerzo para **pro
 
 ---
 
-## 4. Fulfillment: quién recibe y realiza la venta
+## 4. Fulfillment: quién recibe y realiza la venta (distribuidor)
 
-- **Siempre** quien **recibe** el pedido y **despacha** el producto es la **sucursal** (el almacén de donde sale el producto).
+- **Siempre** quien **recibe** el pedido y **despacha** el producto es el **distribuidor** (quien tiene el producto en almacén). En el modelo actual ese rol lo cumple la **sucursal** (`orders.orders.business_id`).
+- Un **distribuidor puede no tener tienda propia** y estar **montado en una o más tiendas** (vender a través de canales ajenos). Ver [03-tiendas-y-distribuidores.md](./03-tiendas-y-distribuidores.md).
 - **Una sucursal pertenece a un dealer (grupo)** y **una sucursal vende una sola marca**.  
   → En datos: cada `core.businesses` (sucursal) tiene `business_group_id` y debe tener asociada **una sola** marca (p. ej. `vehicle_brand_id` o equivalente) para cumplir la regla “sucursal = una marca”.
-- Los pedidos se asignan a una sucursal (ya existe `orders.orders.business_id`); esa sucursal es la que surte y tiene visibilidad de **todos los pedidos que ella despacha**.
+- Los pedidos se asignan a la sucursal que surte (ya existe `orders.orders.business_id`); esa sucursal (distribuidor) tiene visibilidad de **todos los pedidos que ella despacha**.
 
 ---
 
@@ -80,6 +83,7 @@ Cada entidad (tienda global, grupo, sucursal, marca) hace su esfuerzo para **pro
 
 ## 9. Referencias
 
+- **Tiendas y distribuidores (definición):** [03-tiendas-y-distribuidores.md](./03-tiendas-y-distribuidores.md)
 - Agente MultiTienda: [01-multitienda-contexto-global-grupo-sucursal.md](../agentes/01-multitienda-contexto-global-grupo-sucursal.md)
 - Config por marca (definición previa): [01-definicion-modulo-configuracion-por-marca.md](./01-definicion-modulo-configuracion-por-marca.md)
 - Apps (web-admin, web-local, store-front): [05-apps-tres-fronts-backend.md](../agentes/05-apps-tres-fronts-backend.md)

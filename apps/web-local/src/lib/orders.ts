@@ -117,7 +117,46 @@ export interface UpdatePaymentStatusData {
   payment_status: string;
 }
 
+export interface DashboardStatsParams {
+  startDate: string;
+  endDate: string;
+  previousStartDate?: string;
+  previousEndDate?: string;
+}
+
+export interface DashboardStatsResponse {
+  current: {
+    totalRevenue: number;
+    orderCount: number;
+    averageTicket: number;
+    byStatus: Record<string, number>;
+    revenueByDay: { date: string; revenue: number }[];
+    topProducts: { productId?: string; itemName: string; quantity: number; revenue: number }[];
+    distinctClients: number;
+    newClients?: number;
+    recurringClients?: number;
+    avgDeliveryHours?: number;
+  };
+  previous?: { totalRevenue: number; orderCount: number };
+}
+
 export const ordersService = {
+  /**
+   * Estadísticas del dashboard para un negocio (sucursal) en un rango de fechas
+   */
+  async getDashboardStats(
+    businessId: string,
+    params: DashboardStatsParams,
+  ): Promise<DashboardStatsResponse> {
+    const search = new URLSearchParams();
+    search.set('startDate', params.startDate);
+    search.set('endDate', params.endDate);
+    if (params.previousStartDate) search.set('previousStartDate', params.previousStartDate);
+    if (params.previousEndDate) search.set('previousEndDate', params.previousEndDate);
+    const url = `/orders/business/${businessId}/dashboard-stats?${search.toString()}`;
+    return apiRequest<DashboardStatsResponse>(url, { method: 'GET' });
+  },
+
   /**
    * Obtener pedidos de un negocio
    */

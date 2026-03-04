@@ -8,6 +8,8 @@ import {
   Body,
   Req,
   UseGuards,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
@@ -18,6 +20,7 @@ import { StoresService } from './stores.service';
 import { ListStoresDto } from './dto/list-stores.dto';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
+import { ArchiveStoreDto } from './dto/archive-store.dto';
 
 @ApiTags('stores')
 @Controller('stores')
@@ -97,5 +100,21 @@ export class StoresController {
       },
       userId
     );
+  }
+
+  @Patch(':id/archive')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Archivar tienda',
+    description:
+      'Archiva la tienda de forma irreversible. Dejará de mostrarse en menú de tiendas, listados y checkout. Requiere confirmar con el nombre exacto de la tienda.',
+  })
+  @ApiParam({ name: 'id', description: 'UUID de la tienda' })
+  @ApiResponse({ status: 204, description: 'Tienda archivada' })
+  @ApiResponse({ status: 400, description: 'El nombre no coincide con el de la tienda' })
+  @ApiResponse({ status: 404, description: 'Tienda no encontrada o ya archivada' })
+  async archive(@Param('id') id: string, @Body() dto: ArchiveStoreDto) {
+    await this.storesService.archive(id, dto.confirmName);
   }
 }

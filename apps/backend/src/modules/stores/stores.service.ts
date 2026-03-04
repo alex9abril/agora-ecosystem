@@ -18,6 +18,8 @@ export interface Store {
   name: string;
   is_active: boolean;
   settings: Record<string, unknown>;
+  /** Presente solo si se ejecutó migration_stores_archived_at.sql */
+  archived_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -31,6 +33,7 @@ export interface ListStoresDto {
   vehicleBrandId?: string;
   isActive?: boolean;
   search?: string;
+  includeArchived?: boolean;
 }
 
 export interface StoreDisableReason {
@@ -113,7 +116,9 @@ export class StoresService {
       params.push(`%${dto.search}%`);
       paramIndex++;
     }
-
+    if (dto.includeArchived !== true) {
+      conditions.push('(s.archived_at IS NULL)');
+    }
     const whereClause = conditions.join(' AND ');
     const countResult = await dbPool.query(
       `SELECT COUNT(*)::int AS total FROM core.stores s WHERE ${whereClause}`,
@@ -216,6 +221,7 @@ export class StoresService {
       const row = br.rows[0];
       const slugVal = 'sucursal/' + (row.slug || businessId);
       const nameVal = row.name || 'Sucursal';
+      // Tienda nace deshabilitada (is_active = FALSE); el usuario la publica desde Tiendas cuando quiera
       const result = await dbPool.query(
         `INSERT INTO core.stores (type, business_id, business_group_id, slug, name, is_active)
          VALUES ('branch', $1, $2, $3, $4, FALSE)
@@ -343,6 +349,33 @@ export class StoresService {
     return updated;
   }
 
+  /**
+   * Archiva una tienda de forma irreversible. La tienda deja de mostrarse en listados,
+   * selector y resolución por path. Se requiere confirmar con el nombre exacto.
+   */
+  async archive(id: string, confirmName: string): Promise<void> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    const result = await dbPool.query(
+      `SELECT id, name FROM core.stores WHERE id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new NotFoundException('Tienda no encontrada');
+    }
+    const row = result.rows[0];
+    const trimmed = (confirmName ?? '').trim();
+    const storeName = (row.name ?? '').trim();
+    if (storeName.toLowerCase() !== trimmed.toLowerCase()) {
+      throw new BadRequestException('El nombre no coincide con el de la tienda');
+    }
+    await dbPool.query(
+      `UPDATE core.stores SET archived_at = CURRENT_TIMESTAMP, is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [id]
+    );
+  }
+
   private mapRowToStore(row: Record<string, unknown>): Store {
     return {
       id: row.id as string,
@@ -354,6 +387,7 @@ export class StoresService {
       name: row.name as string,
       is_active: row.is_active as boolean,
       settings: (row.settings as Record<string, unknown>) ?? {},
+      ...(row.archived_at != null && { archived_at: row.archived_at as Date }),
       created_at: row.created_at as Date,
       updated_at: row.updated_at as Date,
     };

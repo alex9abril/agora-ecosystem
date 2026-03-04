@@ -12,9 +12,15 @@ export class UpdateUserRoleDto {
   role: BusinessRole;
 
   @ApiProperty({
-    description: 'Permisos adicionales en formato JSON',
+    description:
+      'Permisos en formato JSON. Puede incluir modules, settings y capabilities. ' +
+      'capabilities: { can_fulfill?: boolean, can_assign_fulfillment?: boolean } para surtir/asignar pedidos.',
     required: false,
-    example: { can_edit_prices: true },
+    example: {
+      modules: { orders: true },
+      settings: { store: true },
+      capabilities: { can_fulfill: true, can_assign_fulfillment: false },
+    },
   })
   @IsOptional()
   @IsObject()

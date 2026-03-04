@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { BusinessesService } from '../businesses/businesses.service';
 import { KarbotService } from '../businesses/karbot.service';
 import { IntegrationLogsService } from '../settings/integration-logs.service';
 import { StoresService } from '../stores/stores.service';
+import { BusinessUsersService } from '../business-users/business-users.service';
 import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
 
 const DEFAULT_TAX_SETTINGS = {
@@ -41,6 +43,7 @@ export class OrdersService {
     private readonly karbotService: KarbotService,
     private readonly integrationLogs: IntegrationLogsService,
     private readonly storesService: StoresService,
+    private readonly businessUsersService: BusinessUsersService,
   ) {}
 
   /**
@@ -1755,6 +1758,54 @@ export class OrdersService {
   }
 
   /**
+   * Listar pedidos asignados al usuario para surtir (surtidor sin tienda).
+   * Filtra por orders.assigned_fulfiller_user_id = userId.
+   */
+  async findAllAssignedToFulfiller(userId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    try {
+      const result = await dbPool.query(
+        `SELECT 
+          o.id,
+          o.client_id,
+          o.business_id,
+          o.status,
+          o.delivery_address_text,
+          o.subtotal,
+          o.tax_amount,
+          o.delivery_fee,
+          o.discount_amount,
+          o.tip_amount,
+          o.total_amount,
+          o.payment_method,
+          o.payment_status,
+          o.estimated_delivery_time,
+          o.delivery_notes,
+          o.created_at,
+          o.updated_at,
+          o.confirmed_at,
+          o.assigned_fulfiller_user_id,
+          up.first_name as client_first_name,
+          up.last_name as client_last_name,
+          up.phone as client_phone,
+          (SELECT COUNT(*)::integer FROM orders.order_items WHERE order_id = o.id) as item_count,
+          (SELECT SUM(quantity)::integer FROM orders.order_items WHERE order_id = o.id) as total_quantity
+        FROM orders.orders o
+        LEFT JOIN core.user_profiles up ON o.client_id = up.id
+        WHERE o.assigned_fulfiller_user_id = $1
+        ORDER BY o.created_at DESC`,
+        [userId]
+      );
+      return result.rows;
+    } catch (err: any) {
+      if (err.code === '42703') return [];
+      throw err;
+    }
+  }
+
+  /**
    * Obtener detalle de pedido para negocio
    */
   async findOneByBusiness(orderId: string, businessId: string) {
@@ -1996,6 +2047,15 @@ export class OrdersService {
       const order = orderResult.rows[0];
       const currentStatus = order.status;
       const paymentStatus = order.payment_status;
+
+      // Permiso de surtir: quien cambia estado debe tener can_fulfill para el negocio
+      const changedByUserId = metadata?.changed_by_user_id;
+      if (changedByUserId) {
+        const canFulfill = await this.businessUsersService.userCanFulfillForBusiness(changedByUserId, businessId);
+        if (!canFulfill) {
+          throw new ForbiddenException('No tienes permiso para surtir pedidos en este negocio');
+        }
+      }
 
       // Validar transición de estado usando reglas de negocio (flujo simplificado)
       const validTransitions: { [key: string]: { allowed: string[]; requires?: { payment_status?: string } } } = {
@@ -2949,6 +3009,171 @@ export class OrdersService {
       console.error(`❌ Error en sendOrderStatusChangeEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo
     }
+  }
+
+  /**
+   * Estadísticas agregadas para el dashboard de un negocio (sucursal) en un rango de fechas.
+   * Incluye período anterior opcional para variación % en el frontend.
+   */
+  async getDashboardStats(
+    businessId: string,
+    startDate: string,
+    endDate: string,
+    previousStartDate?: string,
+    previousEndDate?: string,
+  ): Promise<{
+    current: {
+      totalRevenue: number;
+      orderCount: number;
+      averageTicket: number;
+      byStatus: Record<string, number>;
+      revenueByDay: { date: string; revenue: number }[];
+      topProducts: { productId?: string; itemName: string; quantity: number; revenue: number }[];
+      distinctClients: number;
+      newClients?: number;
+      recurringClients?: number;
+      avgDeliveryHours?: number;
+    };
+    previous?: { totalRevenue: number; orderCount: number };
+  }> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const baseWhere = `o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3`;
+    const paidWhere = `o.payment_status IN ('paid', 'overcharged') AND o.status NOT IN ('cancelled', 'refunded')`;
+
+    // Ingresos, conteo y ticket promedio (período actual)
+    const summaryResult = await dbPool.query(
+      `SELECT
+        COALESCE(SUM(CASE WHEN ${paidWhere} THEN o.total_amount::numeric ELSE 0 END), 0)::float AS total_revenue,
+        COUNT(*)::int AS order_count,
+        COUNT(DISTINCT o.client_id)::int AS distinct_clients
+       FROM orders.orders o
+       WHERE ${baseWhere}`,
+      [businessId, startDate, endDate]
+    );
+    const s = summaryResult.rows[0];
+    const totalRevenue = parseFloat(s?.total_revenue ?? '0') || 0;
+    const orderCount = parseInt(s?.order_count ?? '0', 10) || 0;
+    const distinctClients = parseInt(s?.distinct_clients ?? '0', 10) || 0;
+    const averageTicket = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+    // Conteo por status
+    const statusResult = await dbPool.query(
+      `SELECT o.status, COUNT(*)::int AS cnt
+       FROM orders.orders o
+       WHERE ${baseWhere}
+       GROUP BY o.status`,
+      [businessId, startDate, endDate]
+    );
+    const byStatus: Record<string, number> = {};
+    for (const row of statusResult.rows) {
+      byStatus[row.status || 'unknown'] = parseInt(row.cnt, 10) || 0;
+    }
+
+    // Ingresos por día (solo pedidos pagados)
+    const byDayResult = await dbPool.query(
+      `SELECT (o.created_at AT TIME ZONE 'UTC')::date AS day,
+              COALESCE(SUM(o.total_amount::numeric), 0)::float AS revenue
+       FROM orders.orders o
+       WHERE o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3
+         AND ${paidWhere}
+       GROUP BY (o.created_at AT TIME ZONE 'UTC')::date
+       ORDER BY day ASC`,
+      [businessId, startDate, endDate]
+    );
+    const revenueByDay = (byDayResult.rows || []).map((r: any) => ({
+      date: r.day ? new Date(r.day).toISOString().slice(0, 10) : '',
+      revenue: parseFloat(r.revenue ?? '0') || 0,
+    }));
+
+    // Top productos (por item_name; product_id puede ser null)
+    const topResult = await dbPool.query(
+      `SELECT
+        oi.product_id,
+        COALESCE(oi.item_name, 'Sin nombre') AS item_name,
+        SUM(oi.quantity)::int AS quantity,
+        COALESCE(SUM(oi.item_subtotal::numeric), 0)::float AS revenue
+       FROM orders.order_items oi
+       INNER JOIN orders.orders o ON o.id = oi.order_id AND o.business_id = $1
+         AND o.created_at >= $2 AND o.created_at <= $3
+         AND o.status NOT IN ('cancelled', 'refunded')
+       GROUP BY oi.product_id, oi.item_name
+       ORDER BY quantity DESC, revenue DESC
+       LIMIT 10`,
+      [businessId, startDate, endDate]
+    );
+    const topProducts = (topResult.rows || []).map((r: any) => ({
+      productId: r.product_id ?? undefined,
+      itemName: r.item_name ?? 'Sin nombre',
+      quantity: parseInt(r.quantity, 10) || 0,
+      revenue: parseFloat(r.revenue ?? '0') || 0,
+    }));
+
+    // Clientes nuevos en el período (primera orden en esta sucursal en el rango) vs recurrentes
+    const firstOrderResult = await dbPool.query(
+      `SELECT o.client_id,
+         (SELECT MIN(o2.created_at) FROM orders.orders o2 WHERE o2.business_id = $1 AND o2.client_id = o.client_id) AS first_at
+       FROM orders.orders o
+       WHERE ${baseWhere} AND o.client_id IS NOT NULL
+       GROUP BY o.client_id`,
+      [businessId, startDate, endDate]
+    );
+    let newClients = 0;
+    let recurringClients = 0;
+    for (const row of firstOrderResult.rows || []) {
+      const firstAt = row.first_at ? new Date(row.first_at).getTime() : 0;
+      const periodStart = new Date(startDate).getTime();
+      if (firstAt >= periodStart) newClients++;
+      else recurringClients++;
+    }
+
+    // Tiempo promedio de entrega (horas): delivered_at - confirmed_at para pedidos entregados
+    let avgDeliveryHours: number | undefined;
+    const deliveryResult = await dbPool.query(
+      `SELECT AVG(EXTRACT(EPOCH FROM (o.delivered_at - o.confirmed_at)) / 3600.0)::float AS avg_hours
+       FROM orders.orders o
+       WHERE o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3
+         AND o.delivered_at IS NOT NULL AND o.confirmed_at IS NOT NULL`,
+      [businessId, startDate, endDate]
+    );
+    const avgVal = deliveryResult.rows[0]?.avg_hours;
+    if (avgVal != null && !Number.isNaN(parseFloat(avgVal))) avgDeliveryHours = parseFloat(avgVal);
+
+    // Período anterior (solo ingresos y conteo)
+    let previous: { totalRevenue: number; orderCount: number } | undefined;
+    if (previousStartDate && previousEndDate) {
+      const prevResult = await dbPool.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN ${paidWhere} THEN o.total_amount::numeric ELSE 0 END), 0)::float AS total_revenue,
+           COUNT(*)::int AS order_count
+         FROM orders.orders o
+         WHERE o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3`,
+        [businessId, previousStartDate, previousEndDate]
+      );
+      const p = prevResult.rows[0];
+      previous = {
+        totalRevenue: parseFloat(p?.total_revenue ?? '0') || 0,
+        orderCount: parseInt(p?.order_count ?? '0', 10) || 0,
+      };
+    }
+
+    return {
+      current: {
+        totalRevenue,
+        orderCount,
+        averageTicket,
+        byStatus,
+        revenueByDay,
+        topProducts,
+        distinctClients,
+        newClients,
+        recurringClients,
+        avgDeliveryHours,
+      },
+      previous,
+    };
   }
 }
 

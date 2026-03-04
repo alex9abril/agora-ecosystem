@@ -55,6 +55,7 @@ export const usersService = {
     business_email: string;
     business_phone: string;
     business_address?: string;
+    business_group_id?: string | null;
     is_active: boolean;
     total_users: number;
     created_at: string;
@@ -187,6 +188,8 @@ export const usersService = {
     is_active: boolean;
     can_access: boolean;
     assigned_at: string;
+    /** true si la tienda (store) de esta sucursal está archivada */
+    store_archived?: boolean;
   }>> {
     return apiRequest(`/business-users/user/${userId}/summary`, {
       method: 'GET',

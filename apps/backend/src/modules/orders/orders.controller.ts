@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -55,6 +56,15 @@ export class OrdersController {
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async findOrdersWithLogs() {
     return this.ordersService.findOrdersWithIntegrationLogs();
+  }
+
+  @Get('fulfillment/mine')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar pedidos asignados a mí para surtir (surtidor sin tienda)' })
+  @ApiResponse({ status: 200, description: 'Lista de pedidos asignados al usuario' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async findMyFulfillmentOrders(@CurrentUser() user: User) {
+    return this.ordersService.findAllAssignedToFulfiller(user.id);
   }
 
   @Get(':id')
@@ -120,6 +130,35 @@ export class OrdersController {
       endDate,
       search,
     });
+  }
+
+  @Get('business/:businessId/dashboard-stats')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Estadísticas del dashboard para un negocio (sucursal)' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiQuery({ name: 'startDate', required: true, description: 'Fecha de inicio del período (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: true, description: 'Fecha de fin del período (ISO string)' })
+  @ApiQuery({ name: 'previousStartDate', required: false, description: 'Inicio del período anterior (para variación %)' })
+  @ApiQuery({ name: 'previousEndDate', required: false, description: 'Fin del período anterior' })
+  @ApiResponse({ status: 200, description: 'Estadísticas agregadas' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async getDashboardStats(
+    @Param('businessId') businessId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('previousStartDate') previousStartDate?: string,
+    @Query('previousEndDate') previousEndDate?: string,
+  ) {
+    if (!startDate || !endDate) {
+      throw new BadRequestException('startDate y endDate son requeridos');
+    }
+    return this.ordersService.getDashboardStats(
+      businessId,
+      startDate,
+      endDate,
+      previousStartDate,
+      previousEndDate,
+    );
   }
 
   @Get('client/:clientId')

@@ -100,6 +100,8 @@ function isEmptyOperatorPermissions(op: OperatorPermissions | Record<string, unk
 /**
  * Deriva RolePermissions para un operador desde OperatorPermissions (JSONB del backend).
  * Si permissions está vacío (operador legacy), se asume solo pedidos.
+ * Si un módulo/setting no viene en permissions, se usa el valor por defecto del rol
+ * (p. ej. operations_staff tiene canManageOrders: true) para no negar acceso por omisión.
  */
 function rolePermissionsFromOperator(op: OperatorPermissions): RolePermissions {
   const p = normalizeOperatorPermissions(op as Record<string, unknown>);
@@ -110,15 +112,17 @@ function rolePermissionsFromOperator(op: OperatorPermissions): RolePermissions {
   }
   return {
     ...base,
-    canManageProducts: p.modules?.products === true,
-    canManageClients: p.modules?.clients === true,
-    canManageOrders: p.modules?.orders === true,
-    canViewReports: p.modules?.reports === true,
-    canManageSliders: p.modules?.sliders === true,
-    canManageCollections: p.modules?.collections === true,
+    canManageProducts: p.modules?.products === undefined ? base.canManageProducts : p.modules.products === true,
+    canManageClients: p.modules?.clients === undefined ? base.canManageClients : p.modules.clients === true,
+    canManageOrders: p.modules?.orders === undefined ? base.canManageOrders : p.modules.orders === true,
+    canViewReports: p.modules?.reports === undefined ? base.canViewReports : p.modules.reports === true,
+    canManageSliders: p.modules?.sliders === undefined ? base.canManageSliders : p.modules.sliders === true,
+    canManageCollections: p.modules?.collections === undefined ? base.canManageCollections : p.modules.collections === true,
     canManageSettings:
-      Object.values(p.settings || {}).some((v) => v === true) ?? false,
-    canManageUsers: p.settings?.users === true,
+      p.settings && Object.keys(p.settings).length > 0
+        ? Object.values(p.settings).some((v) => v === true)
+        : base.canManageSettings,
+    canManageUsers: p.settings?.users === undefined ? base.canManageUsers : p.settings.users === true,
   };
 }
 

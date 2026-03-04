@@ -775,6 +775,7 @@ export default function OrderDetailPage() {
   // Calcular timeline y acciones después de verificar que order existe
   const timeline = getStatusTimeline(order);
   const nextActions = getNextActions(order);
+  const canFulfill = (selectedBusiness as { capabilities?: { can_fulfill?: boolean } } | null)?.capabilities?.can_fulfill !== false;
 
   return (
     <LocalLayout>
@@ -804,25 +805,27 @@ export default function OrderDetailPage() {
               </p>
             </div>
               <div className="flex items-center gap-3">
-                {nextActions.map((action) => (
+                {nextActions.map((action) => {
+                  const disabledByFulfill = !canFulfill && !action.isPaymentAction;
+                  return (
                   <button
                     key={action.status}
+                    disabled={disabledByFulfill || updating}
                     onClick={() => {
                       if (action.isPaymentAction) {
                         handleConfirmPayment();
                       } else if (action.isNavigationAction) {
-                        // Navegar a la página de preparación
                         router.push(`/orders/${order.id}/prepare`);
                       } else {
                         handleStatusUpdate(action.status, action.requiresConfirmation);
                       }
                     }}
-                    disabled={updating}
                     className={`px-4 py-2 rounded-md text-sm font-medium ${action.color} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
                   >
                     {action.label}
                   </button>
-                ))}
+                  );
+                })}
               <button
                 type="button"
                 onClick={() => setShowKarlopayJsonModal(true)}

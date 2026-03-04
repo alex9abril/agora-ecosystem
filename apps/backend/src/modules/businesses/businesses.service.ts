@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { supabaseAdmin } from '../../config/supabase.config';
 import { dbPool } from '../../config/database.config';
+import { StoresService } from '../stores/stores.service';
 import { ListBusinessesDto } from './dto/list-businesses.dto';
 import { UpdateBusinessStatusDto } from './dto/update-business-status.dto';
 import { CreateBusinessDto } from './dto/create-business.dto';
@@ -35,6 +36,8 @@ const DEFAULT_TAX_SETTINGS: BusinessTaxSettings = {
 
 @Injectable()
 export class BusinessesService {
+  constructor(private readonly storesService: StoresService) {}
+
   /**
    * Método de prueba para diagnosticar problemas de conexión
    */
@@ -200,6 +203,8 @@ export class BusinessesService {
       queryParams.push(businessGroupId);
       paramIndex++;
     }
+
+    whereConditions.push(`(archived_at IS NULL)`);
 
     const whereClause = whereConditions.length > 0 
       ? `WHERE ${whereConditions.join(' AND ')}`
@@ -614,6 +619,57 @@ export class BusinessesService {
       
       throw new ServiceUnavailableException(`Error al actualizar negocio: ${error.message}`);
     }
+  }
+
+  /**
+   * Archivar la sucursal. Si tiene tienda (canal) asociada, la archiva también.
+   * Si no tiene tienda, solo archiva la sucursal (business). Solo superadmin puede archivar.
+   * Requiere migración: core.businesses.archived_at (migration_businesses_archived_at.sql).
+   */
+  async archiveBranch(businessId: string, userId: string, confirmName: string): Promise<void> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    const pool = dbPool;
+
+    const businessUserCheck = await pool.query(
+      `SELECT role FROM core.business_users
+       WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE`,
+      [businessId, userId]
+    );
+    if (businessUserCheck.rows.length === 0 || businessUserCheck.rows[0].role !== 'superadmin') {
+      throw new ForbiddenException('Solo el superadmin de la sucursal puede archivarla');
+    }
+
+    const businessRow = await pool.query<{ name: string }>(
+      `SELECT name FROM core.businesses WHERE id = $1`,
+      [businessId]
+    );
+    if (businessRow.rows.length === 0) {
+      throw new NotFoundException('Sucursal no encontrada');
+    }
+    const businessName = (businessRow.rows[0].name ?? '').trim();
+    const trimmedConfirm = (confirmName ?? '').trim();
+    if (businessName.toLowerCase() !== trimmedConfirm.toLowerCase()) {
+      throw new BadRequestException('El nombre no coincide con el de la sucursal');
+    }
+
+    const storeResult = await pool.query<{ id: string; name: string }>(
+      `SELECT id, name FROM core.stores WHERE type = 'branch' AND business_id = $1 AND (archived_at IS NULL)`,
+      [businessId]
+    );
+
+    if (storeResult.rows.length > 0) {
+      const store = storeResult.rows[0];
+      await this.storesService.archive(store.id, store.name);
+    }
+
+    await pool.query(
+      `UPDATE core.businesses
+       SET archived_at = CURRENT_TIMESTAMP, is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [businessId]
+    );
   }
 
   /**
@@ -1032,6 +1088,17 @@ export class BusinessesService {
       // No lanzamos error aquí para no bloquear la creación del negocio
       // El trigger SQL debería asignar el rol automáticamente como respaldo
       // Si el trigger también falla, el usuario puede ejecutar fix_missing_business_users_roles.sql
+    }
+
+    // Crear tienda (canal de venta) por sucursal: misma lógica que seed_stores_from_groups_branches_brands.sql
+    // La tienda nace deshabilitada (is_active = false) para que aparezca en Tiendas → Distribuidor como inactiva
+    try {
+      await this.storesService.create({
+        type: 'branch',
+        businessId: business.id,
+      });
+    } catch (storeError: any) {
+      console.warn('[BusinessesService.create] No se pudo crear la tienda para la sucursal (aparecerá al ejecutar seed o manualmente):', storeError?.message);
     }
 
     // Log de diagnóstico para verificar coordenadas guardadas
@@ -1739,6 +1806,7 @@ export class BusinessesService {
         INNER JOIN catalog.product_vehicle_compatibility pvc ON pba.product_id = pvc.product_id
         LEFT JOIN core.addresses a ON b.address_id = a.id
         WHERE b.is_active = TRUE
+          AND (b.archived_at IS NULL)
           AND pba.is_enabled = TRUE
           AND pba.is_active = TRUE
           AND pvc.is_active = TRUE
@@ -2112,6 +2180,8 @@ export class BusinessesService {
         whereConditions.push(`b.is_active = TRUE`);
       }
 
+      whereConditions.push(`(b.archived_at IS NULL)`);
+
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
       // Debug: Log de la query para depuración
@@ -2198,7 +2268,7 @@ export class BusinessesService {
           ) as address
         FROM core.businesses b
         LEFT JOIN core.addresses a ON b.address_id = a.id
-        WHERE b.slug = $1 AND b.is_active = TRUE`,
+        WHERE b.slug = $1 AND b.is_active = TRUE AND b.archived_at IS NULL`,
         [slug]
       );
 
@@ -2243,7 +2313,7 @@ export class BusinessesService {
           ) as address
         FROM core.businesses b
         LEFT JOIN core.addresses a ON b.address_id = a.id
-        WHERE b.id = $1 AND b.is_active = TRUE`,
+        WHERE b.id = $1 AND b.is_active = TRUE AND b.archived_at IS NULL`,
         [id]
       );
 
@@ -2812,6 +2882,129 @@ export class BusinessesService {
     }
   }
 
+  async getGroupNotificationSettings(businessGroupId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const groupResult = await pool.query(
+        `SELECT id FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+
+      if (groupResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      const settingsResult = await pool.query(
+        `SELECT notification_type, email_enabled, whatsapp_enabled
+         FROM communication.business_group_notification_settings
+         WHERE business_group_id = $1`,
+        [businessGroupId],
+      );
+
+      const settingsByType = new Map<string, BranchNotificationSetting>();
+      for (const row of settingsResult.rows) {
+        settingsByType.set(row.notification_type, {
+          notification_type: row.notification_type,
+          email_enabled: !!row.email_enabled,
+          whatsapp_enabled: !!row.whatsapp_enabled,
+        });
+      }
+
+      const notifications = this.DEFAULT_NOTIFICATION_SETTINGS.map((base) => ({
+        ...base,
+        ...(settingsByType.get(base.notification_type) || {}),
+      }));
+
+      return { notifications };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Error obteniendo configuracion de notificaciones del grupo:', error);
+      throw new ServiceUnavailableException(
+        `Error al obtener configuracion de notificaciones: ${error.message}`,
+      );
+    }
+  }
+
+  async getGroupNotificationSettingsForUser(businessGroupId: string, userId: string) {
+    const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+
+    return this.getGroupNotificationSettings(businessGroupId);
+  }
+
+  async updateGroupNotificationSettings(
+    businessGroupId: string,
+    userId: string,
+    updateDto: { settings: BranchNotificationSetting[] },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+
+    const pool = dbPool;
+
+    try {
+      const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+
+      const groupResult = await pool.query(
+        `SELECT id FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+
+      if (groupResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+
+      const allowedTypes = new Set(
+        this.DEFAULT_NOTIFICATION_SETTINGS.map((item) => item.notification_type),
+      );
+
+      const sanitizedSettings = (updateDto.settings || []).filter((setting) =>
+        allowedTypes.has(setting.notification_type),
+      );
+
+      for (const setting of sanitizedSettings) {
+        await pool.query(
+          `INSERT INTO communication.business_group_notification_settings
+           (business_group_id, notification_type, email_enabled, whatsapp_enabled)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (business_group_id, notification_type)
+           DO UPDATE SET
+             email_enabled = EXCLUDED.email_enabled,
+             whatsapp_enabled = EXCLUDED.whatsapp_enabled`,
+          [
+            businessGroupId,
+            setting.notification_type,
+            !!setting.email_enabled,
+            !!setting.whatsapp_enabled,
+          ],
+        );
+      }
+
+      return this.getGroupNotificationSettings(businessGroupId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error actualizando configuracion de notificaciones del grupo:', error);
+      throw new ServiceUnavailableException(
+        `Error al actualizar configuracion de notificaciones: ${error.message}`,
+      );
+    }
+  }
+
   // ============================================================================
   // KARBOT SETTINGS
   // ============================================================================
@@ -3177,6 +3370,206 @@ export class BusinessesService {
       throw new ServiceUnavailableException(
         `Error al actualizar configuracion Karlopay: ${error.message}`,
       );
+    }
+  }
+
+  // ============================================================================
+  // GROUP KARBOT / KARLOPAY (business_groups.settings)
+  // ============================================================================
+
+  async getGroupKarbotSettings(businessGroupId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    const pool = dbPool;
+    try {
+      const result = await pool.query(
+        `SELECT id, settings FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const groupSettings = result.rows[0].settings || {};
+      const karbotSettings = groupSettings.karbot || this.DEFAULT_KARBOT_SETTINGS;
+      return {
+        karbot: {
+          ...this.DEFAULT_KARBOT_SETTINGS,
+          ...karbotSettings,
+          dev: { ...this.DEFAULT_KARBOT_SETTINGS.dev, ...(karbotSettings.dev || {}) },
+          prod: { ...this.DEFAULT_KARBOT_SETTINGS.prod, ...(karbotSettings.prod || {}) },
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Error obteniendo configuracion Karbot del grupo:', error);
+      throw new ServiceUnavailableException(`Error al obtener configuracion Karbot: ${error.message}`);
+    }
+  }
+
+  async getGroupKarbotSettingsForUser(businessGroupId: string, userId: string) {
+    const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getGroupKarbotSettings(businessGroupId);
+  }
+
+  async updateGroupKarbotSettings(
+    businessGroupId: string,
+    userId: string,
+    updateDto: {
+      enabled?: boolean;
+      environment?: 'dev' | 'prod';
+      chatbot_enabled?: boolean;
+      whatsapp_enabled?: boolean;
+      dev?: { username?: string; password?: string; endpoint?: string };
+      prod?: { username?: string; password?: string; endpoint?: string };
+    },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    const pool = dbPool;
+    try {
+      const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+      const currentResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+      if (currentResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const currentSettingsObj = currentResult.rows[0].settings || {};
+      const currentKarbot = {
+        ...this.DEFAULT_KARBOT_SETTINGS,
+        ...(currentSettingsObj.karbot || {}),
+        dev: { ...this.DEFAULT_KARBOT_SETTINGS.dev, ...((currentSettingsObj.karbot || {}).dev || {}) },
+        prod: { ...this.DEFAULT_KARBOT_SETTINGS.prod, ...((currentSettingsObj.karbot || {}).prod || {}) },
+      };
+      const updatedKarbot = {
+        ...currentKarbot,
+        ...updateDto,
+        dev: { ...currentKarbot.dev, ...(updateDto.dev || {}) },
+        prod: { ...currentKarbot.prod, ...(updateDto.prod || {}) },
+      };
+      const updatedSettings = { ...currentSettingsObj, karbot: updatedKarbot };
+      await pool.query(
+        `UPDATE core.business_groups SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [JSON.stringify(updatedSettings), businessGroupId],
+      );
+      return this.getGroupKarbotSettings(businessGroupId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) throw error;
+      console.error('Error actualizando configuracion Karbot del grupo:', error);
+      throw new ServiceUnavailableException(`Error al actualizar configuracion Karbot: ${error.message}`);
+    }
+  }
+
+  async getGroupKarlopaySettings(businessGroupId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    const pool = dbPool;
+    try {
+      const result = await pool.query(
+        `SELECT id, settings FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const groupSettings = result.rows[0].settings || {};
+      const karlopaySettings = groupSettings.karlopay || this.DEFAULT_KARLOPAY_SETTINGS;
+      return {
+        karlopay: {
+          ...this.DEFAULT_KARLOPAY_SETTINGS,
+          ...karlopaySettings,
+          dev: { ...this.DEFAULT_KARLOPAY_SETTINGS.dev, ...(karlopaySettings.dev || {}) },
+          prod: { ...this.DEFAULT_KARLOPAY_SETTINGS.prod, ...(karlopaySettings.prod || {}) },
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Error obteniendo configuracion Karlopay del grupo:', error);
+      throw new ServiceUnavailableException(`Error al obtener configuracion Karlopay: ${error.message}`);
+    }
+  }
+
+  async getGroupKarlopaySettingsForUser(businessGroupId: string, userId: string) {
+    const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getGroupKarlopaySettings(businessGroupId);
+  }
+
+  async updateGroupKarlopaySettings(
+    businessGroupId: string,
+    userId: string,
+    updateDto: {
+      enabled?: boolean;
+      environment?: 'dev' | 'prod';
+      dev?: {
+        domain?: string;
+        login_endpoint?: string;
+        orders_endpoint?: string;
+        auth_email?: string;
+        auth_password?: string;
+        redirect_url?: string;
+      };
+      prod?: {
+        domain?: string;
+        login_endpoint?: string;
+        orders_endpoint?: string;
+        auth_email?: string;
+        auth_password?: string;
+        redirect_url?: string;
+      };
+    },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    const pool = dbPool;
+    try {
+      const hasPermission = await this.checkGroupPermissions(businessGroupId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+      const currentResult = await pool.query(
+        `SELECT COALESCE(settings, '{}'::jsonb) as settings FROM core.business_groups WHERE id = $1`,
+        [businessGroupId],
+      );
+      if (currentResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const currentSettingsObj = currentResult.rows[0].settings || {};
+      const currentKarlopay = {
+        ...this.DEFAULT_KARLOPAY_SETTINGS,
+        ...(currentSettingsObj.karlopay || {}),
+        dev: { ...this.DEFAULT_KARLOPAY_SETTINGS.dev, ...((currentSettingsObj.karlopay || {}).dev || {}) },
+        prod: { ...this.DEFAULT_KARLOPAY_SETTINGS.prod, ...((currentSettingsObj.karlopay || {}).prod || {}) },
+      };
+      const updatedKarlopay = {
+        ...currentKarlopay,
+        ...updateDto,
+        dev: { ...currentKarlopay.dev, ...(updateDto.dev || {}) },
+        prod: { ...currentKarlopay.prod, ...(updateDto.prod || {}) },
+      };
+      const updatedSettings = { ...currentSettingsObj, karlopay: updatedKarlopay };
+      await pool.query(
+        `UPDATE core.business_groups SET settings = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [JSON.stringify(updatedSettings), businessGroupId],
+      );
+      return this.getGroupKarlopaySettings(businessGroupId);
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) throw error;
+      console.error('Error actualizando configuracion Karlopay del grupo:', error);
+      throw new ServiceUnavailableException(`Error al actualizar configuracion Karlopay: ${error.message}`);
     }
   }
 

@@ -342,13 +342,17 @@ export const businessService = {
         business_name: string;
         role: string;
         is_active: boolean;
+        store_archived?: boolean;
       }>>(`/business-users/user/${userId}/summary`, {
         method: 'GET',
       });
 
+      // Excluir sucursales archivadas
+      const activeSummary = summary.filter((item) => !item.store_archived);
+
       // Obtener los detalles completos de cada sucursal
       const branches = await Promise.all(
-        summary.map(async (item) => {
+        activeSummary.map(async (item) => {
           try {
             return await this.getMyBusiness(item.business_id);
           } catch (error) {
@@ -363,6 +367,17 @@ export const businessService = {
       console.error('Error obteniendo sucursales:', error);
       throw error;
     }
+  },
+
+  /**
+   * Archivar una sucursal. La tienda (canal) asociada queda archivada y la sucursal
+   * deja de mostrarse en listados. Requiere confirmar con el nombre exacto de la sucursal.
+   */
+  async archiveBranch(branchId: string, confirmName: string): Promise<void> {
+    return apiRequest(`/businesses/${branchId}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({ confirmName }),
+    });
   },
 
   /**
@@ -606,6 +621,34 @@ export const businessService = {
   },
 
   /**
+   * Obtener configuracion de notificaciones de un grupo empresarial
+   */
+  async getGroupNotificationSettings(businessGroupId: string): Promise<BranchNotificationSetting[]> {
+    const response = await apiRequest<{ notifications?: BranchNotificationSetting[] }>(
+      `/businesses/business-groups/${businessGroupId}/notification-settings`,
+      { method: 'GET' },
+    );
+    return response?.notifications || (response as any) || [];
+  },
+
+  /**
+   * Actualizar configuracion de notificaciones de un grupo empresarial
+   */
+  async updateGroupNotificationSettings(
+    businessGroupId: string,
+    settings: BranchNotificationSetting[],
+  ): Promise<BranchNotificationSetting[]> {
+    const response = await apiRequest<{ notifications?: BranchNotificationSetting[] }>(
+      `/businesses/business-groups/${businessGroupId}/notification-settings`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ settings }),
+      },
+    );
+    return response?.notifications || (response as any) || [];
+  },
+
+  /**
    * Obtener configuracion Karbot de una sucursal
    */
   async getBranchKarbotSettings(businessId: string): Promise<BranchKarbotSettings> {
@@ -650,6 +693,56 @@ export const businessService = {
       method: 'PUT',
       body: JSON.stringify(data),
     });
+    return response?.karlopay || (response as any);
+  },
+
+  /**
+   * Obtener configuracion Karbot de un grupo empresarial (tienda por grupo)
+   */
+  async getGroupKarbotSettings(businessGroupId: string): Promise<BranchKarbotSettings> {
+    const response = await apiRequest<{ karbot?: BranchKarbotSettings }>(
+      `/businesses/business-groups/${businessGroupId}/karbot-settings`,
+      { method: 'GET' },
+    );
+    return response?.karbot || (response as any);
+  },
+
+  /**
+   * Actualizar configuracion Karbot de un grupo empresarial (tienda por grupo)
+   */
+  async updateGroupKarbotSettings(
+    businessGroupId: string,
+    data: BranchKarbotSettings,
+  ): Promise<BranchKarbotSettings> {
+    const response = await apiRequest<{ karbot?: BranchKarbotSettings }>(
+      `/businesses/business-groups/${businessGroupId}/karbot-settings`,
+      { method: 'PUT', body: JSON.stringify(data) },
+    );
+    return response?.karbot || (response as any);
+  },
+
+  /**
+   * Obtener configuracion Karlopay de un grupo empresarial (tienda por grupo)
+   */
+  async getGroupKarlopaySettings(businessGroupId: string): Promise<BranchKarlopaySettings> {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(
+      `/businesses/business-groups/${businessGroupId}/karlopay-settings`,
+      { method: 'GET' },
+    );
+    return response?.karlopay || (response as any);
+  },
+
+  /**
+   * Actualizar configuracion Karlopay de un grupo empresarial (tienda por grupo)
+   */
+  async updateGroupKarlopaySettings(
+    businessGroupId: string,
+    data: BranchKarlopaySettings,
+  ): Promise<BranchKarlopaySettings> {
+    const response = await apiRequest<{ karlopay?: BranchKarlopaySettings }>(
+      `/businesses/business-groups/${businessGroupId}/karlopay-settings`,
+      { method: 'PUT', body: JSON.stringify(data) },
+    );
     return response?.karlopay || (response as any);
   },
 

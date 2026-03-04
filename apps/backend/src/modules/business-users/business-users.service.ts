@@ -225,10 +225,23 @@ export class BusinessUsersService {
       );
 
       if (updateDto.permissions !== undefined) {
+        const currentResult = await dbPool.query<{ permissions: Record<string, unknown> }>(
+          `SELECT permissions FROM core.business_users WHERE business_id = $1 AND user_id = $2`,
+          [businessId, userId]
+        );
+        const current = (currentResult.rows[0]?.permissions ?? {}) as Record<string, unknown>;
+        const incoming = updateDto.permissions as Record<string, unknown>;
+        const merged = { ...current, ...incoming };
+        if (incoming.capabilities && typeof incoming.capabilities === 'object') {
+          merged.capabilities = {
+            ...((current.capabilities as Record<string, unknown>) ?? {}),
+            ...(incoming.capabilities as Record<string, unknown>),
+          };
+        }
         await dbPool.query(
           `UPDATE core.business_users SET permissions = $1, updated_at = CURRENT_TIMESTAMP
            WHERE business_id = $2 AND user_id = $3`,
-          [JSON.stringify(updateDto.permissions), businessId, userId]
+          [JSON.stringify(merged), businessId, userId]
         );
       }
 
@@ -309,7 +322,8 @@ export class BusinessUsersService {
   }
 
   /**
-   * Obtener resumen de permisos de un usuario
+   * Obtener resumen de permisos de un usuario.
+   * Añade store_archived a cada fila para que el frontend pueda ocultar sucursales archivadas.
    */
   async getUserBusinessesSummary(userId: string) {
     if (!dbPool) {
@@ -321,7 +335,49 @@ export class BusinessUsersService {
         `SELECT * FROM core.get_user_businesses_summary($1)`,
         [userId]
       );
-      return result.rows;
+      const rows = result.rows as Array<Record<string, unknown> & { business_id: string }>;
+      let storeArchivedIds = new Set<string>();
+      let businessArchivedIds = new Set<string>();
+
+      try {
+        const archivedStores =
+          await dbPool.query<{ business_id: string }>(
+            `SELECT business_id FROM core.stores
+             WHERE type = 'branch' AND archived_at IS NOT NULL`
+          );
+        storeArchivedIds = new Set((archivedStores.rows || []).map((r) => r.business_id));
+      } catch {
+        // Si la columna no existe, ningún negocio se marca por tienda archivada
+      }
+
+      try {
+        const archivedBusinesses =
+          await dbPool.query<{ id: string }>(
+            `SELECT id FROM core.businesses WHERE archived_at IS NOT NULL`
+          );
+        businessArchivedIds = new Set((archivedBusinesses.rows || []).map((r) => r.id));
+      } catch {
+        // Si la columna archived_at no existe en businesses, ignorar
+      }
+
+      const businessIds = rows.map((r) => r.business_id);
+      const permsResult = await dbPool.query<{ business_id: string; permissions: Record<string, unknown> }>(
+        `SELECT business_id, permissions FROM core.business_users
+         WHERE user_id = $1 AND business_id = ANY($2::uuid[]) AND is_active = TRUE`,
+        [userId, businessIds]
+      );
+      const permsByBusiness = new Map(permsResult.rows.map((p) => [p.business_id, p.permissions ?? {}]));
+
+      return rows.map((r) => {
+        const permissions = permsByBusiness.get(r.business_id) ?? {};
+        const capabilities = (permissions.capabilities as { can_fulfill?: boolean; can_assign_fulfillment?: boolean }) ?? {};
+        return {
+          ...r,
+          store_archived: storeArchivedIds.has(r.business_id),
+          business_archived: businessArchivedIds.has(r.business_id),
+          capabilities: { can_fulfill: capabilities.can_fulfill ?? false, can_assign_fulfillment: capabilities.can_assign_fulfillment ?? false },
+        };
+      });
     } catch (error: any) {
       console.error('Error obteniendo resumen de permisos:', error);
       throw new BadRequestException(`Error al obtener resumen: ${error.message}`);
@@ -344,6 +400,90 @@ export class BusinessUsersService {
       return result.rows[0]?.is_superadmin || false;
     } catch (error: any) {
       console.error('Error verificando rol superadmin:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Obtener permisos (incl. capabilities) de un usuario para un negocio.
+   */
+  async getUserPermissionsForBusiness(
+    userId: string,
+    businessId: string,
+  ): Promise<{ capabilities?: { can_fulfill?: boolean; can_assign_fulfillment?: boolean }; [key: string]: unknown }> {
+    if (!dbPool) {
+      return {};
+    }
+    try {
+      const result = await dbPool.query<{ permissions: Record<string, unknown> }>(
+        `SELECT permissions FROM core.business_users
+         WHERE user_id = $1 AND business_id = $2 AND is_active = TRUE`,
+        [userId, businessId]
+      );
+      const permissions = result.rows[0]?.permissions ?? {};
+      return permissions as { capabilities?: { can_fulfill?: boolean; can_assign_fulfillment?: boolean }; [key: string]: unknown };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Verificar si el usuario puede surtir pedidos para el negocio (can_fulfill en capabilities
+   * o fila en user_fulfillment_scope si existe la tabla).
+   */
+  async userCanFulfillForBusiness(userId: string, businessId: string): Promise<boolean> {
+    if (!dbPool) {
+      return false;
+    }
+    try {
+      const result = await dbPool.query<{ permissions: Record<string, unknown> }>(
+        `SELECT permissions FROM core.business_users
+         WHERE user_id = $1 AND business_id = $2 AND is_active = TRUE`,
+        [userId, businessId]
+      );
+      if (result.rows.length > 0) {
+        const permissions = result.rows[0].permissions ?? {};
+        const capabilities = (permissions.capabilities as { can_fulfill?: boolean }) ?? {};
+        if (capabilities.can_fulfill === true) return true;
+      }
+      // Opcional: user_fulfillment_scope (tabla puede no existir aún)
+      try {
+        const scopeResult = await dbPool.query<{ can_fulfill: boolean }>(
+          `SELECT 1 FROM core.user_fulfillment_scope ufs
+           WHERE ufs.user_id = $1 AND ufs.can_fulfill = TRUE
+             AND (ufs.business_id = $2 OR ufs.business_group_id = (
+               SELECT business_group_id FROM core.businesses WHERE id = $2
+             ))`,
+          [userId, businessId]
+        );
+        if (scopeResult.rows.length > 0) return true;
+      } catch {
+        // Tabla no existe o error: ignorar
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Verificar si el usuario puede asignar pedidos a surtidores para el negocio.
+   */
+  async userCanAssignFulfillment(userId: string, businessId: string): Promise<boolean> {
+    if (!dbPool) {
+      return false;
+    }
+    try {
+      const result = await dbPool.query<{ permissions: Record<string, unknown> }>(
+        `SELECT permissions FROM core.business_users
+         WHERE user_id = $1 AND business_id = $2 AND is_active = TRUE`,
+        [userId, businessId]
+      );
+      if (result.rows.length === 0) return false;
+      const permissions = result.rows[0].permissions ?? {};
+      const capabilities = (permissions.capabilities as { can_assign_fulfillment?: boolean }) ?? {};
+      return capabilities.can_assign_fulfillment === true;
+    } catch {
       return false;
     }
   }
@@ -851,6 +991,102 @@ export class BusinessUsersService {
       }
       throw new BadRequestException(`Error al crear usuario: ${error.message}`);
     }
+  }
+
+  /**
+   * Listar asignaciones de surtidor sin tienda (user_fulfillment_scope) para la cuenta del superadmin.
+   */
+  async listFulfillmentScopesForAccount(superadminId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    try {
+      const result = await dbPool.query(
+        `SELECT ufs.id, ufs.user_id, ufs.business_group_id, ufs.business_id, ufs.can_fulfill, ufs.created_at, ufs.updated_at,
+                b.name AS business_name, bg.name AS business_group_name
+         FROM core.user_fulfillment_scope ufs
+         LEFT JOIN core.businesses b ON ufs.business_id = b.id
+         LEFT JOIN core.business_groups bg ON ufs.business_group_id = bg.id
+         WHERE ufs.business_id IN (
+           SELECT bu.business_id FROM core.business_users bu
+           WHERE bu.user_id = $1 AND bu.role = 'superadmin' AND bu.is_active = TRUE
+         )
+         OR ufs.business_group_id IN (
+           SELECT b.business_group_id FROM core.businesses b
+           INNER JOIN core.business_users bu ON b.id = bu.business_id
+           WHERE bu.user_id = $1 AND bu.role = 'superadmin' AND bu.is_active = TRUE AND b.business_group_id IS NOT NULL
+         )
+         ORDER BY ufs.created_at DESC`,
+        [superadminId]
+      );
+      return result.rows;
+    } catch (err: any) {
+      if (err.code === '42P01') return [];
+      throw err;
+    }
+  }
+
+  /**
+   * Crear asignación de surtidor sin tienda. Solo superadmin del negocio/grupo.
+   */
+  async createFulfillmentScope(
+    superadminId: string,
+    dto: { user_id: string; business_id?: string; business_group_id?: string },
+  ) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    if (!dto.business_id && !dto.business_group_id) {
+      throw new BadRequestException('Debe indicar business_id o business_group_id');
+    }
+    if (dto.business_id) {
+      const isSuperadmin = await this.isSuperadminOfBusiness(superadminId, dto.business_id);
+      if (!isSuperadmin) throw new ForbiddenException('Solo el superadmin del negocio puede crear esta asignación');
+    } else if (dto.business_group_id) {
+      const hasGroup = await dbPool.query(
+        `SELECT 1 FROM core.businesses b
+         INNER JOIN core.business_users bu ON b.id = bu.business_id
+         WHERE b.business_group_id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
+        [dto.business_group_id, superadminId]
+      );
+      if (hasGroup.rows.length === 0) throw new ForbiddenException('No tienes permiso sobre este grupo');
+    }
+    const result = await dbPool.query(
+      `INSERT INTO core.user_fulfillment_scope (user_id, business_id, business_group_id, can_fulfill)
+       VALUES ($1, $2, $3, TRUE)
+       RETURNING id, user_id, business_id, business_group_id, can_fulfill, created_at, updated_at`,
+      [dto.user_id, dto.business_id ?? null, dto.business_group_id ?? null]
+    );
+    return result.rows[0];
+  }
+
+  /**
+   * Eliminar asignación de surtidor sin tienda. Solo superadmin.
+   */
+  async deleteFulfillmentScope(scopeId: string, superadminId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    const row = await dbPool.query(
+      `SELECT id, business_id, business_group_id FROM core.user_fulfillment_scope WHERE id = $1`,
+      [scopeId]
+    );
+    if (row.rows.length === 0) throw new NotFoundException('Asignación no encontrada');
+    const scope = row.rows[0];
+    if (scope.business_id) {
+      const isSuperadmin = await this.isSuperadminOfBusiness(superadminId, scope.business_id);
+      if (!isSuperadmin) throw new ForbiddenException('Solo el superadmin puede eliminar esta asignación');
+    } else {
+      const hasGroup = await dbPool.query(
+        `SELECT 1 FROM core.businesses b
+         INNER JOIN core.business_users bu ON b.id = bu.business_id
+         WHERE b.business_group_id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
+        [scope.business_group_id, superadminId]
+      );
+      if (hasGroup.rows.length === 0) throw new ForbiddenException('No tienes permiso sobre este grupo');
+    }
+    await dbPool.query(`DELETE FROM core.user_fulfillment_scope WHERE id = $1`, [scopeId]);
+    return { deleted: true };
   }
 }
 

@@ -399,7 +399,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
             <button
               type="button"
               onClick={handleColorClick}
-              className="w-12 h-12 rounded border-2 border-gray-300 hover:border-indigo-500 transition-colors cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-12 h-12 rounded border-2 border-gray-300 dark:border-neutral-600 hover:border-indigo-500 transition-colors cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               style={{ backgroundColor: displayColor }}
               title="Haz clic para abrir el selector de color"
             />
@@ -426,19 +426,19 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
             )}
           </div>
           <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
             <div className="flex items-center space-x-2">
               <input
                 type="text"
                 value={displayColor}
                 onChange={(e) => updateField('colors', field, e.target.value)}
                 placeholder="#000000"
-                className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                className="flex-1 px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-mono"
               />
               <button
                 type="button"
                 onClick={handleColorClick}
-                className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="px-3 py-2 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 title="Abrir selector de color"
               >
                 🎨
@@ -454,7 +454,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
-        <p className="mt-4 text-xs text-gray-600">Cargando configuración de branding...</p>
+        <p className="mt-4 text-xs text-gray-600 dark:text-gray-400">Cargando configuración de branding...</p>
       </div>
     );
   }
@@ -464,10 +464,10 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-medium text-gray-900">
+          <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">
             Personalización de {type === 'group' ? 'Grupo' : 'Sucursal'}
           </h2>
-          <p className="text-xs text-gray-500 mt-1">{name}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{name}</p>
         </div>
         <button
           onClick={handleSave}
@@ -479,13 +479,13 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       </div>
 
       {saveSuccess && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs text-green-800 dark:text-green-300">
           ✓ Configuración guardada exitosamente
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-neutral-700">
         <nav className="flex space-x-8">
           {[
             { id: 'logos', label: 'Logos' },
@@ -500,8 +500,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-2 px-1 border-b-2 text-xs font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-300 hover:border-gray-300 dark:hover:border-neutral-600'
               }`}
             >
               {tab.label}
@@ -511,14 +511,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
       </div>
 
       {/* Contenido de tabs */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-6">
         {activeTab === 'logos' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Logos</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Logos</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Logo Principal
                   </label>
                   <div
@@ -528,8 +528,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     onDrop={(e) => handleDrop(e, 'logo')}
                     className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
                       dragging === 'logo'
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -541,9 +541,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         onDrop={handleInputDrop}
                         draggable={false}
                         placeholder="https://example.com/logo.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 pointer-events-auto"
                       />
-                      <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
+                      <label className="px-3 py-2 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo' ? (
                           <span className="flex items-center">
                             <svg className="animate-spin -ml-1 mr-2 h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -568,12 +568,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                       </label>
                     </div>
                     {dragging === 'logo' && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 bg-opacity-90 rounded-lg z-10">
+                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 dark:bg-indigo-900/50 bg-opacity-90 rounded-lg z-10">
                         <div className="text-center">
                           <svg className="mx-auto h-8 w-8 text-indigo-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          <p className="text-xs font-medium text-indigo-700">Suelta la imagen aquí</p>
+                          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Suelta la imagen aquí</p>
                         </div>
                       </div>
                     )}
@@ -582,14 +582,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         <img
                           src={branding.logo_url}
                           alt="Logo preview"
-                          className="h-16 object-contain border border-gray-200 rounded bg-white p-1"
+                          className="h-16 object-contain border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 p-1"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                           }}
                         />
                         <button
                           onClick={() => setBranding({ ...branding, logo_url: '' })}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                         >
                           Eliminar
                         </button>
@@ -599,7 +599,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Logo para Fondos Claros
                   </label>
                   <div
@@ -609,8 +609,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     onDrop={(e) => handleDrop(e, 'logo_light')}
                     className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
                       dragging === 'logo_light'
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -622,9 +622,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         onDrop={handleInputDrop}
                         draggable={false}
                         placeholder="https://example.com/logo-light.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 pointer-events-auto"
                       />
-                      <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
+                      <label className="px-3 py-2 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo_light' ? (
                           <span className="flex items-center">
                             <svg className="animate-spin -ml-1 mr-2 h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -649,12 +649,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                       </label>
                     </div>
                     {dragging === 'logo_light' && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 bg-opacity-90 rounded-lg z-10">
+                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 dark:bg-indigo-900/50 bg-opacity-90 rounded-lg z-10">
                         <div className="text-center">
                           <svg className="mx-auto h-8 w-8 text-indigo-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          <p className="text-xs font-medium text-indigo-700">Suelta la imagen aquí</p>
+                          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Suelta la imagen aquí</p>
                         </div>
                       </div>
                     )}
@@ -663,14 +663,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         <img
                           src={branding.logo_light_url}
                           alt="Logo light preview"
-                          className="h-16 object-contain border border-gray-200 rounded bg-white p-1"
+                          className="h-16 object-contain border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 p-1"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                           }}
                         />
                         <button
                           onClick={() => setBranding({ ...branding, logo_light_url: '' })}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                         >
                           Eliminar
                         </button>
@@ -680,7 +680,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Logo para Fondos Oscuros
                   </label>
                   <div
@@ -690,8 +690,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     onDrop={(e) => handleDrop(e, 'logo_dark')}
                     className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
                       dragging === 'logo_dark'
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -703,9 +703,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         onDrop={handleInputDrop}
                         draggable={false}
                         placeholder="https://example.com/logo-dark.png o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 pointer-events-auto"
                       />
-                      <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
+                      <label className="px-3 py-2 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'logo_dark' ? (
                           <span className="flex items-center">
                             <svg className="animate-spin -ml-1 mr-2 h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -730,12 +730,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                       </label>
                     </div>
                     {dragging === 'logo_dark' && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 bg-opacity-90 rounded-lg z-10">
+                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 dark:bg-indigo-900/50 bg-opacity-90 rounded-lg z-10">
                         <div className="text-center">
                           <svg className="mx-auto h-8 w-8 text-indigo-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          <p className="text-xs font-medium text-indigo-700">Suelta la imagen aquí</p>
+                          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Suelta la imagen aquí</p>
                         </div>
                       </div>
                     )}
@@ -744,14 +744,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         <img
                           src={branding.logo_dark_url}
                           alt="Logo dark preview"
-                          className="h-16 object-contain border border-gray-200 rounded bg-white p-1"
+                          className="h-16 object-contain border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 p-1"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                           }}
                         />
                         <button
                           onClick={() => setBranding({ ...branding, logo_dark_url: '' })}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                         >
                           Eliminar
                         </button>
@@ -761,7 +761,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Favicon
                   </label>
                   <div
@@ -771,8 +771,8 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     onDrop={(e) => handleDrop(e, 'favicon')}
                     className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
                       dragging === 'favicon'
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-gray-400'
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30'
+                        : 'border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -784,9 +784,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         onDrop={handleInputDrop}
                         draggable={false}
                         placeholder="https://example.com/favicon.ico o arrastra una imagen aquí"
-                        className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 pointer-events-auto"
+                        className="flex-1 px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 pointer-events-auto"
                       />
-                      <label className="px-3 py-2 text-xs bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100 cursor-pointer transition-colors whitespace-nowrap">
+                      <label className="px-3 py-2 text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 cursor-pointer transition-colors whitespace-nowrap">
                         {uploading === 'favicon' ? (
                           <span className="flex items-center">
                             <svg className="animate-spin -ml-1 mr-2 h-3 w-3" fill="none" viewBox="0 0 24 24">
@@ -811,12 +811,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                       </label>
                     </div>
                     {dragging === 'favicon' && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 bg-opacity-90 rounded-lg z-10">
+                      <div className="absolute inset-0 flex items-center justify-center bg-indigo-50 dark:bg-indigo-900/50 bg-opacity-90 rounded-lg z-10">
                         <div className="text-center">
                           <svg className="mx-auto h-8 w-8 text-indigo-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          <p className="text-xs font-medium text-indigo-700">Suelta la imagen aquí</p>
+                          <p className="text-xs font-medium text-indigo-700 dark:text-indigo-300">Suelta la imagen aquí</p>
                         </div>
                       </div>
                     )}
@@ -825,14 +825,14 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                         <img
                           src={branding.favicon_url}
                           alt="Favicon preview"
-                          className="h-16 w-16 object-contain border border-gray-200 rounded bg-white p-1"
+                          className="h-16 w-16 object-contain border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 p-1"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                           }}
                         />
                         <button
                           onClick={() => setBranding({ ...branding, favicon_url: '' })}
-                          className="text-xs text-red-600 hover:text-red-800"
+                          className="text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                         >
                           Eliminar
                         </button>
@@ -848,7 +848,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'colors' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Colores Principales</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Colores Principales</h3>
               <div className="space-y-4">
                 <ColorPreview color={branding.colors?.primary_color} field="primary_color" label="Color Primario" />
                 <ColorPreview color={branding.colors?.secondary_color} field="secondary_color" label="Color Secundario" />
@@ -857,7 +857,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Colores de Texto</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Colores de Texto</h3>
               <div className="space-y-4">
                 <ColorPreview color={branding.colors?.text_primary} field="text_primary" label="Texto Primario" />
                 <ColorPreview color={branding.colors?.text_secondary} field="text_secondary" label="Texto Secundario" />
@@ -865,7 +865,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Colores de Fondo</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Colores de Fondo</h3>
               <div className="space-y-4">
                 <ColorPreview color={branding.colors?.background_color} field="background_color" label="Fondo Principal" />
                 <ColorPreview color={branding.colors?.background_secondary} field="background_secondary" label="Fondo Secundario" />
@@ -873,7 +873,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Colores de Estado</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Colores de Estado</h3>
               <div className="space-y-4">
                 <ColorPreview color={branding.colors?.success_color} field="success_color" label="Éxito" />
                 <ColorPreview color={branding.colors?.warning_color} field="warning_color" label="Advertencia" />
@@ -887,10 +887,10 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'fonts' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Fuentes</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Fuentes</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Fuente Primaria
                   </label>
                   <input
@@ -898,12 +898,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.fonts?.primary || ''}
                     onChange={(e) => updateField('fonts', 'primary', e.target.value)}
                     placeholder="Inter, Arial, sans-serif"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Fuente Secundaria
                   </label>
                   <input
@@ -911,12 +911,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.fonts?.secondary || ''}
                     onChange={(e) => updateField('fonts', 'secondary', e.target.value)}
                     placeholder="Roboto, Arial, sans-serif"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Fuente para Títulos
                   </label>
                   <input
@@ -924,7 +924,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.fonts?.heading || ''}
                     onChange={(e) => updateField('fonts', 'heading', e.target.value)}
                     placeholder="Poppins, Arial, sans-serif"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
               </div>
@@ -935,10 +935,10 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'texts' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Textos Personalizados</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Textos Personalizados</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Mensaje de Bienvenida
                   </label>
                   <input
@@ -946,12 +946,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.texts?.welcome_message || ''}
                     onChange={(e) => updateField('texts', 'welcome_message', e.target.value)}
                     placeholder="Bienvenido a nuestra tienda"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Tagline / Eslogan
                   </label>
                   <input
@@ -959,12 +959,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.texts?.tagline || ''}
                     onChange={(e) => updateField('texts', 'tagline', e.target.value)}
                     placeholder="Tu tienda de confianza"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Texto del Footer
                   </label>
                   <input
@@ -972,12 +972,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.texts?.footer_text || ''}
                     onChange={(e) => updateField('texts', 'footer_text', e.target.value)}
                     placeholder="© 2025 Todos los derechos reservados"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Mensaje de Contacto
                   </label>
                   <input
@@ -985,7 +985,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.texts?.contact_message || ''}
                     onChange={(e) => updateField('texts', 'contact_message', e.target.value)}
                     placeholder="¿Necesitas ayuda? Contáctanos"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
               </div>
@@ -996,10 +996,10 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'social' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">Redes Sociales</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Redes Sociales</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Facebook
                   </label>
                   <input
@@ -1007,12 +1007,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.social_media?.facebook || ''}
                     onChange={(e) => updateField('social_media', 'facebook', e.target.value)}
                     placeholder="https://facebook.com/tienda"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Instagram
                   </label>
                   <input
@@ -1020,12 +1020,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.social_media?.instagram || ''}
                     onChange={(e) => updateField('social_media', 'instagram', e.target.value)}
                     placeholder="https://instagram.com/tienda"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Twitter / X
                   </label>
                   <input
@@ -1033,12 +1033,12 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.social_media?.twitter || ''}
                     onChange={(e) => updateField('social_media', 'twitter', e.target.value)}
                     placeholder="https://twitter.com/tienda"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                     WhatsApp
                   </label>
                   <input
@@ -1046,7 +1046,7 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                     value={branding.social_media?.whatsapp || ''}
                     onChange={(e) => updateField('social_media', 'whatsapp', e.target.value)}
                     placeholder="+521234567890"
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
                   />
                 </div>
               </div>
@@ -1057,9 +1057,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'advanced' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">CSS Personalizado</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">CSS Personalizado</h3>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Código CSS (opcional)
                 </label>
                 <textarea
@@ -1067,18 +1067,18 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                   onChange={(e) => setBranding({ ...branding, custom_css: e.target.value })}
                   placeholder=".custom-class { color: red; }"
                   rows={8}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-mono"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   ⚠️ Usa con precaución. El CSS personalizado se aplicará globalmente.
                 </p>
               </div>
             </div>
 
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">JavaScript Personalizado</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">JavaScript Personalizado</h3>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-2">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Código JavaScript (opcional)
                 </label>
                 <textarea
@@ -1086,9 +1086,9 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
                   onChange={(e) => setBranding({ ...branding, custom_js: e.target.value })}
                   placeholder="console.log('Custom JS');"
                   rows={8}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-mono"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   ⚠️ Usa con precaución. El JavaScript personalizado se ejecutará en todas las páginas.
                 </p>
               </div>

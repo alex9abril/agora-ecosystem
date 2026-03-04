@@ -9,7 +9,12 @@
 -- 2. Múltiples tiendas por cuenta: Un usuario puede ser dueño/administrador de varias tiendas
 -- 3. Roles por tienda: Cada usuario puede tener diferentes roles en diferentes tiendas
 -- 
--- Uso: Ejecutar después de schema.sql para agregar estas funcionalidades
+-- Uso: Ejecutar después de schema.sql para agregar estas funcionalidades.
+--
+-- Prerequisito obligatorio: debe existir la tabla core.businesses.
+--   - Opción A: Ejecutar antes database/schema/schema.sql (recomendado).
+--   - Opción B: Ejecutar antes database/agora/prereq_core_for_business_roles.sql
+--     si no tienes el schema base completo.
 -- ============================================================================
 -- Versión: 1.0
 -- Fecha: 2025-01-16
@@ -256,6 +261,7 @@ RETURNS TABLE (
     business_email VARCHAR(255),
     business_phone VARCHAR(20),
     business_address TEXT,
+    business_group_id UUID,
     is_active BOOLEAN,
     total_users INTEGER,
     created_at TIMESTAMP
@@ -271,7 +277,7 @@ BEGIN
             TRIM(
                 CONCAT_WS(', ',
                     NULLIF(TRIM(CONCAT_WS(' ', 
-                        NULLIF(a.street, ''), 
+                        NULLIF(a.street, ''),
                         NULLIF(a.street_number, '')
                     )), ''),
                     NULLIF(TRIM(a.neighborhood), ''),
@@ -281,6 +287,7 @@ BEGIN
             ),
             'Sin dirección'
         ) AS business_address,
+        b.business_group_id,
         b.is_active,
         COUNT(DISTINCT bu.id) FILTER (WHERE bu.is_active = TRUE)::INTEGER AS total_users,
         b.created_at
@@ -290,7 +297,7 @@ BEGIN
     WHERE bu.user_id = p_superadmin_id
     AND bu.role = 'superadmin'
     AND bu.is_active = TRUE
-    GROUP BY b.id, b.name, b.email, b.phone, b.is_active, b.created_at,
+    GROUP BY b.id, b.name, b.email, b.phone, b.business_group_id, b.is_active, b.created_at,
              a.street, a.street_number, a.neighborhood, a.city, a.state
     ORDER BY b.created_at DESC;
 END;

@@ -51,4 +51,10 @@ export class ListStoresDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Incluir tiendas archivadas (por defecto no)', example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  includeArchived?: boolean;
 }

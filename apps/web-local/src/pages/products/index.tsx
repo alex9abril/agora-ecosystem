@@ -4820,16 +4820,20 @@ function BranchAvailabilitySection({
 }: BranchAvailabilitySectionProps) {
   const { availableBusinesses } = useSelectedBusiness();
 
+  const nonArchivedForSync = availableBusinesses.filter(
+    (b) => !(b as { store_archived?: boolean }).store_archived,
+  );
+
   // Cargar disponibilidades cuando se edita un producto
   useEffect(() => {
     if (editingProduct?.id && onLoadBranchAvailabilities) {
       onLoadBranchAvailabilities(editingProduct.id);
     } else if (
-      availableBusinesses.length > 0 &&
+      nonArchivedForSync.length > 0 &&
       branchAvailabilities.length === 0
     ) {
-      // Inicializar con todas las sucursales disponibles si no hay datos
-      const initialAvailabilities = availableBusinesses.map((business) => ({
+      // Inicializar solo con sucursales no archivadas
+      const initialAvailabilities = nonArchivedForSync.map((business) => ({
         branch_id: business.business_id,
         branch_name: business.business_name,
         is_enabled: false,
@@ -4903,16 +4907,16 @@ function BranchAvailabilitySection({
     );
   };
 
-  // Asegurar que todas las sucursales estén en la lista
+  // Asegurar que todas las sucursales (no archivadas) estén en la lista
   // Sincronizar branchAvailabilities con availableBusinesses
   useEffect(() => {
-    if (availableBusinesses.length > 0) {
+    if (nonArchivedForSync.length > 0) {
       setBranchAvailabilities((prev) => {
-        const allBranchIds = availableBusinesses.map((b) => b.business_id);
+        const allBranchIds = nonArchivedForSync.map((b) => b.business_id);
         const existingBranchIds = new Set(prev.map((a) => a.branch_id));
 
-        // Agregar sucursales faltantes
-        const missingBranches = availableBusinesses
+        // Agregar solo sucursales no archivadas faltantes
+        const missingBranches = nonArchivedForSync
           .filter((b) => !existingBranchIds.has(b.business_id))
           .map((business) => ({
             branch_id: business.business_id,
@@ -4939,10 +4943,10 @@ function BranchAvailabilitySection({
         return prev;
       });
     }
-  }, [availableBusinesses.map((b) => b.business_id).join(",")]);
+  }, [nonArchivedForSync.map((b) => b.business_id).join(",")]);
 
-  // Asegurar que todas las sucursales estén en la lista para mostrar
-  const allAvailabilities = availableBusinesses.map((business) => {
+  // Asegurar que todas las sucursales (no archivadas) estén en la lista para mostrar
+  const allAvailabilities = nonArchivedForSync.map((business) => {
     const existing = branchAvailabilities.find(
       (a) => a.branch_id === business.business_id,
     );

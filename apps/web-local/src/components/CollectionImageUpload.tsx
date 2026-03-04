@@ -165,7 +165,7 @@ export default function CollectionImageUpload({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         {label}
       </label>
       <div
@@ -174,7 +174,9 @@ export default function CollectionImageUpload({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={`relative border-2 border-dashed rounded-lg p-4 transition-colors ${
-          dragging ? 'border-black bg-gray-50' : 'border-gray-300 hover:border-gray-400'
+          dragging
+            ? 'border-black dark:border-white bg-gray-50 dark:bg-neutral-700'
+            : 'border-gray-300 dark:border-neutral-600 hover:border-gray-400 dark:hover:border-neutral-500'
         }`}
       >
         <div className="flex items-center space-x-2">
@@ -187,14 +189,14 @@ export default function CollectionImageUpload({
               onFileSelected?.(null, null);
             }}
             placeholder={placeholder}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-black focus:border-black"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 rounded-lg text-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-black dark:focus:ring-white focus:border-black dark:focus:border-white"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             draggable={false}
           />
-          <label className="px-4 py-2 text-sm bg-black text-white rounded-lg hover:bg-gray-800 cursor-pointer transition-colors whitespace-nowrap">
+          <label className="px-4 py-2 text-sm bg-black dark:bg-white text-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 cursor-pointer transition-colors whitespace-nowrap">
             {uploading ? 'Subiendo...' : 'Subir Imagen'}
             <input
               ref={fileInputRef}
@@ -207,12 +209,12 @@ export default function CollectionImageUpload({
           </label>
         </div>
         {dragging && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-90 rounded-lg z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-50 dark:bg-neutral-800 bg-opacity-90 dark:bg-opacity-95 rounded-lg z-10">
             <div className="text-center">
-              <svg className="mx-auto h-12 w-12 text-black mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="mx-auto h-12 w-12 text-black dark:text-white mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              <p className="text-sm font-medium text-gray-900">Suelta la imagen aquí</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Suelta la imagen aquí</p>
             </div>
           </div>
         )}
@@ -221,7 +223,7 @@ export default function CollectionImageUpload({
             <img
               src={previewUrl}
               alt="Preview"
-              className="h-32 w-auto object-contain border border-gray-200 rounded-lg bg-white p-2"
+              className="h-32 w-auto object-contain border border-gray-200 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 p-2"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
@@ -233,13 +235,13 @@ export default function CollectionImageUpload({
                 setPreviewUrl('');
                 onFileSelected?.(null, null);
               }}
-              className="text-sm text-red-600 hover:text-red-800 font-medium"
+              className="text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium"
             >
               Eliminar
             </button>
           </div>
         )}
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
           Puedes arrastrar una imagen aquí o hacer clic en &quot;Subir Imagen&quot;. Formatos: JPEG, PNG, WebP, SVG (máx. 10MB)
         </p>
       </div>

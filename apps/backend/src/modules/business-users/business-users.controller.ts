@@ -262,5 +262,38 @@ export class BusinessUsersController {
   ) {
     return this.businessUsersService.createUserForSuperadminAccount(user.id, createUserDto);
   }
+
+  @Get('fulfillment-scope')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar asignaciones de surtidor sin tienda (cuenta superadmin)' })
+  @ApiResponse({ status: 200, description: 'Lista de asignaciones' })
+  async listFulfillmentScopes(@CurrentUser() user: User) {
+    return this.businessUsersService.listFulfillmentScopesForAccount(user.id);
+  }
+
+  @Post('fulfillment-scope')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Crear asignación de surtidor sin tienda' })
+  @ApiResponse({ status: 201, description: 'Asignación creada' })
+  @ApiResponse({ status: 403, description: 'No autorizado' })
+  async createFulfillmentScope(
+    @Body() body: { user_id: string; business_id?: string; business_group_id?: string },
+    @CurrentUser() user: User
+  ) {
+    return this.businessUsersService.createFulfillmentScope(user.id, body);
+  }
+
+  @Delete('fulfillment-scope/:scopeId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Eliminar asignación de surtidor sin tienda' })
+  @ApiParam({ name: 'scopeId', description: 'ID de la asignación' })
+  @ApiResponse({ status: 200, description: 'Asignación eliminada' })
+  @ApiResponse({ status: 404, description: 'Asignación no encontrada' })
+  async deleteFulfillmentScope(
+    @Param('scopeId') scopeId: string,
+    @CurrentUser() user: User
+  ) {
+    return this.businessUsersService.deleteFulfillmentScope(scopeId, user.id);
+  }
 }
 

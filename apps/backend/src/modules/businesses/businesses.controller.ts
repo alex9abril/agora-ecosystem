@@ -11,6 +11,8 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
@@ -43,6 +45,7 @@ import { UpdateBusinessTaxSettingsDto } from './dto/update-business-tax-settings
 import { UpdateBusinessKarbotSettingsDto } from './dto/update-business-karbot-settings.dto';
 import { UpdateBusinessKarlopaySettingsDto } from './dto/update-business-karlopay-settings.dto';
 import { UpdateBusinessNotificationSettingsDto } from './dto/update-business-notification-settings.dto';
+import { ArchiveBranchDto } from './dto/archive-branch.dto';
 import { BrandingImagesService } from './branding-images.service';
 
 @ApiTags('businesses')
@@ -385,6 +388,71 @@ export class BusinessesController {
     return this.businessesService.getMyBusinessGroup(user.id);
   }
 
+  /** Notificaciones por grupo (tienda por grupo). Debe ir ANTES de :id/notification-settings. */
+  @Get('business-groups/:id/notification-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion de notificaciones de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async getGroupNotificationSettings(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.getGroupNotificationSettingsForUser(id, user.id);
+  }
+
+  @Put('business-groups/:id/notification-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion de notificaciones de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async updateGroupNotificationSettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessNotificationSettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateGroupNotificationSettings(id, user.id, updateDto);
+  }
+
+  /** Karbot / Karlopay por grupo (tienda por grupo). Debe ir ANTES de :id/... */
+  @Get('business-groups/:id/karbot-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion Karbot de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async getGroupKarbotSettingsForUser(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getGroupKarbotSettingsForUser(id, user.id);
+  }
+
+  @Put('business-groups/:id/karbot-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion Karbot de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async updateGroupKarbotSettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessKarbotSettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateGroupKarbotSettings(id, user.id, updateDto);
+  }
+
+  @Get('business-groups/:id/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener configuracion Karlopay de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async getGroupKarlopaySettingsForUser(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getGroupKarlopaySettingsForUser(id, user.id);
+  }
+
+  @Put('business-groups/:id/karlopay-settings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Actualizar configuracion Karlopay de un grupo empresarial (tienda por grupo)' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async updateGroupKarlopaySettings(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateBusinessKarlopaySettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.updateGroupKarlopaySettings(id, user.id, updateDto);
+  }
+
   @Get(':id/tax-settings')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Obtener configuracion de impuestos de una sucursal (requiere permisos)' })
@@ -480,6 +548,27 @@ export class BusinessesController {
   @ApiResponse({ status: 404, description: 'Negocio no encontrado' })
   async findOne(@Param('id') id: string, @CurrentUser() user: User) {
     return this.businessesService.findOne(id);
+  }
+
+  @Patch(':id/archive')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Archivar sucursal',
+    description:
+      'Archiva la sucursal de forma irreversible. Dejará de mostrarse en listados y selector. Requiere confirmar con el nombre exacto de la sucursal.',
+  })
+  @ApiParam({ name: 'id', description: 'ID de la sucursal (business)', type: String })
+  @ApiResponse({ status: 204, description: 'Sucursal archivada' })
+  @ApiResponse({ status: 400, description: 'El nombre no coincide con el de la sucursal' })
+  @ApiResponse({ status: 403, description: 'Solo el superadmin puede archivarla' })
+  @ApiResponse({ status: 404, description: 'Sucursal no encontrada o sin tienda asociada' })
+  async archiveBranch(
+    @Param('id') id: string,
+    @Body() dto: ArchiveBranchDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.businessesService.archiveBranch(id, user.id, dto.confirmName);
   }
 
   @Patch(':id/status')

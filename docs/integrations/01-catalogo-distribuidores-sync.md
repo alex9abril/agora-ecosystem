@@ -5,6 +5,8 @@ description: Flujo técnico para sincronizar los catálogos externos (DMS) con e
 
 # 📄 Integración automática del catálogo general
 
+**Distribuidor** en Agora = quien tiene el producto en almacén y surte el pedido; puede no tener tienda propia y estar montado en una o más tiendas (ver [Tiendas y distribuidores](../contexto-trabajo/03-tiendas-y-distribuidores.md)).
+
 Los distribuidores ya cargan y mantienen un catálogo maestro en sus DMS. En Agora ese catálogo es **global** (todos los negocios pueden verlo) y a nivel de sucursal se define manualmente disponibilidad, precios y stock desde el admin (ver [Sistema de catálogos avanzado](../features/05-sistema-catalogos-productos-avanzado.md)). Automatizar ese vínculo para múltiples distribuidores requiere un **punto medio controlado** que respete los datos maestros de Agora y permita auditoría, monitoreo y reconcilación ante errores.
 
 Este documento describe la arquitectura técnica recomendada, los componentes principales (ingestión, staging, sincronización y monitoreo) y las buenas prácticas profesionales que se deben preservar antes de implementar cualquier código o migración.

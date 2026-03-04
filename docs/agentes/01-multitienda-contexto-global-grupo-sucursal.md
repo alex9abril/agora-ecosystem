@@ -6,15 +6,24 @@
 
 ---
 
+## 0. Tienda vs distribuidor (definición de concepto)
+
+- **Tienda** = **canal de venta**: dónde el cliente compra (URL, branding, carrito, checkout). Modelado en **`core.stores`**.
+- **Distribuidor** = **quien tiene el producto en almacén** y surte el pedido (fulfillment). Puede **no tener tienda propia** y estar **montado en otra tienda o en varias**: vende a través del canal de otra(s) tienda(s).
+
+Definición completa y relación tienda ↔ distribuidor: **`docs/contexto-trabajo/03-tiendas-y-distribuidores.md`**.
+
+---
+
 ## 1. Los 5 tipos de tienda (canales de venta)
 
-El marketplace tiene **cinco tipos de canal de venta** ("tiendas"). Cada uno es un contexto desde el que se puede vender; **quien surte el pedido (fulfillment) es siempre la sucursal** (`orders.business_id`).
+El marketplace tiene **cinco tipos de canal de venta** ("tiendas"). Cada uno es un contexto desde el que se puede vender; **quien surte el pedido (fulfillment) es el distribuidor** (en el modelo actual, la sucursal: `orders.business_id`).
 
 | Tipo            | Prefijo URL (store-front)     | Descripción breve | Gestión |
 |-----------------|-------------------------------|-------------------|---------|
 | **Global**      | Sin prefijo (`/`)             | Agora: todo el catálogo. No se gestiona en web-local. | web-admin |
 | **Grupo**       | `/grupo/{slug}`               | Tienda por grupo/corporativo. Productos del grupo. | web-local |
-| **Sucursal**    | `/sucursal/{slug}`            | Tienda por distribuidor (normalmente 1 marca por sucursal). | web-local |
+| **Sucursal**    | `/sucursal/{slug}`            | Tienda (canal) por sucursal; el distribuidor que surte puede ser esa sucursal u otro montado en esta tienda. | web-local |
 | **Grupo+marca** | `/grupo/{slug}/marca/{code}`  | Varias sucursales del mismo grupo, una marca. Multimarca. | web-local |
 | **Marca global**| `/brand/{code}`               | Tienda global por marca (todas las sucursales que venden esa marca). | No en web-local (cuenta marca) |
 
@@ -58,9 +67,9 @@ Resumen:
   Relacionada con compatibilidad de productos (vehicle_models, product_vehicle_compatibility, etc.) en `database/agora/migration_vehicle_compatibility.sql` y schema de catálogo.
 
 - **`core.stores`**  
-  Canales de venta (una fila por tienda/canal).  
-  Campos: `id`, `type` ('global' | 'group' | 'branch' | 'group_brand' | 'global_brand'), `business_group_id`, `business_id`, `vehicle_brand_id` (según tipo), `slug`, `name`, `is_active`, `settings` (JSONB).  
-  Migración: `database/agora/migration_stores.sql`. Seed: `database/agora/seed_stores_from_groups_branches_brands.sql`.
+  **Tiendas** = canales de venta (una fila por tienda/canal). No confundir con distribuidor: la tienda es dónde se vende; el distribuidor es quien tiene el producto en almacén (puede no tener tienda propia y estar montado en una o más tiendas).  
+  Campos: `id`, `type` ('global' | 'group' | 'branch' | 'group_brand' | 'global_brand'), `business_group_id`, `business_id`, `vehicle_brand_id` (según tipo), `slug`, `name`, `is_active`, `archived_at`, `settings` (JSONB).  
+  Migración: `database/agora/migration_stores.sql`, `migration_stores_archived_at.sql`. Seed: `database/agora/seed_stores_from_groups_branches_brands.sql`.
 
 - **Pedidos y canal de venta**  
   - `orders.orders`: cada pedido tiene `business_id` (sucursal que surte / fulfillment).  
@@ -127,7 +136,8 @@ Documentación detallada:
 
 ## 6. Resumen rápido para el agente
 
-- **5 tipos de tienda (canales):** global, grupo, sucursal, grupo+marca, marca global. Fulfillment siempre es la sucursal (`orders.business_id`).
+- **Tienda** = canal de venta (`core.stores`). **Distribuidor** = quien tiene producto en almacén y surte; puede no tener tienda propia y estar montado en una o más tiendas (ver `docs/contexto-trabajo/03-tiendas-y-distribuidores.md`).
+- **5 tipos de tienda (canales):** global, grupo, sucursal, grupo+marca, marca global. Fulfillment (distribuidor) en el modelo actual es la sucursal (`orders.business_id`).
 - **BD:** `core.stores` (canales de venta), `core.business_groups`, `core.businesses` (con `business_group_id` y `slug`), `catalog.vehicle_brands` (code para URL), `orders.orders.store_id` (canal) y `orders.orders.store_context` (ruta para correo).
 - **URLs:** global sin prefijo; grupo `/grupo/{slug}`; sucursal `/sucursal/{slug}`; marca `/brand/{code}`; grupo+marca `/grupo/{slug}/marca/{code}` (fase 2 en store-front).
 - **Store-front:** StoreContext + getContextualUrl + ContextualLink; checkout envía storeContext (y opcionalmente storeId); backend guarda `store_id` y `store_context` en el pedido.
@@ -147,5 +157,6 @@ Resumen: el grupo gestiona solo branding grupo y sucursal; la tienda por **marca
 
 ## 8. Documentación y DB de referencia
 
+- **Tiendas vs distribuidores:** `docs/contexto-trabajo/03-tiendas-y-distribuidores.md`.
 - Docs: `docs/store-front/01-resumen-solucion-contexto.md`, `02-contexto-navegacion-mini-tienda.md`, `03-ejemplos-implementacion-contexto.md`, `docs/features/12-proceso-checkout-multi-sucursal.md`, `docs/features/03-roles-negocio-multi-tiendas.md`.
 - DB: `database/schema/schema.sql`, `database/agora/migration_business_groups.sql`, `database/agora/migration_branch_fields.sql`, `database/agora/migration_vehicle_compatibility.sql`, `database/agora/migration_stores.sql`, `database/agora/migration_orders_store_id.sql`, `database/agora/seed_stores_from_groups_branches_brands.sql`, `database/agora/migration_add_store_context_to_orders.sql`, `database/README.md`.

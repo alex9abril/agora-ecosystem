@@ -312,6 +312,10 @@ export default function BranchesPage() {
                     setKarbotBranch(null);
                     setNotificationBranch(branch);
                   }}
+                  onArchive={async (branch, confirmName) => {
+                    await businessService.archiveBranch(branch.id, confirmName);
+                    await loadBranches();
+                  }}
                 />
               )}
             </div>
@@ -331,6 +335,7 @@ interface BranchesListProps {
   onKarbotSettings?: (branch: Business) => void;
   onKarlopaySettings?: (branch: Business) => void;
   onNotificationSettings?: (branch: Business) => void;
+  onArchive?: (branch: Business, confirmName: string) => Promise<void>;
 }
 
 function BranchesList({
@@ -342,7 +347,12 @@ function BranchesList({
   onKarbotSettings,
   onKarlopaySettings,
   onNotificationSettings,
+  onArchive,
 }: BranchesListProps) {
+  const [archiveTarget, setArchiveTarget] = useState<Business | null>(null);
+  const [archiveConfirmName, setArchiveConfirmName] = useState('');
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
   if (branches.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
@@ -473,10 +483,74 @@ function BranchesList({
               >
                 Editar
               </button>
+              {onArchive && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArchiveTarget(branch);
+                    setArchiveConfirmName('');
+                    setArchiveError(null);
+                  }}
+                  className="px-3 py-1.5 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/30 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+                >
+                  Archivar
+                </button>
+              )}
             </div>
           </div>
         </div>
       ))}
+      {archiveTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-normal text-gray-900 dark:text-gray-100 mb-2">Archivar sucursal</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Esta acción es irreversible. La sucursal dejará de mostrarse en listados. Escribe el nombre exacto para confirmar:
+            </p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">&quot;{archiveTarget.name}&quot;</p>
+            <input
+              type="text"
+              value={archiveConfirmName}
+              onChange={(e) => { setArchiveConfirmName(e.target.value); setArchiveError(null); }}
+              placeholder="Nombre de la sucursal"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-4 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            {archiveError && (
+              <p className="text-sm text-red-600 dark:text-red-400 mb-4">{archiveError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setArchiveTarget(null); setArchiveError(null); }}
+                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={archiveSubmitting || archiveConfirmName.trim().toLowerCase() !== archiveTarget.name.trim().toLowerCase()}
+                onClick={async () => {
+                  if (!onArchive || archiveConfirmName.trim().toLowerCase() !== archiveTarget.name.trim().toLowerCase()) return;
+                  setArchiveSubmitting(true);
+                  setArchiveError(null);
+                  try {
+                    await onArchive(archiveTarget, archiveConfirmName.trim());
+                    setArchiveTarget(null);
+                    setArchiveConfirmName('');
+                  } catch (err: any) {
+                    setArchiveError(err?.message || 'Error al archivar');
+                  } finally {
+                    setArchiveSubmitting(false);
+                  }
+                }}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {archiveSubmitting ? 'Archivando...' : 'Archivar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -765,8 +839,8 @@ function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettin
             </svg>
             Volver a sucursales
           </button>
-          <h2 className="text-xl font-normal text-gray-900">Notificaciones</h2>
-          <p className="text-sm text-gray-600 mt-1">
+          <h2 className="text-xl font-normal text-gray-900 dark:text-gray-100">Notificaciones</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Define si cada notificación se envía por correo, WhatsApp o ambos para la sucursal:{' '}
             <strong>{branch.name}</strong>
           </p>
@@ -774,13 +848,13 @@ function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettin
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">{error}</p>
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+      <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-6 space-y-6">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-xs text-amber-900 dark:text-amber-200">
           Los templates de correo ya existen para estas notificaciones. Aquí solo defines los
           canales por los que se enviarán.
         </div>
@@ -794,30 +868,30 @@ function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettin
             return (
               <div
                 key={option.type}
-                className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                className="border border-gray-200 dark:border-neutral-600 rounded-lg p-4 bg-gray-50 dark:bg-neutral-700/50 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{option.title}</p>
-                  <p className="text-xs text-gray-600 mt-1">{option.description}</p>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{option.title}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{option.description}</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
                       checked={emailEnabled}
                       onChange={(e) => updateChannel(option.type, 'email_enabled', e.target.checked)}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
                     />
                     Correo
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
                       checked={whatsappEnabled}
                       onChange={(e) =>
                         updateChannel(option.type, 'whatsapp_enabled', e.target.checked)
                       }
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
                     />
                     WhatsApp
                   </label>
@@ -831,7 +905,7 @@ function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettin
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-normal text-gray-700 dark:text-gray-200 bg-white dark:bg-neutral-700 border border-gray-300 dark:border-neutral-600 rounded-md hover:bg-gray-50 dark:hover:bg-neutral-600"
           >
             Cancelar
           </button>
@@ -849,10 +923,14 @@ function BranchNotificationSettings({ branch, onBack }: BranchNotificationSettin
   );
 }
 
-interface BranchKarbotSettingsProps {
-  branch: Business;
+export interface BranchKarbotSettingsProps {
+  branch: Business | { id: string; name: string };
   onBack: () => void;
   onUpdated?: () => void;
+  /** Texto del botón volver (ej. "Cerrar" en Tiendas) */
+  backLabel?: string;
+  /** Si "group", usa API de grupo (business-groups); si "branch" o no se pasa, usa API de sucursal */
+  apiMode?: 'branch' | 'group';
 }
 
 const DEFAULT_KARBOT_SETTINGS: BranchKarbotSettings = {
@@ -882,7 +960,7 @@ const DEFAULT_KARBOT_SETTINGS: BranchKarbotSettings = {
   },
 };
 
-function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSettingsProps) {
+export function BranchKarbotSettings({ branch, onBack, onUpdated, backLabel = 'Volver a sucursales' }: BranchKarbotSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -973,66 +1051,66 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Volver a sucursales
+            {backLabel}
           </button>
-          <h2 className="text-xl font-normal text-gray-900">Integracion Karbot</h2>
-          <p className="text-sm text-gray-600 mt-1">
+          <h2 className="text-xl font-normal text-gray-900 dark:text-white">Integracion Karbot</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Configura usuario, contraseña y ambiente para la sucursal: <strong>{branch.name}</strong>
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">{error}</p>
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+      <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-6 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
+            <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-neutral-700 flex items-center justify-center text-gray-500 dark:text-gray-400">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Karbot</h3>
-              <p className="text-xs text-gray-500">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Karbot</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               id="karbot-enabled"
               type="checkbox"
               checked={settings.enabled}
               onChange={(e) => setSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
             />
             Habilitar
           </label>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Ambiente</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ambiente</label>
           <select
             value={settings.environment}
             onChange={(e) => setSettings((prev) => ({ ...prev, environment: e.target.value as 'dev' | 'prod' }))}
-            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
           >
             <option value="dev">Desarrollo</option>
             <option value="prod">Producción</option>
           </select>
         </div>
 
-        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'}`}>
+        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'}`}>
           <div className="flex items-center space-x-2">
             <div className={`w-2 h-2 rounded-full ${isDevMode ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
-            <span className="text-xs font-medium">
+            <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
               {isDevMode ? 'Modo Desarrollo' : 'Modo Producción'}
             </span>
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {isDevMode
               ? 'Se usarán las credenciales y endpoints de desarrollo.'
               : 'Se usarán las credenciales y endpoints de producción.'}
@@ -1041,20 +1119,20 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
 
         <div className="space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Desarrollo</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Credenciales Desarrollo</h3>
             {isDevMode && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded mb-3">
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded mb-3">
                 ACTIVO
               </span>
             )}
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Usuario</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Usuario</label>
                   {isActiveMode && settings.dev.username ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1072,11 +1150,11 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Contraseña</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
                   {isActiveMode && settings.dev.password ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1094,11 +1172,11 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Endpoint</label>
                   {isActiveMode && settings.dev.endpoint ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1116,7 +1194,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Bienvenida (user_registration)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Bienvenida (user_registration)</label>
                 <input
                   type="text"
                   value={settings.dev.template_ids?.user_registration || ''}
@@ -1126,7 +1204,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Confirmación (order_confirmation)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Confirmación (order_confirmation)</label>
                 <input
                   type="text"
                   value={settings.dev.template_ids?.order_confirmation || ''}
@@ -1136,7 +1214,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Cambio Estatus (order_status_change)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Cambio Estatus (order_status_change)</label>
                 <input
                   type="text"
                   value={settings.dev.template_ids?.order_status_change || ''}
@@ -1149,20 +1227,20 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Produccion</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Credenciales Produccion</h3>
             {!isDevMode && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded mb-3">
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded mb-3">
                 ACTIVO
               </span>
             )}
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Usuario</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Usuario</label>
                   {isProdMode && settings.prod.username ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1171,20 +1249,20 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                   onChange={(e) => updateEnvField('prod', 'username', e.target.value)}
                   className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
                     isProdMode
-                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 dark:bg-green-900/20 ring-2 ring-green-200 dark:ring-green-700'
                       : !isDevMode
-                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
-                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50 dark:bg-green-900/20'
+                      : 'border-gray-300 dark:border-neutral-600 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50 dark:bg-neutral-700'
                   }`}
                 />
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Contraseña</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
                   {isProdMode && settings.prod.password ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1202,11 +1280,11 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Endpoint</label>
                   {isProdMode && settings.prod.endpoint ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1224,7 +1302,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Bienvenida (user_registration)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Bienvenida (user_registration)</label>
                 <input
                   type="text"
                   value={settings.prod.template_ids?.user_registration || ''}
@@ -1234,7 +1312,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Confirmación (order_confirmation)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Confirmación (order_confirmation)</label>
                 <input
                   type="text"
                   value={settings.prod.template_ids?.order_confirmation || ''}
@@ -1244,7 +1322,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700">Template Cambio Estatus (order_status_change)</label>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Template Cambio Estatus (order_status_change)</label>
                 <input
                   type="text"
                   value={settings.prod.template_ids?.order_status_change || ''}
@@ -1258,31 +1336,31 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label className="flex items-start gap-2 text-sm text-gray-700">
+          <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               checked={settings.chatbot_enabled}
               onChange={(e) => setSettings((prev) => ({ ...prev, chatbot_enabled: e.target.checked }))}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
             />
             <span>
-              <span className="block font-medium text-gray-800">Habilitar chatbot en storefront</span>
-              <span className="block text-xs text-gray-500">Mostrar el widget del chatbot para los clientes.</span>
+              <span className="block font-medium text-gray-800 dark:text-gray-100">Habilitar chatbot en storefront</span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">Mostrar el widget del chatbot para los clientes.</span>
             </span>
           </label>
-          <label className="flex items-start gap-2 text-sm text-gray-700">
+          <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               type="checkbox"
               checked={settings.whatsapp_enabled}
               onChange={(e) => setSettings((prev) => ({ ...prev, whatsapp_enabled: e.target.checked }))}
               disabled={!isWhatsappReady}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
             />
             <span>
-              <span className="block font-medium text-gray-800">Habilitar notificaciones WhatsApp</span>
-              <span className="block text-xs text-gray-500">Notificar cambios de estado de pedidos.</span>
+              <span className="block font-medium text-gray-800 dark:text-gray-100">Habilitar notificaciones WhatsApp</span>
+              <span className="block text-xs text-gray-500 dark:text-gray-400">Notificar cambios de estado de pedidos.</span>
               {!isWhatsappReady && (
-                <span className="block text-xs text-red-600 mt-1">
+                <span className="block text-xs text-red-600 dark:text-red-400 mt-1">
                   Requiere Karbot habilitado y endpoint configurado en el ambiente activo.
                 </span>
               )}
@@ -1294,7 +1372,7 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-normal text-gray-700 dark:text-gray-200 bg-white dark:bg-neutral-700 border border-gray-300 dark:border-neutral-600 rounded-md hover:bg-gray-50 dark:hover:bg-neutral-600"
           >
             Cancelar
           </button>
@@ -1312,10 +1390,14 @@ function BranchKarbotSettings({ branch, onBack, onUpdated }: BranchKarbotSetting
   );
 }
 
-interface BranchKarlopaySettingsProps {
-  branch: Business;
+export interface BranchKarlopaySettingsProps {
+  branch: Business | { id: string; name: string };
   onBack: () => void;
   onUpdated?: () => void;
+  /** Texto del botón volver (ej. "Cerrar" en Tiendas) */
+  backLabel?: string;
+  /** Si "group", usa API de grupo (business-groups); si "branch" o no se pasa, usa API de sucursal */
+  apiMode?: 'branch' | 'group';
 }
 
 const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
@@ -1339,7 +1421,7 @@ const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
   },
 };
 
-function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySettingsProps) {
+export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 'Volver a sucursales', apiMode = 'branch' }: BranchKarlopaySettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1349,7 +1431,9 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
     setLoading(true);
     setError(null);
     try {
-      const response = await businessService.getBranchKarlopaySettings(branch.id);
+      const response = apiMode === 'group'
+        ? await businessService.getGroupKarlopaySettings(branch.id)
+        : await businessService.getBranchKarlopaySettings(branch.id);
       setSettings({ ...DEFAULT_KARLOPAY_SETTINGS, ...response });
     } catch (err: any) {
       console.error('[BranchKarlopaySettings] Error cargando configuracion Karlopay:', err);
@@ -1362,13 +1446,17 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
 
   useEffect(() => {
     loadSettings();
-  }, [branch.id]);
+  }, [branch.id, apiMode]);
 
   const handleSave = async () => {
     try {
       setSaving(true);
       setError(null);
-      await businessService.updateBranchKarlopaySettings(branch.id, settings);
+      if (apiMode === 'group') {
+        await businessService.updateGroupKarlopaySettings(branch.id, settings);
+      } else {
+        await businessService.updateBranchKarlopaySettings(branch.id, settings);
+      }
       if (onUpdated) onUpdated();
     } catch (err: any) {
       console.error('[BranchKarlopaySettings] Error guardando configuracion Karlopay:', err);
@@ -1415,64 +1503,64 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Volver a sucursales
+            {backLabel}
           </button>
-          <h2 className="text-xl font-normal text-gray-900">Integracion Karlopay</h2>
-          <p className="text-sm text-gray-600 mt-1">
+          <h2 className="text-xl font-normal text-gray-900 dark:text-white">Integracion Karlopay</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Configura endpoints y credenciales para la sucursal: <strong>{branch.name}</strong>
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-sm text-red-800">{error}</p>
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+      <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-6 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500">
-              <span className="text-xs font-bold text-gray-700">KP</span>
+            <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-neutral-700 flex items-center justify-center text-gray-500 dark:text-gray-400">
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300">KP</span>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900">Karlopay</h3>
-              <p className="text-xs text-gray-500">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Karlopay</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{settings.enabled ? 'Habilitado' : 'Deshabilitado'}</p>
             </div>
           </div>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input
               id="karlopay-enabled"
               type="checkbox"
               checked={settings.enabled}
               onChange={(e) => setSettings((prev) => ({ ...prev, enabled: e.target.checked }))}
-              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-neutral-500 rounded"
             />
             Habilitar
           </label>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Ambiente</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ambiente</label>
           <select
             value={settings.environment}
             onChange={(e) => setSettings((prev) => ({ ...prev, environment: e.target.value as 'dev' | 'prod' }))}
-            className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full md:w-64 px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
           >
             <option value="dev">Desarrollo</option>
             <option value="prod">Producción</option>
           </select>
         </div>
 
-        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 border border-yellow-200' : 'bg-green-50 border border-green-200'}`}>
+        <div className={`p-3 rounded-lg ${isDevMode ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700'}`}>
           <div className="flex items-center space-x-2">
             <div className={`w-2 h-2 rounded-full ${isDevMode ? 'bg-yellow-500' : 'bg-green-500'}`}></div>
-            <span className="text-xs font-medium">
+            <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
               {isDevMode ? 'Modo Desarrollo' : 'Modo Producción'}
             </span>
           </div>
-          <p className="text-xs text-gray-600 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {isDevMode
               ? 'Se usarán las credenciales y endpoints de desarrollo.'
               : 'Se usarán las credenciales y endpoints de producción.'}
@@ -1481,20 +1569,20 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
 
         <div className="space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Desarrollo</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Credenciales Desarrollo</h3>
             {isDevMode && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded mb-3">
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200 rounded mb-3">
                 ACTIVO
               </span>
             )}
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Dominio</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Dominio</label>
                   {isActiveMode && settings.dev.domain ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1513,11 +1601,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Login Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Login Endpoint</label>
                   {isActiveMode && settings.dev.login_endpoint ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1536,11 +1624,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Órdenes Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Órdenes Endpoint</label>
                   {isActiveMode && settings.dev.orders_endpoint ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1559,11 +1647,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Auth Email</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Auth Email</label>
                   {isActiveMode && settings.dev.auth_email ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1582,11 +1670,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Auth Password</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Auth Password</label>
                   {isActiveMode && settings.dev.auth_password ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : isActiveMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1605,9 +1693,9 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Redirect URL</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Redirect URL</label>
                   {isActiveMode && settings.dev.redirect_url ? (
-                    <span className="text-xs text-yellow-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">✓ En uso</span>
                   ) : null}
                 </div>
                 <input
@@ -1628,20 +1716,20 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Credenciales Produccion</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Credenciales Produccion</h3>
             {!isDevMode && (
-              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded mb-3">
+              <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200 rounded mb-3">
                 ACTIVO
               </span>
             )}
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Dominio</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Dominio</label>
                   {isProdMode && settings.prod.domain ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1660,11 +1748,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Login Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Login Endpoint</label>
                   {isProdMode && settings.prod.login_endpoint ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1683,11 +1771,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Órdenes Endpoint</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Órdenes Endpoint</label>
                   {isProdMode && settings.prod.orders_endpoint ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1706,11 +1794,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Auth Email</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Auth Email</label>
                   {isProdMode && settings.prod.auth_email ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1729,11 +1817,11 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Auth Password</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Auth Password</label>
                   {isProdMode && settings.prod.auth_password ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : isProdMode ? (
-                    <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
                 <input
@@ -1752,9 +1840,9 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
               </div>
               <div>
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-gray-700">Redirect URL</label>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Redirect URL</label>
                   {isProdMode && settings.prod.redirect_url ? (
-                    <span className="text-xs text-green-700 font-medium">✓ En uso</span>
+                    <span className="text-xs text-green-700 dark:text-green-300 font-medium">✓ En uso</span>
                   ) : null}
                 </div>
                 <input
@@ -1779,7 +1867,7 @@ function BranchKarlopaySettings({ branch, onBack, onUpdated }: BranchKarlopaySet
           <button
             type="button"
             onClick={onBack}
-            className="px-4 py-2 text-sm font-normal text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-normal text-gray-700 dark:text-gray-200 bg-white dark:bg-neutral-700 border border-gray-300 dark:border-neutral-600 rounded-md hover:bg-gray-50 dark:hover:bg-neutral-600"
           >
             Cancelar
           </button>

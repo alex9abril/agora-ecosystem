@@ -160,6 +160,7 @@ Rutas relativas desde `database/`.
 | [migration_integrations_settings.sql](agora/migration_integrations_settings.sql) | Configuración integraciones |
 | [migration_integration_logs.sql](agora/migration_integration_logs.sql) / migration_integration_logs_apply.sql | Logs de integración |
 | [migration_branch_notification_settings.sql](agora/migration_branch_notification_settings.sql) (+ apply) | Notificaciones por sucursal |
+| [migration_business_group_notification_settings.sql](agora/migration_business_group_notification_settings.sql) | Notificaciones por grupo (tienda por grupo) |
 | [migration_email_templates.sql](agora/migration_email_templates.sql) | Templates de correo |
 | [migration_notification_type_email_triggers.sql](agora/migration_notification_type_email_triggers.sql) | Triggers notificación/email |
 | [migration_landing_sliders.sql](agora/migration_landing_sliders.sql) | Sliders de landing |

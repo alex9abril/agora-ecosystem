@@ -11,6 +11,12 @@ interface BusinessSummary {
   is_active: boolean;
   can_access: boolean;
   assigned_at: string;
+  /** Si la tienda (store) de esta sucursal está archivada; no mostrarla en selector ni listados */
+  store_archived?: boolean;
+  /** Si la sucursal (business) está archivada; no mostrarla en selector ni listados */
+  business_archived?: boolean;
+  /** Capacidades de surtir/asignar pedidos (fulfillment) */
+  capabilities?: { can_fulfill?: boolean; can_assign_fulfillment?: boolean };
   // Campos opcionales que pueden venir del backend completo
   category?: string;
   business_address?: string;
@@ -90,15 +96,15 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
         setTimeout(() => reject(new Error('Timeout: La petición tardó demasiado')), 10000);
       });
       
-      const businesses = await Promise.race([
+      const raw = await Promise.race([
         usersService.getUserBusinessesSummary(user.id),
         timeoutPromise
       ]) as any[];
-      
-      setAvailableBusinesses(businesses);
 
-      // Filtrar solo las tiendas activas y accesibles
+      // Solo sucursales a las que el usuario tiene permiso: no archivadas (ni tienda ni sucursal), activas y con acceso
+      const businesses = raw.filter((b) => !b.store_archived && !b.business_archived);
       const activeBusinesses = businesses.filter(b => b.can_access && b.is_active);
+      setAvailableBusinesses(activeBusinesses);
 
       // Intentar recuperar la tienda guardada (nuevo formato con datos o formato antiguo solo UUID)
       let savedBusinessId: string | null = null;
@@ -277,11 +283,25 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
     }
   }, [user, token]);
 
+  // Si la sucursal seleccionada ya no está en la lista permitida, limpiar selección
+  // para evitar mensajes "No tienes autorización" en peticiones posteriores
+  useEffect(() => {
+    if (!selectedBusiness || availableBusinesses.length === 0) return;
+    const stillPermitted = availableBusinesses.some((b) => b.business_id === selectedBusiness.business_id);
+    if (!stillPermitted) {
+      setSelectedBusiness(null);
+      localStorage.removeItem(STORAGE_KEY_ID);
+      localStorage.removeItem(STORAGE_KEY_DATA);
+      localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
+      localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
+    }
+  }, [availableBusinesses, selectedBusiness?.business_id]);
+
   return (
     <SelectedBusinessContext.Provider
       value={{
         selectedBusiness,
-        availableBusinesses: availableBusinesses.filter(b => b.can_access && b.is_active),
+        availableBusinesses,
         isLoading,
         selectBusiness,
         refreshBusinesses: loadBusinesses,

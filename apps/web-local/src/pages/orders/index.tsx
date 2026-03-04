@@ -704,9 +704,6 @@ export default function OrdersPage() {
                         <th scope="col" className="px-4 py-1.5 text-left text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Número
                         </th>
-                        <th scope="col" className="px-4 py-1.5 text-left text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                          Fecha
-                        </th>
                         {(!selectedBusiness?.business_id && isAdmin) && (
                           <th scope="col" className="px-4 py-1.5 text-left text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Sucursal
@@ -727,6 +724,9 @@ export default function OrdersPage() {
                         <th scope="col" className="px-4 py-1.5 text-left text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Canal
                         </th>
+                        <th scope="col" className="px-4 py-1.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Fecha
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-neutral-800 divide-y divide-gray-200 dark:divide-neutral-700">
@@ -744,9 +744,6 @@ export default function OrdersPage() {
                       >
                         <td className="px-4 py-1.5 whitespace-nowrap text-xs font-normal text-gray-900 dark:text-gray-100">
                           #{order.id.slice(-8).toUpperCase()}
-                        </td>
-                        <td className="px-4 py-1.5 whitespace-nowrap text-xs font-normal text-gray-500 dark:text-gray-400">
-                          {formatDate(order.created_at)}
                         </td>
                         {(!selectedBusiness?.business_id && isAdmin) && (
                           <td className="px-4 py-1.5 whitespace-nowrap text-xs font-normal text-gray-900 dark:text-gray-100">
@@ -769,6 +766,9 @@ export default function OrdersPage() {
                         </td>
                         <td className="px-4 py-1.5 whitespace-nowrap text-xs font-normal text-gray-500 dark:text-gray-400">
                           Web
+                        </td>
+                        <td className="px-4 py-1.5 whitespace-nowrap text-xs font-semibold text-gray-900 dark:text-gray-100">
+                          {formatDate(order.created_at)}
                         </td>
                       </tr>
                     );

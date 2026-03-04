@@ -160,7 +160,8 @@ Rutas relativas desde `docs/`.
 | [README.md](./contexto-trabajo/README.md) | Uso de contexto de trabajo |
 | [correo-confirmacion-pedido.md](./contexto-trabajo/correo-confirmacion-pedido.md) | Estado y decisiones: correo confirmación pedido |
 | [01-definicion-modulo-configuracion-por-marca.md](./contexto-trabajo/01-definicion-modulo-configuracion-por-marca.md) | Definición (GRIANT): configuración y branding por marca (tienda por marca) |
-| [02-multitienda-reglas-gestion-y-fulfillment.md](./contexto-trabajo/02-multitienda-reglas-gestion-y-fulfillment.md) | Reglas MultiTienda: quién gestiona qué, cuentas (grupo vs marca), fulfillment por sucursal, visibilidad ventas, margen global |
+| [02-multitienda-reglas-gestion-y-fulfillment.md](./contexto-trabajo/02-multitienda-reglas-gestion-y-fulfillment.md) | Reglas MultiTienda: quién gestiona qué, cuentas (grupo vs marca), fulfillment por distribuidor, visibilidad ventas, margen global |
+| [03-tiendas-y-distribuidores.md](./contexto-trabajo/03-tiendas-y-distribuidores.md) | **Tiendas vs distribuidores:** tienda = canal de venta; distribuidor = quien tiene producto en almacén (puede no tener tienda propia y estar montado en una o más tiendas) |
 
 ---
 

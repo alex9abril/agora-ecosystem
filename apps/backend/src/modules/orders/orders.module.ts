@@ -8,9 +8,10 @@ import { SettingsModule } from '../settings/settings.module';
 import { EmailModule } from '../email/email.module';
 import { BusinessesModule } from '../businesses/businesses.module';
 import { StoresModule } from '../stores/stores.module';
+import { BusinessUsersModule } from '../business-users/business-users.module';
 
 @Module({
-  imports: [TaxesModule, WalletModule, KarlopayModule, SettingsModule, EmailModule, BusinessesModule, StoresModule],
+  imports: [TaxesModule, WalletModule, KarlopayModule, SettingsModule, EmailModule, BusinessesModule, StoresModule, BusinessUsersModule],
   controllers: [OrdersController],
   providers: [OrdersService],
   exports: [OrdersService],

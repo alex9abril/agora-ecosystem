@@ -7,7 +7,6 @@ import { businessService } from '@/lib/business';
 import Topbar from './Topbar';
 import Sidebar from './Sidebar';
 import BusinessSetupWizard from '../BusinessSetupWizard';
-import BusinessSelector from '../BusinessSelector';
 import ProfilePanel from '../profile/ProfilePanel';
 
 interface LocalLayoutProps {
@@ -32,14 +31,6 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
   const [showWizard, setShowWizard] = useState(false);
   const [userRole, setUserRole] = useState<'superadmin' | 'admin' | 'operations_staff' | 'kitchen_staff' | null>(null);
   const isValidatingRef = useRef(false);
-
-  const isGlobalModeSelected = () => {
-    if (typeof window === 'undefined') return false;
-    return (
-      localStorage.getItem('agora_global_mode') === 'true' ||
-      localStorage.getItem('localia_global_mode') === 'true'
-    );
-  };
 
   // Si no está autenticado Y ya terminó de cargar completamente, redirigir al login
   // Esto evita redirecciones prematuras mientras se carga desde localStorage
@@ -240,15 +231,7 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
       );
     }
 
-    // Si tiene múltiples tiendas y no hay una seleccionada, mostrar selector
-    // PERO solo si el usuario no eligió modo global previamente
-    if (availableBusinesses.length > 1 && !selectedBusiness) {
-      const globalMode = isGlobalModeSelected();
-      if (!globalMode) {
-        return <BusinessSelector />;
-      }
-      // Si eligió modo global, continuar sin mostrar selector
-    }
+    // Siempre entrar en modo global: no mostrar selector de sucursal aunque haya varias tiendas
 
     // Si tiene una tienda pero no está seleccionada (no debería pasar, pero por si acaso)
     if (availableBusinesses.length === 1 && !selectedBusiness) {
@@ -276,30 +259,27 @@ export default function LocalLayout({ children }: LocalLayoutProps) {
     return <BusinessSetupWizard onComplete={handleWizardComplete} />;
   }
 
-  // Si es superadmin y tiene múltiples tiendas sin seleccionar, mostrar selector
-  // PERO solo si el usuario no eligió modo global previamente
-  if (userRole === 'superadmin' && availableBusinesses.length > 1 && !selectedBusiness) {
-    const globalMode = isGlobalModeSelected();
-    if (!globalMode) {
-      return <BusinessSelector />;
-    }
-    // Si eligió modo global, continuar sin mostrar selector
-  }
+  // Siempre modo global: no mostrar selector de sucursal
 
-  // Si tiene tienda seleccionada, es superadmin (puede trabajar sin tienda), o tiene una sola tienda, mostrar layout normal
-  if (selectedBusiness || userRole === 'superadmin' || availableBusinesses.length === 1) {
+  // Mostrar layout normal si tiene al menos una tienda, es superadmin o tiene una seleccionada (siempre entramos en global)
+  if (selectedBusiness || userRole === 'superadmin' || availableBusinesses.length >= 1) {
+    // Asegurar modo global cuando hay varias tiendas y ninguna seleccionada
+    if (typeof window !== 'undefined' && availableBusinesses.length > 1 && !selectedBusiness) {
+      localStorage.setItem('agora_global_mode', 'true');
+      localStorage.setItem('localia_global_mode', 'true');
+    }
     return (
-      <div className="flex h-screen bg-gray-50 dark:bg-neutral-900">
+      <div className="flex min-h-screen bg-gray-50 dark:bg-neutral-900">
         {/* Sidebar izquierdo */}
         <Sidebar />
 
-        {/* Contenido principal */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Contenido principal: crece con el contenido, scroll nativo del navegador */}
+        <div className="flex-1 flex flex-col min-h-screen">
           {/* Topbar */}
           <Topbar />
 
           {/* Contenido principal: tono distinto al nav/header */}
-          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-neutral-900">
+          <main className="flex-1 bg-gray-50 dark:bg-neutral-900">
             {children}
           </main>
         </div>

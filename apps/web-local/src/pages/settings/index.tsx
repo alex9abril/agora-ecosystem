@@ -114,12 +114,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (isLoading || loading) return;
-    if (!selectedBusiness) {
+    if (!user) {
       router.push('/auth/login');
       return;
     }
+    // Permitir acceso si es superadmin en alguna tienda aunque no tenga sucursal seleccionada
+    const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
+    if (!selectedBusiness && !hasSuperadminRole) {
+      router.push('/');
+      return;
+    }
     if (!canManageSettings) router.push('/');
-  }, [isLoading, loading, selectedBusiness, canManageSettings, router]);
+  }, [isLoading, loading, user, selectedBusiness, canManageSettings, availableBusinesses, router]);
 
   const role = selectedBusiness?.role ?? 'operations_staff';
   const isOperator = isOperatorRole(role);

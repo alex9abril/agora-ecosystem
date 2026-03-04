@@ -15,9 +15,15 @@ export default function NewCollectionPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
 
+  const businessIdFromQuery = router.query.businessId as string | undefined;
+  const contextNameFromQuery = router.query.contextName as string | undefined;
+  const returnTo = router.query.returnTo as string | undefined;
+  const effectiveBusinessId = businessIdFromQuery || selectedBusiness?.business_id;
+  const subtitle = contextNameFromQuery || selectedBusiness?.business_name || 'Sucursal';
+
   const handleSubmit = async (values: CollectionFormState) => {
-    if (!selectedBusiness?.business_id) {
-      setFormError('Selecciona una sucursal para guardar la colección');
+    if (!effectiveBusinessId) {
+      setFormError('Selecciona una sucursal o abre esta página desde Tiendas para guardar la colección');
       return;
     }
     try {
@@ -26,7 +32,7 @@ export default function NewCollectionPage() {
       const created = await productCollectionsService.create({
         ...values,
         image_url: pendingImageFile ? undefined : values.image_url,
-        business_id: selectedBusiness.business_id,
+        business_id: effectiveBusinessId,
       });
       if (pendingImageFile) {
         if (!token) {
@@ -50,7 +56,11 @@ export default function NewCollectionPage() {
           throw new Error(error.message || 'Error al subir la imagen');
         }
       }
-      router.push('/catalog/collections');
+      if (returnTo) {
+        router.push(returnTo);
+      } else {
+        router.push('/catalog/collections');
+      }
     } catch (error: any) {
       setFormError(error?.message || 'No se pudo guardar la colección');
     } finally {
@@ -68,25 +78,25 @@ export default function NewCollectionPage() {
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={() => router.push('/catalog/collections')}
-            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            onClick={() => (returnTo ? router.push(returnTo) : router.push('/catalog/collections'))}
+            className="rounded-md border border-gray-200 dark:border-neutral-600 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-neutral-800"
           >
             ← Volver
           </button>
         </div>
 
-        {!selectedBusiness?.business_id ? (
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Selecciona una sucursal para crear una colección.
+        {!effectiveBusinessId ? (
+          <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            Selecciona una sucursal o abre esta página desde Tiendas (pestaña Colecciones de una tienda por distribuidor) para crear una colección.
           </div>
         ) : (
           <CollectionForm
             title="Nueva colección"
-            subtitle={`Sucursal ${selectedBusiness.business_name}`}
+            subtitle={subtitle}
             initialValues={{ name: '', slug: '', status: 'active', image_url: '', description: '' }}
             onImageFileChange={setPendingImageFile}
             onSubmit={handleSubmit}
-            onCancel={() => router.push('/catalog/collections')}
+            onCancel={() => (returnTo ? router.push(returnTo) : router.push('/catalog/collections'))}
             saving={saving}
             error={formError}
           />
