@@ -638,6 +638,8 @@ export default function OrderDetailPage() {
       requiresConfirmation?: boolean;
       isPaymentAction?: boolean; // Indica si es una acción de pago
       isNavigationAction?: boolean; // Indica que debe navegar en lugar de cambiar estado
+      disabled?: boolean; // Deshabilita el botón (ej. pedido no pagado)
+      disabledReason?: string; // Mensaje para tooltip cuando está deshabilitado
     }> = [];
 
     // Definir acciones según el estado actual
@@ -668,16 +670,22 @@ export default function OrderDetailPage() {
         const hasPendingTx = (orderData.payment_transactions ?? []).some(
           (t: any) => (t.status ?? t.transaction_status ?? '') === 'pending'
         );
-        // Solo permitir surtir si está totalmente pagado y ninguna transacción pendiente
-        if (paymentStatus === 'paid' && !hasPendingTx) {
-          actions.push({
-            status: 'prepare',
-            label: 'Surtir pedido',
-            color: 'bg-black hover:bg-gray-800 text-white',
-            isPrimary: true,
-            isNavigationAction: true,
-          });
-        }
+        const canSurtirByPayment = paymentStatus === 'paid' && !hasPendingTx;
+        // Siempre mostrar "Surtir pedido"; deshabilitar si no está pagado o hay transacciones pendientes
+        const surtirDisabledReason = !canSurtirByPayment
+          ? hasPendingTx
+            ? 'Hay transacciones de pago pendientes. El pedido debe estar totalmente cobrado para surtir.'
+            : 'El pedido debe estar totalmente pagado para poder surtir.'
+          : undefined;
+        actions.push({
+          status: 'prepare',
+          label: 'Surtir pedido',
+          color: 'bg-black hover:bg-gray-800 text-white',
+          isPrimary: true,
+          isNavigationAction: true,
+          disabled: !canSurtirByPayment,
+          disabledReason: surtirDisabledReason,
+        });
         actions.push({
           status: 'cancelled',
           label: 'Cancelar pedido',
@@ -807,16 +815,27 @@ export default function OrderDetailPage() {
               <div className="flex items-center gap-3">
                 {nextActions.map((action) => {
                   const disabledByFulfill = !canFulfill && !action.isPaymentAction;
+                  const isDisabled = action.disabled === true || disabledByFulfill || updating;
+                  const tooltip = isDisabled
+                    ? (action.disabledReason
+                        ? action.disabledReason
+                        : disabledByFulfill
+                          ? 'No tienes permiso para surtir pedidos en esta sucursal. Para habilitarlo: Configuración → Usuarios → Editar permisos de tu usuario en esta sucursal y activa "Puede surtir pedidos".'
+                          : updating
+                            ? 'Procesando...'
+                            : undefined)
+                    : undefined;
                   return (
                   <button
                     key={action.status}
-                    disabled={disabledByFulfill || updating}
+                    disabled={isDisabled}
+                    title={tooltip}
                     onClick={() => {
                       if (action.isPaymentAction) {
                         handleConfirmPayment();
-                      } else if (action.isNavigationAction) {
+                      } else if (action.isNavigationAction && !action.disabled) {
                         router.push(`/orders/${order.id}/prepare`);
-                      } else {
+                      } else if (!action.disabled) {
                         handleStatusUpdate(action.status, action.requiresConfirmation);
                       }
                     }}

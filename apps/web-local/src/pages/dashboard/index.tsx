@@ -100,7 +100,7 @@ export default function DashboardPage() {
       const role = selectedBusiness.role as BusinessRole;
       const defaultRoute = getDefaultRouteForRole(role);
       
-      // Solo redirigir si no es superadmin o admin
+      // Solo redirigir si no es superadmin o admin (el menú ya no muestra Dashboard a estos roles)
       if (role === 'operations_staff' || role === 'kitchen_staff') {
         router.push(defaultRoute);
       }

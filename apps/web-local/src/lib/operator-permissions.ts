@@ -85,6 +85,16 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   reports: 'Estadísticas / Reportes',
 };
 
+/** Descripciones cortas para cada módulo (permiso) */
+export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
+  products: 'Ver, crear y editar productos; precios y disponibilidad por sucursal.',
+  clients: 'Consultar y gestionar clientes del negocio.',
+  orders: 'Ver y gestionar pedidos (confirmar, surtir, cancelar según rol).',
+  sliders: 'Gestionar banners y sliders de la tienda.',
+  collections: 'Gestionar colecciones y catálogo.',
+  reports: 'Ver estadísticas, reportes y dashboards.',
+};
+
 /** Labels para UI (settings) */
 export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   store: 'Datos de la tienda',
@@ -101,10 +111,32 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   channel_stores: 'Tiendas por grupo/marca',
 };
 
+/** Descripciones cortas para cada área de configuración */
+export const SETTINGS_DESCRIPTIONS: Record<SettingsKey, string> = {
+  store: 'Nombre, dirección, horarios y datos generales de la tienda.',
+  branches: 'Alta y edición de sucursales o distribuidores.',
+  branches_taxes: 'Configurar impuestos por sucursal.',
+  branches_integrations_karlopay: 'Configurar pagos con Karlopay por sucursal.',
+  branches_integrations_karbot: 'Configurar integración Karbot por sucursal.',
+  branches_notifications: 'Ajustar notificaciones por sucursal.',
+  wallet: 'Configurar monedero electrónico del negocio.',
+  vehicle: 'Gestionar marcas y modelos de vehículos (catálogo).',
+  emails: 'Plantillas y configuración de correos.',
+  users: 'Invitar usuarios y asignar permisos por tienda/sucursal.',
+  permissions_groups: 'Crear y editar grupos de permisos.',
+  channel_stores: 'Gestionar tiendas por grupo o por marca.',
+};
+
 /** Labels para UI (capabilities - surtir / asignar surtidores) */
 export const CAPABILITIES_LABELS: Record<CapabilityKey, string> = {
   can_fulfill: 'Puede surtir pedidos',
   can_assign_fulfillment: 'Puede asignar pedidos a surtidores',
+};
+
+/** Descripciones cortas para cada capacidad */
+export const CAPABILITIES_DESCRIPTIONS: Record<CapabilityKey, string> = {
+  can_fulfill: 'Permite surtir pedidos confirmados, validar precios y disponibilidad en esta sucursal.',
+  can_assign_fulfillment: 'Permite asignar pedidos a otros surtidores o marcar quién surte cada pedido.',
 };
 
 /**

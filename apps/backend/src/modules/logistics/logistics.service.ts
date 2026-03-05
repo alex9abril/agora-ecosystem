@@ -100,6 +100,21 @@ export class LogisticsService {
   }
 
   /**
+   * Parsear dimensiones de paquete "LxWxH cm" a { length, width, height } en cm.
+   * Por defecto 30x20x15 si el formato no es válido.
+   */
+  private parsePackageDimensions(dimensions: string | undefined): { length: number; width: number; height: number } {
+    const def = { length: 30, width: 20, height: 15 };
+    if (!dimensions || typeof dimensions !== 'string') return def;
+    const match = dimensions.trim().match(/^(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+    if (!match) return def;
+    const length = Math.max(1, Math.round(parseFloat(match[1])));
+    const width = Math.max(1, Math.round(parseFloat(match[2])));
+    const height = Math.max(1, Math.round(parseFloat(match[3])));
+    return { length, width, height };
+  }
+
+  /**
    * Generar número de guía único
    */
   private generateTrackingNumber(): string {
@@ -481,7 +496,7 @@ export class LogisticsService {
       }
 
       const hasRateId = itemsResult.rows.some(row => row.rate_id);
-      const rateId = hasRateId ? itemsResult.rows.find(row => row.rate_id)?.rate_id : null;
+      let rateId = hasRateId ? itemsResult.rows.find(row => row.rate_id)?.rate_id : null;
       const quotationId = itemsResult.rows[0]?.quotation_id || null;
       const shippingCarrier = itemsResult.rows[0]?.shipping_carrier || null;
       const shippingService = itemsResult.rows[0]?.shipping_service || null;
@@ -501,42 +516,65 @@ export class LogisticsService {
       let pdfPath: string | null = null;
       let shipmentMetadata: any = null;
 
+      // Direcciones para Skydropx (cotización y/o envío)
+      const addressFrom: any = {
+        country_code: order.business_country === 'México' ? 'MX' : (order.business_country || 'MX'),
+        postal_code: order.business_postal_code || '',
+        area_level1: order.business_state || '',
+        area_level2: order.business_city || '',
+        area_level3: order.business_neighborhood || '',
+        street1: `${order.business_street || ''} ${order.business_street_number || ''}`.trim() || '',
+        internal_number: order.business_interior_number || '',
+        reference: order.business_neighborhood || order.business_city || 'Sin referencia',
+        name: order.business_name || '',
+        company: order.business_name || '',
+        phone: order.business_phone || '5550000000',
+        email: order.business_email || '',
+      };
+      const addressTo: any = {
+        country_code: order.delivery_country === 'México' ? 'MX' : (order.delivery_country || 'MX'),
+        postal_code: order.delivery_postal_code || '',
+        area_level1: order.delivery_state || '',
+        area_level2: order.delivery_city || '',
+        area_level3: order.delivery_neighborhood || '',
+        street1: `${order.delivery_street || ''} ${order.delivery_street_number || ''}`.trim() || '',
+        internal_number: order.delivery_interior_number || '',
+        reference: (order.delivery_references || order.delivery_neighborhood || order.delivery_city || 'Sin referencia').substring(0, 30),
+        name: order.client_name || '',
+        company: '',
+        phone: order.client_phone || '5550000000',
+        email: order.client_email || '',
+      };
+
+      // Si no hay rate_id en items, intentar obtener cotización en Skydropx y usar el primer rate
+      if (!rateId) {
+        try {
+          const dims = this.parsePackageDimensions(createDto.packageDimensions);
+          const weightKg = createDto.packageWeight ?? 1.0;
+          const parcels = [{ length: dims.length, width: dims.width, height: dims.height, weight: weightKg }];
+          const { quotations } = await this.skydropxService.getQuotations({
+            quotation: {
+              address_from: addressFrom,
+              address_to: addressTo,
+              parcels,
+              requested_carriers: [],
+            },
+          });
+          if (quotations?.length > 0) {
+            const first = quotations[0];
+            rateId = first.id;
+            if (!shippingCarrier && first.carrier) carrierName = first.carrier;
+            this.logger.log(`📦 Rate obtenido por cotización (orden sin rate en items): ${rateId} (${first.carrier})`);
+          }
+        } catch (quotationError: any) {
+          this.logger.warn(`⚠️ No se pudo obtener cotización Skydropx (se usará método simulado si no hay rate): ${quotationError.message}`);
+        }
+      }
+
       // 3. Si hay rate_id, usar Skydropx para crear el envío
       if (rateId) {
         try {
           this.logger.log(`🚚 Creando envío en Skydropx con rate_id: ${rateId}`);
-          
-          // Construir dirección de origen (negocio)
-          const addressFrom: any = {
-            country_code: order.business_country === 'México' ? 'MX' : (order.business_country || 'MX'),
-            postal_code: order.business_postal_code || '',
-            area_level1: order.business_state || '',
-            area_level2: order.business_city || '',
-            area_level3: order.business_neighborhood || '',
-            street1: `${order.business_street || ''} ${order.business_street_number || ''}`.trim() || '',
-            internal_number: order.business_interior_number || '',
-            reference: order.business_neighborhood || order.business_city || 'Sin referencia', // Valor por defecto si está vacío
-            name: order.business_name || '',
-            company: order.business_name || '',
-            phone: order.business_phone || '5550000000', // Valor por defecto si está vacío
-            email: order.business_email || '',
-          };
-
-          // Construir dirección de destino (cliente)
-          const addressTo: any = {
-            country_code: order.delivery_country === 'México' ? 'MX' : (order.delivery_country || 'MX'),
-            postal_code: order.delivery_postal_code || '',
-            area_level1: order.delivery_state || '',
-            area_level2: order.delivery_city || '',
-            area_level3: order.delivery_neighborhood || '',
-            street1: `${order.delivery_street || ''} ${order.delivery_street_number || ''}`.trim() || '',
-            internal_number: order.delivery_interior_number || '',
-            reference: (order.delivery_references || order.delivery_neighborhood || order.delivery_city || 'Sin referencia').substring(0, 30), // Máximo 30 caracteres, con valor por defecto
-            name: order.client_name || '',
-            company: '',
-            phone: order.client_phone || '5550000000', // Valor por defecto si está vacío
-            email: order.client_email || '',
-          };
 
           // Construir productos para el paquete
           const products = itemsResult.rows.map((item: any) => {

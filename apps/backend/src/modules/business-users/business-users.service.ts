@@ -428,21 +428,27 @@ export class BusinessUsersService {
   }
 
   /**
-   * Verificar si el usuario puede surtir pedidos para el negocio (can_fulfill en capabilities
-   * o fila en user_fulfillment_scope si existe la tabla).
+   * Verificar si el usuario puede surtir pedidos para el negocio.
+   * Devuelve true si: es superadmin/admin del negocio, tiene can_fulfill en capabilities,
+   * o tiene fila en user_fulfillment_scope (si existe la tabla).
    */
   async userCanFulfillForBusiness(userId: string, businessId: string): Promise<boolean> {
     if (!dbPool) {
       return false;
     }
     try {
-      const result = await dbPool.query<{ permissions: Record<string, unknown> }>(
-        `SELECT permissions FROM core.business_users
+      const result = await dbPool.query<{ role: string; permissions: Record<string, unknown> }>(
+        `SELECT role, permissions FROM core.business_users
          WHERE user_id = $1 AND business_id = $2 AND is_active = TRUE`,
         [userId, businessId]
       );
       if (result.rows.length > 0) {
-        const permissions = result.rows[0].permissions ?? {};
+        const row = result.rows[0];
+        // Superadmin y admin tienen permiso completo para surtir en ese negocio
+        if (row.role === 'superadmin' || row.role === 'admin') {
+          return true;
+        }
+        const permissions = row.permissions ?? {};
         const capabilities = (permissions.capabilities as { can_fulfill?: boolean }) ?? {};
         if (capabilities.can_fulfill === true) return true;
       }

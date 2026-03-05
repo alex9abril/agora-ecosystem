@@ -209,7 +209,7 @@ export function getDefaultRouteForRole(role: BusinessRole): string {
     case 'admin':
       return '/dashboard';
     case 'operations_staff':
-      return '/operations';
+      return '/orders';
     case 'kitchen_staff':
       return '/kitchen';
     default:

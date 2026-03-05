@@ -35,6 +35,7 @@ export default function OrdersPage() {
     completed: 0,
     in_transit: 0,
     delivered: 0,
+    readyToFulfill: 0,
     totalRevenue: 0,
   });
 
@@ -156,6 +157,7 @@ export default function OrdersPage() {
             completed: allOrders.filter(o => (o as any).status === 'completed').length,
             in_transit: allOrders.filter(o => o.status === 'in_transit').length,
             delivered: allOrders.filter(o => o.status === 'delivered').length,
+            readyToFulfill: allOrders.filter(o => (o.payment_status === 'paid' || o.payment_status === 'overcharged') && o.status === 'confirmed').length,
             totalRevenue: allOrders
               .filter(o => o.payment_status === 'paid' || o.payment_status === 'overcharged')
               .reduce((sum, o) => sum + parseFloat(o.total_amount.toString()), 0),
@@ -202,6 +204,7 @@ export default function OrdersPage() {
         completed: ordersData.filter(o => (o as any).status === 'completed').length,
         in_transit: ordersData.filter(o => o.status === 'in_transit').length,
         delivered: ordersData.filter(o => o.status === 'delivered').length,
+        readyToFulfill: ordersData.filter(o => (o.payment_status === 'paid' || o.payment_status === 'overcharged') && o.status === 'confirmed').length,
         totalRevenue: ordersData
           .filter(o => o.payment_status === 'paid' || o.payment_status === 'overcharged')
           .reduce((sum, o) => sum + parseFloat(o.total_amount.toString()), 0),
@@ -239,6 +242,58 @@ export default function OrdersPage() {
       e.preventDefault();
     }
     setSearchTerm(searchInput.trim());
+  };
+
+  type StatFilterKey = 'all' | 'pending' | 'readyToFulfill' | 'completed' | 'in_transit' | 'paid';
+  const handleStatCardClick = (key: StatFilterKey) => {
+    setCurrentPage(1);
+    switch (key) {
+      case 'all':
+        setStatusFilter('all');
+        setPaymentStatusFilter('all');
+        break;
+      case 'pending':
+        setStatusFilter('pending');
+        setPaymentStatusFilter('all');
+        break;
+      case 'readyToFulfill':
+        setStatusFilter('confirmed');
+        setPaymentStatusFilter('paid');
+        break;
+      case 'completed':
+        setStatusFilter('completed');
+        setPaymentStatusFilter('all');
+        break;
+      case 'in_transit':
+        setStatusFilter('in_transit');
+        setPaymentStatusFilter('all');
+        break;
+      case 'paid':
+        setStatusFilter('all');
+        setPaymentStatusFilter('paid');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const isStatCardActive = (key: StatFilterKey): boolean => {
+    switch (key) {
+      case 'all':
+        return statusFilter === 'all' && paymentStatusFilter === 'all';
+      case 'pending':
+        return statusFilter === 'pending' && paymentStatusFilter === 'all';
+      case 'readyToFulfill':
+        return statusFilter === 'confirmed' && paymentStatusFilter === 'paid';
+      case 'completed':
+        return statusFilter === 'completed' && paymentStatusFilter === 'all';
+      case 'in_transit':
+        return statusFilter === 'in_transit' && paymentStatusFilter === 'all';
+      case 'paid':
+        return statusFilter === 'all' && paymentStatusFilter === 'paid';
+      default:
+        return false;
+    }
   };
 
   const getStatusBadge = (status: Order['status']) => {
@@ -478,8 +533,8 @@ export default function OrdersPage() {
             <Skeleton className="h-8 w-28 mb-2" />
             <Skeleton className="h-4 w-64" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
@@ -520,9 +575,17 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-4">
+        {/* Estadísticas rápidas (clic filtra la tabla) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('all')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-neutral-500 ${
+              isStatCardActive('all')
+                ? 'border-gray-900 dark:border-neutral-100 ring-2 ring-gray-900 dark:ring-neutral-100'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total de pedidos</p>
@@ -534,9 +597,17 @@ export default function OrdersPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-4">
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('pending')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-yellow-500 ${
+              isStatCardActive('pending')
+                ? 'border-yellow-600 dark:border-yellow-500 ring-2 ring-yellow-600 dark:ring-yellow-500'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pendientes</p>
@@ -548,9 +619,39 @@ export default function OrdersPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-4">
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('readyToFulfill')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              isStatCardActive('readyToFulfill')
+                ? 'border-blue-600 dark:border-blue-500 ring-2 ring-blue-600 dark:ring-blue-500'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Listos para surtir</p>
+                <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400 mt-1">{stats.readyToFulfill}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('completed')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
+              isStatCardActive('completed')
+                ? 'border-green-600 dark:border-green-500 ring-2 ring-green-600 dark:ring-green-500'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completados</p>
@@ -562,9 +663,17 @@ export default function OrdersPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-4">
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('in_transit')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+              isStatCardActive('in_transit')
+                ? 'border-orange-600 dark:border-orange-500 ring-2 ring-orange-600 dark:ring-orange-500'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">En tránsito</p>
@@ -576,9 +685,17 @@ export default function OrdersPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-4">
+          <button
+            type="button"
+            onClick={() => handleStatCardClick('paid')}
+            className={`text-left bg-white dark:bg-neutral-800 rounded-lg border p-4 transition-all hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
+              isStatCardActive('paid')
+                ? 'border-green-600 dark:border-green-500 ring-2 ring-green-600 dark:ring-green-500'
+                : 'border-gray-200 dark:border-neutral-700 hover:border-gray-300 dark:hover:border-neutral-600'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ingresos totales</p>
@@ -590,7 +707,7 @@ export default function OrdersPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Filtros y búsqueda */}

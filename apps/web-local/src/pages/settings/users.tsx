@@ -13,8 +13,11 @@ import {
   SETTINGS_KEYS,
   MODULE_LABELS,
   SETTINGS_LABELS,
+  MODULE_DESCRIPTIONS,
+  SETTINGS_DESCRIPTIONS,
   CAPABILITIES_KEYS,
   CAPABILITIES_LABELS,
+  CAPABILITIES_DESCRIPTIONS,
   normalizeOperatorPermissions,
   type OperatorPermissions,
   type ModuleKey,
@@ -849,54 +852,66 @@ export default function UsersSettingsPage() {
                 <div className="p-6">
                   <h2 className="text-xl font-normal text-gray-900 mb-2">Editar permisos (Operador)</h2>
                   <p className="text-sm text-gray-500 mb-4">{editPermissionsFor.businessName}</p>
-                  <div className="space-y-4 mb-6">
+                  <div className="space-y-6 mb-6">
                     <div>
-                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Módulos</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Módulos</p>
+                      <ul className="space-y-2.5 list-none">
                         {MODULE_KEYS.map((key) => (
-                          <label key={key} className="inline-flex items-center gap-1">
+                          <li key={key} className="flex gap-3">
                             <input
+                              id={`edit-module-${key}`}
                               type="checkbox"
                               checked={editPermissionsValue.modules?.[key] === true}
                               onChange={(e) => setEditPermission('modules', key, e.target.checked)}
-                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
                             />
-                            <span>{MODULE_LABELS[key]}</span>
-                          </label>
+                            <label htmlFor={`edit-module-${key}`} className="cursor-pointer flex-1">
+                              <span className="block text-sm font-medium text-gray-900">{MODULE_LABELS[key]}</span>
+                              <span className="block text-xs text-gray-500 mt-0.5">{MODULE_DESCRIPTIONS[key]}</span>
+                            </label>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Configuración</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Configuración</p>
+                      <ul className="space-y-2.5 list-none">
                         {SETTINGS_KEYS.map((key) => (
-                          <label key={key} className="inline-flex items-center gap-1">
+                          <li key={key} className="flex gap-3">
                             <input
+                              id={`edit-settings-${key}`}
                               type="checkbox"
                               checked={editPermissionsValue.settings?.[key] === true}
                               onChange={(e) => setEditPermission('settings', key, e.target.checked)}
-                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
                             />
-                            <span>{SETTINGS_LABELS[key]}</span>
-                          </label>
+                            <label htmlFor={`edit-settings-${key}`} className="cursor-pointer flex-1">
+                              <span className="block text-sm font-medium text-gray-900">{SETTINGS_LABELS[key]}</span>
+                              <span className="block text-xs text-gray-500 mt-0.5">{SETTINGS_DESCRIPTIONS[key]}</span>
+                            </label>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-500 uppercase mb-2">Capacidades</p>
-                      <div className="flex flex-wrap gap-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Capacidades</p>
+                      <ul className="space-y-2.5 list-none">
                         {CAPABILITIES_KEYS.map((key) => (
-                          <label key={key} className="inline-flex items-center gap-1">
+                          <li key={key} className="flex gap-3">
                             <input
+                              id={`edit-cap-${key}`}
                               type="checkbox"
                               checked={editPermissionsValue.capabilities?.[key] === true}
                               onChange={(e) => setEditPermission('capabilities', key, e.target.checked)}
-                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                              className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
                             />
-                            <span>{CAPABILITIES_LABELS[key]}</span>
-                          </label>
+                            <label htmlFor={`edit-cap-${key}`} className="cursor-pointer flex-1">
+                              <span className="block text-sm font-medium text-gray-900">{CAPABILITIES_LABELS[key]}</span>
+                              <span className="block text-xs text-gray-500 mt-0.5">{CAPABILITIES_DESCRIPTIONS[key]}</span>
+                            </label>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </div>
                   </div>
                   <div className="flex justify-end gap-3">
