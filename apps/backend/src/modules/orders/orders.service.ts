@@ -131,41 +131,55 @@ export class OrdersService {
       const orderGroupIdResult = await client.query('SELECT gen_random_uuid() as id');
       const orderGroupId = orderGroupIdResult.rows[0].id;
 
-      // 6. Validar dirección (una sola vez, se usa para todas las órdenes)
-      const addressResult = await client.query(
-        `SELECT 
-          id,
-          street,
-          street_number,
-          neighborhood,
-          city,
-          state,
-          postal_code,
-          country,
-          location,
-          (location)[0] as longitude,
-          (location)[1] as latitude
-        FROM core.addresses
-        WHERE id = $1 AND user_id = $2 AND is_active = TRUE`,
-        [checkoutDto.addressId, userId]
-      );
+      const isPickup = checkoutDto.deliveryType === 'pickup' || !checkoutDto.addressId;
+      let addressText: string;
+      let deliveryAddressId: string | null;
+      let deliveryLongitude: number | null;
+      let deliveryLatitude: number | null;
 
-      if (addressResult.rows.length === 0) {
-        throw new NotFoundException('Dirección no encontrada');
+      if (isPickup) {
+        addressText = 'Recoger en tienda';
+        deliveryAddressId = null;
+        deliveryLongitude = null;
+        deliveryLatitude = null;
+      } else {
+        // 6. Validar dirección (una sola vez, se usa para todas las órdenes)
+        const addressResult = await client.query(
+          `SELECT 
+            id,
+            street,
+            street_number,
+            neighborhood,
+            city,
+            state,
+            postal_code,
+            country,
+            location,
+            (location)[0] as longitude,
+            (location)[1] as latitude
+          FROM core.addresses
+          WHERE id = $1 AND user_id = $2 AND is_active = TRUE`,
+          [checkoutDto.addressId, userId]
+        );
+
+        if (addressResult.rows.length === 0) {
+          throw new NotFoundException('Dirección no encontrada');
+        }
+
+        const address = addressResult.rows[0];
+        addressText = [
+          address.street,
+          address.street_number,
+          address.neighborhood,
+          address.city,
+          address.state,
+          address.postal_code,
+          address.country,
+        ].filter(Boolean).join(', ');
+        deliveryAddressId = checkoutDto.addressId!;
+        deliveryLongitude = address.longitude != null ? parseFloat(String(address.longitude)) : null;
+        deliveryLatitude = address.latitude != null ? parseFloat(String(address.latitude)) : null;
       }
-
-      const address = addressResult.rows[0];
-
-      // 7. Construir texto de dirección
-      const addressText = [
-        address.street,
-        address.street_number,
-        address.neighborhood,
-        address.city,
-        address.state,
-        address.postal_code,
-        address.country,
-      ].filter(Boolean).join(', ');
 
       // 8. Calcular montos globales (delivery_fee y tip se distribuirán proporcionalmente)
       const globalSubtotal = itemsResult.rows.reduce((sum: number, item: any) => sum + parseFloat(item.item_subtotal), 0);
@@ -344,10 +358,10 @@ export class OrdersService {
           userId,
           businessId,
           'pending',
-          checkoutDto.addressId,
+          deliveryAddressId,
           addressText,
-          address.longitude, // Para ST_MakePoint
-          address.latitude,   // Para ST_MakePoint
+          deliveryLongitude, // Para ST_MakePoint (null si pickup)
+          deliveryLatitude,  // Para ST_MakePoint (null si pickup)
           businessSubtotal.toFixed(2),
           businessTaxAmount.toFixed(2),
           businessDeliveryFee.toFixed(2),
@@ -572,16 +586,20 @@ export class OrdersService {
             }
           }
 
-          // Obtener información del receptor de la dirección
-          const addressReceiverResult = await dbPool.query(
-            `SELECT receiver_name, receiver_phone
-             FROM core.addresses
-             WHERE id = $1 AND user_id = $2`,
-            [checkoutDto.addressId, userId]
-          );
-          const receiverInfo = addressReceiverResult.rows[0] || {};
-          const receiverName = receiverInfo.receiver_name || userName;
-          const receiverPhone = receiverInfo.receiver_phone || userPhone;
+          // Obtener información del receptor: desde la dirección si es envío, sino usar perfil (pickup)
+          let receiverName = userName;
+          let receiverPhone = userPhone;
+          if (!isPickup && checkoutDto.addressId) {
+            const addressReceiverResult = await dbPool.query(
+              `SELECT receiver_name, receiver_phone
+               FROM core.addresses
+               WHERE id = $1 AND user_id = $2`,
+              [checkoutDto.addressId, userId]
+            );
+            const receiverInfo = addressReceiverResult.rows[0] || {};
+            receiverName = receiverInfo.receiver_name || userName;
+            receiverPhone = receiverInfo.receiver_phone || userPhone;
+          }
 
           // Construir operaciones desde los items del carrito
           const operations = itemsResult.rows.map((item: any) => ({

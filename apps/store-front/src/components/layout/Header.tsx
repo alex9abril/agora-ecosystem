@@ -37,8 +37,11 @@ import VehicleMenu from '../VehicleMenu';
 import { getStoredVehicle, getSelectedVehicle, setSelectedVehicle } from '@/lib/vehicle-storage';
 import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
 import { getSearchHistory, addSearchToHistory, removeSearchFromHistory, clearSearchHistory } from '@/lib/search-history';
+import { useBranding } from '@/contexts/BrandingContext';
 
 export default function Header() {
+  const { branding: brandingContext } = useBranding();
+  const embedMode = brandingContext?.embed_mode === true;
   const router = useRouter();
   const { 
     contextType, 
@@ -87,7 +90,28 @@ export default function Header() {
   // siempre será true, garantizando que el HTML inicial sea idéntico
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
   const [isCompactHeader, setIsCompactHeader] = useState(false);
-  
+  const [isInIframe, setIsInIframe] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  // Ocultar botón Navegar cuando la tienda se muestra dentro de un iframe
+  useEffect(() => {
+    if (typeof window !== 'undefined') setIsInIframe(window.self !== window.top);
+  }, []);
+
+  // Detección móvil/tablet (celulares y tablets, < 1024px): regla excepcional iframe + logo deshabilitado → mostramos logo siempre
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const check = () => setIsMobileViewport(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  const showNavegarButton = !embedMode && !isInIframe;
+
+  // Regla excepcional: en iframe con logo deshabilitado, en celular/tablet mostramos el logo siempre (mejor UX)
+  const showEmbedLogo = embedMode && (brandingContext?.embed_show_logo !== false || isMobileViewport);
+
   // Función helper para obtener el color guardado
   const getStoredPrimaryColor = (branchId?: string | null, groupId?: string | null, brandId?: string | null): string | null => {
     if (typeof window === 'undefined') return null;
@@ -693,15 +717,316 @@ export default function Header() {
 
   const isSearchDropdownOpen = showSearchHistoryDropdown && searchHistory.length > 0;
 
+  // Estilo de texto para versión iframe: mayúsculas, 14px, font-weight 300; color oscuro para fondo transparente
+  const embedTextStyle: React.CSSProperties = { fontSize: 14, fontWeight: 300, textTransform: 'uppercase' };
+  const embedColor = '#1f2937';
+
   return (
     <>
       {/* Header Principal */}
       <header 
         ref={headerRef}
-        className="sticky top-0 z-50" 
-        style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}
+        className={embedMode ? 'z-50' : 'sticky top-0 z-50'}
+        style={{
+          ...(embedMode ? { backgroundColor: 'transparent', marginTop: 16 } : { backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }),
+        }}
       >
-        {!isCompactHeader ? (
+        {/* Modo embebido (iframe): fondo transparente, texto mayúsculas 16px font-weight 300 */}
+        {embedMode ? (
+          <div style={{ backgroundColor: 'transparent' }}>
+            <div className="w-full px-3 py-1.5">
+              {isMobileViewport ? (
+                /* Móvil iframe: primera fila = logo, menú, usuario, carrito; segunda fila = buscador ancho completo */
+                <>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {showEmbedLogo && (
+                    <div className="flex-shrink-0">
+                      <ContextualLink href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                        <div className="relative" style={{ width: '104px', height: '31px' }}>
+                          {shouldShowLogo ? (
+                            useCustomLogo && logoUrl ? (
+                              <img src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src} alt={logoAlt} width={104} height={31} className="object-contain" style={{ maxWidth: '104px', maxHeight: '31px', width: 'auto', height: 'auto' }} />
+                            ) : (
+                              <img src={typeof agoraLogo === 'string' ? agoraLogo : agoraLogo.src} alt="AGORA PARTS" width={104} height={31} className="object-contain" style={{ maxWidth: '104px', maxHeight: '31px', width: 'auto', height: 'auto' }} />
+                            )
+                          ) : (
+                            <div className="bg-transparent" style={{ width: '104px', height: '31px' }} aria-hidden="true" />
+                          )}
+                          <span className="absolute text-[5px] uppercase tracking-wide whitespace-nowrap" style={{ left: '39px', top: '26px', fontWeight: 600, color: embedColor, visibility: (shouldShowLogo && !useCustomLogo) ? 'visible' : 'hidden' }} suppressHydrationWarning>EL CENTRO DE TUS REFACCIONES.</span>
+                        </div>
+                      </ContextualLink>
+                    </div>
+                    )}
+                    <div className="flex-shrink-0 relative">
+                      <button onClick={() => { setShowCategoriesMenu(!showCategoriesMenu); setShowMobileMenu(false); }} className="flex items-center gap-1 transition-colors hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                        <MenuIcon className="w-4 h-4" style={{ color: embedColor }} />
+                        <span className="hidden sm:inline">Menú</span>
+                      </button>
+                      {showCategoriesMenu && <CategoriesMenu isOpen={showCategoriesMenu} onClose={() => setShowCategoriesMenu(false)} onCategoryClick={() => setShowCategoriesMenu(false)} />}
+                    </div>
+                    <div className="flex-1 min-w-0" />
+                    {!isAuthenticated ? (
+                      <ContextualLink href="/auth/login" className="flex-shrink-0 px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                        <PersonIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                        <span className="hidden sm:inline">Ingresar</span>
+                      </ContextualLink>
+                    ) : (
+                      <div className="relative flex-shrink-0">
+                        <button onClick={() => setShowUserMenu(!showUserMenu)} className="px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                          <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                          <span className="hidden sm:inline truncate max-w-[64px]">{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</span>
+                          <ArrowDropDownIcon className="w-3 h-3" style={{ color: embedColor }} />
+                        </button>
+                        {showUserMenu && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden" onMouseEnter={() => setShowUserMenu(true)} onMouseLeave={() => setShowUserMenu(false)}>
+                              <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}><p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: textColorOpacity90 }}>Bienvenido</p><p className="text-base font-bold truncate" style={{ color: textColor }}>{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</p>{user?.email && <p className="text-xs truncate mt-1" style={{ color: textColorOpacity80 }}>{user.email}</p>}</div>
+                              <div className="py-2">
+                                <ContextualLink href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><HomeIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis direcciones</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                                <ContextualLink href="/orders" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><ReceiptIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis pedidos</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                                <ContextualLink href="/profile?tab=payment" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><CreditCardIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis formas de pago</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                              </div>
+                              <div className="border-t border-gray-200" /><div className="py-2"><button onClick={async () => { setShowUserMenu(false); await signOut(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm text-red-600 hover:bg-red-50 font-medium"><ExitToAppIcon className="w-5 h-5" /><span>Cerrar sesión</span></button></div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    <div className="relative flex-shrink-0" onMouseEnter={() => setShowCartPreview(true)} onMouseLeave={() => setShowCartPreview(false)}>
+                      <ContextualLink href={getCartUrl()} className="relative flex items-center gap-1 px-1.5 py-1 rounded hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                        <div className="relative"><ShoppingCartIcon className="w-4 h-4" style={{ color: embedColor }} />{itemCount > 0 && <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center bg-red-600 text-white">{itemCount > 99 ? '99+' : itemCount}</span>}</div>
+                        {cart && <span className="hidden sm:inline">${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>}
+                      </ContextualLink>
+                      {showCartPreview && itemCount > 0 && cart && (
+                        <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                          <div className="px-3 py-2" style={{ backgroundColor: primaryColor }}><h3 className="text-xs font-bold" style={{ color: textColor }}>Carrito ({itemCount} {itemCount === 1 ? 'artículo' : 'artículos'})</h3></div>
+                          <div className="max-h-60 overflow-y-auto py-1.5">{cart.items && cart.items.slice(0, 5).map((item) => (<div key={item.id} className="px-3 py-1.5 border-b border-gray-100"><p className="text-xs font-medium text-gray-900 truncate">{item.product_name}</p><span className="text-[11px] text-gray-500">${(parseFloat(String(item.item_subtotal || 0)) + (item.tax_breakdown?.total_tax ? Number(item.tax_breakdown.total_tax) : 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>))}{cart.items && cart.items.length > 5 && <p className="px-3 py-0.5 text-[11px] text-gray-500">+{cart.items.length - 5} más</p>}</div>
+                          {cart.items && cart.items.length > 0 && (<div className="border-t border-gray-200 px-3 py-2 bg-gray-50"><div className="flex justify-between items-center mb-1.5"><span className="text-xs font-medium text-gray-700">Total:</span><span className="text-xs font-bold text-gray-900">${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div><ContextualLink href={getCartUrl()} onClick={() => setShowCartPreview(false)} className="block w-full text-center py-1.5 rounded text-xs font-semibold hover:opacity-90" style={{ backgroundColor: primaryColor, color: textColor }}>Ver carrito</ContextualLink></div>)}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="w-full mt-2" ref={searchHistoryRef}>
+                    <div className={isSearchDropdownOpen ? 'relative w-full rounded-lg bg-white z-50' : 'relative w-full'}>
+                      <form onSubmit={handleSearch} className="relative w-full">
+                        <div className="relative w-full">
+                          <input type="text" value={searchQuery} onChange={handleSearchInputChange} onFocus={() => setShowSearchHistoryDropdown(true)} onBlur={() => setTimeout(() => { setShowSearchHistoryDropdown(false); setSearchHistoryHighlightIndex(-1); }, 200)} onKeyDown={handleSearchInputKeyDown} placeholder="Buscar..." className={`w-full pl-3 pr-9 py-2 bg-white text-gray-700 placeholder-gray-400 ${isSearchDropdownOpen ? 'rounded-t-lg border border-gray-100 border-b-0' : 'rounded-full border border-gray-300 shadow-inner focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400'}`} style={{ fontSize: 14, ...(isSearchDropdownOpen ? {} : { boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }) }} />
+                          {searchQuery ? <button type="button" onClick={clearSearch} className="absolute inset-y-0 right-6 flex items-center text-gray-400 hover:text-gray-600"><CloseIcon className="h-3.5 w-3.5" /></button> : null}
+                          <button type="submit" className="absolute inset-y-0 right-0 flex items-center justify-center w-7 h-full rounded-r-full hover:opacity-80 bg-transparent"><SearchIcon className="h-3.5 w-3.5 text-gray-900" /></button>
+                        </div>
+                        {showSearchHistoryDropdown && searchHistory.length > 0 ? (
+                          <div className="absolute left-0 right-0 top-full -mt-px w-full py-0.5 max-h-44 overflow-auto bg-white rounded-b-lg border-x border-b border-gray-100 z-50 shadow-lg">
+                            <p className="px-2 py-0.5 text-[10px] font-semibold text-gray-500">Búsquedas recientes</p>
+                            {searchHistory.map((item, idx) => (<div key={item} className={`flex items-center gap-1 w-full group ${idx === searchHistoryHighlightIndex ? 'bg-gray-200' : 'hover:bg-gray-100'}`}><button ref={(el) => { searchHistoryItemRefs.current[idx] = el; }} type="button" onMouseDown={(e) => { e.preventDefault(); handleSearchFromHistory(item); }} className={`flex-1 min-w-0 text-left px-2 py-1 text-xs truncate text-gray-700 ${idx === searchHistoryHighlightIndex ? 'text-gray-900' : ''}`}>{item}</button><button type="button" onMouseDown={(e) => handleRemoveSearchFromHistory(e, item)} className="flex-shrink-0 p-0.5 rounded-full text-gray-400 hover:text-gray-600" aria-label="Eliminar búsqueda"><CloseIcon className="h-3 w-3" /></button></div>))}
+                            <div className="border-t border-gray-100"><button type="button" onMouseDown={(e) => handleClearSearchHistory(e)} className="w-full flex items-center gap-1 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100"> <DeleteSweepIcon className="h-3 w-3" /> Borrar historial</button></div>
+                          </div>
+                        ) : null}
+                      </form>
+                    </div>
+                  </div>
+                </>
+              ) : (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Logo iframe: mostrar si está habilitado o regla excepcional móvil (siempre en móvil aunque esté deshabilitado) */}
+                {showEmbedLogo && (
+                <div className="flex-shrink-0">
+                  <ContextualLink href="/" className="flex items-center hover:opacity-80 transition-opacity">
+                    <div className="relative" style={{ width: '104px', height: '31px' }}>
+                      {shouldShowLogo ? (
+                        useCustomLogo && logoUrl ? (
+                          <img
+                            src={typeof logoUrl === 'string' ? logoUrl : logoUrl.src}
+                            alt={logoAlt}
+                            width={104}
+                            height={31}
+                            className="object-contain"
+                            style={{ maxWidth: '104px', maxHeight: '31px', width: 'auto', height: 'auto' }}
+                          />
+                        ) : (
+                          <img
+                            src={typeof agoraLogo === 'string' ? agoraLogo : agoraLogo.src}
+                            alt="AGORA PARTS"
+                            width={104}
+                            height={31}
+                            className="object-contain"
+                            style={{ maxWidth: '104px', maxHeight: '31px', width: 'auto', height: 'auto' }}
+                          />
+                        )
+                      ) : (
+                        <div className="bg-transparent" style={{ width: '104px', height: '31px' }} aria-hidden="true" />
+                      )}
+                      <span
+                        className="absolute text-[5px] uppercase tracking-wide whitespace-nowrap"
+                        style={{ left: '39px', top: '26px', fontWeight: 600, color: embedColor, visibility: (shouldShowLogo && !useCustomLogo) ? 'visible' : 'hidden' }}
+                        suppressHydrationWarning
+                      >
+                        EL CENTRO DE TUS REFACCIONES.
+                      </span>
+                    </div>
+                  </ContextualLink>
+                </div>
+                )}
+
+                {/* Menú categorías */}
+                <div className="flex-shrink-0 relative">
+                  <button
+                    onClick={() => { setShowCategoriesMenu(!showCategoriesMenu); setShowMobileMenu(false); }}
+                    className="flex items-center gap-1 transition-colors hover:opacity-80"
+                    style={{ color: embedColor, ...embedTextStyle }}
+                  >
+                    <MenuIcon className="w-4 h-4" style={{ color: embedColor }} />
+                    <span className="hidden sm:inline">Menú</span>
+                  </button>
+                  {showCategoriesMenu && (
+                    <CategoriesMenu isOpen={showCategoriesMenu} onClose={() => setShowCategoriesMenu(false)} onCategoryClick={() => setShowCategoriesMenu(false)} />
+                  )}
+                </div>
+
+                {/* Vehículo */}
+                {isClient && isVehicleLoaded && currentVehicle ? (
+                  <button
+                    onClick={() => setShowVehicleSelector(true)}
+                    className="hidden md:flex items-center gap-1 text-left rounded px-1.5 py-1 transition-colors min-w-0 max-w-[160px] hover:opacity-80"
+                    style={{ color: embedColor, ...embedTextStyle }}
+                  >
+                    <DirectionsCarIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: embedColor }} />
+                    <span className="truncate">{currentVehicle.nickname || `${currentVehicle.brand_name || ''} ${currentVehicle.model_name || ''}`.trim() || 'Mi Vehículo'}</span>
+                  </button>
+                ) : isClient && isVehicleLoaded ? (
+                  <button onClick={() => setShowVehicleSelector(true)} className="hidden md:flex items-center gap-1 transition-colors hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                    <DirectionsCarIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                    <span>Vehículo</span>
+                  </button>
+                ) : null}
+
+                {/* Buscador desktop iframe: en línea */}
+                <div className="flex-1 min-w-0 mx-2 sm:mx-3" ref={searchHistoryRef}>
+                  <div className={isSearchDropdownOpen ? 'relative w-full rounded-lg bg-white z-50' : 'relative w-full'}>
+                    <form onSubmit={handleSearch} className="relative w-full">
+                      <div className="relative w-full">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={handleSearchInputChange}
+                          onFocus={() => setShowSearchHistoryDropdown(true)}
+                          onBlur={() => setTimeout(() => { setShowSearchHistoryDropdown(false); setSearchHistoryHighlightIndex(-1); }, 200)}
+                          onKeyDown={handleSearchInputKeyDown}
+                          placeholder="Buscar..."
+                          className={`w-full pl-3 pr-9 py-2 bg-white text-gray-700 placeholder-gray-400 ${isSearchDropdownOpen ? 'rounded-t-lg border border-gray-100 border-b-0' : 'rounded-full border border-gray-300 shadow-inner focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400'}`}
+                          style={{ fontSize: 14, ...(isSearchDropdownOpen ? {} : { boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)' }) }}
+                        />
+                        {searchQuery ? (
+                          <button type="button" onClick={clearSearch} className="absolute inset-y-0 right-6 flex items-center text-gray-400 hover:text-gray-600">
+                            <CloseIcon className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                        <button type="submit" className="absolute inset-y-0 right-0 flex items-center justify-center w-7 h-full rounded-r-full hover:opacity-80 bg-transparent">
+                          <SearchIcon className="h-3.5 w-3.5 text-gray-900" />
+                        </button>
+                      </div>
+                      {showSearchHistoryDropdown && searchHistory.length > 0 ? (
+                        <div className="absolute left-0 right-0 top-full -mt-px w-full py-0.5 max-h-44 overflow-auto bg-white rounded-b-lg border-x border-b border-gray-100 z-50 shadow-lg">
+                          <p className="px-2 py-0.5 text-[10px] font-semibold text-gray-500">Búsquedas recientes</p>
+                          {searchHistory.map((item, idx) => (
+                            <div key={item} className={`flex items-center gap-1 w-full group ${idx === searchHistoryHighlightIndex ? 'bg-gray-200' : 'hover:bg-gray-100'}`}>
+                              <button ref={(el) => { searchHistoryItemRefs.current[idx] = el; }} type="button" onMouseDown={(e) => { e.preventDefault(); handleSearchFromHistory(item); }} className={`flex-1 min-w-0 text-left px-2 py-1 text-xs truncate text-gray-700 ${idx === searchHistoryHighlightIndex ? 'text-gray-900' : ''}`}>{item}</button>
+                              <button type="button" onMouseDown={(e) => handleRemoveSearchFromHistory(e, item)} className="flex-shrink-0 p-0.5 rounded-full text-gray-400 hover:text-gray-600" aria-label="Eliminar búsqueda"><CloseIcon className="h-3 w-3" /></button>
+                            </div>
+                          ))}
+                          <div className="border-t border-gray-100">
+                            <button type="button" onMouseDown={(e) => handleClearSearchHistory(e)} className="w-full flex items-center gap-1 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100"> <DeleteSweepIcon className="h-3 w-3" /> Borrar historial</button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </form>
+                  </div>
+                </div>
+
+                {/* Grupo derecho: Navegar, Usuario, Carrito (iframe sin botón sucursal) */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 ml-auto">
+                {/* Navegar - oculto en iframe / embed */}
+                {showNavegarButton && (
+                <button onClick={() => setShowNavigationDialog(true)} className="flex-shrink-0 px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                  <BusinessIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                  <span className="hidden sm:inline">Navegar</span>
+                </button>
+                )}
+
+                {/* Usuario */}
+                {!isAuthenticated ? (
+                  <ContextualLink href="/auth/login" className="flex-shrink-0 px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                    <PersonIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                    <span className="hidden sm:inline">Ingresar</span>
+                  </ContextualLink>
+                ) : (
+                  <div className="relative flex-shrink-0">
+                    <button onClick={() => setShowUserMenu(!showUserMenu)} className="px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                      <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                      <span className="hidden sm:inline truncate max-w-[64px]">{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</span>
+                      <ArrowDropDownIcon className="w-3 h-3" style={{ color: embedColor }} />
+                    </button>
+                    {showUserMenu && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                        <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden" onMouseEnter={() => setShowUserMenu(true)} onMouseLeave={() => setShowUserMenu(false)}>
+                          <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}>
+                            <p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: textColorOpacity90 }}>Bienvenido</p>
+                            <p className="text-base font-bold truncate" style={{ color: textColor }}>{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</p>
+                            {user?.email && <p className="text-xs truncate mt-1" style={{ color: textColorOpacity80 }}>{user.email}</p>}
+                          </div>
+                          <div className="py-2">
+                            <ContextualLink href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><HomeIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis direcciones</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                            <ContextualLink href="/orders" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><ReceiptIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis pedidos</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                            <ContextualLink href="/profile?tab=payment" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><CreditCardIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis formas de pago</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                          </div>
+                          <div className="border-t border-gray-200" />
+                          <div className="py-2">
+                            <button onClick={async () => { setShowUserMenu(false); await signOut(); }} className="w-full flex items-center gap-3 px-5 py-3 text-sm text-red-600 hover:bg-red-50 font-medium"><ExitToAppIcon className="w-5 h-5" /><span>Cerrar sesión</span></button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Carrito */}
+                <div className="relative flex-shrink-0" onMouseEnter={() => setShowCartPreview(true)} onMouseLeave={() => setShowCartPreview(false)}>
+                  <ContextualLink href={getCartUrl()} className="relative flex items-center gap-1 px-1.5 py-1 rounded hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
+                    <div className="relative">
+                      <ShoppingCartIcon className="w-4 h-4" style={{ color: embedColor }} />
+                      {itemCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold rounded-full min-w-[12px] h-[12px] flex items-center justify-center bg-red-600 text-white">{itemCount > 99 ? '99+' : itemCount}</span>
+                      )}
+                    </div>
+                    {cart && <span className="hidden sm:inline">${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>}
+                  </ContextualLink>
+                  {showCartPreview && itemCount > 0 && cart && (
+                    <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                      <div className="px-3 py-2" style={{ backgroundColor: primaryColor }}><h3 className="text-xs font-bold" style={{ color: textColor }}>Carrito ({itemCount} {itemCount === 1 ? 'artículo' : 'artículos'})</h3></div>
+                      <div className="max-h-60 overflow-y-auto py-1.5">
+                        {cart.items && cart.items.slice(0, 5).map((item) => (
+                          <div key={item.id} className="px-3 py-1.5 border-b border-gray-100">
+                            <p className="text-xs font-medium text-gray-900 truncate">{item.product_name}</p>
+                            <span className="text-[11px] text-gray-500">${(parseFloat(String(item.item_subtotal || 0)) + (item.tax_breakdown?.total_tax ? Number(item.tax_breakdown.total_tax) : 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        ))}
+                        {cart.items && cart.items.length > 5 && <p className="px-3 py-0.5 text-[11px] text-gray-500">+{cart.items.length - 5} más</p>}
+                      </div>
+                      {cart.items && cart.items.length > 0 && (
+                        <div className="border-t border-gray-200 px-3 py-2 bg-gray-50">
+                          <div className="flex justify-between items-center mb-1.5"><span className="text-xs font-medium text-gray-700">Total:</span><span className="text-xs font-bold text-gray-900">${cartTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span></div>
+                          <ContextualLink href={getCartUrl()} onClick={() => setShowCartPreview(false)} className="block w-full text-center py-1.5 rounded text-xs font-semibold hover:opacity-90" style={{ backgroundColor: primaryColor, color: textColor }}>Ver carrito</ContextualLink>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                </div>
+              </div>
+              )}
+            </div>
+          </div>
+        ) : !isCompactHeader ? (
           <>
             {/* Primera fila: Logo y acciones de usuario */}
             <div style={{ backgroundColor: primaryColor, borderBottom: `1px solid ${borderColor}` }}>
@@ -765,7 +1090,8 @@ export default function Header() {
               {/* Acciones de usuario */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 
-                {/* Botón Navegar */}
+                {/* Botón Navegar - oculto en iframe / embed */}
+                {showNavegarButton && (
                 <button
                   onClick={() => setShowNavigationDialog(true)}
                   className="px-4 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
@@ -774,6 +1100,7 @@ export default function Header() {
                   <BusinessIcon className="w-5 h-5" style={{ color: textColor }} />
                   <span className="hidden sm:inline">Navegar</span>
                 </button>
+                )}
 
                 {/* Sección de Usuario */}
                 {!isAuthenticated ? (
@@ -916,11 +1243,7 @@ export default function Header() {
                       <ShoppingCartIcon className="w-6 h-6 transition-colors" style={{ color: textColor }} />
                       {itemCount > 0 && (
                         <span 
-                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md"
-                          style={{ 
-                            backgroundColor: textColor, 
-                            color: primaryColor 
-                          }}
+                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md bg-red-600 text-white"
                         >
                           {itemCount > 99 ? '99+' : itemCount}
                         </span>
@@ -1378,6 +1701,7 @@ export default function Header() {
 
                 {/* Acciones usuario y carrito */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {showNavegarButton && (
                   <button
                     onClick={() => setShowNavigationDialog(true)}
                     className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-2 hover:opacity-80"
@@ -1386,6 +1710,7 @@ export default function Header() {
                     <BusinessIcon className="w-5 h-5" style={{ color: textColor }} />
                     <span className="hidden xl:inline">Navegar</span>
                   </button>
+                  )}
 
                   {!isAuthenticated ? (
                     <ContextualLink
@@ -1494,8 +1819,7 @@ export default function Header() {
                       <ShoppingCartIcon className="w-6 h-6" style={{ color: textColor }} />
                       {itemCount > 0 && (
                         <span
-                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md"
-                          style={{ backgroundColor: textColor, color: primaryColor }}
+                          className="absolute -top-1.5 -right-1.5 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md bg-red-600 text-white"
                         >
                           {itemCount > 99 ? '99+' : itemCount}
                         </span>

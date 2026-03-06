@@ -334,20 +334,9 @@ export default function CartPage() {
                 : 'Agrega productos para comenzar'
               }
             </p>
-            {!isAuthenticated ? (
-              <div className="flex gap-3 justify-center">
-                <ContextualLink href="/auth/login" className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block">
-                  Iniciar Sesión
-                </ContextualLink>
-                <ContextualLink href="/auth/register" className="px-6 py-3 bg-gray-100 text-black rounded-lg hover:bg-gray-200 transition-colors inline-block">
-                  Registrarse
-                </ContextualLink>
-              </div>
-            ) : (
-              <ContextualLink href="/products" className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block">
-                Ver Productos
-              </ContextualLink>
-            )}
+            <ContextualLink href="/" className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block">
+              Seguir comprando
+            </ContextualLink>
           </div>
         </StoreLayout>
       </>

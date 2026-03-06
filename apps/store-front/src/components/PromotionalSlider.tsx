@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ContextualLink from './ContextualLink';
+import { useBranding } from '@/contexts/BrandingContext';
 
 export interface ProductImage {
   url: string;
@@ -64,8 +65,16 @@ export default function PromotionalSlider({
   height = '400px',
   className = '',
 }: PromotionalSliderProps) {
+  const { branding } = useBranding();
+  const embedMode = branding?.embed_mode === true;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Variante compacta y estilizada cuando la tienda está embebida (iframe)
+  const effectiveHeight = embedMode ? '440px' : height;
+  const wrapperClass = embedMode
+    ? 'relative w-full overflow-hidden rounded-2xl shadow-lg border border-gray-200/50'
+    : `relative w-full overflow-hidden ${className}`.trim();
 
   // Auto-play
   useEffect(() => {
@@ -115,8 +124,8 @@ export default function PromotionalSlider({
 
   return (
     <div
-      className={`relative w-full overflow-hidden ${className}`}
-      style={{ height }}
+      className={wrapperClass}
+      style={{ height: effectiveHeight }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
@@ -211,7 +220,7 @@ export default function PromotionalSlider({
           </div>
         )}
 
-        {/* Overlay con contenido */}
+        {/* Overlay con contenido (iframe: textos ~30% más pequeños) */}
         {currentSlide.overlay && (
           <div
             className={`absolute inset-0 flex items-center z-10 ${
@@ -223,6 +232,7 @@ export default function PromotionalSlider({
             } py-8 md:py-12`}
           >
             <div
+              style={embedMode ? { transform: 'scale(0.7)', transformOrigin: overlayPosition === 'left' ? 'left center' : overlayPosition === 'right' ? 'right center' : 'center center' } : undefined}
               className={`max-w-2xl ${
                 overlayPosition === 'center'
                   ? 'text-center'

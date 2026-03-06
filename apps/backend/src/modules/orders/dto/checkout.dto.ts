@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsOptional, IsNumber, Min, ValidateNested, IsObject, ValidateIf, ValidatorConstraint, ValidatorConstraintInterface, Validate, ValidationArguments } from 'class-validator';
+import { IsUUID, IsString, IsOptional, IsNumber, Min, ValidateNested, IsObject, ValidateIf, IsIn, ValidatorConstraint, ValidatorConstraintInterface, Validate, ValidationArguments } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class WalletPaymentDto {
@@ -84,9 +84,16 @@ class PaymentInfoDto {
 }
 
 export class CheckoutDto {
-  @ApiProperty({ description: 'ID de la dirección de entrega', example: '11111111-1111-1111-1111-111111111111' })
+  @ApiPropertyOptional({ description: 'Tipo de entrega: shipping = envío a domicilio (requiere addressId), pickup = recoger en tienda (no se envía addressId)', example: 'shipping', enum: ['shipping', 'pickup'] })
+  @IsOptional()
+  @IsIn(['shipping', 'pickup'], { message: 'deliveryType debe ser "shipping" o "pickup"' })
+  deliveryType?: 'shipping' | 'pickup' = 'shipping';
+
+  @ApiPropertyOptional({ description: 'ID de la dirección de entrega. Requerido cuando deliveryType es "shipping". No se envía cuando deliveryType es "pickup".', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @ValidateIf((o) => o.deliveryType !== 'pickup')
   @IsUUID('4', { message: 'El addressId debe ser un UUID válido' })
-  addressId: string;
+  addressId?: string;
 
   @ApiPropertyOptional({ description: 'Notas especiales para la entrega', example: 'Llamar antes de llegar' })
   @IsOptional()

@@ -261,14 +261,9 @@ export default function OrderDetailPage() {
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
               <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                 <LocalShippingIcon className="w-5 h-5" />
-                Dirección de Entrega
+                Datos de entrega
               </h2>
               <p className="text-gray-600">{order.delivery_address_text}</p>
-              {order.delivery_notes && (
-                <p className="text-sm text-gray-500 mt-2">
-                  Notas: {order.delivery_notes}
-                </p>
-              )}
             </div>
           )}
 

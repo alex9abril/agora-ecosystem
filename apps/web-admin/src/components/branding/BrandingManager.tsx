@@ -48,6 +48,12 @@ interface Branding {
   social_media?: BrandingSocialMedia;
   custom_css?: string;
   custom_js?: string;
+  /** Si la tienda se mostrará embebida en iframe en el portal del cliente (subdominio). Afecta header/footer en el store-front. */
+  embed_mode?: boolean;
+  /** Con contenido embebido: ancho completo o contenedor centrado. */
+  embed_layout?: 'full_width' | 'contained';
+  /** En modo embebido: si se muestra el logotipo de la tienda en el header. */
+  embed_show_logo?: boolean;
 }
 
 interface BrandingManagerProps {
@@ -1074,7 +1080,65 @@ export default function BrandingManager({ type, id, name }: BrandingManagerProps
         {activeTab === 'advanced' && (
           <div className="space-y-6">
             <div>
-              <h3 className="text-sm font-medium text-gray-900 mb-4">CSS Personalizado</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Modo embebido (iframe)</h3>
+              <div className="bg-gray-50 dark:bg-neutral-700/50 rounded-lg border border-gray-200 dark:border-neutral-600 p-4">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="embed_mode"
+                    checked={!!branding.embed_mode}
+                    onChange={(e) => setBranding({ ...branding, embed_mode: e.target.checked })}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="embed_mode" className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer">
+                      Mostrar tienda como embebida (iframe)
+                    </label>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">
+                      Habilítalo cuando la tienda se consuma embebida (iframe o subdominio) desde el sitio del cliente. 
+                      Se aplicará una vista simplificada: header compacto y sin footer propio para una experiencia integrada en el portal, sin duplicar navegación ni parecer “página dentro de página”.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">Ancho del contenido (embebido)</h3>
+              <div className="bg-gray-50 dark:bg-neutral-700/50 rounded-lg border border-gray-200 dark:border-neutral-600 p-4">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                  Cuando la tienda se muestra embebida, define si ocupa todo el ancho o va dentro de un contenedor centrado.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="embed_layout"
+                      checked={(branding.embed_layout || 'full_width') === 'full_width'}
+                      onChange={() => setBranding({ ...branding, embed_layout: 'full_width' })}
+                      className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Ancho completo</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="embed_layout"
+                      checked={branding.embed_layout === 'contained'}
+                      onChange={() => setBranding({ ...branding, embed_layout: 'contained' })}
+                      className="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">Contenedor central</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Contenedor central: el contenido queda centrado con un ancho máximo, ocupando la parte central de la pantalla.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">CSS Personalizado</h3>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-2">
                   Código CSS (opcional)

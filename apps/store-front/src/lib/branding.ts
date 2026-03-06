@@ -32,6 +32,12 @@ export interface Branding {
   };
   custom_css?: string;
   custom_js?: string;
+  /** Si la tienda se muestra embebida (iframe/subdominio); cuando es true se oculta el footer en el store-front. */
+  embed_mode?: boolean;
+  /** Con contenido embebido: full_width o contained (contenedor centrado). */
+  embed_layout?: 'full_width' | 'contained';
+  /** En modo embebido: si se muestra el logotipo de la tienda en el header (por defecto true). Si el sitio que embebe ya tiene logo, conviene false. */
+  embed_show_logo?: boolean;
 }
 
 class BrandingService {
@@ -85,6 +91,11 @@ class BrandingService {
       social_media: branding.social_media,
       custom_css: branding.custom_css,
       custom_js: branding.custom_js,
+      embed_mode: branding.embed_mode === true,
+      embed_layout: branding.embed_layout === 'contained' || branding.embed_layout === 'full_width'
+        ? branding.embed_layout
+        : undefined,
+      embed_show_logo: branding.embed_show_logo,
     };
   }
 

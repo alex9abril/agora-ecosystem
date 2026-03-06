@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsObject, ValidateNested, IsUrl, Matches } from 'class-validator';
+import { Allow, IsOptional, IsString, IsObject, ValidateNested, IsUrl, IsBoolean, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BrandingColorsDto {
@@ -291,6 +291,32 @@ export class BrandingDto {
   @IsOptional()
   @IsString()
   custom_js?: string;
+
+  @ApiPropertyOptional({
+    description: 'Si la tienda se muestra embebida en iframe en el portal del cliente (subdominio). El front puede omitir footer y adaptar header para mayor integración.',
+  })
+  @Allow()
+  @IsOptional()
+  @IsBoolean()
+  embed_mode?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Con contenido embebido: full_width (ancho completo) o contained (contenedor centrado).',
+    enum: ['full_width', 'contained'],
+  })
+  @Allow()
+  @IsOptional()
+  @IsString()
+  @Matches(/^(full_width|contained)$/, { message: 'embed_layout debe ser full_width o contained' })
+  embed_layout?: string;
+
+  @ApiPropertyOptional({
+    description: 'En modo embebido: si se muestra el logotipo de la tienda en el header. Útil cuando el sitio que embebe ya tiene su propio logo.',
+  })
+  @Allow()
+  @IsOptional()
+  @IsBoolean()
+  embed_show_logo?: boolean;
 }
 
 export class UpdateBrandingDto {

@@ -14,6 +14,7 @@ import InstagramIcon from '@mui/icons-material/Instagram';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import BrandingLoader from '../BrandingLoader';
+import { BrandingProvider } from '@/contexts/BrandingContext';
 
 interface StoreLayoutProps {
   children: ReactNode;
@@ -200,6 +201,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
   const isFullyLoading = isBrandingLoading || isLoading;
 
   return (
+    <BrandingProvider branding={branding}>
     <>
       {/* Loading overlay mientras se carga el branding */}
       <BrandingLoader 
@@ -216,6 +218,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
           backgroundColor: backgroundColor,
         }}
       >
+        <div className={branding?.embed_layout === 'contained' ? 'max-w-7xl mx-auto w-full px-4 sm:px-6' : undefined}>
         {/* Header principal con diseño AutoZone */}
         <Header />
 
@@ -232,8 +235,8 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
         </div>
       )}
 
-      {/* Contenido principal */}
-      <main>
+      {/* Contenido principal: mismo espacio arriba/abajo del header en iframe (16px = pt-4, igual que marginTop del header) */}
+      <main className={branding?.embed_mode ? 'pt-4' : undefined}>
         {isLoading ? (
           <div className="text-center py-12">
             <p className="text-gray-500">Cargando...</p>
@@ -243,7 +246,8 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
         )}
       </main>
 
-      {/* Footer completo inspirado en AliExpress */}
+      {/* Footer: oculto cuando la tienda está en modo embebido (iframe/subdominio) */}
+      {!branding?.embed_mode && (
       <footer className="bg-gray-800 text-white mt-12">
         {/* Sección descriptiva sobre Ágora */}
         <div className="bg-gray-800 border-b border-gray-700">
@@ -515,8 +519,11 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
           </div>
         </div>
       </footer>
+      )}
+        </div>
       </div>
     </>
+    </BrandingProvider>
   );
 }
 

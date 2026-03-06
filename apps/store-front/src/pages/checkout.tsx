@@ -24,6 +24,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import PersonIcon from '@mui/icons-material/Person';
 import LockIcon from '@mui/icons-material/Lock';
 import EditIcon from '@mui/icons-material/Edit';
@@ -292,6 +293,7 @@ export default function CheckoutPage() {
   const [deletingBillingAddressId, setDeletingBillingAddressId] = useState<string | null>(null);
   
   // Estados para envío
+  const [deliveryType, setDeliveryType] = useState<'shipping' | 'pickup'>('shipping');
   const [shippingSelections, setShippingSelections] = useState<Record<string, string>>({}); // storeId -> optionId
   const [shippingOptionsByStore, setShippingOptionsByStore] = useState<Record<string, ShippingOption[]>>({});
   const [loadingQuotations, setLoadingQuotations] = useState<Record<string, boolean>>({}); // storeId -> loading
@@ -891,20 +893,42 @@ export default function CheckoutPage() {
     }
   };
 
-  // Obtener cotizaciones cuando se avanza al paso de shipping-method
+  // Obtener cotizaciones cuando se avanza al paso de shipping-method (solo si envío a domicilio)
   useEffect(() => {
-    if (currentStep === 'shipping-method' && selectedAddressId && Object.keys(storesInfo).length > 0) {
-      // Limpiar cotizaciones anteriores antes de cargar nuevas
+    if (currentStep !== 'shipping-method' || Object.keys(storesInfo).length === 0) return;
+
+    if (deliveryType === 'pickup') {
+      // Pickup: no cotizar Skydropx; solo opción "Recoger en tienda" por tienda
       setShippingOptionsByStore({});
       setShippingSelections({});
-      
-      // Obtener cotizaciones para cada tienda
+      const optionsByStore: Record<string, ShippingOption[]> = {};
+      const selections: Record<string, string> = {};
+      Object.keys(storesInfo).forEach((storeId) => {
+        const store = storesInfo[storeId];
+        const pickupOption: ShippingOption = {
+          id: `${storeId}-pickup`,
+          provider: 'pickup',
+          label: 'Recoger en tienda',
+          price: 0,
+          estimatedDays: 0,
+        };
+        optionsByStore[storeId] = [pickupOption];
+        selections[storeId] = pickupOption.id;
+      });
+      setShippingOptionsByStore(optionsByStore);
+      setShippingSelections(selections);
+      return;
+    }
+
+    if (selectedAddressId) {
+      setShippingOptionsByStore({});
+      setShippingSelections({});
       Object.keys(storesInfo).forEach((storeId) => {
         fetchQuotationsForStore(storeId);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, selectedAddressId]);
+  }, [currentStep, selectedAddressId, deliveryType]);
 
   // Calcular total de envío
   const shippingTotal = useMemo(() => {
@@ -1466,6 +1490,12 @@ export default function CheckoutPage() {
 
   // Continuar al paso de método de envío
   const handleContinueToShippingMethod = () => {
+    if (deliveryType === 'pickup') {
+      setCurrentStep('shipping-method');
+      setError('');
+      return;
+    }
+
     if (!selectedAddressId) {
       setError('Por favor, selecciona una dirección de envío');
       return;
@@ -1510,8 +1540,12 @@ export default function CheckoutPage() {
 
   // Procesar orden
   const handlePlaceOrder = async () => {
-    if (!selectedAddressId || !selectedPaymentMethod) {
+    if (!selectedPaymentMethod) {
       setError('Por favor, completa todos los pasos');
+      return;
+    }
+    if (deliveryType === 'shipping' && !selectedAddressId) {
+      setError('Por favor, selecciona una dirección de envío');
       return;
     }
 
@@ -1625,7 +1659,7 @@ export default function CheckoutPage() {
       const order = await apiRequest<{ id: string; order_number: string; karlopay_payment_url?: string }>('/orders/checkout', {
         method: 'POST',
         body: JSON.stringify({
-          addressId: selectedAddressId,
+          ...(deliveryType === 'pickup' ? { deliveryType: 'pickup' } : { addressId: selectedAddressId }),
           deliveryNotes: deliveryNotes.trim(),
           payment: paymentInfo,
           deliveryFee: shippingTotal, // Enviar el costo de envío calculado al backend
@@ -1965,6 +1999,48 @@ export default function CheckoutPage() {
                 {/* Paso 2: Envío */}
                 {currentStep === 'shipping' && (
                   <div>
+                    <p className="text-sm text-gray-600 mb-3">¿Cómo quieres recibir tu pedido?</p>
+                    <div className="flex flex-wrap gap-3 mb-6">
+                      <label
+                        className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                          deliveryType === 'shipping' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="deliveryType"
+                          value="shipping"
+                          checked={deliveryType === 'shipping'}
+                          onChange={() => setDeliveryType('shipping')}
+                          className="sr-only"
+                        />
+                        <LocalShippingIcon className="w-5 h-5 text-gray-600" />
+                        <span className="font-medium text-gray-900">Envío a domicilio</span>
+                      </label>
+                      <label
+                        className={`flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                          deliveryType === 'pickup' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="deliveryType"
+                          value="pickup"
+                          checked={deliveryType === 'pickup'}
+                          onChange={() => setDeliveryType('pickup')}
+                          className="sr-only"
+                        />
+                        <LocationOnIcon className="w-5 h-5 text-gray-600" />
+                        <span className="font-medium text-gray-900">Recoger en tienda</span>
+                      </label>
+                    </div>
+
+                    {deliveryType === 'pickup' && (
+                      <p className="text-sm text-gray-600 mb-6">Recogerás tu pedido en la tienda. No se requiere dirección de envío.</p>
+                    )}
+
+                    {deliveryType === 'shipping' && (
+                      <>
                     <h2 className="text-xl font-medium text-gray-900 mb-6">Dirección de Envío</h2>
 
                     {addresses.length > 0 && (
@@ -2594,6 +2670,8 @@ export default function CheckoutPage() {
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
 
                     <div className="mt-6 flex justify-between">
                       <button
@@ -2612,10 +2690,12 @@ export default function CheckoutPage() {
                       <button
                         onClick={handleContinueToShippingMethod}
                         disabled={
-                          !selectedAddressId || 
-                          (showNewAddressForm && !newAddress.receiver_name.trim()) ||
-                          (!showNewAddressForm && addresses.find(addr => addr.id === selectedAddressId) && !addresses.find(addr => addr.id === selectedAddressId)?.receiver_name?.trim()) ||
-                          (!useSameAddressForBilling && !selectedBillingAddressId)
+                          deliveryType === 'shipping'
+                            ? !selectedAddressId ||
+                              (showNewAddressForm && !newAddress.receiver_name.trim()) ||
+                              (!showNewAddressForm && addresses.find(addr => addr.id === selectedAddressId) && !addresses.find(addr => addr.id === selectedAddressId)?.receiver_name?.trim()) ||
+                              (!useSameAddressForBilling && !selectedBillingAddressId)
+                            : false
                         }
                         className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
@@ -2694,11 +2774,11 @@ export default function CheckoutPage() {
                                       />
                                       <div>
                                         <span className="font-medium text-gray-900 text-sm block">{option.label}</span>
-                                        {option.estimatedDays && option.estimatedDays > 0 && (
+                                        {option.estimatedDays != null && option.estimatedDays > 0 ? (
                                           <span className="text-xs text-gray-500">
                                             Entrega estimada: {option.estimatedDays} {option.estimatedDays === 1 ? 'día' : 'días'}
                                           </span>
-                                        )}
+                                        ) : null}
                                         {option.provider === 'pickup' && (
                                           <span className="text-xs text-gray-500">
                                             Recoge en {store.name}
@@ -3018,8 +3098,13 @@ export default function CheckoutPage() {
                         </div>
                       </div>
 
-                      {/* Dirección de envío */}
-                      {selectedAddressId && (() => {
+                      {/* Dirección de envío o Recoger en tienda */}
+                      {deliveryType === 'pickup' ? (
+                        <div className="mb-4 pb-4 border-b border-gray-200">
+                          <p className="text-sm font-medium text-gray-700 mb-2">Entrega</p>
+                          <p className="text-sm text-gray-600">Recoger en tienda</p>
+                        </div>
+                      ) : selectedAddressId && (() => {
                         const selectedAddress = addresses.find(addr => addr.id === selectedAddressId);
                         if (selectedAddress) {
                           return (
