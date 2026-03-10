@@ -29,6 +29,8 @@ export interface KarlopayCredentials extends PaymentProviderCredentials {
   authEmail: string;
   authPassword: string;
   redirectUrl: string; // URL base con placeholders: {tienda} y {session_id}
+  /** Modo de integración: redirect (hosted externo) | embedded (widget en tienda). Default: redirect */
+  integrationMode?: 'redirect' | 'embedded';
 }
 
 /**
@@ -100,6 +102,7 @@ export class IntegrationsService {
       redirectUrl: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.redirect_url`, ''),
       endpoint: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.domain`, ''),
       mode,
+      integrationMode: 'redirect', // Global siempre redirect; embedded solo por sucursal (BranchKarlopaySettings)
     };
   }
 

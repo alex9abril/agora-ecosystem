@@ -20,6 +20,9 @@ import { logisticsService, type Address as LogisticsAddress, type Parcel } from 
 import { branchesService, BranchTaxSettings } from '@/lib/branches';
 import { authService } from '@/lib/auth';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
+import { KarlopayCheckout } from '@/components/checkout/KarlopayCheckout';
+import { isEmbedded } from '@/utils/embed';
+import { beginCheckout, buildStandaloneCheckoutUrl } from '@/services/checkout-embed';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
@@ -316,6 +319,15 @@ export default function CheckoutPage() {
   // Estados para confirmación
   const [orderId, setOrderId] = useState<string | null>(null);
   const [processingOrder, setProcessingOrder] = useState(false);
+  const [karlopayPaymentData, setKarlopayPaymentData] = useState<{
+    mode: 'redirect' | 'embedded';
+    paymentUrl: string;
+    orderGroupId: string;
+    numberOfOrder: string;
+    businessId?: string;
+  } | null>(null);
+  /** Cuando la tienda está embebida y enviamos postMessage al parent para breakout */
+  const [embedBreakoutPending, setEmbedBreakoutPending] = useState(false);
   const [confirmedOrderData, setConfirmedOrderData] = useState<{
     storesInfo: Record<string, { name: string; items: CartItem[] }>;
     subtotalsByStore: Record<string, number>;
@@ -1656,7 +1668,15 @@ export default function CheckoutPage() {
         }
       });
 
-      const order = await apiRequest<{ id: string; order_number: string; karlopay_payment_url?: string }>('/orders/checkout', {
+      const order = await apiRequest<{
+        id: string;
+        order_number: string;
+        order_group_id?: string;
+        karlopay_payment_url?: string;
+        karlopay_mode?: 'redirect' | 'embedded';
+        karlopay_order_group_id?: string;
+        karlopay_number_of_order?: string;
+      }>('/orders/checkout', {
         method: 'POST',
         body: JSON.stringify({
           ...(deliveryType === 'pickup' ? { deliveryType: 'pickup' } : { addressId: selectedAddressId }),
@@ -1676,14 +1696,50 @@ export default function CheckoutPage() {
         (selectedPaymentMethod === 'wallet' && (secondaryPaymentMethod === 'card' || secondaryPaymentMethod === 'karlopay-branch'));
       
       if (needsPaymentRedirect && order.karlopay_payment_url) {
-        // Asegurar que la URL tenga protocolo
+        const orderGroupId = order.karlopay_order_group_id || order.order_group_id || order.id;
+        const mode = order.karlopay_mode || 'redirect';
+
+        // Si la tienda está embebida en iframe: breakout para evitar cross-origin con KarloPay
+        if (isEmbedded()) {
+          const standaloneUrl = buildStandaloneCheckoutUrl(orderGroupId);
+          const result = beginCheckout({
+            checkoutUrl: standaloneUrl,
+            sessionId: orderGroupId,
+          });
+          setProcessingOrder(false);
+          if (result.success) {
+            setEmbedBreakoutPending(true);
+            return;
+          }
+          // Fallback: abrir en nueva pestaña
+          if ('fallbackUrl' in result && result.fallbackUrl) {
+            window.open(result.fallbackUrl, '_blank', 'noopener,noreferrer');
+            setEmbedBreakoutPending(true);
+            return;
+          }
+          setError(('error' in result ? result.error : null) || 'No se pudo iniciar el pago');
+          return;
+        }
+
+        // No embebido: flujo normal
         let paymentUrl = order.karlopay_payment_url;
         if (!paymentUrl.startsWith('http://') && !paymentUrl.startsWith('https://')) {
           paymentUrl = `https://${paymentUrl}`;
         }
+        if (mode === 'embedded') {
+          setKarlopayPaymentData({
+            mode: 'embedded',
+            paymentUrl,
+            orderGroupId,
+            numberOfOrder: order.karlopay_number_of_order || `AGORA_${order.id?.replace(/-/g, '').substring(0, 20).toUpperCase()}`,
+            businessId: paymentInfo.branchId || paymentInfo.secondary_branchId || branchKarlopayBusinessId || undefined,
+          });
+          setProcessingOrder(false);
+          return;
+        }
         console.log(`🔗 Redirigiendo a pasarela de pago: ${paymentUrl}`);
         window.location.href = paymentUrl;
-        return; // No continuar con el flujo normal
+        return;
       }
 
       // Guardar información del pedido antes de vaciar el carrito
@@ -1734,6 +1790,37 @@ export default function CheckoutPage() {
         <title>Checkout - Agora</title>
       </Head>
       <StoreLayout>
+        {embedBreakoutPending && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 dark:bg-neutral-900/95 px-4">
+            <div className="text-center max-w-md">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-toyota-red mb-4" />
+              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                Te estamos llevando al pago seguro...
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                La ventana principal se abrirá para completar el pago. Si no ocurre, revisa si un popup fue bloqueado.
+              </p>
+            </div>
+          </div>
+        )}
+        {karlopayPaymentData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 px-4">
+            <div className="w-full max-w-lg">
+              <h2 className="text-lg font-medium text-gray-900 mb-4 text-center">Pago con tarjeta</h2>
+              <KarlopayCheckout
+                mode={karlopayPaymentData.mode}
+                paymentUrl={karlopayPaymentData.paymentUrl}
+                orderGroupId={karlopayPaymentData.orderGroupId}
+                numberOfOrder={karlopayPaymentData.numberOfOrder}
+                businessId={karlopayPaymentData.businessId}
+                onError={(msg) => {
+                  setError(msg);
+                  setKarlopayPaymentData(null);
+                }}
+              />
+            </div>
+          </div>
+        )}
         {showWhatsappPrompt && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
             <div className="w-full max-w-md rounded-lg bg-white shadow-lg">

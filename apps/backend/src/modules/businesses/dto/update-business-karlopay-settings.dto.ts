@@ -1,11 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsObject, IsOptional } from 'class-validator';
 
 export class UpdateBusinessKarlopaySettingsDto {
   @ApiPropertyOptional({ description: 'Habilitar Karlopay para la sucursal', example: false })
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  /** Modo de integración: redirect (redirige a Karlopay) | embedded (pago dentro de la tienda) */
+  @ApiPropertyOptional({ description: 'Modo de integración Karlopay', example: 'redirect', enum: ['redirect', 'embedded'] })
+  @IsOptional()
+  @IsIn(['redirect', 'embedded'])
+  mode?: 'redirect' | 'embedded';
 
   @ApiPropertyOptional({ description: 'Ambiente activo para Karlopay', example: 'dev' })
   @IsOptional()

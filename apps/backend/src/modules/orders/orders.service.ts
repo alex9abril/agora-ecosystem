@@ -556,6 +556,8 @@ export class OrdersService {
 
       // 17. Crear orden en Karlopay si el método de pago es karlopay/karlopay-branch o si hay método secundario karlopay/karlopay-branch (después del COMMIT)
       let karlopayPaymentUrl: string | null = null;
+      let karlopayMode: 'redirect' | 'embedded' = 'redirect';
+      let karlopayNumberOfOrder: string | null = null;
       const needsKarlopay = 
         paymentMethod === 'karlopay' || 
         paymentMethod === 'karlopay-branch' ||
@@ -668,9 +670,10 @@ export class OrdersService {
           }, karlopayBusinessId);
 
           karlopayPaymentUrl = karlopayOrder.urlPayment;
-          
-          // Obtener el numberOfOrder que devuelve Karlopay (puede ser diferente al que enviamos)
-          const karlopayNumberOfOrder = karlopayOrder.numberOfOrder || numberOfOrder;
+          // Usar modo de la sucursal: si hay branchId (karlopay-branch) usarlo; si no, intentar con la primera orden
+          const modeBusinessId = karlopayBusinessId || createdOrders[0]?.business_id;
+          karlopayMode = await this.karlopayService.getIntegrationMode(modeBusinessId);
+          karlopayNumberOfOrder = karlopayOrder.numberOfOrder || numberOfOrder;
 
           // Guardar la URL de pago y número de orden de Karlopay en la primera orden
           // Guardar tanto el que enviamos como el que recibimos
@@ -742,9 +745,12 @@ export class OrdersService {
         related_orders: createdOrders.map(o => ({ id: o.id, business_id: o.business_id, total_amount: o.total_amount })),
       };
 
-      // Si se creó orden en Karlopay, agregar URL de pago
+      // Si se creó orden en Karlopay, agregar URL de pago, modo y numberOfOrder (para embedded/status)
       if (karlopayPaymentUrl) {
         response.karlopay_payment_url = karlopayPaymentUrl;
+        response.karlopay_mode = karlopayMode;
+        response.karlopay_order_group_id = orderGroupId;
+        if (karlopayNumberOfOrder) response.karlopay_number_of_order = karlopayNumberOfOrder;
       }
 
       return response;
@@ -758,6 +764,60 @@ export class OrdersService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Obtener sesión de checkout standalone (para breakout de iframe).
+   * Retorna la URL de pago Karlopay si el order_group pertenece al usuario.
+   */
+  async getCheckoutSession(orderGroupId: string, userId: string): Promise<{
+    paymentUrl: string;
+    orderGroupId: string;
+    storeContext: string | null;
+    numberOfOrder?: string;
+  } | null> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const result = await dbPool.query(
+      `SELECT o.id, o.order_group_id, o.client_id, o.delivery_notes, o.store_context
+       FROM orders.orders o
+       WHERE o.order_group_id = $1 AND o.client_id = $2
+       LIMIT 1`,
+      [orderGroupId, userId]
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const order = result.rows[0];
+    let paymentUrl: string | undefined;
+
+    const match = order.delivery_notes?.match(/Karlopay Payment URL:\s*([^\n]+)/);
+    if (match) paymentUrl = match[1].trim();
+
+    if (!paymentUrl) {
+      const txResult = await dbPool.query(
+        `SELECT payment_data FROM orders.payment_transactions
+         WHERE order_id = $1 AND payment_method = 'karlopay' AND status = 'pending'
+         LIMIT 1`,
+        [order.id]
+      );
+      const pd = txResult.rows[0]?.payment_data;
+      if (pd?.karlopay_payment_url) paymentUrl = pd.karlopay_payment_url;
+    }
+
+    if (!paymentUrl) return null;
+
+    if (!paymentUrl.startsWith('http://') && !paymentUrl.startsWith('https://')) {
+      paymentUrl = `https://${paymentUrl}`;
+    }
+
+    return {
+      paymentUrl,
+      orderGroupId,
+      storeContext: order.store_context || null,
+    };
   }
 
   /**

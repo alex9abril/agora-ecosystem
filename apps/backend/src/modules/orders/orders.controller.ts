@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,6 +39,22 @@ export class OrdersController {
   @ApiResponse({ status: 404, description: 'Dirección no encontrada' })
   async checkout(@Body() checkoutDto: CheckoutDto, @CurrentUser() user: User) {
     return this.ordersService.checkout(user.id, checkoutDto);
+  }
+
+  @Get('checkout-session/:orderGroupId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener sesión de checkout standalone (para breakout iframe)' })
+  @ApiResponse({ status: 200, description: 'Sesión con URL de pago' })
+  @ApiResponse({ status: 404, description: 'Sesión no encontrada o no autorizada' })
+  async getCheckoutSession(
+    @Param('orderGroupId') orderGroupId: string,
+    @CurrentUser() user: User,
+  ) {
+    const session = await this.ordersService.getCheckoutSession(orderGroupId, user.id);
+    if (!session) {
+      throw new NotFoundException('Sesión de checkout no encontrada o expirada');
+    }
+    return session;
   }
 
   @Get()

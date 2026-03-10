@@ -47,7 +47,7 @@ export class KarlopayService {
 
   /**
    * Obtener credenciales de Karlopay según el modo activo
-   * Intenta primero obtener credenciales a nivel branch, si no están disponibles usa las globales
+   * Orden: branch → group (si la sucursal pertenece a un grupo) → globales
    */
   private async getCredentials(businessId?: string): Promise<KarlopayCredentials> {
     // Si hay businessId, intentar obtener credenciales a nivel branch
@@ -59,8 +59,18 @@ export class KarlopayService {
           return branchCredentials;
         }
       } catch (error: any) {
-        // Si no hay configuración branch o no está habilitada, continuar con globales
-        this.logger.debug(`⚠️ No se encontraron credenciales branch para ${businessId}, usando globales: ${error.message}`);
+        this.logger.debug(`⚠️ No se encontraron credenciales branch para ${businessId}: ${error.message}`);
+      }
+
+      // Si no hay branch, intentar credenciales a nivel grupo (cuando se configuró en Integraciones del grupo)
+      try {
+        const groupCredentials = await this.getGroupKarlopayCredentials(businessId);
+        if (groupCredentials) {
+          this.logger.debug(`✅ Usando credenciales Karlopay a nivel grupo para business: ${businessId}`);
+          return groupCredentials;
+        }
+      } catch (error: any) {
+        this.logger.debug(`⚠️ No se encontraron credenciales grupo para ${businessId}: ${error.message}`);
       }
     }
 
@@ -95,6 +105,7 @@ export class KarlopayService {
         return null;
       }
 
+      const integrationMode = (karlopaySettings.mode || 'redirect') as 'redirect' | 'embedded';
       return {
         enabled: true,
         domain: envSettings.domain || '',
@@ -105,10 +116,59 @@ export class KarlopayService {
         redirectUrl: envSettings.redirect_url || '',
         endpoint: envSettings.domain || '',
         mode,
+        integrationMode,
       };
     } catch (error: any) {
       // Si hay error (ej: sucursal no encontrada), retornar null para usar globales
       this.logger.debug(`Error obteniendo credenciales branch: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Obtener credenciales de Karlopay a nivel grupo (cuando la sucursal pertenece a un grupo
+   * y la configuración se hizo en Integraciones del grupo).
+   */
+  private async getGroupKarlopayCredentials(businessId: string): Promise<KarlopayCredentials | null> {
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) return null;
+
+    const groupResult = await dbPool.query<{ business_group_id: string | null }>(
+      `SELECT business_group_id FROM core.businesses WHERE id = $1`,
+      [businessId],
+    );
+    const businessGroupId = groupResult.rows[0]?.business_group_id;
+    if (!businessGroupId) return null;
+
+    try {
+      const groupSettings = await this.businessesService.getGroupKarlopaySettings(businessGroupId);
+      const karlopaySettings = groupSettings.karlopay;
+
+      if (!karlopaySettings.enabled) return null;
+
+      const mode = karlopaySettings.environment || 'dev';
+      const envSettings = mode === 'dev' ? karlopaySettings.dev : karlopaySettings.prod;
+
+      if (!envSettings.domain && !envSettings.login_endpoint) {
+        this.logger.warn(`Configuración Karlopay grupo incompleta para group ${businessGroupId}`);
+        return null;
+      }
+
+      const integrationMode = (karlopaySettings.mode || 'redirect') as 'redirect' | 'embedded';
+      return {
+        enabled: true,
+        domain: envSettings.domain || '',
+        loginEndpoint: envSettings.login_endpoint || '',
+        ordersEndpoint: envSettings.orders_endpoint || '',
+        authEmail: envSettings.auth_email || '',
+        authPassword: envSettings.auth_password || '',
+        redirectUrl: envSettings.redirect_url || '',
+        endpoint: envSettings.domain || '',
+        mode,
+        integrationMode,
+      };
+    } catch (error: any) {
+      this.logger.debug(`Error obteniendo credenciales grupo: ${error.message}`);
       return null;
     }
   }
@@ -314,6 +374,197 @@ export class KarlopayService {
       throw new ServiceUnavailableException(
         `Error procesando orden en Karlopay: ${error.response?.data?.message || error.message}`
       );
+    }
+  }
+
+  /**
+   * Obtener modo de integración (redirect | embedded) para una sucursal.
+   */
+  async getIntegrationMode(businessId?: string): Promise<'redirect' | 'embedded'> {
+    const credentials = await this.getCredentials(businessId);
+    return credentials.integrationMode || 'redirect';
+  }
+
+  /**
+   * Crear sesión de pago (abstracción para redirect y embedded).
+   * Retorna urlPayment para redirect o embeddedConfig si el proveedor lo soporta.
+   */
+  async createPaymentSession(
+    input: {
+      orderGroupId: string;
+      numberOfOrder: string;
+      total: number;
+      customer: { foreignId: string; fullName: string; phoneNumber: string; email: string };
+      operations: Array<{ description: string; quantity: number; price: number }>;
+      redirectUrl?: string;
+      additional?: Record<string, unknown>;
+    },
+    businessId?: string,
+  ): Promise<{
+    mode: 'redirect' | 'embedded';
+    urlPayment?: string;
+    numberOfOrder: string;
+    karlopayOrderId?: number;
+    embeddedConfig?: Record<string, unknown>;
+  }> {
+    const credentials = await this.getCredentials(businessId);
+    const integrationMode = credentials.integrationMode || 'redirect';
+
+    const orderDto: CreateKarlopayOrderDto = {
+      businessArea: 'ventas',
+      numberOfOrder: input.numberOfOrder,
+      status: 'R',
+      total: input.total,
+      customer: input.customer,
+      operations: input.operations,
+      product: null,
+      redirectUrl: input.redirectUrl,
+      additional: input.additional,
+    };
+
+    const result = await this.createOrUpdateOrder(orderDto, businessId);
+
+    const response: {
+      mode: 'redirect' | 'embedded';
+      urlPayment?: string;
+      numberOfOrder: string;
+      karlopayOrderId?: number;
+      embeddedConfig?: Record<string, unknown>;
+    } = {
+      mode: integrationMode,
+      urlPayment: result.urlPayment,
+      numberOfOrder: result.numberOfOrder || input.numberOfOrder,
+      karlopayOrderId: result.id,
+    };
+
+    if (integrationMode === 'embedded') {
+      // TODO: Karlopay no expone SDK/widget embebido oficial. Cuando esté disponible,
+      // obtener sessionId/clientSecret/widgetUrl desde su API y mapear en embeddedConfig.
+      response.embeddedConfig = undefined;
+    }
+
+    return response;
+  }
+
+  /**
+   * Inicializar sesión embebida. Stub: Karlopay no expone SDK embedded oficial.
+   * Retorna fallbackUrl para usar redirect cuando embedded no está disponible.
+   */
+  async initEmbeddedSession(
+    orderGroupId: string,
+    numberOfOrder: string,
+    businessId?: string,
+  ): Promise<{
+    success: boolean;
+    embeddedConfig?: Record<string, unknown>;
+    fallbackToRedirect: boolean;
+    redirectUrl?: string;
+    error?: string;
+  }> {
+    const credentials = await this.getCredentials(businessId);
+    if (credentials.integrationMode !== 'embedded') {
+      return {
+        success: false,
+        fallbackToRedirect: true,
+        error: 'Modo embedded no configurado para esta sucursal',
+      };
+    }
+
+    // TODO: KarlopayEmbeddedProviderAdapter - cuando Karlopay exponga SDK/widget oficial:
+    // 1. Llamar API de Karlopay para obtener sessionId/clientSecret/widgetUrl
+    // 2. Retornar embeddedConfig con esos datos
+    // Por ahora: no hay SDK, retornar fallback a redirect
+    const { dbPool } = await import('../../../config/database.config');
+    let redirectUrl: string | undefined;
+    if (dbPool) {
+      const r = await dbPool.query(
+        `SELECT delivery_notes FROM orders.orders WHERE order_group_id = $1 LIMIT 1`,
+        [orderGroupId],
+      );
+      if (r.rows[0]?.delivery_notes) {
+        const match = r.rows[0].delivery_notes.match(/Karlopay Payment URL:\s*([^\n]+)/);
+        if (match) redirectUrl = match[1].trim();
+      }
+    }
+
+    this.logger.debug(
+      `[KarlopayEmbedded] initEmbeddedSession: Karlopay no expone SDK embedded. Fallback a redirect. orderGroupId=${orderGroupId}`,
+    );
+
+    return {
+      success: false,
+      fallbackToRedirect: true,
+      redirectUrl: redirectUrl || undefined,
+      error: 'Karlopay no ofrece SDK/widget embebido oficial. Usar modo redirect.',
+    };
+  }
+
+  /**
+   * Obtener estado de pago por orderGroupId o numberOfOrder.
+   * Fuente de verdad: payment_transactions y orders, no el frontend.
+   */
+  async getPaymentStatus(
+    orderGroupIdOrNumberOfOrder: string,
+  ): Promise<{
+    status: string;
+    orderId?: string;
+    orderGroupId?: string;
+    paymentAmount?: number;
+    completedAt?: string;
+    error?: string;
+  }> {
+    const { dbPool } = await import('../../../config/database.config');
+    if (!dbPool) {
+      return { status: 'error', error: 'DB no configurada' };
+    }
+
+    try {
+      // Buscar por order_group_id
+      let ordersResult = await dbPool.query(
+        `SELECT o.id, o.order_group_id, o.payment_status, o.total_amount
+         FROM orders.orders o
+         WHERE o.order_group_id = $1
+         LIMIT 1`,
+        [orderGroupIdOrNumberOfOrder],
+      );
+
+      if (ordersResult.rows.length === 0) {
+        // Buscar por numberOfOrder en delivery_notes
+        ordersResult = await dbPool.query(
+          `SELECT o.id, o.order_group_id, o.payment_status, o.total_amount
+           FROM orders.orders o
+           WHERE o.delivery_notes LIKE $1
+           LIMIT 1`,
+          [`%Karlopay Order: ${orderGroupIdOrNumberOfOrder}%`],
+        );
+      }
+
+      if (ordersResult.rows.length === 0) {
+        return { status: 'not_found', error: 'Orden no encontrada' };
+      }
+
+      const order = ordersResult.rows[0];
+      const txResult = await dbPool.query(
+        `SELECT status, amount, completed_at
+         FROM orders.payment_transactions
+         WHERE order_id = $1 AND payment_method = 'karlopay'
+         ORDER BY created_at DESC LIMIT 1`,
+        [order.id],
+      );
+
+      const tx = txResult.rows[0];
+      const paymentStatus = order.payment_status || tx?.status || 'pending_payment';
+
+      return {
+        status: paymentStatus,
+        orderId: order.id,
+        orderGroupId: order.order_group_id,
+        paymentAmount: tx ? parseFloat(tx.amount) : undefined,
+        completedAt: tx?.completed_at ? new Date(tx.completed_at).toISOString() : undefined,
+      };
+    } catch (err: any) {
+      this.logger.error('Error obteniendo estado de pago:', err);
+      return { status: 'error', error: err?.message || 'Error consultando estado' };
     }
   }
 

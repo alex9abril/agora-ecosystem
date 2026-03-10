@@ -27,7 +27,6 @@ export default function BranchesPage() {
   const [brandingBranch, setBrandingBranch] = useState<Business | null>(null);
   const [settingsPreviewBranch, setSettingsPreviewBranch] = useState<Business | null>(null);
   const [karbotBranch, setKarbotBranch] = useState<Business | null>(null);
-  const [karlopayBranch, setKarlopayBranch] = useState<Business | null>(null);
   const [notificationBranch, setNotificationBranch] = useState<Business | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -171,7 +170,6 @@ export default function BranchesPage() {
                 !brandingBranch &&
                 !settingsPreviewBranch &&
                 !karbotBranch &&
-                !karlopayBranch &&
                 !notificationBranch && (
                 <div className="mb-6">
                   <button
@@ -244,12 +242,6 @@ export default function BranchesPage() {
                   onBack={() => setKarbotBranch(null)}
                   onUpdated={loadBranches}
                 />
-              ) : karlopayBranch ? (
-                <BranchKarlopaySettings
-                  branch={karlopayBranch}
-                  onBack={() => setKarlopayBranch(null)}
-                  onUpdated={loadBranches}
-                />
               ) : notificationBranch ? (
                 <BranchNotificationSettings
                   branch={notificationBranch}
@@ -263,7 +255,6 @@ export default function BranchesPage() {
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
-                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(branch);
@@ -271,7 +262,6 @@ export default function BranchesPage() {
                   onBranding={(branch) => {
                     setSettingsPreviewBranch(null);
                     setKarbotBranch(null);
-                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setShowAddForm(false);
                     setEditingBranch(null);
@@ -282,7 +272,6 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setKarbotBranch(null);
-                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setSettingsPreviewBranch(branch);
                   }}
@@ -291,18 +280,8 @@ export default function BranchesPage() {
                     setEditingBranch(null);
                     setBrandingBranch(null);
                     setSettingsPreviewBranch(null);
-                    setKarlopayBranch(null);
                     setNotificationBranch(null);
                     setKarbotBranch(branch);
-                  }}
-                  onKarlopaySettings={(branch) => {
-                    setShowAddForm(false);
-                    setEditingBranch(null);
-                    setBrandingBranch(null);
-                    setSettingsPreviewBranch(null);
-                    setKarbotBranch(null);
-                    setNotificationBranch(null);
-                    setKarlopayBranch(branch);
                   }}
                   onNotificationSettings={(branch) => {
                     setShowAddForm(false);
@@ -333,7 +312,6 @@ interface BranchesListProps {
   onBranding?: (branch: Business) => void;
   onPreviewSettings?: (branch: Business) => void;
   onKarbotSettings?: (branch: Business) => void;
-  onKarlopaySettings?: (branch: Business) => void;
   onNotificationSettings?: (branch: Business) => void;
   onArchive?: (branch: Business, confirmName: string) => Promise<void>;
 }
@@ -345,7 +323,6 @@ function BranchesList({
   onBranding,
   onPreviewSettings,
   onKarbotSettings,
-  onKarlopaySettings,
   onNotificationSettings,
   onArchive,
 }: BranchesListProps) {
@@ -459,14 +436,6 @@ function BranchesList({
                   className="px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 rounded hover:bg-emerald-100 dark:hover:bg-emerald-800/50 transition-colors"
                 >
                   Karbot
-                </button>
-              )}
-              {onKarlopaySettings && (
-                <button
-                  onClick={() => onKarlopaySettings(branch)}
-                  className="px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 rounded hover:bg-emerald-100 dark:hover:bg-emerald-800/50 transition-colors"
-                >
-                  Karlopay
                 </button>
               )}
               {onNotificationSettings && (
@@ -1402,6 +1371,7 @@ export interface BranchKarlopaySettingsProps {
 
 const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
   enabled: false,
+  mode: 'redirect',
   environment: 'dev',
   dev: {
     domain: '',
@@ -1564,6 +1534,23 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
             {isDevMode
               ? 'Se usarán las credenciales y endpoints de desarrollo.'
               : 'Se usarán las credenciales y endpoints de producción.'}
+          </p>
+        </div>
+
+        <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20">
+          <label className="block text-xs font-medium text-gray-900 dark:text-gray-100 mb-1.5">Modo de integración</label>
+          <select
+            value={settings.mode || 'redirect'}
+            onChange={(e) => setSettings((prev) => ({ ...prev, mode: e.target.value as 'redirect' | 'embedded' }))}
+            className="w-full max-w-md px-2.5 py-1.5 text-xs border border-gray-300 dark:border-neutral-600 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100"
+          >
+            <option value="redirect">Redirect (pago en sitio externo de Karlopay)</option>
+            <option value="embedded">Embedded (pago dentro de la tienda - requiere SDK de Karlopay)</option>
+          </select>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1.5">
+            {settings.mode === 'embedded'
+              ? 'Embedded requiere que Karlopay proporcione SDK/widget oficial. Actualmente hace fallback a redirect.'
+              : 'El cliente será redirigido al sitio de Karlopay para completar el pago.'}
           </p>
         </div>
 

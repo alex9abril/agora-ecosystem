@@ -31,7 +31,7 @@ export default function IntegracionesPanel({
 }: IntegracionesPanelProps) {
   const id = idProp ?? businessIdLegacy ?? '';
   const contextName = contextNameProp ?? businessNameLegacy ?? '';
-  const [expanded, setExpanded] = useState<ExpandedIntegration>(null);
+  const [expanded, setExpanded] = useState<ExpandedIntegration>('karlopay'); // Karlopay expandido por defecto para configurar
   const [karbotLoading, setKarbotLoading] = useState(true);
   const [karlopayLoading, setKarlopayLoading] = useState(true);
   const [karbotSummary, setKarbotSummary] = useState<{ enabled: boolean; environment: string } | null>(null);

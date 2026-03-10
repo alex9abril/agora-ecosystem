@@ -163,6 +163,7 @@ function requiresAuthentication(endpoint: string): boolean {
     '/user-vehicles',
     '/auth/me',
     '/auth/refresh',
+    '/payments',
   ];
   
   // Verificar si es un endpoint público

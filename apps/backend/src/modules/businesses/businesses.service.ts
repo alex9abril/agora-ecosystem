@@ -3192,6 +3192,7 @@ export class BusinessesService {
 
   private readonly DEFAULT_KARLOPAY_SETTINGS = {
     enabled: false,
+    mode: 'redirect' as 'redirect' | 'embedded',
     environment: 'dev' as 'dev' | 'prod',
     dev: {
       domain: '',
@@ -3200,6 +3201,7 @@ export class BusinessesService {
       auth_email: '',
       auth_password: '',
       redirect_url: '',
+      embedded_config: undefined as Record<string, unknown> | undefined,
     },
     prod: {
       domain: '',
@@ -3208,6 +3210,7 @@ export class BusinessesService {
       auth_email: '',
       auth_password: '',
       redirect_url: '',
+      embedded_config: undefined as Record<string, unknown> | undefined,
     },
   };
 
@@ -3292,6 +3295,7 @@ export class BusinessesService {
     userId: string,
     updateDto: {
       enabled?: boolean;
+      mode?: 'redirect' | 'embedded';
       environment?: 'dev' | 'prod';
       dev?: {
         domain?: string;
@@ -3300,6 +3304,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        embedded_config?: Record<string, unknown>;
       };
       prod?: {
         domain?: string;
@@ -3308,6 +3313,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        embedded_config?: Record<string, unknown>;
       };
     },
   ) {
@@ -3512,6 +3518,7 @@ export class BusinessesService {
     userId: string,
     updateDto: {
       enabled?: boolean;
+      mode?: 'redirect' | 'embedded';
       environment?: 'dev' | 'prod';
       dev?: {
         domain?: string;
@@ -3520,6 +3527,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        embedded_config?: Record<string, unknown>;
       };
       prod?: {
         domain?: string;
@@ -3528,6 +3536,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        embedded_config?: Record<string, unknown>;
       };
     },
   ) {

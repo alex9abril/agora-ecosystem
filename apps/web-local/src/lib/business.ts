@@ -174,8 +174,13 @@ export interface BranchKarbotSettings {
   };
 }
 
+/** Modo de integración Karlopay: redirect (hosted externo) o embedded (widget en tienda) */
+export type KarlopayMode = 'redirect' | 'embedded';
+
 export interface BranchKarlopaySettings {
   enabled: boolean;
+  /** Modo de integración: redirect (redirige a Karlopay) | embedded (pago dentro de la tienda) */
+  mode?: KarlopayMode;
   environment: 'dev' | 'prod';
   dev: {
     domain?: string;
@@ -184,6 +189,8 @@ export interface BranchKarlopaySettings {
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;
+    /** Para embedded: publicKey/widgetUrl si Karlopay lo provee (opcional) */
+    embedded_config?: Record<string, unknown>;
   };
   prod: {
     domain?: string;
@@ -192,6 +199,7 @@ export interface BranchKarlopaySettings {
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;
+    embedded_config?: Record<string, unknown>;
   };
 }
 
