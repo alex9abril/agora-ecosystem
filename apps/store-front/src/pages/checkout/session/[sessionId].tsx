@@ -53,7 +53,7 @@ export default function CheckoutSessionPage() {
         // Usar window.top para asegurar que KarloPay cargue en top window, no en iframe.
         // Evita: "Blocked a frame with origin landing-staging.karlopay.com from accessing cross-origin frame"
         try {
-          window.top.location.href = url;
+          (window.top ?? window).location.href = url;
         } catch {
           window.location.href = url;
         }
