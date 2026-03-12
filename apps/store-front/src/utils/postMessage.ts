@@ -40,7 +40,7 @@ export interface AgoraResizeIframePayload {
 
 export interface AgoraMessageBase {
   type: AgoraMessageType;
-  payload?: Record<string, unknown>;
+  payload?: object;
 }
 
 export interface AgoraOpenTopCheckoutMessage extends AgoraMessageBase {
