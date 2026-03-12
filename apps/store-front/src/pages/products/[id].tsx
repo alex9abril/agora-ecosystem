@@ -27,7 +27,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
-import { checkProductCompatibility } from '@/lib/product-compatibility';
+import { checkProductCompatibility, getProductCompatibilities, ProductCompatibilityItem } from '@/lib/product-compatibility';
 import SimilarProductsCarousel from '@/components/SimilarProductsCarousel';
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
@@ -61,6 +61,8 @@ export default function ProductDetailPage() {
   const [currentVehicle, setCurrentVehicle] = useState<any | null>(null);
   const [isCompatible, setIsCompatible] = useState<boolean | null>(null);
   const [checkingCompatibility, setCheckingCompatibility] = useState(false);
+  const [productCompatibilities, setProductCompatibilities] = useState<ProductCompatibilityItem[]>([]);
+  const [loadingCompatibilities, setLoadingCompatibilities] = useState(false);
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
   const [taxedUnitPrice, setTaxedUnitPrice] = useState<number | null>(null);
@@ -262,6 +264,27 @@ export default function ProductDetailPage() {
       window.removeEventListener('vehicle-selected', handleVehicleChanged);
     };
   }, [product]);
+
+  // Cargar lista de compatibilidades (vehicle_variants) para mostrar tabla discreta
+  useEffect(() => {
+    if (!product?.id || !shouldCheckCompatibility) {
+      setProductCompatibilities([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingCompatibilities(true);
+    getProductCompatibilities(product.id)
+      .then((list) => {
+        if (!cancelled) setProductCompatibilities(list);
+      })
+      .catch(() => {
+        if (!cancelled) setProductCompatibilities([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCompatibilities(false);
+      });
+    return () => { cancelled = true; };
+  }, [product?.id, shouldCheckCompatibility]);
 
   // Cuando se carga la sucursal guardada, si hay disponibilidades ya cargadas, seleccionarla automáticamente
   useEffect(() => {
@@ -1333,6 +1356,92 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                   ) : null}
+
+                  {/* Compatibilidades (vehicle_variants): presentación con versión/motor en chips */}
+                  {!loadingCompatibilities && productCompatibilities.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200/80">
+                      <p className="text-xs text-gray-600 font-semibold mb-2">Compatibilidades registradas</p>
+                      <div className="rounded-lg border border-gray-200/80 bg-gray-50/60 overflow-hidden">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-gray-100/90">
+                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Marca</th>
+                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Modelo</th>
+                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Año</th>
+                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Versiones y motores</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {productCompatibilities.map((c) =>
+                                c.is_universal ? (
+                                  <tr key={c.id} className="border-t border-gray-200/60 bg-white">
+                                    <td colSpan={4} className="py-2 px-2.5 text-gray-500 italic">
+                                      Compatible con cualquier vehículo (universal)
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={c.id} className="border-t border-gray-200/60 bg-white hover:bg-gray-50/80 transition-colors">
+                                    <td className="py-2 px-2.5 font-medium text-gray-800 align-top">{c.make ?? '—'}</td>
+                                    <td className="py-2 px-2.5 font-medium text-gray-800 align-top">{c.model ?? '—'}</td>
+                                    <td className="py-2 px-2.5 text-gray-700 align-top whitespace-nowrap">{c.year ?? '—'}</td>
+                                    <td className="py-2 px-2.5 align-top">
+                                      {(() => {
+                                        const trims = (c.body_trim ?? '')
+                                          .split(',')
+                                          .map((s) => s.trim())
+                                          .filter(Boolean);
+                                        const motors = (c.engine_transmission ?? '')
+                                          .split(',')
+                                          .map((s) => s.trim())
+                                          .filter(Boolean);
+                                        const hasAny = trims.length > 0 || motors.length > 0;
+                                        if (!hasAny) return <span className="text-gray-400">—</span>;
+                                        return (
+                                          <div className="space-y-1.5">
+                                            {trims.length > 0 && (
+                                              <div>
+                                                <span className="text-gray-500 font-medium block mb-1">Versiones</span>
+                                                <div className="flex flex-wrap gap-1">
+                                                  {trims.map((t, i) => (
+                                                    <span
+                                                      key={i}
+                                                      className="inline-flex items-center rounded-md bg-gray-200/90 px-1.5 py-0.5 text-gray-700"
+                                                    >
+                                                      {t}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {motors.length > 0 && (
+                                              <div>
+                                                <span className="text-gray-500 font-medium block mb-1">Motores</span>
+                                                <div className="flex flex-wrap gap-1">
+                                                  {motors.map((m, i) => (
+                                                    <span
+                                                      key={i}
+                                                      className="inline-flex items-center rounded-md bg-slate-200/80 px-1.5 py-0.5 text-slate-700"
+                                                    >
+                                                      {m}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  </tr>
+                                )
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

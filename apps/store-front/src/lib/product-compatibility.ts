@@ -16,6 +16,20 @@ export interface CompatibilityCheckResponse {
   is_compatible: boolean;
 }
 
+/** Una compatibilidad de producto (vehicle_variants / product_vehicle_compatibility) */
+export interface ProductCompatibilityItem {
+  id: string;
+  product_id: string;
+  vehicle_variant_id?: string | null;
+  is_universal: boolean;
+  notes?: string | null;
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  body_trim?: string | null;
+  engine_transmission?: string | null;
+}
+
 /**
  * Verificar si un producto es compatible con un vehículo
  */
@@ -45,6 +59,24 @@ export async function checkProductCompatibility(
     console.error('[ProductCompatibility] Error verificando compatibilidad:', error);
     // En caso de error, retornar false para ser conservador
     return false;
+  }
+}
+
+/**
+ * Obtener la lista de compatibilidades de un producto (vehicle_variants)
+ */
+export async function getProductCompatibilities(
+  productId: string
+): Promise<ProductCompatibilityItem[]> {
+  try {
+    const data = await apiRequest<ProductCompatibilityItem[]>(
+      `/catalog/vehicles/products/${productId}/compatibilities`,
+      { method: 'GET' }
+    );
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    console.error('[ProductCompatibility] Error obteniendo compatibilidades:', error);
+    return [];
   }
 }
 
