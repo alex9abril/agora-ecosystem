@@ -71,19 +71,110 @@ export class VehiclesController {
     return this.vehiclesService.getSpecsByYear(yearId);
   }
 
+  @Get('variants/makes')
+  @Public()
+  @ApiOperation({ summary: 'Marcas distintas para desplegable (vehicle_variants)' })
+  @ApiResponse({ status: 200, description: 'Lista de marcas' })
+  async getVariantMakes() {
+    return this.vehiclesService.getVariantMakes();
+  }
+
+  @Get('variants/models')
+  @Public()
+  @ApiOperation({ summary: 'Modelos distintos por marca' })
+  @ApiQuery({ name: 'make', required: true, description: 'Marca' })
+  @ApiResponse({ status: 200, description: 'Lista de modelos' })
+  async getVariantModels(@Query('make') make: string) {
+    return this.vehiclesService.getVariantModels(make || '');
+  }
+
+  @Get('variants/years')
+  @Public()
+  @ApiOperation({ summary: 'Años distintos por marca y modelo' })
+  @ApiQuery({ name: 'make', required: true }) @ApiQuery({ name: 'model', required: true })
+  @ApiResponse({ status: 200, description: 'Lista de años' })
+  async getVariantYears(@Query('make') make: string, @Query('model') model: string) {
+    return this.vehiclesService.getVariantYears(make || '', model || '');
+  }
+
+  @Get('variants/body-trims')
+  @Public()
+  @ApiOperation({ summary: 'Body trim distintos por make, model, year' })
+  @ApiQuery({ name: 'make', required: true }) @ApiQuery({ name: 'model', required: true }) @ApiQuery({ name: 'year', required: true })
+  @ApiResponse({ status: 200, description: 'Lista de body_trim' })
+  async getVariantBodyTrims(
+    @Query('make') make: string,
+    @Query('model') model: string,
+    @Query('year') year: string,
+  ) {
+    const yearNum = year != null && year !== '' ? parseInt(year, 10) : 0;
+    return this.vehiclesService.getVariantBodyTrims(make || '', model || '', yearNum);
+  }
+
+  @Get('variants/engine-transmissions')
+  @Public()
+  @ApiOperation({ summary: 'Engine/transmission distintos por make, model, year, body_trim' })
+  @ApiQuery({ name: 'make', required: true }) @ApiQuery({ name: 'model', required: true }) @ApiQuery({ name: 'year', required: true })
+  @ApiQuery({ name: 'bodyTrim', required: false })
+  @ApiResponse({ status: 200, description: 'Lista de engine_transmission' })
+  async getVariantEngineTransmissions(
+    @Query('make') make: string,
+    @Query('model') model: string,
+    @Query('year') year: string,
+    @Query('bodyTrim') bodyTrim?: string,
+  ) {
+    const yearNum = year != null && year !== '' ? parseInt(year, 10) : 0;
+    return this.vehiclesService.getVariantEngineTransmissions(make || '', model || '', yearNum, bodyTrim ?? null);
+  }
+
+  @Get('variants')
+  @Public()
+  @ApiOperation({ summary: 'Listar/buscar variantes de vehículo (vehicle_variants)' })
+  @ApiQuery({ name: 'q', required: false, description: 'Búsqueda en make, model, body_trim, engine_transmission' })
+  @ApiQuery({ name: 'make', required: false }) @ApiQuery({ name: 'model', required: false }) @ApiQuery({ name: 'year', required: false })
+  @ApiQuery({ name: 'body_trim', required: false }) @ApiQuery({ name: 'engine_transmission', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiResponse({ status: 200, description: 'Variantes obtenidas exitosamente' })
+  @ApiResponse({ status: 503, description: 'Servicio no disponible' })
+  async getVariants(
+    @Query('q') q?: string,
+    @Query('make') make?: string,
+    @Query('model') model?: string,
+    @Query('year') year?: string,
+    @Query('body_trim') body_trim?: string,
+    @Query('engine_transmission') engine_transmission?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const yearNum = year != null && year !== '' ? parseInt(year, 10) : undefined;
+    const limitNum = limit != null && limit !== '' ? parseInt(limit, 10) : undefined;
+    const bodyTrimVal = body_trim !== undefined && body_trim !== '' ? body_trim : undefined;
+    const engineVal = engine_transmission !== undefined && engine_transmission !== '' ? engine_transmission : undefined;
+    return this.vehiclesService.getVehicleVariants({
+      q,
+      make,
+      model,
+      year: yearNum,
+      body_trim: bodyTrimVal,
+      engine_transmission: engineVal,
+      limit: limitNum,
+    });
+  }
+
   @Get('products/:productId/compatibility')
   @Public()
   @ApiOperation({ summary: 'Verificar compatibilidad de un producto con un vehículo' })
   @ApiParam({ name: 'productId', description: 'ID del producto' })
-  @ApiQuery({ name: 'brandId', required: false, description: 'ID de la marca' })
-  @ApiQuery({ name: 'modelId', required: false, description: 'ID del modelo' })
-  @ApiQuery({ name: 'yearId', required: false, description: 'ID del año' })
-  @ApiQuery({ name: 'specId', required: false, description: 'ID de la especificación' })
+  @ApiQuery({ name: 'vehicleVariantId', required: false, description: 'ID de la variante (vehicle_variants)' })
+  @ApiQuery({ name: 'brandId', required: false, description: 'ID de la marca (legacy)' })
+  @ApiQuery({ name: 'modelId', required: false, description: 'ID del modelo (legacy)' })
+  @ApiQuery({ name: 'yearId', required: false, description: 'ID del año (legacy)' })
+  @ApiQuery({ name: 'specId', required: false, description: 'ID de la especificación (legacy)' })
   @ApiResponse({ status: 200, description: 'Compatibilidad verificada' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async checkCompatibility(
     @Param('productId') productId: string,
+    @Query('vehicleVariantId') vehicleVariantId?: string,
     @Query('brandId') brandId?: string,
     @Query('modelId') modelId?: string,
     @Query('yearId') yearId?: string,
@@ -94,7 +185,8 @@ export class VehiclesController {
       brandId,
       modelId,
       yearId,
-      specId
+      specId,
+      vehicleVariantId
     );
     return { is_compatible: isCompatible };
   }

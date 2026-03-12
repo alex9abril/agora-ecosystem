@@ -195,8 +195,26 @@ export default function ProductDetailPage() {
     const checkCompatibility = async (vehicle: any) => {
       setCurrentVehicle(vehicle);
       
-      if (vehicle && vehicle.vehicle_brand_id && product && product.id) {
-        // Verificar compatibilidad
+      if (!vehicle || !product?.id) {
+        setIsCompatible(null);
+        return;
+      }
+      if (vehicle.vehicle_variant_id) {
+        try {
+          setCheckingCompatibility(true);
+          const compatible = await checkProductCompatibility(product.id, {
+            vehicleVariantId: vehicle.vehicle_variant_id,
+          });
+          setIsCompatible(compatible);
+        } catch (error) {
+          console.error('Error verificando compatibilidad:', error);
+          setIsCompatible(null);
+        } finally {
+          setCheckingCompatibility(false);
+        }
+        return;
+      }
+      if (vehicle.vehicle_brand_id) {
         try {
           setCheckingCompatibility(true);
           const compatible = await checkProductCompatibility(product.id, {
@@ -212,9 +230,9 @@ export default function ProductDetailPage() {
         } finally {
           setCheckingCompatibility(false);
         }
-      } else {
-        setIsCompatible(null);
+        return;
       }
+      setIsCompatible(null);
     };
 
     const handleStorageChange = (e: StorageEvent) => {

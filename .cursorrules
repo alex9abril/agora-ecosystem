@@ -100,9 +100,11 @@ No asumir que solo `schema.sql` o el README bastan; revisar migraciones, fixes y
 
 ### 3.9 Ejecución de scripts SQL
 
-- **No ejecutar** scripts SQL en la base de datos desde el agente.
-- Solo **crear, editar o corregir** archivos SQL según lo que pida el usuario.
-- La ejecución la hace **siempre el usuario**.
+- El agente puede ejecutar scripts SQL si el usuario lo autoriza explícitamente.
+- Para cada tarea o ejecución, el script debe guardarse primero en la carpeta `scripts/` antes de su ejecución.
+- Cada script ejecutado debe iniciar siempre con la fecha, una descripción clara de la acción que realizará y además el nombre del archivo debe llevar un consecutivo (ej. `001_`, `002_`, etc.) seguido de una breve descripción de lo que hace.
+- Mantener un registro organizado de cada SQL ejecutado en la carpeta `scripts/`.
+- Sin autorización expresa, solo crear, editar o corregir archivos SQL según lo solicite el usuario.
 
 ---
 

@@ -1131,20 +1131,27 @@ export class LogisticsService {
         [orderStatus, orderId]
       );
 
-      // Registrar en historial de estados
-      await client.query(
-        `INSERT INTO orders.order_status_history (order_id, old_status, new_status, changed_by_user_id, changed_by_role, notes)
-         SELECT 
-           $1,
-           o.status,
-           $2,
-           NULL,
-           'system',
-           'Actualización automática desde servicio de logística'
-         FROM orders.orders o
-         WHERE o.id = $1`,
-        [orderId, orderStatus]
-      );
+      // Registrar en historial de estados (opcional: la tabla puede no existir si no se corrió la migración)
+      try {
+        await client.query(
+          `INSERT INTO orders.order_status_history (order_id, previous_status, new_status, changed_by_user_id, changed_by_role, change_reason)
+           SELECT 
+             $1,
+             o.status,
+             $2,
+             NULL,
+             NULL,
+             'Actualización automática desde servicio de logística'
+           FROM orders.orders o
+           WHERE o.id = $1`,
+          [orderId, orderStatus]
+        );
+      } catch (historyError: any) {
+        // No fallar la actualización del pedido si la tabla order_status_history no existe
+        this.logger.warn(
+          `⚠️ No se pudo registrar en order_status_history (puede que la tabla no exista): ${historyError?.message || historyError}`
+        );
+      }
 
       await client.query('COMMIT');
 
@@ -1301,6 +1308,244 @@ export class LogisticsService {
       this.logger.error(`❌ URL intentada: ${labelUrl}`);
       return null;
     }
+  }
+
+  /**
+   * Obtener datos de la orden para etiqueta de pickup (cliente + tienda + ítems).
+   * Solo válido si delivery_address_text = 'Recoger en tienda'.
+   */
+  async getOrderForPickupLabel(orderId: string): Promise<{
+    order_id: string;
+    order_number: string;
+    client_name: string;
+    client_phone: string;
+    business_name: string;
+    business_address: string;
+    business_logo_url: string | null;
+    items: { item_name: string; quantity: number }[];
+    created_at: Date;
+  } | null> {
+    if (!dbPool) return null;
+    const orderResult = await dbPool.query(
+      `SELECT 
+        o.id as order_id,
+        o.delivery_address_text,
+        o.created_at,
+        TRIM(COALESCE(up.first_name, '') || ' ' || COALESCE(up.last_name, '')) as client_name,
+        up.phone as client_phone,
+        b.name as business_name,
+        b.logo_url as business_logo_url,
+        TRIM(CONCAT_WS(', ',
+          NULLIF(TRIM(CONCAT_WS(' ', a.street, a.street_number)), ''),
+          NULLIF(a.neighborhood, ''),
+          NULLIF(a.city, ''),
+          NULLIF(a.state, ''),
+          NULLIF(a.postal_code, '')
+        )) as business_address
+       FROM orders.orders o
+       INNER JOIN core.user_profiles up ON o.client_id = up.id
+       INNER JOIN core.businesses b ON o.business_id = b.id
+       LEFT JOIN core.addresses a ON b.address_id = a.id
+       WHERE o.id = $1`,
+      [orderId]
+    );
+    if (orderResult.rows.length === 0) return null;
+    const row = orderResult.rows[0];
+    if (row.delivery_address_text !== 'Recoger en tienda') return null;
+
+    const itemsResult = await dbPool.query(
+      `SELECT item_name, quantity FROM orders.order_items WHERE order_id = $1 ORDER BY created_at`,
+      [orderId]
+    );
+    const items = (itemsResult.rows || []).map((r: any) => ({
+      item_name: r.item_name || 'Producto',
+      quantity: parseInt(r.quantity, 10) || 1,
+    }));
+
+    const orderNumber = String(row.order_id).replace(/-/g, '').slice(-8).toUpperCase();
+    return {
+      order_id: row.order_id,
+      order_number: orderNumber,
+      client_name: row.client_name || 'Cliente',
+      client_phone: row.client_phone || '',
+      business_name: row.business_name || 'Tienda',
+      business_address: row.business_address && String(row.business_address).trim() ? String(row.business_address).trim() : '',
+      business_logo_url: row.business_logo_url ? String(row.business_logo_url).trim() : null,
+      items,
+      created_at: row.created_at,
+    };
+  }
+
+  /**
+   * Descargar imagen desde URL y devolver buffer (para logo en PDF).
+   */
+  private async fetchImageBuffer(url: string): Promise<Buffer | null> {
+    try {
+      if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) return null;
+      const axios = require('axios');
+      const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 8000 });
+      return Buffer.from(res.data);
+    } catch (err: any) {
+      this.logger.warn(`⚠️ No se pudo cargar logo (${url}): ${err?.message || err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Generar PDF de etiqueta para recoger en tienda (tamaño estándar 4x6 pulgadas).
+   */
+  async getPickupLabelPDF(orderId: string): Promise<Buffer | null> {
+    const orderData = await this.getOrderForPickupLabel(orderId);
+    if (!orderData) {
+      this.logger.warn(`⚠️ Orden ${orderId} no es pickup o no existe`);
+      return null;
+    }
+    let logoBuffer: Buffer | null = null;
+    if (orderData.business_logo_url) {
+      logoBuffer = await this.fetchImageBuffer(orderData.business_logo_url);
+    }
+    return this.generatePickupLabelPDFBuffer(orderData, logoBuffer);
+  }
+
+  private generatePickupLabelPDFBuffer(
+    data: {
+      order_id: string;
+      order_number: string;
+      client_name: string;
+      client_phone: string;
+      business_name: string;
+      business_address: string;
+      items: { item_name: string; quantity: number }[];
+      created_at: Date;
+    },
+    logoBuffer: Buffer | null
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      try {
+        const { Writable } = require('stream');
+        const chunks: Buffer[] = [];
+        const writable = new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            chunks.push(chunk);
+            cb();
+          },
+          final(cb: () => void) {
+            resolve(Buffer.concat(chunks));
+            cb();
+          },
+        });
+
+        const doc = new PDFDocument({
+          size: [288, 432],
+          margins: { top: 12, bottom: 12, left: 12, right: 12 },
+        });
+        doc.pipe(writable);
+
+        const pageWidth = 288;
+        const marginLeft = 12;
+        const marginRight = 12;
+        const contentWidth = pageWidth - marginLeft - marginRight;
+        let y = 12;
+
+        // ========== TIENDA: logo + nombre + dirección ==========
+        const logoHeight = 28;
+        const logoWidth = 80;
+        if (logoBuffer) {
+          try {
+            doc.image(logoBuffer, marginLeft, y, { width: logoWidth, height: logoHeight, fit: [logoWidth, logoHeight] });
+          } catch {
+            // Si la imagen no es compatible (ej. SVG), ignorar
+          }
+        }
+        y += logoHeight + 4;
+
+        doc.fontSize(11).font('Helvetica-Bold').fillColor('black');
+        const businessNameH = doc.heightOfString(data.business_name, { width: contentWidth });
+        doc.text(data.business_name, marginLeft, y, { width: contentWidth });
+        y += businessNameH + 2;
+        if (data.business_address) {
+          doc.fontSize(7).font('Helvetica');
+          const addrH = doc.heightOfString(data.business_address, { width: contentWidth });
+          doc.text(data.business_address, marginLeft, y, { width: contentWidth });
+          y += addrH + 2;
+        }
+        y += 4;
+        doc.moveTo(marginLeft, y).lineTo(pageWidth - marginRight, y).stroke();
+        y += 8;
+
+        doc.fontSize(11).font('Helvetica-Bold');
+        doc.text('RECOGER EN TIENDA', marginLeft, y);
+        y += 12;
+        doc.moveTo(marginLeft, y).lineTo(pageWidth - marginRight, y).stroke();
+        y += 8;
+
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('Nº PEDIDO', marginLeft, y);
+        y += 10;
+        doc.fontSize(16).font('Helvetica-Bold');
+        doc.text(data.order_number, marginLeft, y);
+        y += 20;
+
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('CLIENTE', marginLeft, y);
+        y += 10;
+        doc.fontSize(10).font('Helvetica');
+        const clientNameH = doc.heightOfString(data.client_name, { width: contentWidth });
+        doc.text(data.client_name, marginLeft, y, { width: contentWidth });
+        y += clientNameH + 2;
+        if (data.client_phone) {
+          doc.fontSize(9);
+          doc.text('Tel: ' + data.client_phone, marginLeft, y);
+          y += 12;
+        } else {
+          y += 4;
+        }
+        y += 6;
+
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('CONTENIDO', marginLeft, y);
+        y += 10;
+        doc.fontSize(8).font('Helvetica');
+        const maxItems = 10;
+        const itemsToShow = data.items.slice(0, maxItems);
+        for (const item of itemsToShow) {
+          const line = `• ${item.item_name} x ${item.quantity}`;
+          const lineH = doc.heightOfString(line, { width: contentWidth });
+          if (y + lineH > 390) break;
+          doc.text(line, marginLeft, y, { width: contentWidth });
+          y += lineH + 2;
+        }
+        if (data.items.length > maxItems) {
+          doc.fontSize(7).fillColor('gray');
+          doc.text(`+ ${data.items.length - maxItems} más`, marginLeft, y);
+          doc.fillColor('black');
+          y += 10;
+        }
+        y += 8;
+
+        doc.moveTo(marginLeft, y).lineTo(pageWidth - marginRight, y).stroke();
+        y += 8;
+
+        const barcodeY = y;
+        this.drawBarcode(doc, data.order_number, marginLeft + 20, barcodeY, contentWidth - 40, 32);
+        doc.fontSize(8).font('Courier-Bold');
+        doc.text(data.order_number, marginLeft, barcodeY + 38, { width: contentWidth, align: 'center' });
+        y = barcodeY + 50;
+
+        doc.fontSize(6).font('Helvetica').fillColor('gray');
+        doc.text(
+          `Pedido: ${new Date(data.created_at).toLocaleDateString('es-MX')}`,
+          marginLeft,
+          y,
+          { width: contentWidth, align: 'center' }
+        );
+        doc.fillColor('black');
+        doc.end();
+      } catch (error: any) {
+        this.logger.error(`❌ Error generando PDF pickup: ${error.message}`);
+        reject(error);
+      }
+    });
   }
 
   /**

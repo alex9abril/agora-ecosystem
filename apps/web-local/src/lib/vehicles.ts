@@ -68,6 +68,7 @@ export interface UserVehicle {
 export interface ProductCompatibility {
   id: string;
   product_id: string;
+  vehicle_variant_id?: string | null;
   vehicle_spec_id: string | null;
   vehicle_year_id: string | null;
   vehicle_model_id: string | null;
@@ -75,6 +76,12 @@ export interface ProductCompatibility {
   is_universal: boolean;
   notes: string | null;
   is_active: boolean;
+  /** Estructura radical: campos desde vehicle_variants */
+  make?: string | null;
+  model?: string | null;
+  year?: number | null;
+  body_trim?: string | null;
+  engine_transmission?: string | null;
   brand_name?: string;
   model_name?: string;
   year_start?: number;

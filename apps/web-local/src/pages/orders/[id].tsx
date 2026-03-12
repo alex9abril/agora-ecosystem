@@ -149,23 +149,26 @@ export default function OrderDetailPage() {
         }
       }
 
-      // Cargar guía de envío siempre (para cualquier estado de orden)
-      // Esto permite mostrar el panel incluso si la orden está en estados anteriores
-      try {
-        setLoadingShippingLabel(true);
-        const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
-        if (label) {
-          setShippingLabel(label);
-          console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
-        } else {
+      // Cargar guía de envío solo para órdenes con envío a domicilio (no pickup)
+      const isPickupOrder = (orderData as any).delivery_address_text === 'Recoger en tienda';
+      if (!isPickupOrder) {
+        try {
+          setLoadingShippingLabel(true);
+          const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
+          if (label) {
+            setShippingLabel(label);
+            console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
+          } else {
+            setShippingLabel(null);
+          }
+        } catch (err) {
+          console.error('❌ [SHIPPING LABEL] Error cargando guía de envío:', err);
           setShippingLabel(null);
-          console.log('📦 [SHIPPING LABEL] No hay guía de envío para esta orden');
+        } finally {
+          setLoadingShippingLabel(false);
         }
-      } catch (err) {
-        console.error('❌ [SHIPPING LABEL] Error cargando guía de envío:', err);
-        // No fallar la carga de la orden si hay error cargando la guía
+      } else {
         setShippingLabel(null);
-      } finally {
         setLoadingShippingLabel(false);
       }
     } catch (err: any) {
@@ -699,26 +702,30 @@ export default function OrderDetailPage() {
       case 'completed':
         // El pedido está surtido, listo para entregar al proveedor de logística
         // El proveedor tomará control y cambiará a in_transit
-        // El negocio solo puede cancelar en casos excepcionales
-        actions.push({ 
-          status: 'cancelled', 
-          label: 'Cancelar pedido (excepcional)', 
-          color: 'bg-red-600 hover:bg-red-700 text-white', 
-          isPrimary: false,
-          requiresConfirmation: true
-        });
+        // Cancelar (excepcional) solo visible en development
+        if (process.env.NEXT_PUBLIC_ENVIRONMENT === 'development') {
+          actions.push({ 
+            status: 'cancelled', 
+            label: 'Cancelar pedido (excepcional)', 
+            color: 'bg-red-600 hover:bg-red-700 text-white', 
+            isPrimary: false,
+            requiresConfirmation: true
+          });
+        }
         break;
       
       case 'in_transit':
         // Estado controlado por proveedor de logística
-        // El negocio solo puede cancelar en casos excepcionales
-        actions.push({ 
-          status: 'cancelled', 
-          label: 'Cancelar pedido (excepcional)', 
-          color: 'bg-red-600 hover:bg-red-700 text-white', 
-          isPrimary: false,
-          requiresConfirmation: true
-        });
+        // Cancelar (excepcional) solo visible en development
+        if (process.env.NEXT_PUBLIC_ENVIRONMENT === 'development') {
+          actions.push({ 
+            status: 'cancelled', 
+            label: 'Cancelar pedido (excepcional)', 
+            color: 'bg-red-600 hover:bg-red-700 text-white', 
+            isPrimary: false,
+            requiresConfirmation: true
+          });
+        }
         break;
       
       case 'delivery_failed':
@@ -805,9 +812,34 @@ export default function OrderDetailPage() {
           </button>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-900">
-                Pedido #{order.id.slice(-8).toUpperCase()}
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl font-semibold text-gray-900">
+                  Pedido #{order.id.slice(-8).toUpperCase()}
+                </h1>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    order.delivery_address_text === 'Recoger en tienda'
+                      ? 'text-amber-800 bg-amber-100 dark:text-amber-200 dark:bg-amber-900/40'
+                      : 'text-sky-800 bg-sky-100 dark:text-sky-200 dark:bg-sky-900/40'
+                  }`}
+                >
+                  {order.delivery_address_text === 'Recoger en tienda' ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      Pickup
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                      </svg>
+                      Envío
+                    </>
+                  )}
+                </span>
+              </div>
               <p className="text-sm text-gray-500 mt-1">
                 Creado el {formatDate(order.created_at)}
               </p>
@@ -845,23 +877,26 @@ export default function OrderDetailPage() {
                   </button>
                   );
                 })}
-              <button
-                type="button"
-                onClick={() => setShowKarlopayJsonModal(true)}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Ver JSON de simulación de webhook Karlopay"
-              >
-                JSON Karlopay
-              </button>
-              {/* ⚠️ Botón temporal para eliminar pedido */}
-              <button
-                onClick={handleDeleteOrder}
-                disabled={deleting || updating}
-                className="px-4 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="⚠️ TEMPORAL: Eliminar pedido"
-              >
-                {deleting ? 'Eliminando...' : '🗑️ Eliminar'}
-              </button>
+              {process.env.NEXT_PUBLIC_ENVIRONMENT === 'development' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowKarlopayJsonModal(true)}
+                    className="px-4 py-2 rounded-md text-sm font-medium bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Ver JSON de simulación de webhook Karlopay"
+                  >
+                    JSON Karlopay
+                  </button>
+                  <button
+                    onClick={handleDeleteOrder}
+                    disabled={deleting || updating}
+                    className="px-4 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="⚠️ TEMPORAL: Eliminar pedido"
+                  >
+                    {deleting ? 'Eliminando...' : '🗑️ Eliminar'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1028,11 +1063,14 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* Guía de envío - Mostrar siempre si hay información de envío o si la orden tiene items con shipping */}
-              {((order.status === 'ready' || order.status === 'picked_up' || order.status === 'in_transit' || order.status === 'delivered') || shippingLabel || (order.items && order.items.some(item => item.quotation_id || item.shipping_carrier))) && (
+              {/* Guía de envío / Pickup - Mostrar si hay guía, si es pickup (datos de envío/recoger en tienda), o si la orden está en estados de envío */}
+              {((order.status === 'ready' || order.status === 'picked_up' || order.status === 'in_transit' || order.status === 'delivered' || order.status === 'completed') || shippingLabel || order.delivery_address_text === 'Recoger en tienda' || (order.items && order.items.some(item => item.quotation_id || item.shipping_carrier))) && (
+                (() => {
+                  const isPickup = order.delivery_address_text === 'Recoger en tienda';
+                  return (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Guía de Envío</h2>
+                    <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">{isPickup ? 'Pickup' : 'Guía de Envío'}</h2>
                     {shippingLabel && (
                       <button
                         onClick={async () => {
@@ -1042,7 +1080,7 @@ export default function OrderDetailPage() {
                             const url = window.URL.createObjectURL(blob);
                             const a = document.createElement('a');
                             a.href = url;
-                            a.download = `guia-envio-${shippingLabel.tracking_number}.pdf`;
+                            a.download = isPickup ? `etiqueta-pickup-${shippingLabel.tracking_number}.pdf` : `guia-envio-${shippingLabel.tracking_number}.pdf`;
                             document.body.appendChild(a);
                             a.click();
                             document.body.removeChild(a);
@@ -1085,7 +1123,7 @@ export default function OrderDetailPage() {
                     <div className="space-y-4">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-semibold text-blue-900 uppercase tracking-wide">Número de Guía</span>
+                          <span className="text-xs font-semibold text-blue-900 uppercase tracking-wide">{isPickup ? 'Número de control' : 'Número de Guía'}</span>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             shippingLabel.status === 'delivered' ? 'bg-green-100 text-green-800' :
                             shippingLabel.status === 'in_transit' ? 'bg-blue-100 text-blue-800' :
@@ -1102,8 +1140,8 @@ export default function OrderDetailPage() {
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                         <div>
-                          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Transportista</p>
-                          <p className="text-gray-900">{shippingLabel.carrier_name}</p>
+                          <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">{isPickup ? 'Tipo de entrega' : 'Transportista'}</p>
+                          <p className="text-gray-900">{isPickup ? 'Recoger en tienda (Pickup)' : shippingLabel.carrier_name}</p>
                         </div>
                         {shippingLabel.package_weight && (
                           <div>
@@ -1406,6 +1444,52 @@ export default function OrderDetailPage() {
                         </div>
                       )}
                     </div>
+                  ) : isPickup ? (
+                    <div className="text-center py-4 space-y-4">
+                      <p className="text-sm text-gray-600">Entrega por recoger en tienda.</p>
+                      <p className="text-xs text-gray-500">No se requiere guía de envío.</p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            setDownloadingPDF(true);
+                            const blob = await logisticsService.downloadPickupLabelPDF(order.id);
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `etiqueta-pickup-${order.id.slice(-8)}.pdf`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                          } catch (err: any) {
+                            console.error('Error descargando etiqueta pickup:', err);
+                            alert('Error al descargar la etiqueta: ' + (err.message || 'Error desconocido'));
+                          } finally {
+                            setDownloadingPDF(false);
+                          }
+                        }}
+                        disabled={downloadingPDF}
+                        className="px-4 py-2 text-sm font-medium bg-black hover:bg-gray-800 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+                      >
+                        {downloadingPDF ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Descargar etiqueta PDF
+                          </>
+                        )}
+                      </button>
+                    </div>
                   ) : (
                     <div className="text-center py-4">
                       <p className="text-sm text-gray-500 mb-2">No se ha generado la guía de envío aún</p>
@@ -1469,6 +1553,8 @@ export default function OrderDetailPage() {
                     </div>
                   )}
                 </div>
+                  );
+                })()
               )}
 
               {/* Grid de dos columnas para resúmenes */}

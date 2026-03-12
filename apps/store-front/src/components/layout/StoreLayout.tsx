@@ -14,6 +14,7 @@ import InstagramIcon from '@mui/icons-material/Instagram';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import BrandingLoader from '../BrandingLoader';
+import BrandingFavicon from '../BrandingFavicon';
 import { BrandingProvider } from '@/contexts/BrandingContext';
 
 interface StoreLayoutProps {
@@ -203,6 +204,7 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
   return (
     <BrandingProvider branding={branding}>
     <>
+      <BrandingFavicon />
       {/* Loading overlay mientras se carga el branding */}
       <BrandingLoader 
         isLoading={isFullyLoading} 

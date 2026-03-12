@@ -4427,20 +4427,34 @@ function VehicleCompatibilitySection({
       return "🌐 Universal (Todos los vehículos)";
     }
 
-    const parts: string[] = [];
+    // Estructura radical: preferir make, model, year, body_trim, engine_transmission
+    const hasNewFields =
+      compatibility.make != null ||
+      compatibility.model != null ||
+      compatibility.year != null ||
+      (compatibility.body_trim != null && compatibility.body_trim !== "") ||
+      (compatibility.engine_transmission != null && compatibility.engine_transmission !== "");
+    if (hasNewFields) {
+      const parts: string[] = [];
+      if (compatibility.make) parts.push(compatibility.make);
+      if (compatibility.model) parts.push(compatibility.model);
+      if (compatibility.year) parts.push(String(compatibility.year));
+      const sub: string[] = [];
+      if (compatibility.body_trim) sub.push(compatibility.body_trim);
+      if (compatibility.engine_transmission) sub.push(compatibility.engine_transmission);
+      if (sub.length > 0) parts.push(sub.join(" | "));
+      if (parts.length > 0) return parts.join(" ");
+    }
 
-    // Marca
+    const parts: string[] = [];
     if (compatibility.brand_name) {
       parts.push(compatibility.brand_name);
     } else if (compatibility.vehicle_brand_id) {
-      // Intentar obtener el nombre desde el estado local
       const brandData = brands.find(
         (b) => b.id === compatibility.vehicle_brand_id,
       );
       if (brandData) parts.push(brandData.name);
     }
-
-    // Modelo
     if (compatibility.model_name) {
       parts.push(compatibility.model_name);
     } else if (compatibility.vehicle_model_id) {
@@ -4449,8 +4463,6 @@ function VehicleCompatibilitySection({
       );
       if (modelData) parts.push(modelData.name);
     }
-
-    // Años
     if (compatibility.year_start) {
       const yearStr = compatibility.year_end
         ? `${compatibility.year_start}-${compatibility.year_end}`
@@ -4473,8 +4485,6 @@ function VehicleCompatibilitySection({
         }
       }
     }
-
-    // Especificaciones técnicas
     const specParts: string[] = [];
     if (compatibility.engine_code) {
       specParts.push(compatibility.engine_code);
@@ -4484,7 +4494,6 @@ function VehicleCompatibilitySection({
       );
       if (specData?.engine_code) specParts.push(specData.engine_code);
     }
-
     if (compatibility.transmission_type) {
       specParts.push(compatibility.transmission_type);
     } else if (compatibility.vehicle_spec_id) {
@@ -4494,19 +4503,15 @@ function VehicleCompatibilitySection({
       if (specData?.transmission_type)
         specParts.push(specData.transmission_type);
     }
-
     if (specParts.length > 0) {
       parts.push(`[${specParts.join(", ")}]`);
     }
-
-    // Si no hay información suficiente, mostrar al menos lo que tenemos
     if (parts.length === 0) {
       if (compatibility.vehicle_brand_id) {
         return "Compatibilidad específica (Marca seleccionada)";
       }
       return "Compatibilidad específica";
     }
-
     return parts.join(" ");
   };
 
@@ -4522,8 +4527,8 @@ function VehicleCompatibilitySection({
       </div>
 
       <div className="space-y-4">
-        {/* Formulario para agregar compatibilidad */}
-        <div className="p-4 border border-gray-200 dark:border-neutral-700 rounded bg-gray-50 dark:bg-neutral-800">
+        {/* Formulario para agregar compatibilidad (oculto por ahora, reservado para más adelante) */}
+        <div className="p-4 border border-gray-200 dark:border-neutral-700 rounded bg-gray-50 dark:bg-neutral-800" style={{ display: 'none' }}>
           <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3">
             Agregar Compatibilidad
           </h4>

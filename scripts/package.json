@@ -1,0 +1,15 @@
+{
+  "name": "agora-import-catalog",
+  "version": "1.0.0",
+  "description": "Import product catalog and vehicle compatibilities from CSV to AGORA (Supabase)",
+  "private": true,
+  "scripts": {
+    "import": "node import-catalog.js",
+    "import:dry": "DRY_RUN=1 node import-catalog.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.2",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3"
+  }
+}

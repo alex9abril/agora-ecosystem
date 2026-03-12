@@ -40,6 +40,7 @@ export default function PrepareOrderPage() {
   const [error, setError] = useState<string | null>(null);
   const [productsStock, setProductsStock] = useState<ProductStockInfo[]>([]);
   const [saving, setSaving] = useState(false);
+  const [completionStep, setCompletionStep] = useState<string | null>(null);
   const [shortageOptions, setShortageOptions] = useState<Record<string, StockShortageOption>>({});
 
   useEffect(() => {
@@ -293,6 +294,7 @@ export default function PrepareOrderPage() {
 
     try {
       setSaving(true);
+      setCompletionStep('Preparando pedido...');
 
       // Primero guardar la preparación
       const items = productsStock.map((info) => ({
@@ -321,45 +323,52 @@ export default function PrepareOrderPage() {
         shortage_options: shortageOptionsArray.length > 0 ? shortageOptionsArray : undefined,
       });
 
+      setCompletionStep('Cambiando estado de la orden...');
       // Luego marcar como completado
       await ordersService.updateOrderStatus(businessId, order.id, {
         status: 'completed',
       });
 
-      // Generar guía de envío automáticamente
-      try {
-        const { logisticsService } = await import('@/lib/logistics');
-        console.log('🚚 Intentando crear guía de envío para orden:', order.id);
-        const shippingLabel = await logisticsService.createShippingLabel({
-          orderId: order.id,
-          packageWeight: 1.0, // Peso por defecto, se puede calcular basado en items
-          packageDimensions: '30x20x15 cm', // Dimensiones por defecto
-          declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
-        });
-        console.log('✅ Guía de envío generada automáticamente:', {
-          trackingNumber: shippingLabel.tracking_number,
-          carrier: shippingLabel.carrier_name,
-          status: shippingLabel.status,
-        });
-      } catch (logisticsError: any) {
-        console.error('❌ Error generando guía de envío:', {
-          message: logisticsError.message,
-          statusCode: logisticsError.statusCode,
-          response: logisticsError.response,
-          orderId: order.id,
-        });
-        // Mostrar alerta al usuario para que sepa que hubo un problema
-        alert(`⚠️ La orden se marcó como completada, pero hubo un problema al generar la guía de envío: ${logisticsError.message || 'Error desconocido'}. Puedes generar la guía manualmente desde el detalle de la orden.`);
-        // No bloquear el flujo si falla la generación de guía
+      const isPickup = order.delivery_address_text === 'Recoger en tienda';
+      if (!isPickup) {
+        setCompletionStep('Comprando guía con el proveedor...');
+        // Generar guía de envío solo para órdenes con envío a domicilio
+        try {
+          const { logisticsService } = await import('@/lib/logistics');
+          console.log('🚚 Intentando crear guía de envío para orden:', order.id);
+          const shippingLabel = await logisticsService.createShippingLabel({
+            orderId: order.id,
+            packageWeight: 1.0, // Peso por defecto, se puede calcular basado en items
+            packageDimensions: '30x20x15 cm', // Dimensiones por defecto
+            declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
+          });
+          console.log('✅ Guía de envío generada automáticamente:', {
+            trackingNumber: shippingLabel.tracking_number,
+            carrier: shippingLabel.carrier_name,
+            status: shippingLabel.status,
+          });
+        } catch (logisticsError: any) {
+          console.error('❌ Error generando guía de envío:', {
+            message: logisticsError.message,
+            statusCode: logisticsError.statusCode,
+            response: logisticsError.response,
+            orderId: order.id,
+          });
+          alert(`⚠️ La orden se marcó como completada, pero hubo un problema al generar la guía de envío: ${logisticsError.message || 'Error desconocido'}. Puedes generar la guía manualmente desde el detalle de la orden.`);
+        }
       }
 
+      setCompletionStep('Listo. Redirigiendo...');
       // Regresar a la página de detalle del pedido
       router.push(`/orders/${order.id}`);
     } catch (err: any) {
       console.error('Error marcando pedido como completado:', err);
+      setCompletionStep(null);
       alert('Error al marcar el pedido como completado: ' + (err.message || 'Error desconocido'));
     } finally {
       setSaving(false);
+      // No ocultar overlay si estamos redirigiendo, para que siga visible hasta cambiar de página
+      setCompletionStep((prev) => (prev === 'Listo. Redirigiendo...' ? prev : null));
     }
   };
 
@@ -414,6 +423,16 @@ export default function PrepareOrderPage() {
       <Head>
         <title>Preparar pedido #{order.id.slice(-8).toUpperCase()} - AGORA Local</title>
       </Head>
+      {/* Overlay de progreso al completar pedido */}
+      {completionStep && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 transition-opacity" aria-live="polite" aria-busy="true">
+          <div className="bg-white rounded-xl shadow-2xl px-8 py-8 flex flex-col items-center gap-6 min-w-[280px] max-w-[90vw]">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-black" />
+            <p className="text-center text-gray-800 font-medium text-lg">{completionStep}</p>
+            <p className="text-center text-gray-500 text-sm">Por favor espera, no cierres esta ventana.</p>
+          </div>
+        </div>
+      )}
       <div className="w-full h-full flex flex-col bg-white">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 bg-white flex-shrink-0">

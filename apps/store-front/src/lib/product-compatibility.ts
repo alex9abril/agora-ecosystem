@@ -5,6 +5,7 @@
 import { apiRequest } from './api';
 
 export interface CompatibilityCheckParams {
+  vehicleVariantId?: string;
   brandId?: string;
   modelId?: string;
   yearId?: string;
@@ -24,12 +25,14 @@ export async function checkProductCompatibility(
 ): Promise<boolean> {
   try {
     const queryParams = new URLSearchParams();
-    
-    if (params.brandId) queryParams.append('brandId', params.brandId);
-    if (params.modelId) queryParams.append('modelId', params.modelId);
-    if (params.yearId) queryParams.append('yearId', params.yearId);
-    if (params.specId) queryParams.append('specId', params.specId);
-    
+    if (params.vehicleVariantId) {
+      queryParams.append('vehicleVariantId', params.vehicleVariantId);
+    } else {
+      if (params.brandId) queryParams.append('brandId', params.brandId);
+      if (params.modelId) queryParams.append('modelId', params.modelId);
+      if (params.yearId) queryParams.append('yearId', params.yearId);
+      if (params.specId) queryParams.append('specId', params.specId);
+    }
     const queryString = queryParams.toString();
     const url = `/catalog/vehicles/products/${productId}/compatibility${queryString ? `?${queryString}` : ''}`;
     

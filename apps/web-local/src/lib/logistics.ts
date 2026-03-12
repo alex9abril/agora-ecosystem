@@ -134,6 +134,30 @@ export const logisticsService = {
   },
 
   /**
+   * Descargar PDF de etiqueta para recoger en tienda (pedido pickup).
+   * Tamaño estándar 4x6 para imprimir como etiqueta.
+   */
+  async downloadPickupLabelPDF(orderId: string): Promise<Blob> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+    const url = `${API_URL}/logistics/pickup-label/${orderId}/pdf`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error descargando etiqueta pickup: ${errorText}`);
+    }
+
+    return response.blob();
+  },
+
+  /**
    * Obtener estado de seguimiento de envío desde Skydropx
    */
   async getShipmentTracking(orderId: string): Promise<ShipmentTracking> {

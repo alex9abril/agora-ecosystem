@@ -418,19 +418,25 @@ Script que crea el sistema completo de compatibilidad de vehículos para refacci
 
 **Documentación:** Ver `docs/agora/03-sistema-compatibilidad-vehiculos.md`
 
+**Estructura radical de compatibilidades (recomendada):**  
+Para que la compatibilidad producto–vehículo use **year, make, model, body_trim, engine_transmission** como campos explícitos (sin depender de `notes`), ejecutar además:
+
+- `migration_vehicle_variants_and_compat_radical.sql`: crea `catalog.vehicle_variants` y reemplaza `product_vehicle_compatibility` por enlace producto ↔ variante; añade la vista `catalog.product_vehicle_compatibility_detail`. La compatibilidad de productos pasa a usar solo `vehicle_variants`; `vehicle_brands`/`vehicle_models`/`vehicle_years`/`vehicle_specs` se mantienen para `user_vehicles` y `business_vehicle_brands`. Ver `scripts/README-import-catalog.md` para el flujo de importación desde CSV.
+
 **Orden recomendado:**
 1. `migration_product_types_refacciones.sql` (migra tipos de producto)
 2. `migration_vehicle_compatibility.sql` (crea sistema de compatibilidad)
-3. `migration_site_settings.sql` (crea sistema de configuraciones) ✅
-4. `migration_business_groups.sql` (crea grupos empresariales y relación con sucursales) ✅
-5. `migration_business_branding.sql` (crea sistema de branding) ✅
-6. `setup_storage_policies_branding.sql` (configura políticas de Storage para branding) ✅
-7. `migration_branch_fields.sql` (agrega campos adicionales a sucursales)
-8. `migration_add_sku_to_products.sql` (agrega campo SKU a productos)
-9. `migration_business_vehicle_brands.sql` (crea relación sucursales-marcas)
-10. `migration_product_branch_availability.sql` (crea disponibilidad por sucursal)
-11. `seed_toyota_vehicles.sql` (pobla catálogo de vehículos Toyota)
-12. `seed_refacciones_catalog.sql` (crea categorías)
+3. `migration_vehicle_variants_and_compat_radical.sql` (estructura radical: vehicle_variants + compat por variante) ✅
+4. `migration_site_settings.sql` (crea sistema de configuraciones) ✅
+5. `migration_business_groups.sql` (crea grupos empresariales y relación con sucursales) ✅
+6. `migration_business_branding.sql` (crea sistema de branding) ✅
+7. `setup_storage_policies_branding.sql` (configura políticas de Storage para branding) ✅
+8. `migration_branch_fields.sql` (agrega campos adicionales a sucursales)
+9. `migration_add_sku_to_products.sql` (agrega campo SKU a productos)
+10. `migration_business_vehicle_brands.sql` (crea relación sucursales-marcas)
+11. `migration_product_branch_availability.sql` (crea disponibilidad por sucursal)
+12. `seed_toyota_vehicles.sql` (pobla catálogo de vehículos Toyota)
+13. `seed_refacciones_catalog.sql` (crea categorías)
 
 ### `cleanup_old_categories.sql` ⚠️ OPCIONAL
 
@@ -464,6 +470,9 @@ Script opcional para eliminar categorías globales antiguas antes de insertar el
 -- Paso 2: Crear sistema de compatibilidad de vehículos
 \i database/agora/migration_vehicle_compatibility.sql
 
+-- Paso 2b: Estructura radical (vehicle_variants + compat por variante)
+\i database/agora/migration_vehicle_variants_and_compat_radical.sql
+
 -- Paso 3: Crear sistema de configuraciones
 \i database/agora/migration_site_settings.sql
 
@@ -487,6 +496,9 @@ Si quieres empezar completamente desde cero:
 
 -- Paso 3: Crear sistema de compatibilidad de vehículos
 \i database/agora/migration_vehicle_compatibility.sql
+
+-- Paso 3b: Estructura radical (vehicle_variants + compat por variante)
+\i database/agora/migration_vehicle_variants_and_compat_radical.sql
 
 -- Paso 4: Crear sistema de configuraciones
 \i database/agora/migration_site_settings.sql

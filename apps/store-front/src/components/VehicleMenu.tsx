@@ -9,6 +9,15 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { vehicleBrandsService, VehicleBrand } from '@/lib/vehicle-brands';
 import { userVehiclesService, UserVehicle, CreateUserVehicleDto } from '@/lib/user-vehicles';
+import {
+  getVehicleVariants,
+  getVariantMakes,
+  getVariantModels,
+  getVariantYears,
+  getVariantBodyTrims,
+  getVariantEngineTransmissions,
+  VehicleVariant,
+} from '@/lib/vehicle-variants';
 import { apiRequest } from '@/lib/api';
 import { branchesService } from '@/lib/branches';
 import { useStoreContext } from '@/contexts/StoreContext';
@@ -90,11 +99,23 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
   const [storedVehicleState, setStoredVehicleState] = useState<any | null>(null);
   const [selectedVehicleState, setSelectedVehicleState] = useState<any | null>(null);
   
-  // Vehículo en proceso de selección
+  // Vehículo en proceso de selección (legacy brand/model/year/spec)
   const [selectedVehicle, setSelectedVehicle] = useState<CreateUserVehicleDto>({
     vehicle_brand_id: '',
   });
   const [nickname, setNickname] = useState('');
+  // Desplegables en cascada (vehicle_variants)
+  const [selectedMake, setSelectedMake] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedBodyTrim, setSelectedBodyTrim] = useState('');
+  const [selectedEngineTransmission, setSelectedEngineTransmission] = useState('');
+  const [makes, setMakes] = useState<string[]>([]);
+  const [variantModels, setVariantModels] = useState<string[]>([]);
+  const [variantYears, setVariantYears] = useState<number[]>([]);
+  const [variantBodyTrims, setVariantBodyTrims] = useState<(string | null)[]>([]);
+  const [variantEngineTransmissions, setVariantEngineTransmissions] = useState<(string | null)[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(false);
   const displayBrands = allowedBrandIds
     ? brands.filter((brand) => allowedBrandIds.includes(brand.id))
     : brands;
@@ -173,8 +194,8 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
         setStoredVehicleState(vehicleToUse);
         setSelectedVehicleState(vehicleToUse);
         
-        // Crear lista unificada con el vehículo local (si existe)
-        if (vehicleToUse && vehicleToUse.vehicle_brand_id) {
+        // Crear lista unificada con el vehículo local (si existe: por variante o por brand)
+        if (vehicleToUse && (vehicleToUse.vehicle_variant_id || vehicleToUse.vehicle_brand_id)) {
           setUnifiedVehicles([{
             source: 'local',
             vehicle: vehicleToUse,
@@ -265,11 +286,125 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
     if (!singleBrandId) return;
     if (selectedVehicle.vehicle_brand_id === singleBrandId) return;
     handleBrandChange(singleBrandId);
-  }, [singleBrandId, selectedVehicle.vehicle_brand_id, handleBrandChange]);
+  }, [singleBrandId, selectedVehicle.vehicle_brand_id]);
+
+  // Cargar marcas al mostrar el formulario
+  useEffect(() => {
+    if (view !== 'form' || !isOpen) return;
+    let cancelled = false;
+    setOptionsLoading(true);
+    getVariantMakes()
+      .then((list) => { if (!cancelled) setMakes(list); })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [view, isOpen]);
+
+  // Cargar modelos al elegir marca
+  useEffect(() => {
+    if (!selectedMake) {
+      setVariantModels([]);
+      return;
+    }
+    let cancelled = false;
+    setOptionsLoading(true);
+    getVariantModels(selectedMake)
+      .then((list) => { if (!cancelled) setVariantModels(list); })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedMake]);
+
+  // Cargar años al elegir modelo
+  useEffect(() => {
+    if (!selectedMake || !selectedModel) {
+      setVariantYears([]);
+      return;
+    }
+    let cancelled = false;
+    setOptionsLoading(true);
+    getVariantYears(selectedMake, selectedModel)
+      .then((list) => { if (!cancelled) setVariantYears(list); })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedMake, selectedModel]);
+
+  // Cargar body trims y engine/transmission al elegir año
+  useEffect(() => {
+    if (!selectedMake || !selectedModel || selectedYear === '') {
+      setVariantBodyTrims([]);
+      setVariantEngineTransmissions([]);
+      return;
+    }
+    const yearNum = parseInt(selectedYear, 10);
+    if (Number.isNaN(yearNum)) return;
+    let cancelled = false;
+    setOptionsLoading(true);
+    Promise.all([
+      getVariantBodyTrims(selectedMake, selectedModel, yearNum),
+      getVariantEngineTransmissions(selectedMake, selectedModel, yearNum, selectedBodyTrim || null),
+    ])
+      .then(([bodyTrims, engines]) => {
+        if (!cancelled) {
+          setVariantBodyTrims(bodyTrims);
+          setVariantEngineTransmissions(engines);
+        }
+      })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedMake, selectedModel, selectedYear, selectedBodyTrim]);
 
   const handleSave = async () => {
+    // Flujo por desplegables (vehicle_variants): make, model, year requeridos
+    if (selectedMake && selectedModel && selectedYear) {
+      try {
+        setLoading(true);
+        setError(null);
+        const list = await getVehicleVariants({
+          make: selectedMake,
+          model: selectedModel,
+          year: parseInt(selectedYear, 10),
+          body_trim: selectedBodyTrim || undefined,
+          engine_transmission: selectedEngineTransmission || undefined,
+          limit: 1,
+        });
+        const variant = list[0];
+        if (!variant) {
+          setError('No se encontró una variante para la selección actual.');
+          return;
+        }
+        const vehicleToStore = {
+          vehicle_variant_id: variant.id,
+          make: variant.make,
+          model: variant.model,
+          year: variant.year,
+          body_trim: variant.body_trim ?? undefined,
+          engine_transmission: variant.engine_transmission ?? undefined,
+          nickname: nickname.trim() || undefined,
+          brand_name: variant.make,
+          model_name: variant.model,
+        };
+        setStoredVehicle(vehicleToStore);
+        setSelectedVehicleStorage(vehicleToStore);
+        setStoredVehicleState(vehicleToStore);
+        setSelectedVehicleState(vehicleToStore);
+        if (onVehicleSelected) onVehicleSelected(vehicleToStore as any);
+        setView('list');
+        setSelectedMake('');
+        setSelectedModel('');
+        setSelectedYear('');
+        setSelectedBodyTrim('');
+        setSelectedEngineTransmission('');
+        setNickname('');
+        onClose();
+      } catch (err: any) {
+        setError(err.message || 'Error al agregar el vehículo');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!selectedVehicle.vehicle_brand_id) {
-      setError('Por favor selecciona al menos la marca del vehículo');
+      setError('Busca y selecciona tu vehículo de la lista');
       return;
     }
 
@@ -431,7 +566,15 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
     if (vehicle.nickname) {
       return vehicle.nickname;
     }
-    
+    if (vehicle.make != null || vehicle.vehicle_variant_id) {
+      const parts: string[] = [];
+      if (vehicle.make) parts.push(vehicle.make);
+      if (vehicle.model) parts.push(vehicle.model);
+      if (vehicle.year) parts.push(String(vehicle.year));
+      const sub = [vehicle.body_trim, vehicle.engine_transmission].filter(Boolean);
+      if (sub.length > 0) parts.push(sub.join(' | '));
+      if (parts.length > 0) return parts.join(' ');
+    }
     const parts: string[] = [];
     if (vehicle.brand_name) parts.push(vehicle.brand_name);
     if (vehicle.model_name) parts.push(vehicle.model_name);
@@ -442,8 +585,13 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
         parts.push(`${vehicle.year_start}+`);
       }
     }
-    
     return parts.length > 0 ? parts.join(' ') : 'Vehículo sin nombre';
+  };
+
+  const formatVariantLabel = (v: VehicleVariant): string => {
+    const main = [v.make, v.model, v.year].filter(Boolean).join(' ');
+    const sub = [v.body_trim, v.engine_transmission].filter(Boolean).join(' | ');
+    return sub ? `${main} · ${sub}` : main;
   };
 
   if (!isOpen) return null;
@@ -650,6 +798,11 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
                     setView('form');
                     setSelectedVehicle({ vehicle_brand_id: '' });
                     setNickname('');
+                    setSelectedMake('');
+                    setSelectedModel('');
+                    setSelectedYear('');
+                    setSelectedBodyTrim('');
+                    setSelectedEngineTransmission('');
                     setError(null);
                   }}
                   className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-900 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 text-sm font-medium text-gray-900"
@@ -699,178 +852,120 @@ export default function VehicleMenu({ isOpen, onClose, onVehicleSelected }: Vehi
                   />
                 </div>
 
-                {/* Marca */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Marca <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={selectedVehicle.vehicle_brand_id}
-                      onChange={(e) => handleBrandChange(e.target.value)}
-                      disabled={!!singleBrandId}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10 disabled:bg-gray-100 disabled:text-gray-700"
-                    >
-                      {!singleBrandId && <option value="">Marca</option>}
-                      {displayBrands.map((brand) => (
-                        <option key={brand.id} value={brand.id}>
-                          {brand.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Modelo */}
-                {selectedVehicle.vehicle_brand_id && (
+                {/* Desplegables en cascada: Marca, Modelo, Año, Body trim, Motor/Transmisión */}
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Modelo
+                      Marca <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <select
-                        value={selectedVehicle.vehicle_model_id || ''}
-                        onChange={(e) => handleModelChange(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10"
-                      >
-                        <option value="">Modelo</option>
-                        {models.map((model) => (
-                          <option key={model.id} value={model.id}>
-                            {model.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
+                    <select
+                      value={selectedMake}
+                      onChange={(e) => {
+                        setSelectedMake(e.target.value);
+                        setSelectedModel('');
+                        setSelectedYear('');
+                        setSelectedBodyTrim('');
+                        setSelectedEngineTransmission('');
+                      }}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900"
+                    >
+                      <option value="">— Selecciona marca —</option>
+                      {makes.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
-
-                {/* Año y Especificaciones en fila cuando ambos están disponibles */}
-                {selectedVehicle.vehicle_model_id ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Año */}
-                    {selectedVehicle.vehicle_model_id && (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                          Año
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={selectedVehicle.vehicle_year_id || ''}
-                            onChange={(e) => handleYearChange(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10"
-                          >
-                            <option value="">Año</option>
-                            {years.map((year) => (
-                              <option key={year.id} value={year.id}>
-                                {year.year_start}
-                                {year.year_end ? `-${year.year_end}` : '+'}
-                                {year.generation && ` (${year.generation})`}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Especificaciones (Engine/Driveline) */}
-                    {selectedVehicle.vehicle_year_id ? (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                          Especificaciones
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={selectedVehicle.vehicle_spec_id || ''}
-                            onChange={(e) => handleSpecChange(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 appearance-none pr-10"
-                          >
-                            <option value="">Driveline</option>
-                            {specs.map((spec) => (
-                              <option key={spec.id} value={spec.id}>
-                                {[
-                                  spec.engine_code,
-                                  spec.engine_displacement,
-                                  spec.transmission_type,
-                                  spec.drivetrain,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' - ')}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                          Especificaciones
-                        </label>
-                        <div className="relative">
-                          <select
-                            disabled
-                            className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-400 appearance-none pr-10 cursor-not-allowed"
-                          >
-                            <option value="">Driveline</option>
-                          </select>
-                          <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Modelo <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => {
+                        setSelectedModel(e.target.value);
+                        setSelectedYear('');
+                        setSelectedBodyTrim('');
+                        setSelectedEngineTransmission('');
+                      }}
+                      disabled={!selectedMake}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Selecciona modelo —</option>
+                      {variantModels.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  /* Año solo cuando no hay modelo seleccionado */
-                  selectedVehicle.vehicle_brand_id && (
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Año
-                      </label>
-                      <div className="relative">
-                        <select
-                          disabled
-                          className="w-full px-4 py-3 bg-gray-100 border border-gray-300 rounded-lg text-sm text-gray-400 appearance-none pr-10 cursor-not-allowed"
-                        >
-                          <option value="">Año</option>
-                        </select>
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </div>
-                  )
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Año <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => {
+                        setSelectedYear(e.target.value);
+                        setSelectedBodyTrim('');
+                        setSelectedEngineTransmission('');
+                      }}
+                      disabled={!selectedModel}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Selecciona año —</option>
+                      {variantYears.map((y) => (
+                        <option key={y} value={String(y)}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Versión / Body trim (opcional)
+                    </label>
+                    <select
+                      value={selectedBodyTrim}
+                      onChange={(e) => {
+                        setSelectedBodyTrim(e.target.value);
+                        setSelectedEngineTransmission('');
+                      }}
+                      disabled={!selectedYear}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Cualquiera —</option>
+                      {variantBodyTrims.map((bt, i) => {
+                        const val = bt ?? '';
+                        const label = bt === null || bt === '' ? '— Sin especificar —' : bt;
+                        return <option key={`${val}-${i}`} value={val}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Motor / Transmisión (opcional)
+                    </label>
+                    <select
+                      value={selectedEngineTransmission}
+                      onChange={(e) => setSelectedEngineTransmission(e.target.value)}
+                      disabled={!selectedYear}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-gray-900 text-sm text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">— Cualquiera —</option>
+                      {variantEngineTransmissions.map((et, i) => {
+                        const val = et ?? '';
+                        const label = et === null || et === '' ? '— Sin especificar —' : et;
+                        return <option key={`${val}-${i}`} value={val}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                </div>
+                {optionsLoading && (
+                  <p className="text-xs text-gray-500">Cargando opciones...</p>
                 )}
 
                 {/* Botón de guardar */}
                 <div className="pt-4">
                   <button
                     onClick={handleSave}
-                    disabled={loading || !selectedVehicle.vehicle_brand_id}
-                    className="w-full px-4 py-3 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    disabled={loading || !selectedMake || !selectedModel || !selectedYear}
+                    className="w-full px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     {loading ? 'Guardando...' : 'Agregar Vehículo'}
                   </button>

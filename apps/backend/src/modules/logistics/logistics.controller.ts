@@ -173,6 +173,36 @@ export class LogisticsController {
     res.send(pdfBuffer);
   }
 
+  @Get('pickup-label/:orderId/pdf')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Descargar PDF etiqueta de pickup',
+    description: 'Genera un PDF en tamaño estándar de etiqueta (4x6 in) con número de pedido, cliente y contenido. Solo para órdenes con recoger en tienda.',
+  })
+  @ApiParam({ name: 'orderId', description: 'ID de la orden', type: String })
+  @ApiResponse({ status: 200, description: 'PDF etiqueta pickup', content: { 'application/pdf': {} } })
+  @ApiResponse({ status: 404, description: 'Orden no encontrada o no es pickup' })
+  async getPickupLabelPDF(
+    @Param('orderId') orderId: string,
+    @Res() res: Response
+  ) {
+    const pdfBuffer = await this.logisticsService.getPickupLabelPDF(orderId);
+    if (!pdfBuffer) {
+      throw new NotFoundException(
+        `No se pudo generar la etiqueta. La orden ${orderId} no existe o no es de recoger en tienda.`
+      );
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="etiqueta-pickup-${orderId}.pdf"`
+    );
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.send(pdfBuffer);
+  }
+
   @Get('shipments/:orderId/tracking')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
