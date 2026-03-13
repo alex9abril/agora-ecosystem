@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { clientsService, Client, ClientFilters } from '@/lib/clients';
 import Link from 'next/link';
 import { SkeletonTable } from '@/components/ui/Skeleton';
+import { usePermission } from '@/lib/role-guards';
 
 const PAGE_SIZE_STORAGE_KEY = 'clients_page_size';
 const CURRENT_PAGE_STORAGE_KEY = 'clients_current_page';
@@ -43,10 +44,13 @@ export default function ClientsPage() {
   // Filtros
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isActiveFilter, setIsActiveFilter] = useState<string>('all');
+  const [isActiveFilter, setIsActiveFilter] = useState<string>('active');
   const [isBlockedFilter, setIsBlockedFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const canManageClients = usePermission('canManageClients');
 
   useEffect(() => {
     loadClients(page, pageSize, searchTerm);
@@ -135,6 +139,31 @@ export default function ClientsPage() {
     e.preventDefault();
     setPage(1);
     setSearchTerm(searchInput.trim());
+  };
+
+  const handleDeleteClient = async (client: Client) => {
+    if (!canManageClients) {
+      if (typeof window !== 'undefined') {
+        window.alert('No tienes permisos para efectuar esta acción.');
+      }
+      return;
+    }
+    const name = `${client.first_name} ${client.last_name}`.trim() || client.email || 'este cliente';
+    if (typeof window !== 'undefined' && !window.confirm(`¿Eliminar a ${name}? Esta acción desactivará el cliente.`)) {
+      return;
+    }
+    try {
+      setDeletingId(client.id);
+      await clientsService.deleteClient(client.id);
+      await loadClients(page, pageSize, searchTerm);
+    } catch (err: any) {
+      console.error('Error eliminando cliente:', err);
+      if (typeof window !== 'undefined') {
+        window.alert(err?.message || 'No se pudo eliminar el cliente.');
+      }
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -335,15 +364,12 @@ export default function ClientsPage() {
                           </Link>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (typeof window !== 'undefined') {
-                                window.alert('No tienes permisos para efectuar esta acción.');
-                              }
-                            }}
-                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 disabled:opacity-50"
-                            title="Eliminar cliente"
+                            onClick={() => handleDeleteClient(client)}
+                            disabled={!canManageClients || deletingId === client.id}
+                            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={canManageClients ? 'Eliminar cliente' : 'Sin permisos para eliminar clientes'}
                           >
-                            Eliminar
+                            {deletingId === client.id ? 'Eliminando...' : 'Eliminar'}
                           </button>
                         </div>
                       </td>

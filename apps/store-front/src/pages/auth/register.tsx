@@ -16,7 +16,7 @@ import agoraLogo from '@/images/agora_logo_white.png';
 export default function RegisterPage() {
   const { signUp, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { groupId, branchId } = useStoreContext();
+  const { groupId, branchId, branchData, groupData } = useStoreContext();
   const [branding, setBranding] = useState<Branding | null>(null);
   const [isBrandingLoading, setIsBrandingLoading] = useState(true);
   
@@ -121,7 +121,9 @@ export default function RegisterPage() {
         ? `${origin}/${contextMatch[1]}/${contextMatch[2]}`
         : `${origin}/`;
 
-      await signUp({
+      const contextType = contextMatch?.[1];
+      const contextSlug = contextMatch?.[2];
+      const signUpPayload: Record<string, unknown> = {
         email: formData.email,
         password: formData.password,
         firstName: formData.firstName || undefined,
@@ -132,7 +134,15 @@ export default function RegisterPage() {
         appUrl,
         businessId: branchId || undefined,
         businessGroupId: groupId || undefined,
-      });
+      };
+      if (contextType === 'sucursal' && contextSlug) {
+        signUpPayload.businessSlug = contextSlug;
+      }
+      if (contextType === 'grupo' && contextSlug) {
+        signUpPayload.businessGroupSlug = contextSlug;
+      }
+
+      await signUp(signUpPayload);
 
       setSuccessMessage('Cuenta registrada. Te enviamos un correo para confirmar tu cuenta.');
 
@@ -242,6 +252,11 @@ export default function RegisterPage() {
                 <div className="space-y-1">
                   <h2 className="text-2xl font-semibold text-gray-900">Información Personal</h2>
                   <p className="text-sm text-gray-600">Completa tus datos para crear tu cuenta</p>
+                  {(branchData?.name || groupData?.name) && (
+                    <p className="text-sm font-medium text-gray-800 mt-1">
+                      Registrándote en: {branchData?.name || groupData?.name}
+                    </p>
+                  )}
                 </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -359,6 +359,35 @@ export class AuthService {
     const platformRole = signUpDto.role || 'client';
     const requiresEmailConfirmation = !!signUpDto.requiresEmailConfirmation;
 
+    // Resolver businessId / businessGroupId desde slug si no vienen en el body (registro desde URL contextual)
+    let resolvedBusinessId: string | undefined = signUpDto.businessId;
+    let resolvedBusinessGroupId: string | undefined = signUpDto.businessGroupId;
+    if (!resolvedBusinessId && signUpDto.businessSlug) {
+      try {
+        const branch = await this.businessesService.getBranchBySlug(signUpDto.businessSlug);
+        if (branch) {
+          resolvedBusinessId = branch.id;
+          if (!resolvedBusinessGroupId && branch.business_group_id) {
+            resolvedBusinessGroupId = branch.business_group_id;
+          }
+          console.log('[AuthService.signUp] Resolución por slug: businessId=', resolvedBusinessId, 'businessGroupId=', resolvedBusinessGroupId);
+        }
+      } catch (e) {
+        console.warn('[AuthService.signUp] No se pudo resolver sucursal por slug:', signUpDto.businessSlug, (e as Error)?.message);
+      }
+    }
+    if (!resolvedBusinessGroupId && signUpDto.businessGroupSlug) {
+      try {
+        const group = await this.businessesService.getBusinessGroupBySlug(signUpDto.businessGroupSlug);
+        if (group) {
+          resolvedBusinessGroupId = group.id;
+          console.log('[AuthService.signUp] Resolución grupo por slug: businessGroupId=', resolvedBusinessGroupId);
+        }
+      } catch (e) {
+        console.warn('[AuthService.signUp] No se pudo resolver grupo por slug:', signUpDto.businessGroupSlug, (e as Error)?.message);
+      }
+    }
+
     // Validar duplicados antes de crear el usuario en Auth
     if (dbPool && signUpDto.phone) {
       const phoneCheck = await dbPool.query(
@@ -706,13 +735,16 @@ export class AuthService {
     // Enviar correo/WhatsApp de bienvenida según configuración (no bloquea el flujo si falla)
     let emailEnabled = true;
     let whatsappEnabled = false;
-    if (signUpDto.businessId) {
+    if (resolvedBusinessId) {
       const channels = await this.businessesService.getNotificationChannels(
-        signUpDto.businessId,
+        resolvedBusinessId,
         'user_registration',
       );
       emailEnabled = channels.emailEnabled;
       whatsappEnabled = channels.whatsappEnabled;
+      console.log('[AuthService.signUp] Canales user_registration:', { businessId: resolvedBusinessId, emailEnabled, whatsappEnabled });
+    } else {
+      console.log('[AuthService.signUp] Sin businessId; se usará template global para correo de bienvenida (emailEnabled=true por defecto).');
     }
 
     if (emailEnabled && authData.user && authData.user.email) {
@@ -720,43 +752,42 @@ export class AuthService {
       const fallbackUrl = `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/dashboard`;
       const dashboardUrl = signUpDto.appUrl || confirmationLink || fallbackUrl;
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[AuthService.signUp] Enviando welcome email:', {
-          email: authData.user.email,
-          userName,
-          dashboardUrl,
-          requiresEmailConfirmation,
-          hasConfirmationLink: Boolean(confirmationLink),
-          appUrl: signUpDto.appUrl,
-        });
-      }
-      
+      console.log('[AuthService.signUp] Enviando correo de bienvenida desde nuestro aplicativo:', {
+        to: authData.user.email,
+        businessId: resolvedBusinessId ?? null,
+        businessGroupId: resolvedBusinessGroupId ?? null,
+      });
+
       this.emailService.sendWelcomeEmail(
         authData.user.email,
         userName,
         dashboardUrl,
-        signUpDto.businessId,
-        signUpDto.businessGroupId,
+        resolvedBusinessId,
+        resolvedBusinessGroupId,
         { userId: authData.user.id }
-      ).catch((error) => {
+      ).then((status) => {
+        console.log('[AuthService.signUp] Resultado envío correo de bienvenida:', status);
+      }).catch((error) => {
         console.error('❌ Error enviando correo de bienvenida (no crítico):', error);
       });
+    } else {
+      console.log('[AuthService.signUp] No se envía correo de bienvenida desde nuestro aplicativo: emailEnabled=', emailEnabled, 'hasUser=', !!authData.user, 'hasEmail=', !!(authData.user && authData.user.email));
     }
 
-    if (whatsappEnabled && signUpDto.businessId) {
+    if (whatsappEnabled && resolvedBusinessId) {
       if (!signUpDto.phone) {
         await this.integrationLogs.log({
           integration: 'karbot',
           eventType: 'user_registration',
           channel: 'whatsapp',
           status: 'skipped',
-          businessId: signUpDto.businessId,
+          businessId: resolvedBusinessId,
           userId: authData.user?.id,
           message: 'Telefono no disponible para WhatsApp',
         });
       } else {
         this.karbotService.sendWhatsappNotification({
-          businessId: signUpDto.businessId,
+          businessId: resolvedBusinessId,
           triggerType: 'user_registration',
           to: signUpDto.phone,
           userId: authData.user?.id,

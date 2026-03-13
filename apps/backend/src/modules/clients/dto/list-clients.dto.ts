@@ -24,6 +24,12 @@ export class ListClientsDto {
   @IsBoolean()
   isActive?: boolean;
 
+  @ApiPropertyOptional({ description: 'Filtrar por bloqueado', example: false })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isBlocked?: boolean;
+
   @ApiPropertyOptional({ description: 'Filtrar por teléfono verificado', example: true })
   @IsOptional()
   @Type(() => Boolean)

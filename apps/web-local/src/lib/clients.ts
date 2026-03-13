@@ -53,8 +53,8 @@ export const clientsService = {
   async getClients(filters?: ClientFilters): Promise<ClientsResponse> {
     const params = new URLSearchParams();
     if (filters?.search) params.append('search', filters.search);
-    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active.toString());
-    if (filters?.is_blocked !== undefined) params.append('is_blocked', filters.is_blocked.toString());
+    if (filters?.is_active !== undefined) params.append('isActive', filters.is_active.toString());
+    if (filters?.is_blocked !== undefined) params.append('isBlocked', filters.is_blocked.toString());
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.sortBy) params.append('sortBy', filters.sortBy);

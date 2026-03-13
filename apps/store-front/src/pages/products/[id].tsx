@@ -1008,8 +1008,8 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Galería de imágenes */}
-            <div>
+            {/* Galería de imágenes: sticky en desktop para seguir viendo la foto al hacer scroll */}
+            <div className="lg:sticky lg:top-24 lg:self-start">
               <ProductImageGallery
                 images={productImages}
                 productName={product.name}
@@ -1360,32 +1360,32 @@ export default function ProductDetailPage() {
                   {/* Compatibilidades (vehicle_variants): presentación con versión/motor en chips */}
                   {!loadingCompatibilities && productCompatibilities.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200/80">
-                      <p className="text-xs text-gray-600 font-semibold mb-2">Compatibilidades registradas</p>
+                      <p className="text-sm text-gray-600 font-semibold mb-2">Compatibilidades registradas</p>
                       <div className="rounded-lg border border-gray-200/80 bg-gray-50/60 overflow-hidden">
                         <div className="overflow-x-auto">
-                          <table className="w-full text-xs border-collapse">
+                          <table className="w-full text-sm border-collapse">
                             <thead>
                               <tr className="bg-gray-100/90">
-                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Marca</th>
-                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Modelo</th>
-                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Año</th>
-                                <th className="text-left py-2 px-2.5 font-semibold text-gray-600">Versiones y motores</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-gray-600">Marca</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-gray-600">Modelo</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-gray-600">Año</th>
+                                <th className="text-left py-2.5 px-3 font-semibold text-gray-600">Versiones y motores</th>
                               </tr>
                             </thead>
                             <tbody>
                               {productCompatibilities.map((c) =>
                                 c.is_universal ? (
                                   <tr key={c.id} className="border-t border-gray-200/60 bg-white">
-                                    <td colSpan={4} className="py-2 px-2.5 text-gray-500 italic">
+                                    <td colSpan={4} className="py-2.5 px-3 text-gray-500 italic">
                                       Compatible con cualquier vehículo (universal)
                                     </td>
                                   </tr>
                                 ) : (
                                   <tr key={c.id} className="border-t border-gray-200/60 bg-white hover:bg-gray-50/80 transition-colors">
-                                    <td className="py-2 px-2.5 font-medium text-gray-800 align-top">{c.make ?? '—'}</td>
-                                    <td className="py-2 px-2.5 font-medium text-gray-800 align-top">{c.model ?? '—'}</td>
-                                    <td className="py-2 px-2.5 text-gray-700 align-top whitespace-nowrap">{c.year ?? '—'}</td>
-                                    <td className="py-2 px-2.5 align-top">
+                                    <td className="py-2.5 px-3 font-medium text-gray-800 align-top">{c.make ?? '—'}</td>
+                                    <td className="py-2.5 px-3 font-medium text-gray-800 align-top">{c.model ?? '—'}</td>
+                                    <td className="py-2.5 px-3 text-gray-700 align-top whitespace-nowrap">{c.year ?? '—'}</td>
+                                    <td className="py-2.5 px-3 align-top">
                                       {(() => {
                                         const trims = (c.body_trim ?? '')
                                           .split(',')
@@ -1406,7 +1406,7 @@ export default function ProductDetailPage() {
                                                   {trims.map((t, i) => (
                                                     <span
                                                       key={i}
-                                                      className="inline-flex items-center rounded-md bg-gray-200/90 px-1.5 py-0.5 text-gray-700"
+                                                      className="inline-flex items-center rounded-md bg-gray-200/90 px-2 py-1 text-gray-700"
                                                     >
                                                       {t}
                                                     </span>
@@ -1421,7 +1421,7 @@ export default function ProductDetailPage() {
                                                   {motors.map((m, i) => (
                                                     <span
                                                       key={i}
-                                                      className="inline-flex items-center rounded-md bg-slate-200/80 px-1.5 py-0.5 text-slate-700"
+                                                      className="inline-flex items-center rounded-md bg-slate-200/80 px-2 py-1 text-slate-700"
                                                     >
                                                       {m}
                                                     </span>

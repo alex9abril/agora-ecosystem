@@ -558,24 +558,46 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
-        b.id,
-        b.name,
-        bu.role,
-        bu.permissions,
-        bu.is_active,
-        (bu.is_active AND b.is_active) AS can_access,
-        bu.created_at AS assigned_at
-    FROM core.business_users bu
-    INNER JOIN core.businesses b ON bu.business_id = b.id
-    WHERE bu.user_id = p_user_id
-    ORDER BY 
-        (bu.is_active AND b.is_active) DESC,
-        bu.created_at DESC;
+    SELECT
+        sub.id,
+        sub.name,
+        sub.role,
+        sub.permissions,
+        sub.is_active,
+        sub.can_access,
+        sub.assigned_at
+    FROM (
+        SELECT
+            b.id,
+            b.name,
+            bu.role,
+            bu.permissions,
+            bu.is_active,
+            (bu.is_active AND b.is_active) AS can_access,
+            bu.created_at AS assigned_at
+        FROM core.business_users bu
+        INNER JOIN core.businesses b ON bu.business_id = b.id
+        WHERE bu.user_id = p_user_id
+        UNION ALL
+        SELECT
+            b.id,
+            b.name,
+            'superadmin'::core.business_role,
+            '{}'::jsonb,
+            TRUE,
+            b.is_active,
+            b.created_at
+        FROM core.businesses b
+        WHERE b.owner_id = p_user_id
+          AND b.id NOT IN (
+              SELECT bu2.business_id FROM core.business_users bu2 WHERE bu2.user_id = p_user_id
+          )
+    ) sub
+    ORDER BY sub.can_access DESC, sub.assigned_at DESC;
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION core.get_user_businesses_summary IS 'Obtiene un resumen de todas las tiendas a las que un usuario tiene acceso y sus roles';
+COMMENT ON FUNCTION core.get_user_businesses_summary IS 'Resumen de tiendas del usuario (business_users). Incluye fallback: owner_id sin fila en business_users se devuelve con rol superadmin.';
 
 -- ============================================================================
 -- VISTA: Negocios con información de usuarios y roles

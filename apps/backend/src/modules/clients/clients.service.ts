@@ -16,6 +16,7 @@ export class ClientsService {
       page = 1,
       limit = 20,
       isActive,
+      isBlocked,
       phoneVerified,
       search,
       sortBy = 'created_at',
@@ -33,6 +34,12 @@ export class ClientsService {
     if (isActive !== undefined) {
       whereConditions.push(`up.is_active = $${paramIndex}`);
       queryParams.push(isActive);
+      paramIndex++;
+    }
+
+    if (isBlocked !== undefined) {
+      whereConditions.push(`up.is_blocked = $${paramIndex}`);
+      queryParams.push(isBlocked);
       paramIndex++;
     }
 

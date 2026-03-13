@@ -94,5 +94,21 @@ export class SignUpDto {
   @IsOptional()
   @IsUUID()
   businessGroupId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Slug de la sucursal (ej. toyota-satelite) cuando el registro viene de URL /sucursal/{slug}',
+    example: 'toyota-satelite',
+  })
+  @IsOptional()
+  @IsString()
+  businessSlug?: string;
+
+  @ApiPropertyOptional({
+    description: 'Slug del grupo empresarial cuando el registro viene de URL /grupo/{slug}',
+    example: 'mi-grupo',
+  })
+  @IsOptional()
+  @IsString()
+  businessGroupSlug?: string;
 }
 

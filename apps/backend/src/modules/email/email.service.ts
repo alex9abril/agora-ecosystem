@@ -72,11 +72,7 @@ export class EmailService {
     }
 
     try {
-      if (process.env.NODE_ENV !== 'production') {
-        this.logger.debug(
-          `Resolviendo template: triggerType=${triggerType} businessId=${businessId || 'null'} businessGroupId=${businessGroupId || 'null'}`
-        );
-      }
+      console.log('[EmailService.getEmailTemplate] Buscando template:', { triggerType, businessId: businessId ?? null, businessGroupId: businessGroupId ?? null });
 
       const query = `
         SELECT * FROM communication.get_email_template($1, $2, $3)
@@ -89,16 +85,14 @@ export class EmailService {
       ]);
 
       if (result.rows.length === 0) {
+        console.warn('[EmailService.getEmailTemplate] No se encontró template para trigger_type:', triggerType);
         this.logger.warn(`No se encontró template para trigger_type: ${triggerType}`);
         return null;
       }
 
       const row = result.rows[0];
-      if (process.env.NODE_ENV !== 'production') {
-        this.logger.debug(
-          `Template resuelto: triggerType=${triggerType} subjectLength=${(row.subject || '').length} htmlLength=${(row.template_html || '').length}`
-        );
-      }
+      const level = (row as { level?: string }).level ?? 'unknown';
+      console.log('[EmailService.getEmailTemplate] Template encontrado:', { triggerType, level, subjectLength: (row.subject || '').length, htmlLength: (row.template_html || '').length });
       return {
         template_html: row.template_html,
         subject: row.subject || '',
@@ -227,6 +221,7 @@ export class EmailService {
     context?: { userId?: string; orderId?: string }
   ): Promise<IntegrationLogStatus> {
     if (!this.transporter) {
+      console.warn('[EmailService.sendEmail] Transporter no inicializado (SMTP no configurado). No se envía correo desde nuestro aplicativo. trigger=', triggerType);
       this.logger.warn('⚠️ Transporter no inicializado. No se puede enviar correo.');
         this.logger.debug(`[Email] Log skipped: transporter no inicializado (trigger=${triggerType})`);
       await this.integrationLogs.log({
@@ -258,6 +253,7 @@ export class EmailService {
       );
 
       if (!template) {
+        console.warn('[EmailService.sendEmail] No se enviará correo desde nuestro aplicativo: template no encontrado para', triggerType);
         this.logger.warn(
           `No se encontró template para ${triggerType}. No se enviará correo.`
         );
@@ -321,6 +317,7 @@ export class EmailService {
       // Enviar correo
       const info = await this.transporter.sendMail(mailOptions);
 
+      console.log('[EmailService.sendEmail] Correo enviado desde nuestro aplicativo:', { to, triggerType, messageId: info.messageId });
       this.logger.log(`✅ Correo enviado exitosamente a ${to} (${triggerType})`);
       this.logger.debug(`Message ID: ${info.messageId}`);
 
@@ -339,6 +336,7 @@ export class EmailService {
       this.logger.debug(`[Email] Log success guardado (trigger=${triggerType})`);
       return 'success';
     } catch (error: any) {
+      console.error('[EmailService.sendEmail] Error enviando correo desde nuestro aplicativo:', { to, triggerType, error: error?.message ?? String(error) });
       this.logger.error(`❌ Error enviando correo a ${to}:`, error);
       await this.integrationLogs.log({
         integration: 'email',

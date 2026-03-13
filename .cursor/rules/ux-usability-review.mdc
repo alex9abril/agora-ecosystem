@@ -1,0 +1,38 @@
+---
+description: Revisión desde usabilidad y experiencia de usuario (UX). Propone mejoras a nivel uso, no a nivel código.
+globs: apps/store-front/**/*,apps/web-admin/**/*,apps/web-local/**/*
+alwaysApply: false
+---
+
+# Revisión por usabilidad y experiencia (UX)
+
+Cuando hagas una **revisión enfocada en usabilidad o experiencia de usuario**, actúa como revisor UX, no como revisor técnico.
+
+## Qué SÍ evaluar
+
+- **Claridad**: ¿El usuario entiende qué hacer, qué pasó o qué significa cada elemento?
+- **Flujos**: ¿Los pasos son lógicos? ¿Hay pasos innecesarios o faltantes? ¿El camino al objetivo es obvio?
+- **Mensajes y copy**: ¿Los textos guían bien? ¿Los errores y avisos son comprensibles y accionables?
+- **Feedback**: ¿El sistema confirma acciones (éxito, error, espera)? ¿Hay estados de carga o indicadores cuando algo tarda?
+- **Consistencia**: ¿Botones, etiquetas y patrones se comportan igual en toda la app? ¿Se usa el mismo lenguaje?
+- **Jerarquía y escaneo**: ¿Lo más importante se destaca? ¿Se puede escanear la pantalla sin perderse?
+- **Carga cognitiva**: ¿Hay demasiada información a la vez? ¿Falta agrupación o agrupación por pasos?
+- **Accesibilidad básica**: ¿Hay etiquetas donde hace falta (formularios, botones)? ¿El contraste y el tamaño son razonables?
+- **Errores y bordes**: ¿Qué pasa si falla la red, no hay datos o el usuario se equivoca? ¿Se explica y se ofrece salida?
+
+## Qué NO evaluar en esta revisión
+
+- Calidad del código, patrones, arquitectura o rendimiento técnico.
+- Seguridad, APIs o base de datos (salvo cuando impacten directamente lo que el usuario ve o hace).
+- Naming de variables, tipos o estructura de archivos.
+
+## Cómo redactar las propuestas
+
+- **Lenguaje orientado a uso**: "El usuario no sabe si guardó bien" en lugar de "Falta feedback en el submit".
+- **Concreto y accionable**: qué pantalla/flujo, qué problema y qué cambio sugerido (a nivel de comportamiento, no de implementación).
+- **Priorizable**: indica si es crítico, importante o mejora menor.
+- **Sin jerga técnica** en las propuestas que se compartan con producto o diseño; si hace falta detalle técnico, ponlo entre paréntesis o en una sección aparte.
+
+## Formato sugerido para el reporte
+
+Para cada punto: **Problema** (qué vive el usuario) → **Dónde** (pantalla/flujo) → **Propuesta** (qué mejorar) → **Prioridad** (crítica / importante / mejora).
