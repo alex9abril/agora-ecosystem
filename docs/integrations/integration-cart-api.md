@@ -2,7 +2,18 @@
 
 Carrito persistente para **WhatsApp, bots y servicios externos** sin usuario Supabase. Cada carrito está ligado a un **`store_id`** (`core.stores`): la API valida que los productos puedan venderse en ese canal (misma lógica de negocio que el catálogo multi-tienda).
 
-No reemplaza el carrito de usuario autenticado (`GET/POST /cart` con JWT).
+No reemplaza el carrito de usuario autenticado (`GET/POST /api/cart` con JWT).
+
+## Rutas base
+
+El backend usa prefijo global **`/api`** para casi todo, pero el **carrito de integración está excluido** de ese prefijo para alinearlo con URLs típicas de webhooks:
+
+| Uso | Base URL ejemplo |
+|-----|------------------|
+| **Carrito integración (recomendado)** | `POST http://localhost:3000/integrations/cart` |
+| Resto de la API | `http://localhost:3000/api/...` |
+
+Si llamas `POST /integrations/cart` y recibes 404, reinicia el servidor tras actualizar el código y confirma que `IntegrationCartModule` está importado en `app.module.ts`.
 
 ## Requisitos
 
@@ -42,9 +53,25 @@ VALUES (
 
 O usar el flujo de administración de webhook secrets del backend si ya expone creación por `provider`.
 
+### Si recibes 401 “no hay claves activas”
+
+1. **`DATABASE_URL`**: el proceso del backend debe poder conectarse a la misma base donde insertaste la fila. Sin pool, la API no lee `core.webhook_secrets` (solo cuenta `INTEGRATION_CART_WEBHOOK_SECRET` si está en `.env`).
+2. **`provider`**: debe ser equivalente a `integration_cart` (la consulta ignora mayúsculas y espacios al inicio/fin; evita guiones u otros nombres).
+3. **`is_active`**: debe ser `true`. **`expires_at`**: `NULL` o fecha futura.
+4. **Header**: el valor de `X-Webhook-Secret` (o el Bearer) debe coincidir **exactamente** con la columna `secret` (mismos caracteres, sin espacios extra salvo los que formen parte del valor).
+5. **Permisos**: la URL de conexión suele usar `postgres` o `service_role`; si usas otro rol, necesita `SELECT` sobre `core.webhook_secrets` (ver [`migration_webhook_secrets.sql`](../../database/agora/migration_webhook_secrets.sql)).
+
+Comprobación rápida en SQL (misma instancia que `DATABASE_URL`):
+
+```sql
+SELECT id, name, provider, is_active, expires_at, left(secret, 20) AS secret_prefix
+FROM core.webhook_secrets
+WHERE lower(trim(provider)) = 'integration_cart';
+```
+
 ## Base URL
 
-Misma del API NestJS (ej. `https://<host>/api` si usáis prefijo global).
+Origen del servidor **sin** el segmento `/api` para estos endpoints (ej. `https://<host>` o `http://localhost:3000`), porque las rutas del carrito de integración quedan en la raíz: `/integrations/cart`.
 
 ## Endpoints
 
@@ -74,7 +101,49 @@ El carrito expira a los **30 días** por defecto (`expires_at`). Si se consulta 
 
 ---
 
-### 2. Obtener carrito
+### 2. Enlace público al carrito (sitio web / WhatsApp)
+
+El **backend** arma la URL; n8n solo llama al endpoint y reenvía el `url` por WhatsApp (o usa `token` si tu plantilla lo requiere).
+
+- `POST /integrations/cart/:cartId/link` — body JSON opcional (ver tabla).
+- `GET /integrations/cart/:cartId/link?ttlSeconds=&path=` — mismos parámetros por query.
+
+**Headers:** igual que el resto (`X-Webhook-Secret` o `Authorization: Bearer`).
+
+**Body / query opcional:**
+
+| Campo | Tipo | Default | Notas |
+|-------|------|---------|--------|
+| `ttlSeconds` | int | 604800 (7 d) | Entre 60 y 2 592 000 (30 d). El enlace **nunca** vive más que `expires_at` del carrito. |
+| `path` | string | `INTEGRATION_CART_WEB_PATH` o `/carrito/integracion` | Ruta **relativa** bajo `FRONTEND_URL`. |
+
+**Variables de entorno:**
+
+| Variable | Uso |
+|----------|-----|
+| `FRONTEND_URL` | Base del sitio (obligatoria para generar `url`), sin `/` final. |
+| `INTEGRATION_CART_LINK_SECRET` | HMAC del token `t` (recomendada). Si falta, se usa `INTEGRATION_CART_WEBHOOK_SECRET`. |
+| `INTEGRATION_CART_WEB_PATH` | Ruta por defecto si no envías `path`. |
+
+**200** — Ejemplo:
+
+```json
+{
+  "url": "https://tu-sitio.com/carrito/integracion?t=eyJ2IjoxLCJjYXJ0SWQiOi...",
+  "token": "eyJ2IjoxLCJjYXJ0SWQiOi...",
+  "cart_id": "<uuid>",
+  "link_expires_at": "2026-03-30T12:00:00.000Z",
+  "path": "/carrito/integracion"
+}
+```
+
+El query **`t`** es un token firmado (HMAC-SHA256). El front debe tener una ruta que lea `t`, valide la firma (endpoint futuro o misma clave solo en servidor) y cargue el carrito. **No** expongas `INTEGRATION_CART_LINK_SECRET` en el cliente.
+
+**503** si falta `FRONTEND_URL` o un secreto para firmar.
+
+---
+
+### 3. Obtener carrito
 
 `GET /integrations/cart/:cartId`
 
@@ -82,7 +151,7 @@ Devuelve el carrito, ítems enriquecidos (nombre producto, imagen pública si ap
 
 ---
 
-### 3. Agregar o sumar cantidad (misma línea)
+### 4. Agregar o sumar cantidad (misma línea)
 
 `POST /integrations/cart/:cartId/items`
 
@@ -109,7 +178,7 @@ Validación de catálogo: precio base &gt; 0, producto disponible, PBA habilitad
 
 ---
 
-### 4. Ajustar cantidad de un ítem
+### 5. Ajustar cantidad de un ítem
 
 `PATCH /integrations/cart/:cartId/items/:itemId`
 
@@ -126,7 +195,7 @@ Si la cantidad resultante es **≤ 0**, se **elimina** el ítem. Si el carrito q
 
 ---
 
-### 5. Eliminar un ítem
+### 6. Eliminar un ítem
 
 `DELETE /integrations/cart/:cartId/items/:itemId`
 
@@ -134,7 +203,7 @@ Si era el último ítem, se elimina el carrito; respuesta **`null`** en ese caso
 
 ---
 
-### 6. Eliminar carrito completo
+### 7. Eliminar carrito completo
 
 `DELETE /integrations/cart/:cartId`
 
@@ -155,6 +224,7 @@ Respuesta ejemplo: `{ "deleted": true, "cartId": "..." }`
 ## Ejemplo `curl` (crear carrito y agregar ítem)
 
 ```bash
+# Host sin /api (el carrito de integración no usa el prefijo global)
 export API=https://tu-api.example.com
 export SECRET=tu_clave_integration_cart
 export STORE_ID=d3803a96-63dd-4b82-983f-c0c8cdc87d56

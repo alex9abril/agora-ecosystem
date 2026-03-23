@@ -7,9 +7,9 @@
 --              compatibilidades de refacciones/accesorios (u otros) publicados en
 --              ese canal (global, grupo, sucursal, marca, etc.).
 -- ============================================================================
--- Versión: 1.0
--- Fecha: 2026-03-19
--- Hora: 16:00:00
+-- Versión: 1.2
+-- Fecha: 2026-03-23
+-- Hora: 16:30:00
 -- ============================================================================
 
 SET search_path TO core, catalog, orders, automation, public;
@@ -20,8 +20,9 @@ COMMENT ON SCHEMA automation IS
     'Objetos de lectura para automatizaciones (ej. WhatsApp, ETL): vistas que cruzan core/catalog sin duplicar datos.';
 
 -- Requiere automation.v_store_products (migration_v_store_products.sql).
+-- CASCADE: automation.v_store_vehicle_combinations suele depender de esta vista.
 
-DROP VIEW IF EXISTS automation.v_product_vehicle_compatibilities;
+DROP VIEW IF EXISTS automation.v_product_vehicle_compatibilities CASCADE;
 
 CREATE OR REPLACE VIEW automation.v_product_vehicle_compatibilities AS
 SELECT
@@ -38,6 +39,15 @@ SELECT
     sp.sku AS product_sku,
     sp.product_name,
     sp.product_type,
+    sp.product_image_url_legacy,
+    sp.primary_image_file_path,
+    sp.primary_image_file_name,
+    sp.primary_image_mime_type,
+    sp.primary_image_alt_text,
+    sp.primary_image_width,
+    sp.primary_image_height,
+    sp.product_images_json,
+    sp.product_primary_image_ref,
     pvc.is_universal,
     pvc.notes AS compatibility_notes,
     pvc.created_at AS compatibility_created_at,
@@ -82,12 +92,15 @@ LEFT JOIN LATERAL (
 WHERE (pvc.is_universal = TRUE OR vv.id IS NULL OR vv.is_active = TRUE);
 
 COMMENT ON VIEW automation.v_product_vehicle_compatibilities IS
-    'Compatibilidades (product_vehicle_compatibility) solo para productos del catálogo por tienda (v_store_products). Filtrar: WHERE store_id = $1. matched_vehicle_* enlaza make de la variante con vehicle_brands por nombre (case-insensitive).';
+    'Compatibilidades (product_vehicle_compatibility) solo para productos del catálogo por tienda (v_store_products). Incluye columnas de imagen del producto (mismas que v_store_products). Filtrar: WHERE store_id = $1. matched_vehicle_* enlaza make de la variante con vehicle_brands por nombre (case-insensitive).';
 
 -- ============================================================================
 -- NOTAS
 -- ============================================================================
--- 1. Ejecutar después de migration_v_store_products.sql (depende de automation.v_store_products).
+-- 1. Ejecutar después de migration_v_store_products.sql v1.1+ (depende de automation.v_store_products
+--    y de la columna product_primary_image_ref en esa vista).
+-- 1b. Tras este script, volver a crear automation.v_store_vehicle_combinations si existía
+--     (el CASCADE la elimina). Usa tu SQL guardado o migration_automation_v_store_vehicle_combinations.sql.
 -- 2. Ejemplo: SELECT * FROM automation.v_product_vehicle_compatibilities WHERE store_id = $1;
 -- 3. Filas universal: vehicle_* y matched_vehicle_* son NULL salvo etiqueta "Universal".
 -- 4. Si varias marcas comparten el mismo nombre, matched_vehicle_brand_* toma una fila

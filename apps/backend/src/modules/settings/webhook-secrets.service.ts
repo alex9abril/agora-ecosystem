@@ -272,7 +272,8 @@ export class WebhookSecretsService {
     const result = await dbPool.query<{ secret: string }>(
       `SELECT secret
        FROM core.webhook_secrets
-       WHERE provider = $1 AND is_active = true
+       WHERE LOWER(TRIM(COALESCE(provider, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+         AND is_active = true
          AND (expires_at IS NULL OR expires_at > NOW())
        ORDER BY created_at DESC
        LIMIT 1`,
@@ -293,7 +294,8 @@ export class WebhookSecretsService {
     const result = await dbPool.query<{ secret: string }>(
       `SELECT secret
        FROM core.webhook_secrets
-       WHERE provider = $1 AND is_active = true
+       WHERE LOWER(TRIM(COALESCE(provider, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+         AND is_active = true
          AND (expires_at IS NULL OR expires_at > NOW())
        ORDER BY created_at DESC`,
       [provider],

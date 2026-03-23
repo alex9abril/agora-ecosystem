@@ -15,9 +15,9 @@
 --              comparación case-insensitive). Otros tipos de producto pasan
 --              sin exigir compatibilidad explícita.
 -- ============================================================================
--- Versión: 1.0
--- Fecha: 2026-03-19
--- Hora: 12:00:00
+-- Versión: 1.2
+-- Fecha: 2026-03-23
+-- Hora: 16:00:00
 -- ============================================================================
 
 SET search_path TO core, catalog, orders, automation, public;
@@ -67,9 +67,12 @@ COMMENT ON FUNCTION catalog.product_matches_vehicle_brand(UUID, UUID) IS
 -- ----------------------------------------------------------------------------
 -- Vista principal
 -- ----------------------------------------------------------------------------
+-- Otras vistas (p. ej. automation.v_product_vehicle_compatibilities,
+-- automation.v_store_vehicle_combinations) dependen de automation.v_store_products.
+-- CASCADE elimina esas dependencias; hay que volver a crearlas al final del despliegue.
 
 DROP VIEW IF EXISTS catalog.v_store_products;
-DROP VIEW IF EXISTS automation.v_store_products;
+DROP VIEW IF EXISTS automation.v_store_products CASCADE;
 
 CREATE OR REPLACE VIEW automation.v_store_products AS
 WITH
@@ -544,6 +547,16 @@ SELECT
     c.primary_image_width,
     c.primary_image_height,
     c.product_images_json,
+    CASE
+        WHEN BTRIM(COALESCE(c.product_image_url_legacy, '')) <> ''
+             AND BTRIM(c.product_image_url_legacy) ~* '^https?://'
+        THEN BTRIM(c.product_image_url_legacy)
+        WHEN BTRIM(COALESCE(c.primary_image_file_path, '')) <> ''
+        THEN BTRIM(c.primary_image_file_path)
+        WHEN BTRIM(COALESCE(c.product_image_url_legacy, '')) <> ''
+        THEN BTRIM(c.product_image_url_legacy)
+        ELSE NULL
+    END AS product_primary_image_ref,
     c.product_type,
     c.product_category_id,
     c.category_name,
@@ -579,11 +592,17 @@ SELECT
 FROM combined_store_products c;
 
 COMMENT ON VIEW automation.v_store_products IS
-    'Catálogo efectivo por core.stores. Primeras columnas: store_id, sku, price (precio efectivo), stock. pricing_scope indica branch | aggregated_group | aggregated_group_brand | aggregated_global_brand | catalog_global. Galería en product_images_json; imagen principal en primary_image_*.';
+    'Catálogo efectivo por core.stores. Imagen: product_primary_image_ref = URL absoluta (image_url legacy http) o ruta en storage (primary_image_file_path) para armar URL pública; galería en product_images_json; columnas primary_image_* y product_image_url_legacy detallan origen.';
 
 -- ============================================================================
 -- NOTAS
 -- ============================================================================
+-- 0. Tras este script, ejecutar de nuevo (en orden) las vistas que dependían de
+--    v_store_products (el CASCADE las eliminó):
+--    a) database/agora/migration_automation_v_product_vehicle_compatibilities.sql
+--    b) Tu script de automation.v_store_vehicle_combinations (si existe en tu entorno;
+--       no está versionado en agora-ecosystem; recupera la definición desde Supabase
+--       Dashboard → Database → Views si hace falta).
 -- 1. Vista en esquema automation: SELECT * FROM automation.v_store_products WHERE store_id = $1;
 --    Compatibilidades por tienda: migration_automation_v_product_vehicle_compatibilities.sql
 --    → automation.v_product_vehicle_compatibilities (mismo store_id).

@@ -7,9 +7,9 @@
 --              de venta (core.stores.id). Sustituir el UUID si se requiere
 --              otra tienda.
 -- ============================================================================
--- Versión: 1.0
--- Fecha: 2026-03-19
--- Hora: 18:00:00
+-- Versión: 1.1
+-- Fecha: 2026-03-23
+-- Hora: 14:15:00
 -- ============================================================================
 
 SET search_path TO core, catalog, orders, automation, public;
@@ -48,4 +48,6 @@ ORDER BY combination_origin, is_universal DESC NULLS LAST, vehicle_make NULLS LA
 -- 2. Cada bloque devuelve un result set independiente; en Supabase SQL Editor
 --    ejecuta un SELECT a la vez o envuelve en una transacción de solo lectura.
 -- 3. UUID de ejemplo: d3803a96-63dd-4b82-983f-c0c8cdc87d56 (cambiar según entorno).
+-- 4. Imagen por producto: en v_store_products y v_product_vehicle_compatibilities usar
+--    product_primary_image_ref (URL http(s) o ruta storage) y product_images_json (galería).
 -- ============================================================================

@@ -36,8 +36,11 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Global prefix
-  app.setGlobalPrefix('api');
+  // Global prefix (la mayoría de rutas quedan bajo /api/...)
+  // Excluir integraciones: webhooks/servicios suelen llamar /integrations/cart sin /api
+  app.setGlobalPrefix('api', {
+    exclude: ['integrations/(.*)'],
+  });
 
   // Swagger Configuration
   const config = new DocumentBuilder()

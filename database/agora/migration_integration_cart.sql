@@ -5,12 +5,35 @@
 --              WhatsApp, bots y servicios externos. Cada carrito está ligado a
 --              core.stores (canal de venta). No sustituye orders.shopping_cart.
 -- ============================================================================
--- Versión: 1.0
--- Fecha: 2026-03-19
--- Hora: 20:00:00
+-- Versión: 1.1
+-- Fecha: 2026-03-23
+-- Hora: 12:00:00
 -- ============================================================================
 
 SET search_path TO orders, core, catalog, public;
+
+CREATE SCHEMA IF NOT EXISTS orders;
+
+-- ----------------------------------------------------------------------------
+-- Funciones de updated_at (idempotentes; mismo cuerpo que shopping_cart)
+-- Si aún no existen en la BD, los triggers de abajo fallarían sin esto.
+-- ----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION orders.update_shopping_cart_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION orders.update_shopping_cart_items_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ----------------------------------------------------------------------------
 -- Tabla: integration_carts
@@ -83,7 +106,9 @@ CREATE TRIGGER trigger_update_integration_cart_items_updated_at
 -- ============================================================================
 -- NOTAS
 -- ============================================================================
--- 1. Ejecutar después de core.stores y catalog.products.
--- 2. La autorización de la API es por webhook secret (provider integration_cart),
---    no por RLS en estas tablas; el backend usa pool con rol con permisos INSERT/SELECT/DELETE.
+-- 1. Ejecutar en el MISMO proyecto Supabase (misma DATABASE_URL) que el backend.
+-- 2. Requiere core.stores y catalog.products (FKs). Si CREATE TABLE falla, revise el error.
+-- 3. La autorización de la API es por webhook secret (provider integration_cart),
+--    no por RLS; el backend usa pool con rol con permisos INSERT/SELECT/DELETE.
+-- 4. Verificación: SELECT to_regclass('orders.integration_carts'); -- no debe ser NULL.
 -- ============================================================================
