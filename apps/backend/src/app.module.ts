@@ -33,6 +33,7 @@ import { LandingSlidersModule } from './modules/commerce/landing-sliders/landing
 import { EmailTemplatesModule } from './modules/email-templates/email-templates.module';
 import { EmailModule } from './modules/email/email.module';
 import { StoresModule } from './modules/stores/stores.module';
+import { IntegrationCartModule } from './modules/integration-cart/integration-cart.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { StoresModule } from './modules/stores/stores.module';
     EmailTemplatesModule,
     EmailModule,
     StoresModule,
+    IntegrationCartModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.
@@ -100,6 +102,6 @@ export class AppModule implements NestModule {
     // Aplicar el middleware a todas las rutas de cart
     consumer
       .apply(RequestBodyLoggerMiddleware)
-      .forRoutes('cart');
+      .forRoutes('cart', 'integrations/cart');
   }
 }

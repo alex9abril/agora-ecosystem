@@ -152,15 +152,37 @@ export class StoresService {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
-    const result = await dbPool.query(
-      `SELECT id, type, business_group_id, business_id, vehicle_brand_id, slug, name, is_active, settings, created_at, updated_at
-       FROM core.stores WHERE id = $1`,
-      [id]
-    );
-    if (result.rows.length === 0) {
-      throw new NotFoundException('Tienda no encontrada');
+    let row: Record<string, unknown> | undefined;
+    try {
+      const result = await dbPool.query(
+        `SELECT id, type, business_group_id, business_id, vehicle_brand_id, slug, name, is_active, settings, created_at, updated_at, archived_at
+         FROM core.stores WHERE id = $1`,
+        [id]
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Tienda no encontrada');
+      }
+      row = result.rows[0];
+    } catch (err: unknown) {
+      if (err instanceof NotFoundException) {
+        throw err;
+      }
+      const code = (err as { code?: string })?.code;
+      if (code === '42703') {
+        const result = await dbPool.query(
+          `SELECT id, type, business_group_id, business_id, vehicle_brand_id, slug, name, is_active, settings, created_at, updated_at
+           FROM core.stores WHERE id = $1`,
+          [id]
+        );
+        if (result.rows.length === 0) {
+          throw new NotFoundException('Tienda no encontrada');
+        }
+        row = result.rows[0];
+      } else {
+        throw err;
+      }
     }
-    return this.mapRowToStore(result.rows[0]);
+    return this.mapRowToStore(row!);
   }
 
   async findByPath(path: string): Promise<Store> {

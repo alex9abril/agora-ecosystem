@@ -1,0 +1,117 @@
+{
+  "info": {
+    "name": "AGORA - Integration Cart",
+    "description": "Carrito de integración (/integrations/cart). Autenticación: X-Webhook-Secret o Authorization Bearer.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "webhookSecret", "value": "" },
+    { "key": "storeId", "value": "" },
+    { "key": "cartId", "value": "" },
+    { "key": "itemId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "branchId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create cart",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"storeId\": \"{{storeId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/integrations/cart"
+      }
+    },
+    {
+      "name": "Get cart",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}"
+      }
+    },
+    {
+      "name": "Add item",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items"
+      }
+    },
+    {
+      "name": "Patch item quantity",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"quantity\": 2\n}"
+        },
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
+      }
+    },
+    {
+      "name": "Patch item quantityDelta",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"quantityDelta\": -1\n}"
+        },
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
+      }
+    },
+    {
+      "name": "Remove item",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
+      }
+    },
+    {
+      "name": "Delete cart",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
+        "url": "{{baseUrl}}/integrations/cart/{{cartId}}"
+      }
+    },
+    {
+      "name": "Auth Bearer variant (Create cart)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{webhookSecret}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"storeId\": \"{{storeId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/integrations/cart"
+      }
+    }
+  ]
+}
