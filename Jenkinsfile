@@ -247,6 +247,8 @@ def deployApp(String appName, String port) {
     def deployPath = "${env.DEPLOY_BASE}/${appName}"
     def envFile = "${env.ENV_BASE}/${appName}.env"
     def serviceName = "agora-${appName}.service"
+    // No usar /tmp entre dos bloques sh: en agentes por contenedor /tmp no persiste. El workspace sí.
+    def deployTarball = "${env.WORKSPACE}/${appName}-deploy.tar.gz"
     
     // Detectar si es una aplicación frontend (Next.js)
     def isFrontend = appName in ['store-front', 'web-admin', 'web-local']
@@ -323,11 +325,12 @@ def deployApp(String appName, String port) {
             echo "ℹ️  .next eliminado (se generará en el servidor con el .env correcto)"
         fi
         
-        # Crear archivo tar para transferencia más eficiente
+        # Crear archivo tar en el workspace (persiste entre pasos sh del mismo build)
         cd \${TEMP_DIR}
-        tar czf /tmp/${appName}-deploy.tar.gz .
+        tar czf "${deployTarball}" .
         
-        echo "✅ Archivos preparados en /tmp/${appName}-deploy.tar.gz"
+        echo "✅ Archivos preparados en ${deployTarball}"
+        ls -la "${deployTarball}"
     """
     
     echo "📤 Copiando archivos al servidor..."
@@ -347,7 +350,7 @@ def deployApp(String appName, String port) {
                 chmod 600 \${SSH_KEY}
                 
                 # Copiar archivo tar al servidor
-                scp -i \${SSH_KEY} -o StrictHostKeyChecking=no /tmp/${appName}-deploy.tar.gz \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
+                scp -i \${SSH_KEY} -o StrictHostKeyChecking=no "${deployTarball}" \${SSH_USERNAME}@${env.SSH_HOST}:/tmp/
                 
                 # Ejecutar deploy en el servidor
                 # Pasar IS_FRONTEND como variable de entorno en el comando SSH
@@ -556,8 +559,8 @@ def deployApp(String appName, String port) {
             
             # Extraer archivos nuevos
             echo "📂 Extrayendo archivos nuevos..."
-            tar xzf /tmp/${appName}-deploy.tar.gz -C ${deployPath}
-            rm -f /tmp/${appName}-deploy.tar.gz
+            tar xzf "${deployTarball}" -C ${deployPath}
+            rm -f "${deployTarball}"
             
             # Aplicar permisos correctos: directorios 2750 (setgid + grupo rwx), archivos 640
             echo "🔐 Aplicando permisos correctos..."
@@ -714,8 +717,8 @@ def deployApp(String appName, String port) {
         """
     }
     
-    // Limpiar archivo temporal local
-    sh "rm -f /tmp/${appName}-deploy.tar.gz"
+    // Limpiar artefacto en workspace (por si el deploy no lo borró)
+    sh "rm -f '${deployTarball}'"
     
     echo "✅ Deploy de ${appName} completado exitosamente"
     echo "ℹ️  Nota: Reinicia el servicio ${serviceName} manualmente cuando estés listo"
