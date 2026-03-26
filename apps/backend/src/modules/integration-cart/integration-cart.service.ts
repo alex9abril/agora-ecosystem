@@ -369,6 +369,7 @@ export class IntegrationCartService {
           sci.branch_id,
           sci.created_at,
           sci.updated_at,
+          p.sku as product_sku,
           p.name as product_name,
           p.description as product_description,
           p.image_url as product_image_url_fallback,

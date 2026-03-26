@@ -5,9 +5,9 @@
 --              WhatsApp, bots y servicios externos. Cada carrito está ligado a
 --              core.stores (canal de venta). No sustituye orders.shopping_cart.
 -- ============================================================================
--- Versión: 1.1
+-- Versión: 1.2
 -- Fecha: 2026-03-23
--- Hora: 12:00:00
+-- Hora: 19:00:00
 -- ============================================================================
 
 SET search_path TO orders, core, catalog, public;
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS orders.integration_cart_items (
     item_subtotal DECIMAL(10,2) NOT NULL CHECK (item_subtotal >= 0),
     special_instructions TEXT,
     special_instructions_normalized TEXT GENERATED ALWAYS AS (COALESCE(special_instructions, '')) STORED,
-    branch_id UUID REFERENCES core.businesses(id) ON DELETE SET NULL,
+    branch_id UUID NOT NULL REFERENCES core.businesses(id) ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT integration_cart_items_unique UNIQUE(
@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_integration_cart_items_product_id ON orders.integ
 CREATE INDEX IF NOT EXISTS idx_integration_cart_items_branch_id ON orders.integration_cart_items(branch_id);
 CREATE INDEX IF NOT EXISTS idx_integration_cart_items_variant_selections ON orders.integration_cart_items USING GIN(variant_selections);
 
-COMMENT ON TABLE orders.integration_cart_items IS 'Líneas del carrito de integración; misma semántica que shopping_cart_items (snapshot de precio, branch_id opcional).';
+COMMENT ON TABLE orders.integration_cart_items IS 'Líneas del carrito de integración; misma semántica que shopping_cart_items (snapshot de precio). branch_id es obligatorio.';
 
 -- ----------------------------------------------------------------------------
 -- Triggers updated_at (reutiliza funciones existentes en orders)

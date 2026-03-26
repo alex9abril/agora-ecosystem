@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "agora-integration-cart-v2",
     "name": "AGORA - Integration Cart (crear, ítems, gestión)",
-    "description": "Carrito de integración para n8n / WhatsApp.\n\n**Base:** `{{baseUrl}}` sin `/api` (ej. `http://localhost:3000`).\n\n**Auth (una de dos):**\n- Header `X-Webhook-Secret: {{webhookSecret}}`\n- Header `Authorization: Bearer {{webhookSecret}}`\n\n**Variables de colección:** `webhookSecret`, `storeId`, `cartId`, `productId`, `branchId`, `itemId`.\n\nTras **Crear carrito** y **Agregar ítem**, los tests guardan `cartId` e `itemId` en variables de colección.\n\n**Docs:** `docs/integrations/integration-cart-api.md`",
+    "description": "Carrito de integración para n8n / WhatsApp.\n\n**Base:** `{{baseUrl}}` sin `/api` (ej. `http://localhost:3000`).\n\n**Auth (una de dos):**\n- Header `X-Webhook-Secret: {{webhookSecret}}`\n- Header `Authorization: Bearer {{webhookSecret}}`\n\n**Variables de colección:** `webhookSecret`, `storeId`, `cartId`, `productId`, `branchId`, `itemId`.\n\n> `branchId` es obligatorio en altas de ítems (`POST /integrations/cart/:cartId/items`).\n\nTras **Crear carrito** y **Agregar ítem**, los tests guardan `cartId` e `itemId` en variables de colección.\n\n**Docs:** `docs/integrations/integration-cart-api.md`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -12,7 +12,7 @@
     { "key": "cartId", "value": "" },
     { "key": "itemId", "value": "" },
     { "key": "productId", "value": "" },
-    { "key": "branchId", "value": "" }
+    { "key": "branchId", "value": "00000000-0000-0000-0000-000000000001" }
   ],
   "item": [
     {
@@ -75,7 +75,7 @@
       "name": "2. Gestionar ítems",
       "item": [
         {
-          "name": "POST Agregar ítem (mínimo)",
+          "name": "POST Agregar ítem (requerido)",
           "event": [
             {
               "listen": "test",
@@ -104,9 +104,9 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}"
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\"\n}"
             },
-            "description": "Si la misma línea (producto + variantes + notas + branch) ya existe, suma cantidad. En tiendas group / group_brand / global_brand suele hacer falta `branchId`.",
+            "description": "Si la misma línea (producto + variantes + notas + branch) ya existe, suma cantidad. `branchId` es obligatorio en todos los casos.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items"
           }
         },
@@ -139,7 +139,7 @@
               "mode": "raw",
               "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\",\n  \"variantSelections\": {\n    \"00000000-0000-0000-0000-000000000001\": \"00000000-0000-0000-0000-000000000002\"\n  },\n  \"specialInstructions\": \"Ejemplo de nota\"\n}"
             },
-            "description": "Ajusta UUIDs de `variantSelections` a IDs reales de tu catálogo. `branchId` obligatorio según tipo de tienda.",
+            "description": "Ajusta UUIDs de `variantSelections` a IDs reales de tu catálogo. `branchId` es obligatorio.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items"
           }
         },

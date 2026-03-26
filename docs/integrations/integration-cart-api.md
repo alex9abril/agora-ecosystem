@@ -163,16 +163,16 @@ Devuelve el carrito, ítems enriquecidos (nombre producto, imagen pública si ap
 | `quantity` | int ≥ 1 | Sí | Si ya existe la misma línea (producto + variantes + notas + `branch_id`), se **suma** la cantidad y se actualiza snapshot de precio |
 | `variantSelections` | objeto | No | Igual que `/cart/items` |
 | `specialInstructions` | string | No | |
-| `branchId` | UUID | Depende de la tienda | Ver tabla siguiente |
+| `branchId` | UUID | Sí | Sucursal de contexto para disponibilidad y precio (PBA) |
 
-**Uso de `branchId` según `store.type`:**
+**Regla actual de `branchId`:**
 
 | `store.type` | `branchId` |
 |--------------|------------|
-| `branch` | Opcional; si no se envía se usa la sucursal de la tienda. Debe coincidir con la tienda. |
-| `group`, `group_brand` | **Obligatorio**; sucursal del grupo (`business_group_id` del store). |
-| `global_brand` | **Obligatorio**; sucursal activa con PBA. |
-| `global` | Opcional; si se envía, precio/disponibilidad por PBA de esa sucursal. |
+| `branch` | **Obligatorio** y debe coincidir con `store.business_id`. |
+| `group`, `group_brand` | **Obligatorio** y debe pertenecer al `business_group_id` del store. |
+| `global_brand` | **Obligatorio**; sucursal activa con PBA habilitada. |
+| `global` | **Obligatorio**; se valida contra sucursal activa y PBA habilitada. |
 
 Validación de catálogo: precio base &gt; 0, producto disponible, PBA habilitada cuando aplica, y para `refaccion`/`accesorio` en tiendas con marca, `product_matches_vehicle_brand`.
 

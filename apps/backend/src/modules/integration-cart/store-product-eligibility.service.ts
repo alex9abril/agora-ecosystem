@@ -55,6 +55,9 @@ export class StoreProductEligibilityService {
 
     const productType = product.product_type != null ? String(product.product_type) : null;
     let branchIdResolved: string | null = branchIdInput?.trim() || null;
+    if (!branchIdResolved) {
+      throw new BadRequestException('branchId es obligatorio para agregar al carrito de integración');
+    }
 
     switch (store.type) {
       case 'branch': {
@@ -62,7 +65,6 @@ export class StoreProductEligibilityService {
         if (!expected) {
           throw new BadRequestException('Tienda sucursal mal configurada');
         }
-        branchIdResolved = branchIdResolved || expected;
         if (branchIdResolved !== expected) {
           throw new BadRequestException('La sucursal no coincide con la tienda (branch)');
         }
@@ -102,13 +104,10 @@ export class StoreProductEligibilityService {
       }
       case 'global':
       default: {
-        if (branchIdResolved) {
-          await this.assertBranchActive(branchIdResolved);
-          await this.assertPbaIfPresent(productId, branchIdResolved, false);
-          const unitPrice = await this.resolveUnitPrice(productId, branchIdResolved, basePrice);
-          return { unitPrice, productBusinessId: product.owner_business_id, branchIdResolved };
-        }
-        return { unitPrice: basePrice, productBusinessId: product.owner_business_id, branchIdResolved: null };
+        await this.assertBranchActive(branchIdResolved);
+        await this.assertPbaIfPresent(productId, branchIdResolved, true);
+        const unitPrice = await this.resolveUnitPrice(productId, branchIdResolved, basePrice);
+        return { unitPrice, productBusinessId: product.owner_business_id, branchIdResolved };
       }
     }
   }

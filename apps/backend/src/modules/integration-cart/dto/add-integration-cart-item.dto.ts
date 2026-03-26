@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsInt, Min, IsOptional, IsString, IsObject, Matches } from 'class-validator';
+import { IsInt, Min, IsOptional, IsString, IsObject, Matches } from 'class-validator';
 
 export class AddIntegrationCartItemDto {
   @ApiProperty({ description: 'ID del producto', format: 'uuid' })
@@ -25,13 +25,12 @@ export class AddIntegrationCartItemDto {
   @IsString()
   specialInstructions?: string;
 
-  @ApiPropertyOptional({
-    description: 'Sucursal (obligatoria para tiendas group, group_brand, global_brand; recomendada para branch)',
+  @ApiProperty({
+    description: 'Sucursal obligatoria. Se valida contra la tienda y reglas de disponibilidad/precio por branch',
     format: 'uuid',
   })
-  @IsOptional()
   @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
     message: 'branchId debe ser un UUID válido',
   })
-  branchId?: string;
+  branchId: string;
 }
