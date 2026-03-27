@@ -173,6 +173,16 @@ class CartService {
       throw error;
     }
   }
+
+  /**
+   * Importar líneas del carrito de integración (enlace WhatsApp) al carrito del usuario autenticado.
+   */
+  async importFromIntegration(token: string): Promise<Cart> {
+    return apiRequest<Cart>('/cart/import-integration', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
 }
 
 export const cartService = new CartService();

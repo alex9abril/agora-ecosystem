@@ -5,7 +5,9 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
+import { SKIP_INTEGRATION_CART_WEBHOOK_KEY } from '../decorators/skip-integration-cart-webhook.decorator';
 import * as crypto from 'crypto';
 import { WebhookSecretsService } from '../../settings/webhook-secrets.service';
 import { dbPool } from '../../../config/database.config';
@@ -32,9 +34,20 @@ function normalizeProvidedKey(raw: string): string {
 export class IntegrationCartWebhookGuard implements CanActivate {
   private readonly logger = new Logger(IntegrationCartWebhookGuard.name);
 
-  constructor(private readonly webhookSecretsService: WebhookSecretsService) {}
+  constructor(
+    private readonly webhookSecretsService: WebhookSecretsService,
+    private readonly reflector: Reflector,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_INTEGRATION_CART_WEBHOOK_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (skip) {
+      return true;
+    }
+
     const request = context.switchToHttp().getRequest<Request>();
     const pickFirst = (v: string | string[] | undefined): string =>
       typeof v === 'string' ? v : Array.isArray(v) && v[0] ? String(v[0]) : '';

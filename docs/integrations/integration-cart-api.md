@@ -106,7 +106,7 @@ El carrito expira a los **30 días** por defecto (`expires_at`). Si se consulta 
 El **backend** arma la URL; n8n solo llama al endpoint y reenvía el `url` por WhatsApp (o usa `token` si tu plantilla lo requiere).
 
 - `POST /integrations/cart/:cartId/link` — body JSON opcional (ver tabla).
-- `GET /integrations/cart/:cartId/link?ttlSeconds=&path=` — mismos parámetros por query.
+- `GET /integrations/cart/:cartId/link?ttlSeconds=&path=&storeId=` — mismos parámetros por query.
 
 **Headers:** igual que el resto (`X-Webhook-Secret` o `Authorization: Bearer`).
 
@@ -115,7 +115,8 @@ El **backend** arma la URL; n8n solo llama al endpoint y reenvía el `url` por W
 | Campo | Tipo | Default | Notas |
 |-------|------|---------|--------|
 | `ttlSeconds` | int | 604800 (7 d) | Entre 60 y 2 592 000 (30 d). El enlace **nunca** vive más que `expires_at` del carrito. |
-| `path` | string | `INTEGRATION_CART_WEB_PATH` o `/carrito/integracion` | Ruta **relativa** bajo `FRONTEND_URL`. |
+| `path` | string | (ver abajo) | Ruta **relativa** bajo `FRONTEND_URL`. Si se envía, **tiene prioridad** sobre la ruta derivada de `storeId`. |
+| `storeId` | UUID | — | **Sin `path`:** si lo envías y coincide con `integration_carts.store_id` del carrito, el backend arma la ruta del carrito en el sitio según `core.stores.type` y `slug` (ej. `branch` → `/sucursal/{slug}/cart`, `group` / `group_brand` → `/grupo/{slug}/cart`, `global_brand` → `/brand/{slug}/cart`, `global` → `/cart`). Si no envías `path` ni `storeId`, se usa `INTEGRATION_CART_WEB_PATH` (compatibilidad, p. ej. `/carrito/integracion`). |
 
 **Variables de entorno:**
 
@@ -125,25 +126,66 @@ El **backend** arma la URL; n8n solo llama al endpoint y reenvía el `url` por W
 | `INTEGRATION_CART_LINK_SECRET` | HMAC del token `t` (recomendada). Si falta, se usa `INTEGRATION_CART_WEBHOOK_SECRET`. |
 | `INTEGRATION_CART_WEB_PATH` | Ruta por defecto si no envías `path`. |
 
-**200** — Ejemplo:
+**200** — Ejemplo (enlace a carrito contextual):
 
 ```json
 {
-  "url": "https://tu-sitio.com/carrito/integracion?t=eyJ2IjoxLCJjYXJ0SWQiOi...",
+  "url": "https://tu-sitio.com/sucursal/toyota-satelite/cart?t=eyJ2IjoxLCJjYXJ0SWQiOi...",
   "token": "eyJ2IjoxLCJjYXJ0SWQiOi...",
   "cart_id": "<uuid>",
+  "store_id": "<uuid>",
   "link_expires_at": "2026-03-30T12:00:00.000Z",
-  "path": "/carrito/integracion"
+  "path": "/sucursal/toyota-satelite/cart"
 }
 ```
 
-El query **`t`** es un token firmado (HMAC-SHA256). El front debe tener una ruta que lea `t`, valide la firma (endpoint futuro o misma clave solo en servidor) y cargue el carrito. **No** expongas `INTEGRATION_CART_LINK_SECRET` en el cliente.
+El query **`t`** es un token firmado (HMAC-SHA256). En **store-front**, la página de carrito (`/cart` y `/sucursal/.../cart`, etc.) lee `t`, importa el carrito de integración (usuario autenticado vía `POST /api/cart/import-integration`, invitado vía `GET /integrations/cart/session` + carrito local) y quita `t` de la URL. **No** expongas `INTEGRATION_CART_LINK_SECRET` en el cliente.
 
 **503** si falta `FRONTEND_URL` o un secreto para firmar.
 
 ---
 
-### 3. Obtener carrito
+### 3. Resolver carrito por token del enlace (sitio web, sin webhook secret)
+
+`GET /integrations/cart/session?t=<token>`
+
+Valida la firma HMAC del mismo `token` que devuelve el endpoint de enlace y el query `t` en la URL pública. **No** requiere `X-Webhook-Secret` ni JWT. Pensado para que el frontend (p. ej. store-front) muestre el resumen antes de iniciar sesión.
+
+**Query:**
+
+| Parámetro | Obligatorio | Descripción |
+|-----------|-------------|-------------|
+| `t` | Sí | Token completo (`payload.sig`) |
+
+**200** — Mismo cuerpo que `GET /integrations/cart/:cartId` (carrito con ítems enriquecidos).
+
+**400** — Token ausente, inválido o caducado.
+
+**410** — Carrito eliminado o expirado en base de datos.
+
+**503** — Falta `INTEGRATION_CART_LINK_SECRET` / `INTEGRATION_CART_WEBHOOK_SECRET` para validar la firma.
+
+---
+
+### 4. Importar carrito de integración al carrito del usuario (checkout web)
+
+`POST /api/cart/import-integration`
+
+Requiere **JWT** de Supabase (`Authorization: Bearer`). Vacía el `shopping_cart` del usuario y copia las líneas del carrito de integración identificado por el mismo token `t` del enlace (validación idéntica a `GET .../session`). Tras esto, el usuario puede usar `POST /api/orders/checkout` con su flujo habitual.
+
+**Body JSON:**
+
+```json
+{ "token": "<mismo token t del enlace>" }
+```
+
+**200** — Carrito del usuario (`GET /api/cart`).
+
+**400** — Token inválido o carrito de integración vacío.
+
+---
+
+### 5. Obtener carrito (integración, con webhook)
 
 `GET /integrations/cart/:cartId`
 
@@ -151,7 +193,7 @@ Devuelve el carrito, ítems enriquecidos (nombre producto, imagen pública si ap
 
 ---
 
-### 4. Agregar o sumar cantidad (misma línea)
+### 6. Agregar o sumar cantidad (misma línea)
 
 `POST /integrations/cart/:cartId/items`
 
@@ -178,7 +220,7 @@ Validación de catálogo: precio base &gt; 0, producto disponible, PBA habilitad
 
 ---
 
-### 5. Ajustar cantidad de un ítem
+### 7. Ajustar cantidad de un ítem
 
 `PATCH /integrations/cart/:cartId/items/:itemId`
 
@@ -195,7 +237,7 @@ Si la cantidad resultante es **≤ 0**, se **elimina** el ítem. Si el carrito q
 
 ---
 
-### 6. Eliminar un ítem
+### 8. Eliminar un ítem
 
 `DELETE /integrations/cart/:cartId/items/:itemId`
 
@@ -203,7 +245,7 @@ Si era el último ítem, se elimina el carrito; respuesta **`null`** en ese caso
 
 ---
 
-### 7. Eliminar carrito completo
+### 9. Eliminar carrito completo
 
 `DELETE /integrations/cart/:cartId`
 

@@ -7,6 +7,8 @@ import {
   Body,
   Param,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +20,7 @@ import {
 import { CartService } from './cart.service';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { ImportIntegrationCartDto } from './dto/import-integration-cart.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '@supabase/supabase-js';
@@ -36,6 +39,19 @@ export class CartController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async getCart(@CurrentUser() user: User) {
     return this.cartService.getCart(user.id);
+  }
+
+  @Post('import-integration')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Importar carrito desde token de integración (WhatsApp)',
+    description:
+      'Vacia el carrito del usuario y copia las líneas del carrito de integración validado con el token `t` del enlace.',
+  })
+  @ApiResponse({ status: 200, description: 'Carrito del usuario actualizado' })
+  @ApiResponse({ status: 400, description: 'Token inválido o carrito vacío' })
+  async importIntegration(@CurrentUser() user: User, @Body() dto: ImportIntegrationCartDto) {
+    return this.cartService.importFromIntegrationToken(user.id, dto.token);
   }
 
   @Post('items')

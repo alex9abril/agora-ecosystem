@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
   HttpException,
   HttpStatus,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { QueryResult } from 'pg';
 import { dbPool } from '../../config/database.config';
@@ -16,9 +17,14 @@ import { PatchIntegrationCartItemDto } from './dto/patch-integration-cart-item.d
 import { normalizeStoragePath } from '../../utils/storage.utils';
 import {
   signIntegrationCartLinkToken,
+  verifyIntegrationCartLinkToken,
   INTEGRATION_CART_LINK_TOKEN_V,
 } from './integration-cart-link.util';
 import { CreateIntegrationCartLinkDto } from './dto/create-integration-cart-link.dto';
+import type { Store } from '../stores/stores.service';
+import { WebhookSecretsService } from '../settings/webhook-secrets.service';
+
+const WEBHOOK_PROVIDER_INTEGRATION_CART = 'integration_cart';
 
 @Injectable()
 export class IntegrationCartService {
@@ -27,6 +33,7 @@ export class IntegrationCartService {
   constructor(
     private readonly storesService: StoresService,
     private readonly eligibility: StoreProductEligibilityService,
+    private readonly webhookSecretsService: WebhookSecretsService,
   ) {}
 
   async createCart(storeId: string) {
@@ -53,6 +60,30 @@ export class IntegrationCartService {
   async getCart(cartId: string) {
     const { cart } = await this.loadOpenCart(cartId);
     return this.buildCartPayload(cart as Record<string, unknown>);
+  }
+
+  /**
+   * Resuelve el carrito a partir del token `t` del enlace firmado (WhatsApp → web).
+   * No requiere webhook secret en la petición; valida HMAC con los mismos secretos que la firma (env o core.webhook_secrets).
+   */
+  async getCartByLinkToken(token: string) {
+    const trimmed = (token || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Parámetro t requerido');
+    }
+    const secrets = await this.collectLinkSigningSecrets();
+    if (secrets.length === 0) {
+      throw new ServiceUnavailableException(
+        'Configure INTEGRATION_CART_LINK_SECRET o INTEGRATION_CART_WEBHOOK_SECRET, o un secreto activo en core.webhook_secrets (provider integration_cart), para validar enlaces',
+      );
+    }
+    for (const secret of secrets) {
+      const payload = verifyIntegrationCartLinkToken(trimmed, secret);
+      if (payload) {
+        return this.getCart(payload.cartId);
+      }
+    }
+    throw new BadRequestException('Token inválido o expirado');
   }
 
   async deleteCart(cartId: string) {
@@ -256,9 +287,11 @@ export class IntegrationCartService {
    */
   async createShareLink(cartId: string, dto: CreateIntegrationCartLinkDto = {}) {
     const { cart } = await this.loadOpenCart(cartId);
-    const secret = this.resolveLinkSigningSecret();
+    const cartStoreId = String(cart.store_id);
+    const path = await this.resolveShareLinkPath(cartStoreId, dto);
+
+    const secret = await this.resolveLinkSigningSecretForSigning();
     const base = this.resolveFrontendBaseUrl();
-    const path = this.resolveWebPath(dto.path);
 
     const ttlMin = 60;
     const ttlMax = 30 * 24 * 3600;
@@ -283,18 +316,107 @@ export class IntegrationCartService {
       url,
       token,
       cart_id: id,
+      store_id: cartStoreId,
       link_expires_at: new Date(exp * 1000).toISOString(),
       path: path.startsWith('/') ? path : `/${path}`,
     };
   }
 
-  private resolveLinkSigningSecret(): string {
+  /**
+   * Si `path` viene en el DTO, se usa (vía resolveWebPath).
+   * Si no hay `path`: con `storeId` que coincida con el carrito se arma la ruta del sitio (`/sucursal/{slug}/cart`, etc.).
+   * Sin `path` ni `storeId`, compatibilidad: `INTEGRATION_CART_WEB_PATH` (p. ej. `/carrito/integracion`).
+   */
+  private async resolveShareLinkPath(cartStoreId: string, dto: CreateIntegrationCartLinkDto): Promise<string> {
+    const pathOverride = dto.path?.trim();
+    if (pathOverride) {
+      if (dto.storeId && dto.storeId !== cartStoreId) {
+        throw new BadRequestException('storeId no coincide con el carrito de integración');
+      }
+      return this.resolveWebPath(pathOverride);
+    }
+    if (!dto.storeId) {
+      return this.resolveWebPath(undefined);
+    }
+    if (dto.storeId !== cartStoreId) {
+      throw new BadRequestException('storeId no coincide con el carrito de integración');
+    }
+    const store = await this.storesService.findById(dto.storeId);
+    if (!store.is_active || store.archived_at) {
+      throw new BadRequestException('La tienda no está disponible');
+    }
+    return this.resolveStorefrontCartPath(store);
+  }
+
+  /**
+   * Rutas alineadas con store-front (StoreContext / páginas [origen]/[slug]/cart).
+   */
+  private resolveStorefrontCartPath(store: Store): string {
+    if (store.type === 'global') {
+      return '/cart';
+    }
+    const rawSlug = (store.slug || '').trim();
+    if (!rawSlug) {
+      throw new UnprocessableEntityException(
+        'La tienda no tiene slug configurado; envía path en el body o asigna slug en core.stores',
+      );
+    }
+    const slugSegment = rawSlug.includes('/')
+      ? rawSlug
+          .split('/')
+          .filter((s) => s.length > 0)
+          .pop()!
+      : rawSlug;
+
+    switch (store.type) {
+      case 'branch':
+        return `/sucursal/${slugSegment}/cart`;
+      case 'group':
+      case 'group_brand':
+        return `/grupo/${slugSegment}/cart`;
+      case 'global_brand':
+        return `/brand/${slugSegment}/cart`;
+      default:
+        throw new UnprocessableEntityException(`Tipo de tienda no soportado para enlace de carrito: ${store.type}`);
+    }
+  }
+
+  /**
+   * Secretos posibles para verificar el token (rotación / varias claves en BD).
+   * Orden: INTEGRATION_CART_LINK_SECRET, INTEGRATION_CART_WEBHOOK_SECRET, luego core.webhook_secrets (provider integration_cart).
+   */
+  private async collectLinkSigningSecrets(): Promise<string[]> {
+    const out: string[] = [];
+    const push = (s?: string | null) => {
+      const t = (s ?? '').replace(/\r/g, '').trim();
+      if (t && !out.includes(t)) out.push(t);
+    };
+    push(process.env.INTEGRATION_CART_LINK_SECRET);
+    push(process.env.INTEGRATION_CART_WEBHOOK_SECRET);
+    try {
+      const fromDb = await this.webhookSecretsService.getActiveSecrets(WEBHOOK_PROVIDER_INTEGRATION_CART);
+      for (const s of fromDb) push(s);
+    } catch {
+      // BD no disponible: seguir solo con env
+    }
+    return out;
+  }
+
+  /**
+   * Un solo secreto para firmar nuevos enlaces: prioriza env; si no, primera clave activa en Supabase (misma que valida el webhook).
+   */
+  private async resolveLinkSigningSecretForSigning(): Promise<string> {
     const dedicated = process.env.INTEGRATION_CART_LINK_SECRET?.trim();
     if (dedicated) return dedicated;
     const webhook = process.env.INTEGRATION_CART_WEBHOOK_SECRET?.trim();
     if (webhook) return webhook;
+    const fromDb = await this.webhookSecretsService.getActiveSecrets(WEBHOOK_PROVIDER_INTEGRATION_CART);
+    const first = fromDb.find((s) => (s ?? '').trim().length > 0);
+    if (first) {
+      return first.replace(/\r/g, '').trim();
+    }
     throw new ServiceUnavailableException(
-      'Configure INTEGRATION_CART_LINK_SECRET (recomendado) o INTEGRATION_CART_WEBHOOK_SECRET para firmar enlaces de carrito',
+      'Configure INTEGRATION_CART_LINK_SECRET o INTEGRATION_CART_WEBHOOK_SECRET, o registre un secreto activo en core.webhook_secrets (provider integration_cart), para firmar enlaces de carrito',
     );
   }
 

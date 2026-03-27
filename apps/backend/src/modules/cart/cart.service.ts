@@ -10,10 +10,13 @@ import { supabaseAdmin } from '../../config/supabase.config';
 import { AddCartItemDto } from './dto/add-cart-item.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { normalizeStoragePath } from '../../utils/storage.utils';
+import { IntegrationCartService } from '../integration-cart/integration-cart.service';
 
 @Injectable()
 export class CartService {
   private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+
+  constructor(private readonly integrationCartService: IntegrationCartService) {}
   /**
    * Obtener o crear el carrito del usuario
    */
@@ -556,6 +559,58 @@ export class CartService {
       console.error('❌ Error vaciando carrito:', error);
       throw new ServiceUnavailableException(`Error al vaciar carrito: ${error.message}`);
     }
+  }
+
+  /**
+   * Reemplaza el carrito del usuario con el contenido del carrito de integración (WhatsApp).
+   * Valida el token `t` igual que GET /integrations/cart/session.
+   */
+  async importFromIntegrationToken(userId: string, token: string) {
+    const integrationPayload = await this.integrationCartService.getCartByLinkToken(token);
+    const items = (integrationPayload as { items?: unknown[] }).items ?? [];
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('El carrito de integración está vacío');
+    }
+
+    await this.clearCart(userId);
+
+    for (const row of items as Record<string, unknown>[]) {
+      const rawVs = row.variant_selections;
+      let variantSelections: Record<string, string | string[]> = {};
+      if (rawVs != null) {
+        if (typeof rawVs === 'string') {
+          try {
+            variantSelections = JSON.parse(rawVs) as Record<string, string | string[]>;
+          } catch {
+            variantSelections = {};
+          }
+        } else if (typeof rawVs === 'object') {
+          variantSelections = rawVs as Record<string, string | string[]>;
+        }
+      }
+
+      const branchId = row.branch_id ? String(row.branch_id) : undefined;
+      const productId = String(row.product_id ?? '');
+      const quantity = Number(row.quantity);
+      if (!productId || !Number.isFinite(quantity) || quantity < 1) {
+        throw new BadRequestException('Línea de carrito de integración inválida');
+      }
+
+      const specialInstructions =
+        row.special_instructions != null ? String(row.special_instructions) : undefined;
+
+      const dto: AddCartItemDto = {
+        productId,
+        quantity: Math.floor(quantity),
+        variantSelections: Object.keys(variantSelections).length ? variantSelections : undefined,
+        specialInstructions: specialInstructions || undefined,
+        branchId,
+      };
+
+      await this.addItem(userId, dto);
+    }
+
+    return this.getCart(userId);
   }
 }
 

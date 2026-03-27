@@ -1,8 +1,8 @@
 {
   "info": {
-    "_postman_id": "agora-integration-cart-v2",
-    "name": "AGORA - Integration Cart (crear, ítems, gestión)",
-    "description": "Carrito de integración para n8n / WhatsApp.\n\n**Base:** `{{baseUrl}}` sin `/api` para `/integrations/...` (ej. `http://localhost:3000`). Las rutas de checkout web usan **`{{baseUrl}}/api/...`**.\n\n**Auth (una de dos) para carrito de integración:**\n- Header `X-Webhook-Secret: {{webhookSecret}}`\n- Header `Authorization: Bearer {{webhookSecret}}`\n\n**Variables:** `webhookSecret`, `storeId`, `cartId`, `productId`, `branchId`, `itemId`, `linkToken` (token `t` del enlace), `accessToken` (JWT Supabase para import).\n\n> `branchId` es obligatorio en altas de ítems (`POST /integrations/cart/:cartId/items`).\n\n**Docs:** `docs/integrations/integration-cart-api.md`",
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef0102030405",
+    "name": "AGORA — Integration Cart & Checkout",
+    "description": "Carrito de integración (`/integrations/cart`) y flujo web: enlace firmado `t`, sesión pública e import al carrito de usuario.\n\n**Bases**\n- Integración: `{{baseUrl}}` **sin** `/api` (ej. `https://api.agoramp.mx` o `http://localhost:3000`).\n- Carrito usuario / import: `{{baseUrl}}/api/...`\n\n**Auth del webhook** (elige una)\n- `X-Webhook-Secret: {{webhookSecret}}`\n- `Authorization: Bearer {{webhookSecret}}`\n\n**Variables de colección**\n`webhookSecret`, `storeId` (core.stores), `cartId`, `productId`, `branchId`, `itemId`, `linkToken` (query `t`), `accessToken` (JWT Supabase).\n\n**Enlaces**\n- Con `storeId` en el body del POST `.../link` se genera URL contextual (ej. `/sucursal/{slug}/cart?t=`).\n- Con `path` explícito se ignora la derivación por tienda.\n\n**Documentación:** `docs/integrations/integration-cart-api.md`",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -10,15 +10,15 @@
     { "key": "webhookSecret", "value": "" },
     { "key": "storeId", "value": "" },
     { "key": "cartId", "value": "" },
-    { "key": "itemId", "value": "" },
     { "key": "productId", "value": "" },
     { "key": "branchId", "value": "00000000-0000-0000-0000-000000000001" },
+    { "key": "itemId", "value": "" },
     { "key": "linkToken", "value": "" },
     { "key": "accessToken", "value": "" }
   ],
   "item": [
     {
-      "name": "1. Crear y consultar carrito",
+      "name": "1. Carrito",
       "item": [
         {
           "name": "POST Crear carrito",
@@ -28,11 +28,12 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
                   "if (pm.response.code === 201) {",
-                  "  const j = pm.response.json();",
+                  "  const j = unwrap(pm.response.json());",
                   "  if (j && j.id) {",
                   "    pm.collectionVariables.set('cartId', j.id);",
-                  "    console.log('cartId guardado:', j.id);",
+                  "    console.log('cartId →', j.id);",
                   "  }",
                   "}"
                 ]
@@ -49,48 +50,49 @@
               "mode": "raw",
               "raw": "{\n  \"storeId\": \"{{storeId}}\"\n}"
             },
-            "description": "Body: `storeId` = UUID de `core.stores`. Respuesta 201 incluye `id` del carrito.",
+            "description": "Crea `orders.integration_carts` para `core.stores`. 201 devuelve `id` (UUID del carrito).",
             "url": "{{baseUrl}}/integrations/cart"
           }
         },
         {
-          "name": "GET Obtener carrito (con ítems)",
+          "name": "GET Carrito con ítems",
           "request": {
             "method": "GET",
             "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
-            "description": "Devuelve carrito, líneas enriquecidas, `subtotal`, `itemCount`, `totalQuantity`. 410 si expiró.",
+            "description": "410 si el carrito expiró.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}"
           }
         },
         {
-          "name": "DELETE Eliminar carrito completo",
+          "name": "DELETE Carrito completo",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
-            "description": "Borra el carrito y sus ítems.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}"
           }
         }
       ]
     },
     {
-      "name": "2. Gestionar ítems",
+      "name": "2. Ítems",
       "item": [
         {
-          "name": "POST Agregar ítem (requerido)",
+          "name": "POST Agregar ítem",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
                   "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j && j.items && j.items.length) {",
-                  "    const last = j.items[j.items.length - 1];",
+                  "  const j = unwrap(pm.response.json());",
+                  "  const items = j && j.items;",
+                  "  if (items && items.length) {",
+                  "    const last = items[items.length - 1];",
                   "    if (last.id) {",
                   "      pm.collectionVariables.set('itemId', last.id);",
-                  "      console.log('itemId guardado:', last.id);",
+                  "      console.log('itemId →', last.id);",
                   "    }",
                   "  }",
                   "}"
@@ -108,22 +110,24 @@
               "mode": "raw",
               "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\"\n}"
             },
-            "description": "Si la misma línea (producto + variantes + notas + branch) ya existe, suma cantidad. `branchId` es obligatorio en todos los casos.",
+            "description": "`branchId` obligatorio (reglas según `store.type`). Línea duplicada suma cantidad.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items"
           }
         },
         {
-          "name": "POST Agregar ítem (branch + variantes + notas)",
+          "name": "POST Agregar ítem (variantes + notas)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
                   "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  if (j && j.items && j.items.length) {",
-                  "    const last = j.items[j.items.length - 1];",
+                  "  const j = unwrap(pm.response.json());",
+                  "  const items = j && j.items;",
+                  "  if (items && items.length) {",
+                  "    const last = items[items.length - 1];",
                   "    if (last.id) pm.collectionVariables.set('itemId', last.id);",
                   "  }",
                   "}"
@@ -139,14 +143,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\",\n  \"variantSelections\": {\n    \"00000000-0000-0000-0000-000000000001\": \"00000000-0000-0000-0000-000000000002\"\n  },\n  \"specialInstructions\": \"Ejemplo de nota\"\n}"
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1,\n  \"branchId\": \"{{branchId}}\",\n  \"variantSelections\": {},\n  \"specialInstructions\": \"\"\n}"
             },
-            "description": "Ajusta UUIDs de `variantSelections` a IDs reales de tu catálogo. `branchId` es obligatorio.",
+            "description": "Ajusta `variantSelections` a UUIDs reales del catálogo si aplica.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items"
           }
         },
         {
-          "name": "PATCH Cantidad absoluta",
+          "name": "PATCH Ítem (cantidad absoluta)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -157,12 +161,11 @@
               "mode": "raw",
               "raw": "{\n  \"quantity\": 2\n}"
             },
-            "description": "Envía `quantity` y/o `quantityDelta`. Si el total es ≤ 0, elimina el ítem (y el carrito si queda vacío).",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
           }
         },
         {
-          "name": "PATCH Cantidad delta",
+          "name": "PATCH Ítem (delta)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -173,26 +176,43 @@
               "mode": "raw",
               "raw": "{\n  \"quantityDelta\": -1\n}"
             },
-            "description": "Incrementa o decrementa respecto a la cantidad actual.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
           }
         },
         {
-          "name": "DELETE Quitar ítem",
+          "name": "DELETE Ítem",
           "request": {
             "method": "DELETE",
             "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
-            "description": "Elimina la línea. Si era el último ítem, puede borrarse el carrito (respuesta null según implementación).",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/items/{{itemId}}"
           }
         }
       ]
     },
     {
-      "name": "3. Enlace al sitio (WhatsApp)",
+      "name": "3. Enlaces (sitio / WhatsApp)",
       "item": [
         {
-          "name": "POST Generar link público",
+          "name": "POST Generar enlace (storeId → /sucursal/.../cart)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
+                  "if (pm.response.code === 200) {",
+                  "  const j = unwrap(pm.response.json());",
+                  "  if (j && j.token) {",
+                  "    pm.collectionVariables.set('linkToken', j.token);",
+                  "    console.log('linkToken guardado');",
+                  "    console.log('url →', j.url);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -203,31 +223,53 @@
               "mode": "raw",
               "raw": "{\n  \"ttlSeconds\": 604800,\n  \"storeId\": \"{{storeId}}\"\n}"
             },
-            "description": "Requiere `FRONTEND_URL`. Con `storeId` (mismo que el carrito) se genera URL tipo `/sucursal/{slug}/cart?t=`. Alternativa: `path` explícito (tiene prioridad). Sin `path` ni `storeId`, usa `INTEGRATION_CART_WEB_PATH`. Respuesta incluye `url`, `token`, `store_id`, `link_expires_at`.",
+            "description": "Requiere `FRONTEND_URL` en el backend. `storeId` debe ser el mismo que el del carrito. Respuesta: `url`, `token`, `store_id`, `path`.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link"
           }
         },
         {
-          "name": "GET Generar link público (query)",
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
-            "description": "Opcional: `?ttlSeconds=604800&path=/carrito/integracion` o `&storeId={{storeId}}` para ruta contextual.",
-            "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link?ttlSeconds=604800&storeId={{storeId}}"
-          }
-        },
-        {
-          "name": "GET Session por token t (sin webhook)",
+          "name": "POST Generar enlace (path manual)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
                   "if (pm.response.code === 200) {",
-                  "  const j = pm.response.json();",
-                  "  const d = j && j.data ? j.data : j;",
-                  "  if (d && d.id) console.log('Carrito:', d.id);",
+                  "  const j = unwrap(pm.response.json());",
+                  "  if (j && j.token) pm.collectionVariables.set('linkToken', j.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ttlSeconds\": 604800,\n  \"path\": \"/carrito/integracion\"\n}"
+            },
+            "description": "`path` tiene prioridad sobre la ruta derivada por `storeId`.",
+            "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link"
+          }
+        },
+        {
+          "name": "GET Generar enlace (query)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
+                  "if (pm.response.code === 200) {",
+                  "  const j = unwrap(pm.response.json());",
+                  "  if (j && j.token) pm.collectionVariables.set('linkToken', j.token);",
                   "}"
                 ]
               }
@@ -235,18 +277,27 @@
           ],
           "request": {
             "method": "GET",
+            "header": [{ "key": "X-Webhook-Secret", "value": "{{webhookSecret}}" }],
+            "description": "Parámetros opcionales: `ttlSeconds`, `path`, `storeId`.",
+            "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link?ttlSeconds=604800&storeId={{storeId}}"
+          }
+        },
+        {
+          "name": "GET Session por token t (sin webhook)",
+          "request": {
+            "method": "GET",
             "header": [],
-            "description": "Público. Copia `token` de **POST Generar link** en `linkToken` o pásalo en query `t`.",
+            "description": "Público. Usa `linkToken` guardado o pega el `t` completo.",
             "url": "{{baseUrl}}/integrations/cart/session?t={{linkToken}}"
           }
         }
       ]
     },
     {
-      "name": "5. Checkout web (JWT)",
+      "name": "4. Checkout web (JWT)",
       "item": [
         {
-          "name": "POST Importar a carrito usuario",
+          "name": "POST Importar a carrito de usuario",
           "request": {
             "method": "POST",
             "header": [
@@ -257,25 +308,26 @@
               "mode": "raw",
               "raw": "{\n  \"token\": \"{{linkToken}}\"\n}"
             },
-            "description": "Mismo `t` del enlace. Requiere JWT de Supabase. Base incluye `/api`.",
+            "description": "Mismo token `t` del enlace. Sustituye el carrito del usuario por el de integración.",
             "url": "{{baseUrl}}/api/cart/import-integration"
           }
         }
       ]
     },
     {
-      "name": "4. Auth con Bearer (alternativa)",
+      "name": "5. Auth alternativa (Bearer)",
       "item": [
         {
-          "name": "POST Crear carrito (Authorization Bearer)",
+          "name": "POST Crear carrito (Bearer)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const unwrap = (r) => (r && r.data !== undefined ? r.data : r);",
                   "if (pm.response.code === 201) {",
-                  "  const j = pm.response.json();",
+                  "  const j = unwrap(pm.response.json());",
                   "  if (j && j.id) pm.collectionVariables.set('cartId', j.id);",
                   "}"
                 ]
@@ -292,7 +344,7 @@
               "mode": "raw",
               "raw": "{\n  \"storeId\": \"{{storeId}}\"\n}"
             },
-            "description": "Misma clave que `X-Webhook-Secret`, en header Bearer.",
+            "description": "Misma clave que el webhook, en `Authorization: Bearer`.",
             "url": "{{baseUrl}}/integrations/cart"
           }
         }

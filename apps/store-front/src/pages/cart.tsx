@@ -15,6 +15,7 @@ import { branchesService, BranchTaxSettings } from '@/lib/branches';
 import TaxBreakdownComponent from '@/components/TaxBreakdown';
 import ContextualLink from '@/components/ContextualLink';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
+import { useIntegrationCartTokenImport } from '@/hooks/useIntegrationCartTokenImport';
 import { formatPrice } from '@/lib/format';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -30,6 +31,7 @@ export default function CartPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { cart, loading, updateItem, removeItem, clearCart, refreshCart } = useCart();
+  const { integrationImporting, integrationImportError } = useIntegrationCartTokenImport();
   const { getCheckoutUrl } = useStoreRouting();
   const [productsData, setProductsData] = useState<Record<string, Product>>({});
   const [itemsTaxBreakdowns, setItemsTaxBreakdowns] = useState<Record<string, TaxBreakdown>>({});
@@ -309,6 +311,21 @@ export default function CartPage() {
   // Por ahora no incluimos el envío en el total del carrito
   const total = subtotal + totalTax;
 
+  if (integrationImporting) {
+    return (
+      <>
+        <Head>
+          <title>Carrito - Agora</title>
+        </Head>
+        <StoreLayout>
+          <div className="text-center py-12">
+            <p className="text-gray-600">Importando tu carrito desde el enlace...</p>
+          </div>
+        </StoreLayout>
+      </>
+    );
+  }
+
   if (loading) {
     return (
       <StoreLayout>
@@ -327,6 +344,9 @@ export default function CartPage() {
         </Head>
         <StoreLayout>
           <div className="text-center py-12">
+            {integrationImportError ? (
+              <p className="text-red-600 text-sm mb-6 max-w-md mx-auto">{integrationImportError}</p>
+            ) : null}
             <h1 className="text-2xl font-medium text-gray-900 mb-4">Tu carrito está vacío</h1>
             <p className="text-gray-600 mb-6">
               {!isAuthenticated 
@@ -351,6 +371,11 @@ export default function CartPage() {
       <StoreLayout>
         <div className="max-w-7xl mx-auto pt-6">
           <h1 className="text-3xl font-medium text-gray-900 mb-8">Carrito de Compras</h1>
+          {integrationImportError ? (
+            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">
+              {integrationImportError}
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Items del carrito - Columna izquierda (2/3) */}

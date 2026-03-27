@@ -18,8 +18,10 @@ import {
   ApiParam,
   ApiHeader,
   ApiSecurity,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
+import { SkipIntegrationCartWebhook } from './decorators/skip-integration-cart-webhook.decorator';
 import { IntegrationCartWebhookGuard } from './guards/integration-cart-webhook.guard';
 import { IntegrationCartService } from './integration-cart.service';
 import { CreateIntegrationCartDto } from './dto/create-integration-cart.dto';
@@ -50,14 +52,34 @@ export class IntegrationCartController {
     return this.integrationCartService.createCart(dto.storeId);
   }
 
+  @Get('session')
+  @SkipIntegrationCartWebhook()
+  @ApiOperation({
+    summary: 'Obtener carrito por token del enlace (query t)',
+    description:
+      'Valida la firma HMAC del token generado con POST/GET /integrations/cart/:cartId/link. No requiere X-Webhook-Secret.',
+  })
+  @ApiQuery({ name: 't', required: true, description: 'Token firmado (query en la URL del enlace)' })
+  @ApiResponse({ status: 200, description: 'Carrito con ítems' })
+  @ApiResponse({ status: 400, description: 'Token inválido, ausente o expirado' })
+  @ApiResponse({ status: 410, description: 'Carrito expirado en base de datos' })
+  @ApiResponse({ status: 503, description: 'Falta secreto para validar o BD no disponible' })
+  async getSession(@Query('t') token: string) {
+    return this.integrationCartService.getCartByLinkToken(token ?? '');
+  }
+
   @Post(':cartId/link')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
       'Generar enlace público firmado (query `t`) para abrir el carrito en el sitio; n8n solo orquesta, la firma la hace el backend',
+    description:
+      'Sin `path`: con `storeId` (debe coincidir con el carrito) se construye la URL contextual del carrito (ej. `/sucursal/{slug}/cart?t=`). Sin `path` ni `storeId`, se usa `INTEGRATION_CART_WEB_PATH`. Con `path` explícito, `storeId` es opcional (validación cruzada si se envía).',
   })
   @ApiParam({ name: 'cartId', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'url, token, link_expires_at' })
+  @ApiResponse({ status: 200, description: 'url, token, store_id, link_expires_at' })
+  @ApiResponse({ status: 400, description: 'storeId ausente o no coincide con el carrito' })
+  @ApiResponse({ status: 422, description: 'Tienda sin slug o tipo no soportado para URL' })
   @ApiResponse({ status: 503, description: 'Falta FRONTEND_URL o secreto para firmar' })
   async createShareLinkPost(
     @Param('cartId') cartId: string,
@@ -68,12 +90,14 @@ export class IntegrationCartController {
 
   @Get(':cartId/link')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Igual que POST :cartId/link; query opcional ttlSeconds, path' })
+  @ApiOperation({ summary: 'Igual que POST :cartId/link; query opcional ttlSeconds, path, storeId' })
   @ApiParam({ name: 'cartId', format: 'uuid' })
+  @ApiQuery({ name: 'storeId', required: false, description: 'UUID core.stores; obligatorio si no se envía path' })
   async createShareLinkGet(
     @Param('cartId') cartId: string,
     @Query('ttlSeconds') ttlSecondsRaw?: string,
     @Query('path') path?: string,
+    @Query('storeId') storeId?: string,
   ) {
     const dto = new CreateIntegrationCartLinkDto();
     if (ttlSecondsRaw !== undefined && ttlSecondsRaw !== '') {
@@ -81,6 +105,7 @@ export class IntegrationCartController {
       if (Number.isFinite(n)) dto.ttlSeconds = n;
     }
     if (path) dto.path = path;
+    if (storeId) dto.storeId = storeId;
     return this.integrationCartService.createShareLink(cartId, dto);
   }
 

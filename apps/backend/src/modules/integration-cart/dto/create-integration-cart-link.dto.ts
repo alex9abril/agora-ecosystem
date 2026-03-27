@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 const TTL_MAX = 30 * 24 * 3600;
@@ -21,7 +21,7 @@ export class CreateIntegrationCartLinkDto {
 
   @ApiPropertyOptional({
     description:
-      'Ruta relativa en el sitio (FRONTEND_URL). Ej: /carrito/integracion. Por defecto INTEGRATION_CART_WEB_PATH o /carrito/integracion',
+      'Ruta relativa en el sitio (FRONTEND_URL). Si se envía, tiene prioridad sobre la ruta derivada de storeId. Ej: /carrito/integracion',
     example: '/carrito/integracion',
     maxLength: 200,
   })
@@ -29,4 +29,13 @@ export class CreateIntegrationCartLinkDto {
   @IsString()
   @MaxLength(200)
   path?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'ID de core.stores. Obligatorio si no se envía path: debe coincidir con el store_id del carrito; el backend arma la ruta (ej. /sucursal/{slug}/cart). Si se envía path, es opcional pero si viene debe coincidir con el carrito.',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'storeId debe ser un UUID válido' })
+  storeId?: string;
 }
