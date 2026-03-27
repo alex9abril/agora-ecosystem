@@ -316,7 +316,22 @@ export class IntegrationCartService {
     const token = signIntegrationCartLinkToken({ v: INTEGRATION_CART_LINK_TOKEN_V, cartId: id, exp }, secret);
     const fullBase = `${base}${path.startsWith('/') ? path : `/${path}`}`;
     const checkoutUrl = this.appendQueryParam(fullBase, 't', token);
-    const autoSessionUrl = await this.buildAutoSessionUrl(phone, checkoutUrl);
+    let autoSessionUrl = checkoutUrl;
+    let sessionMode: 'magiclink' | 'manual' = 'magiclink';
+    let sessionWarning: string | undefined;
+    try {
+      autoSessionUrl = await this.buildAutoSessionUrl(phone, checkoutUrl);
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      if (/user not allowed/i.test(message)) {
+        sessionMode = 'manual';
+        sessionWarning =
+          'No se pudo generar sesión automática (User not allowed). Se entrega checkout_url para acceso manual.';
+        autoSessionUrl = checkoutUrl;
+      } else {
+        throw error;
+      }
+    }
 
     return {
       url: autoSessionUrl,
@@ -326,7 +341,8 @@ export class IntegrationCartService {
       store_id: cartStoreId,
       link_expires_at: new Date(exp * 1000).toISOString(),
       path: path.startsWith('/') ? path : `/${path}`,
-      session_mode: 'magiclink',
+      session_mode: sessionMode,
+      session_warning: sessionWarning,
     };
   }
 
