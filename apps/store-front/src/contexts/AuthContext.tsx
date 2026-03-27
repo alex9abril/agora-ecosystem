@@ -20,6 +20,7 @@ import {
   syncLocalVehiclesToAccount,
   clearLocalVehicleAfterSync 
 } from '@/lib/vehicle-sync';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 interface AuthContextType {
   user: any | null;
@@ -42,46 +43,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Cargar token y usuario desde localStorage al iniciar
   useEffect(() => {
-    const initializeAuth = () => {
+    let cancelled = false;
+
+    const finishSessionFromSupabaseTokens = async (
+      accessToken: string,
+      refreshTokenValue: string | null,
+    ) => {
+      if (cancelled) {
+        return;
+      }
+      setToken(accessToken);
+      setAuthToken(accessToken);
+      if (refreshTokenValue) {
+        setRefreshToken(refreshTokenValue);
+      }
+      try {
+        const profile = await authService.getProfile(accessToken);
+        if (!cancelled) {
+          setUser(profile);
+          setUserInStorage(profile);
+        }
+      } catch {
+        if (!cancelled) {
+          clearAuth();
+          setToken(null);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    const initializeAuth = async () => {
       if (typeof window === 'undefined') {
         setLoading(false);
         return;
       }
 
       try {
-        // Soporte para enlaces mágicos de Supabase: #access_token=...&refresh_token=...
+        // PKCE (magic link moderno): ?code=... — debe intercambiarse antes que el resto
+        const supabase = getSupabaseBrowser();
+        const urlObj = new URL(window.location.href);
+        const code = urlObj.searchParams.get('code');
+        if (supabase && code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+          if (!cancelled && !error && data.session) {
+            urlObj.searchParams.delete('code');
+            urlObj.searchParams.delete('state');
+            const clean = `${urlObj.pathname}${urlObj.search}${urlObj.hash}`;
+            window.history.replaceState(null, '', clean);
+            await finishSessionFromSupabaseTokens(
+              data.session.access_token,
+              data.session.refresh_token ?? null,
+            );
+            return;
+          }
+          if (!cancelled && error) {
+            console.warn('[Auth] exchangeCodeForSession:', error.message);
+            urlObj.searchParams.delete('code');
+            urlObj.searchParams.delete('state');
+            window.history.replaceState(null, `${urlObj.pathname}${urlObj.search}${urlObj.hash}`);
+          }
+        }
+
+        // Enlaces mágicos implicit: #access_token=...&refresh_token=...
         const hash = window.location.hash || '';
         if (hash.startsWith('#') && hash.includes('access_token=')) {
           const params = new URLSearchParams(hash.slice(1));
           const hashAccessToken = params.get('access_token');
           const hashRefreshToken = params.get('refresh_token');
           if (hashAccessToken) {
-            setToken(hashAccessToken);
-            setAuthToken(hashAccessToken);
-            if (hashRefreshToken) {
-              setRefreshToken(hashRefreshToken);
-            }
-            // Limpiar hash sensible de la URL.
             window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            authService
-              .getProfile(hashAccessToken)
-              .then((profile) => {
-                setUser(profile);
-                setUserInStorage(profile);
-              })
-              .catch(() => {
-                clearAuth();
-                setToken(null);
-                setUser(null);
-              })
-              .finally(() => setLoading(false));
+            await finishSessionFromSupabaseTokens(
+              hashAccessToken,
+              hashRefreshToken,
+            );
             return;
           }
         }
 
         const storedToken = localStorage.getItem('auth_token');
         const storedUserStr = localStorage.getItem('auth_user');
-        
+
         let storedUser = null;
         if (storedUserStr) {
           try {
@@ -92,28 +137,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (storedToken && storedUser) {
+          if (cancelled) return;
           setToken(storedToken);
           setUser(storedUser);
           setLoading(false);
-          
-          // Verificar que el token sigue siendo válido (en background)
-          authService.getProfile(storedToken)
+
+          authService
+            .getProfile(storedToken)
             .then((profile) => {
-              setUser(profile);
-              setUserInStorage(profile);
+              if (!cancelled) {
+                setUser(profile);
+                setUserInStorage(profile);
+              }
             })
             .catch((error: any) => {
               if (error?.statusCode === 401 && getRefreshToken()) {
-                authService.refreshToken(getRefreshToken()!)
+                authService
+                  .refreshToken(getRefreshToken()!)
                   .then((refreshResponse) => {
+                    if (cancelled) return;
                     setToken(refreshResponse.accessToken);
                     setAuthToken(refreshResponse.accessToken);
                     setRefreshToken(refreshResponse.refreshToken);
                     return authService.getProfile(refreshResponse.accessToken);
                   })
                   .then((profile) => {
-                    setUser(profile);
-                    setUserInStorage(profile);
+                    if (!cancelled && profile) {
+                      setUser(profile);
+                      setUserInStorage(profile);
+                    }
                   })
                   .catch(() => {
                     // Mantener sesión aunque falle el refresh
@@ -121,15 +173,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             });
         } else {
-          setLoading(false);
+          if (!cancelled) {
+            setLoading(false);
+          }
         }
       } catch (error) {
         console.error('[Auth] Error inicializando autenticación:', error);
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    initializeAuth();
+    void initializeAuth();
 
     const handleSessionExpired = () => {
       setToken(null);
@@ -140,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('auth:session-expired', handleSessionExpired);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('auth:session-expired', handleSessionExpired);
     };
   }, []);

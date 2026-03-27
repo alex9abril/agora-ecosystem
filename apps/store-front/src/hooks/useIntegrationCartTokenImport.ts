@@ -52,11 +52,17 @@ export function useIntegrationCartTokenImport() {
         : '';
 
   useEffect(() => {
-    if (!router.isReady || authLoading || !token) {
+    if (!router.isReady || authLoading) {
+      return;
+    }
+
+    if (!token) {
+      setImporting(false);
       return;
     }
 
     if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(sessionKey(token)) === '1') {
+      setImporting(false);
       const q = { ...router.query };
       delete q.t;
       void router.replace({ pathname: router.pathname, query: q }, undefined, { shallow: true });
