@@ -49,6 +49,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        // Soporte para enlaces mágicos de Supabase: #access_token=...&refresh_token=...
+        const hash = window.location.hash || '';
+        if (hash.startsWith('#') && hash.includes('access_token=')) {
+          const params = new URLSearchParams(hash.slice(1));
+          const hashAccessToken = params.get('access_token');
+          const hashRefreshToken = params.get('refresh_token');
+          if (hashAccessToken) {
+            setToken(hashAccessToken);
+            setAuthToken(hashAccessToken);
+            if (hashRefreshToken) {
+              setRefreshToken(hashRefreshToken);
+            }
+            // Limpiar hash sensible de la URL.
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            authService
+              .getProfile(hashAccessToken)
+              .then((profile) => {
+                setUser(profile);
+                setUserInStorage(profile);
+              })
+              .catch(() => {
+                clearAuth();
+                setToken(null);
+                setUser(null);
+              })
+              .finally(() => setLoading(false));
+            return;
+          }
+        }
+
         const storedToken = localStorage.getItem('auth_token');
         const storedUserStr = localStorage.getItem('auth_user');
         

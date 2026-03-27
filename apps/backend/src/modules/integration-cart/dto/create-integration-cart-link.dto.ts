@@ -1,11 +1,20 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 const TTL_MAX = 30 * 24 * 3600;
 const TTL_MIN = 60;
 
 export class CreateIntegrationCartLinkDto {
+  @ApiProperty({
+    description:
+      'Teléfono del usuario (WhatsApp). Se usa para localizar al usuario registrado y generar sesión automática.',
+    example: '5217717875215',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'phone es requerido' })
+  phone!: string;
+
   @ApiPropertyOptional({
     description: `Vida útil del enlace en segundos (${TTL_MIN}–${TTL_MAX}). No puede superar la expiración del carrito.`,
     minimum: TTL_MIN,
@@ -32,10 +41,18 @@ export class CreateIntegrationCartLinkDto {
 
   @ApiPropertyOptional({
     description:
-      'ID de core.stores. Obligatorio si no se envía path: debe coincidir con el store_id del carrito; el backend arma la ruta (ej. /sucursal/{slug}/cart). Si se envía path, es opcional pero si viene debe coincidir con el carrito.',
+      'ID de core.stores. Si se envía (y no hay `path`), debe coincidir con el carrito; sirve para validar. Sin `path`, si omites storeId/store_id se usa el store del propio carrito para armar la URL.',
     format: 'uuid',
   })
   @IsOptional()
   @IsUUID('4', { message: 'storeId debe ser un UUID válido' })
   storeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Alias en snake_case de `storeId` (útil para n8n u orígenes que serializan así).',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'store_id debe ser un UUID válido' })
+  store_id?: string;
 }

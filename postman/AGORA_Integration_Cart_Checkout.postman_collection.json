@@ -13,6 +13,7 @@
     { "key": "productId", "value": "" },
     { "key": "branchId", "value": "00000000-0000-0000-0000-000000000001" },
     { "key": "itemId", "value": "" },
+    { "key": "customerPhone", "value": "5217717875215" },
     { "key": "linkToken", "value": "" },
     { "key": "accessToken", "value": "" }
   ],
@@ -221,7 +222,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ttlSeconds\": 604800,\n  \"storeId\": \"{{storeId}}\"\n}"
+              "raw": "{\n  \"ttlSeconds\": 604800,\n  \"storeId\": \"{{storeId}}\",\n  \"phone\": \"{{customerPhone}}\"\n}"
             },
             "description": "Requiere `FRONTEND_URL` en el backend. `storeId` debe ser el mismo que el del carrito. Respuesta: `url`, `token`, `store_id`, `path`.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link"
@@ -252,7 +253,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ttlSeconds\": 604800,\n  \"path\": \"/carrito/integracion\"\n}"
+              "raw": "{\n  \"ttlSeconds\": 604800,\n  \"path\": \"/carrito/integracion\",\n  \"phone\": \"{{customerPhone}}\"\n}"
             },
             "description": "`path` tiene prioridad sobre la ruta derivada por `storeId`.",
             "url": "{{baseUrl}}/integrations/cart/{{cartId}}/link"

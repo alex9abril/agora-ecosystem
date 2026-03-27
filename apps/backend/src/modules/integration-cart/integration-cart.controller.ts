@@ -74,32 +74,36 @@ export class IntegrationCartController {
     summary:
       'Generar enlace público firmado (query `t`) para abrir el carrito en el sitio; n8n solo orquesta, la firma la hace el backend',
     description:
-      'Sin `path`: con `storeId` (debe coincidir con el carrito) se construye la URL contextual del carrito (ej. `/sucursal/{slug}/cart?t=`). Sin `path` ni `storeId`, se usa `INTEGRATION_CART_WEB_PATH`. Con `path` explícito, `storeId` es opcional (validación cruzada si se envía).',
+      'Requiere `phone`: busca al usuario por teléfono y devuelve un enlace con sesión automática (magic link) que redirige al carrito tokenizado. Sin `path`: la URL se arma desde el `store_id` del carrito.',
   })
   @ApiParam({ name: 'cartId', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'url, token, store_id, link_expires_at' })
-  @ApiResponse({ status: 400, description: 'storeId ausente o no coincide con el carrito' })
+  @ApiResponse({ status: 200, description: 'url (magic link), checkout_url, token, store_id, link_expires_at' })
+  @ApiResponse({ status: 400, description: 'phone inválido o storeId no coincide con el carrito' })
+  @ApiResponse({ status: 404, description: 'No existe usuario con ese teléfono' })
   @ApiResponse({ status: 422, description: 'Tienda sin slug o tipo no soportado para URL' })
   @ApiResponse({ status: 503, description: 'Falta FRONTEND_URL o secreto para firmar' })
   async createShareLinkPost(
     @Param('cartId') cartId: string,
-    @Body() dto?: CreateIntegrationCartLinkDto,
+    @Body() dto: CreateIntegrationCartLinkDto,
   ) {
-    return this.integrationCartService.createShareLink(cartId, dto ?? {});
+    return this.integrationCartService.createShareLink(cartId, dto);
   }
 
   @Get(':cartId/link')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Igual que POST :cartId/link; query opcional ttlSeconds, path, storeId' })
+  @ApiOperation({ summary: 'Igual que POST :cartId/link; query opcional ttlSeconds, path, storeId, requerido phone' })
   @ApiParam({ name: 'cartId', format: 'uuid' })
   @ApiQuery({ name: 'storeId', required: false, description: 'UUID core.stores; obligatorio si no se envía path' })
+  @ApiQuery({ name: 'phone', required: true, description: 'Teléfono del usuario para sesión automática' })
   async createShareLinkGet(
     @Param('cartId') cartId: string,
     @Query('ttlSeconds') ttlSecondsRaw?: string,
     @Query('path') path?: string,
     @Query('storeId') storeId?: string,
+    @Query('phone') phone?: string,
   ) {
     const dto = new CreateIntegrationCartLinkDto();
+    dto.phone = phone ?? '';
     if (ttlSecondsRaw !== undefined && ttlSecondsRaw !== '') {
       const n = parseInt(ttlSecondsRaw, 10);
       if (Number.isFinite(n)) dto.ttlSeconds = n;

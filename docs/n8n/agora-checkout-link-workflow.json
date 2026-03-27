@@ -32,7 +32,7 @@
     },
     {
       "parameters": {
-        "content": "## Agora — WhatsApp → enlace checkout\n\n### Entradas (usa una)\n- **Manual**: pin data o vacío; usa `AGORA_DEMO_CART_ID`, `AGORA_STORE_ID` (UUID `core.stores`) y `WHAPI_DEMO_TO`.\n- **Webhook POST** `/webhook/agora-checkout-link`: JSON con `integration_cart_id`, `store_id`, `contact_phone`, opcional `message_type`, `conversation_id`.\n- **Execute Workflow**: mismo JSON que envía el flujo padre.\n\nEl **POST …/link** envía `storeId` para generar URL tipo `/sucursal/{slug}/cart?t=` (sin `path`).\n\n### Mensajes (`message_type`)\n`default` | `abandoned` | `review` | `human_handoff`\n\n### Env\n`AGORA_API_BASE` (sin `/api`), credencial **Header Auth** con el header del webhook de integración, `WHAPI_MESSAGES_BASE`, token Whapi por credencial (no en JSON).\n\n### Idempotencia\nEvita re-disparos: en el padre, tras enviar enlace, guarda `checkout_link_sent_at` en tu estado (Redis/DB) y no llames otra vez la misma acción para el mismo `integration_cart_id` en ventana corta.",
+        "content": "## Agora — WhatsApp → enlace checkout\n\n### Entradas (usa una)\n- **Manual**: pin data o vacío; usa `AGORA_DEMO_CART_ID`, `AGORA_STORE_ID` (UUID `core.stores`) y `WHAPI_DEMO_TO`.\n- **Webhook POST** `/webhook/agora-checkout-link`: JSON con `integration_cart_id`, `store_id`, `contact_phone`, opcional `message_type`, `conversation_id`.\n- **Execute Workflow**: mismo JSON que envía el flujo padre.\n\nEl **POST …/link** usa body `{\"ttlSeconds\":604800}` solamente; el API deriva la ruta del `store_id` del carrito. No enviar `path` salvo que quieras `/carrito/integracion`.\n\n### Mensajes (`message_type`)\n`default` | `abandoned` | `review` | `human_handoff`\n\n### Env\n`AGORA_API_BASE` (sin `/api`), credencial **Header Auth** con el header del webhook de integración, `WHAPI_MESSAGES_BASE`, token Whapi por credencial (no en JSON).\n\n### Idempotencia\nEvita re-disparos: en el padre, tras enviar enlace, guarda `checkout_link_sent_at` en tu estado (Redis/DB) y no llames otra vez la misma acción para el mismo `integration_cart_id` en ventana corta.",
         "height": 520,
         "width": 480,
         "color": "#D5E8FF"
@@ -142,9 +142,18 @@
         "url": "={{ $env.AGORA_API_BASE }}/integrations/cart/{{ $json.integration_cart_id }}/link",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ ttlSeconds: 604800, storeId: $json.store_id }) }}",
+        "jsonBody": "={\n  \"ttlSeconds\": 604800,\n  \"phone\": $json.contact_phone\n}",
         "options": {
           "response": {
             "response": {
@@ -159,6 +168,8 @@
       "position": [800, 420],
       "id": "http-post-link",
       "name": "POST: Generar link (API Agora)",
+      "notesInFlow": true,
+      "notes": "Body JSON sin path y con phone (contact_phone). El API arma /sucursal/... desde el carrito y genera sesión automática por magic link. Credencial Header Auth: nombre del header X-Webhook-Secret (mismo valor que en Postman), no solo Bearer salvo que así lo tengas en Agora.",
       "credentials": {
         "httpHeaderAuth": {
           "id": "REPLACE_WITH_AGORA_CREDENTIAL_ID",

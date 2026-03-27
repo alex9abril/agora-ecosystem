@@ -285,9 +285,14 @@ export class IntegrationCartService {
   /**
    * Enlace público para el sitio (WhatsApp → navegador). Firma HMAC; el front validará `t` con un endpoint futuro o leerá el cartId tras verificar.
    */
-  async createShareLink(cartId: string, dto: CreateIntegrationCartLinkDto = {}) {
+  async createShareLink(cartId: string, dto: CreateIntegrationCartLinkDto) {
     const { cart } = await this.loadOpenCart(cartId);
     const cartStoreId = String(cart.store_id);
+    const phone = (dto.phone || '').trim();
+    if (!phone) {
+      throw new BadRequestException('phone es requerido para generar enlace con sesión automática');
+    }
+
     const path = await this.resolveShareLinkPath(cartStoreId, dto);
 
     const secret = await this.resolveLinkSigningSecretForSigning();
@@ -310,38 +315,109 @@ export class IntegrationCartService {
     const id = cart.id as string;
     const token = signIntegrationCartLinkToken({ v: INTEGRATION_CART_LINK_TOKEN_V, cartId: id, exp }, secret);
     const fullBase = `${base}${path.startsWith('/') ? path : `/${path}`}`;
-    const url = this.appendQueryParam(fullBase, 't', token);
+    const checkoutUrl = this.appendQueryParam(fullBase, 't', token);
+    const autoSessionUrl = await this.buildAutoSessionUrl(phone, checkoutUrl);
 
     return {
-      url,
+      url: autoSessionUrl,
+      checkout_url: checkoutUrl,
       token,
       cart_id: id,
       store_id: cartStoreId,
       link_expires_at: new Date(exp * 1000).toISOString(),
       path: path.startsWith('/') ? path : `/${path}`,
+      session_mode: 'magiclink',
     };
   }
 
   /**
+   * Genera sesión automática por email mágico (Supabase) usando el teléfono como llave de lookup.
+   */
+  private async buildAutoSessionUrl(phoneRaw: string, redirectTo: string): Promise<string> {
+    if (!supabaseAdmin) {
+      throw new ServiceUnavailableException('Servicio de autenticación admin no configurado');
+    }
+    const phone10 = this.normalizePhoneToTenDigits(phoneRaw);
+    if (!phone10) {
+      throw new BadRequestException('phone inválido; no se pudo normalizar a 10 dígitos');
+    }
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const userByPhone = await dbPool.query<{ id: string; email: string | null }>(
+      `SELECT up.id, au.email
+       FROM core.user_profiles up
+       LEFT JOIN auth.users au ON au.id = up.id
+       WHERE regexp_replace(COALESCE(up.phone, ''), '[^0-9]', '', 'g') = $1
+       LIMIT 1`,
+      [phone10],
+    );
+    if (userByPhone.rows.length === 0) {
+      throw new NotFoundException('No existe un usuario registrado con ese teléfono');
+    }
+    const email = (userByPhone.rows[0].email || '').trim();
+    if (!email) {
+      throw new BadRequestException('El usuario asociado al teléfono no tiene email para generar sesión automática');
+    }
+
+    const linkRes = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: {
+        redirectTo,
+      },
+    });
+    const actionLink = (linkRes.data as any)?.properties?.action_link as string | undefined;
+    if (linkRes.error || !actionLink) {
+      throw new ServiceUnavailableException(
+        `No se pudo generar magic link de sesión: ${linkRes.error?.message || 'sin action_link'}`,
+      );
+    }
+    return actionLink;
+  }
+
+  /**
+   * Normaliza teléfono de WhatsApp MX a 10 dígitos nacionales.
+   * Ej: 5217717875215 -> 7717875215
+   */
+  private normalizePhoneToTenDigits(raw: string): string {
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '';
+    if (/^521\d{10}$/.test(digits)) return digits.slice(3);
+    if (/^52\d{10}$/.test(digits)) return digits.slice(2);
+    if (/^\d{10}$/.test(digits)) return digits;
+    if (digits.length > 10) return digits.slice(-10);
+    return digits;
+  }
+
+  /**
    * Si `path` viene en el DTO, se usa (vía resolveWebPath).
-   * Si no hay `path`: con `storeId` que coincida con el carrito se arma la ruta del sitio (`/sucursal/{slug}/cart`, etc.).
-   * Sin `path` ni `storeId`, compatibilidad: `INTEGRATION_CART_WEB_PATH` (p. ej. `/carrito/integracion`).
+   * Si no hay `path`: la ruta se deriva del `store_id` del carrito (o valida contra `storeId` / `store_id` del body si vienen).
+   * Para seguir usando `/carrito/integracion` u otra landing, envía `path` explícito en el body.
    */
   private async resolveShareLinkPath(cartStoreId: string, dto: CreateIntegrationCartLinkDto): Promise<string> {
+    const sid = dto.storeId?.trim();
+    const sidSnake = dto.store_id?.trim();
+    if (sid && sidSnake && sid !== sidSnake) {
+      throw new BadRequestException('storeId y store_id deben ser el mismo UUID');
+    }
+
     const pathOverride = dto.path?.trim();
+    const explicitStoreId = sid || sidSnake || undefined;
+
     if (pathOverride) {
-      if (dto.storeId && dto.storeId !== cartStoreId) {
+      if (explicitStoreId && explicitStoreId !== cartStoreId) {
         throw new BadRequestException('storeId no coincide con el carrito de integración');
       }
       return this.resolveWebPath(pathOverride);
     }
-    if (!dto.storeId) {
-      return this.resolveWebPath(undefined);
-    }
-    if (dto.storeId !== cartStoreId) {
+
+    if (explicitStoreId && explicitStoreId !== cartStoreId) {
       throw new BadRequestException('storeId no coincide con el carrito de integración');
     }
-    const store = await this.storesService.findById(dto.storeId);
+
+    const store = await this.storesService.findById(cartStoreId);
     if (!store.is_active || store.archived_at) {
       throw new BadRequestException('La tienda no está disponible');
     }
