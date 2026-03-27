@@ -358,6 +358,9 @@ export class AuthService {
     // Determinar el rol del usuario (default: 'client')
     const platformRole = signUpDto.role || 'client';
     const requiresEmailConfirmation = !!signUpDto.requiresEmailConfirmation;
+    const frontendBaseUrl = (process.env.FRONTEND_URL || 'https://agoramp.mx').replace(/\/+$/, '');
+    const confirmationRedirectBaseUrl = (signUpDto.appUrl || frontendBaseUrl).replace(/\/+$/, '');
+    const emailConfirmationRedirectTo = `${confirmationRedirectBaseUrl}/auth/email-verified`;
 
     // Resolver businessId / businessGroupId desde slug si no vienen en el body (registro desde URL contextual)
     let resolvedBusinessId: string | undefined = signUpDto.businessId;
@@ -473,6 +476,7 @@ export class AuthService {
                   email: signUpDto.email,
                   password: signUpDto.password,
                   options: {
+                    redirectTo: emailConfirmationRedirectTo,
                     data: {
                       first_name: signUpDto.firstName,
                       last_name: signUpDto.lastName,
@@ -580,6 +584,7 @@ export class AuthService {
               email: signUpDto.email,
               password: signUpDto.password,
               options: {
+                redirectTo: emailConfirmationRedirectTo,
                 data: {
                   first_name: signUpDto.firstName,
                   last_name: signUpDto.lastName,
