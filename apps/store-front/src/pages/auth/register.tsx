@@ -101,6 +101,13 @@ export default function RegisterPage() {
       setError('La contraseña debe tener al menos 6 caracteres');
       return false;
     }
+    const phoneDigits = formData.phone.replace(/\D/g, '');
+    if (formData.phone.trim() !== '') {
+      if (phoneDigits.length !== 10) {
+        setError('El teléfono debe tener exactamente 10 dígitos, solo números, sin espacios.');
+        return false;
+      }
+    }
     return true;
   };
 
@@ -128,7 +135,7 @@ export default function RegisterPage() {
         password: formData.password,
         firstName: formData.firstName || undefined,
         lastName: formData.lastName || undefined,
-        phone: formData.phone || undefined,
+        phone: formData.phone.replace(/\D/g, '').length === 10 ? formData.phone.replace(/\D/g, '') : undefined,
         role: 'client',
         requiresEmailConfirmation: true,
         appUrl,
@@ -165,6 +172,14 @@ export default function RegisterPage() {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
+    });
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setFormData({
+      ...formData,
+      phone: digitsOnly,
     });
   };
 
@@ -302,10 +317,15 @@ export default function RegisterPage() {
                       id="phone"
                       name="phone"
                       type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel-national"
+                      maxLength={10}
+                      pattern="[0-9]{10}"
                       value={formData.phone}
-                      onChange={handleChange}
+                      onChange={handlePhoneChange}
                       className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all"
-                      placeholder="Teléfono (opcional)"
+                      placeholder="Teléfono (opcional, 10 dígitos)"
+                      title="Solo números, 10 dígitos, sin espacios"
                     />
                   </div>
 
