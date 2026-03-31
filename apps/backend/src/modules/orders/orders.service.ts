@@ -1667,10 +1667,25 @@ export class OrdersService {
           o.id::text ILIKE $${paramIndex} OR
           REPLACE(o.id::text, '-', '') ILIKE $${paramIndex + 1} OR
           RIGHT(REPLACE(o.id::text, '-', ''), 8) ILIKE $${paramIndex + 1} OR
+          up.phone ILIKE $${paramIndex} OR
+          up.first_name ILIKE $${paramIndex} OR
+          up.last_name ILIKE $${paramIndex} OR
+          CONCAT(COALESCE(up.first_name, ''), ' ', COALESCE(up.last_name, '')) ILIKE $${paramIndex} OR
+          au.email ILIKE $${paramIndex} OR
+          EXISTS (
+            SELECT 1
+            FROM orders.shipping_labels sls
+            WHERE sls.order_id = o.id
+              AND sls.tracking_number ILIKE $${paramIndex}
+          ) OR
           EXISTS (
             SELECT 1 FROM orders.order_items oi
             WHERE oi.order_id = o.id
-            AND oi.item_name ILIKE $${paramIndex}
+            AND (
+              oi.item_name ILIKE $${paramIndex} OR
+              oi.product_id::text ILIKE $${paramIndex} OR
+              oi.variant_selection::text ILIKE $${paramIndex}
+            )
           )
         )`;
         queryParams.push(searchParam, folioSearchParam);
@@ -1704,6 +1719,10 @@ export class OrdersService {
           up.first_name as client_first_name,
           up.last_name as client_last_name,
           up.phone as client_phone,
+          au.email as client_email,
+          sl_latest.tracking_number,
+          (sl_latest.id IS NOT NULL) as has_shipping_label,
+          sl_latest.status as shipping_label_status,
           (
             SELECT COUNT(*)::integer
             FROM orders.order_items
@@ -1716,6 +1735,14 @@ export class OrdersService {
           ) as total_quantity
         FROM orders.orders o
         LEFT JOIN core.user_profiles up ON o.client_id = up.id
+        LEFT JOIN auth.users au ON o.client_id = au.id
+        LEFT JOIN LATERAL (
+          SELECT sl.id, sl.tracking_number, sl.status, sl.created_at
+          FROM orders.shipping_labels sl
+          WHERE sl.order_id = o.id
+          ORDER BY sl.created_at DESC
+          LIMIT 1
+        ) sl_latest ON true
         ${whereClause}
         ORDER BY o.created_at DESC`,
         queryParams

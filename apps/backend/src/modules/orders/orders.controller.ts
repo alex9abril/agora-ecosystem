@@ -129,7 +129,11 @@ export class OrdersController {
   @ApiQuery({ name: 'payment_status', required: false, description: 'Filtrar por estado de pago' })
   @ApiQuery({ name: 'startDate', required: false, description: 'Fecha de inicio (ISO string)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'Fecha de fin (ISO string)' })
-  @ApiQuery({ name: 'search', required: false, description: 'Búsqueda por dirección, ID o nombre de producto' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Búsqueda por folio/ID, cliente, teléfono, correo, producto, SKU o guía',
+  })
   @ApiResponse({ status: 200, description: 'Lista de pedidos obtenida exitosamente' })
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async findAllByBusiness(

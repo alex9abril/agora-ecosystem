@@ -34,6 +34,9 @@ export interface Order {
   client_email?: string;
   /** Canal de venta (ej. web, app). Si no viene del API, el front asume `web`. */
   sales_channel?: string;
+  has_shipping_label?: boolean;
+  tracking_number?: string | null;
+  shipping_label_status?: string | null;
   item_count?: number;
   total_quantity?: number;
   items?: OrderItem[];
