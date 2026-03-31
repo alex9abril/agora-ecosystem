@@ -36,6 +36,13 @@ export interface ShippingLabel {
   updated_at: Date;
 }
 
+/** Respuesta enriquecida con flags derivados (sin columnas extra en BD). */
+export interface ShippingLabelResponse extends ShippingLabel {
+  pdf_ready: boolean;
+  tracking_is_pending: boolean;
+  skydropx_workflow_status?: string | null;
+}
+
 @Injectable()
 export class LogisticsService {
   private readonly logger = new Logger(LogisticsService.name);
@@ -377,7 +384,7 @@ export class LogisticsService {
   /**
    * Crear guía de envío para una orden
    */
-  async createShippingLabel(createDto: CreateShippingLabelDto): Promise<ShippingLabel> {
+  async createShippingLabel(createDto: CreateShippingLabelDto): Promise<ShippingLabelResponse> {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
@@ -1031,7 +1038,11 @@ export class LogisticsService {
         this.startStatusSimulation(shippingLabel.id, createDto.orderId);
       }
 
-      return shippingLabel;
+      const finalRow = await this.fetchShippingLabelRowByOrderId(createDto.orderId);
+      if (!finalRow) {
+        throw new ServiceUnavailableException('Guía creada pero no se pudo recuperar el registro');
+      }
+      return this.enrichShippingLabel(finalRow);
     } catch (error: any) {
       await client.query('ROLLBACK');
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
@@ -1101,16 +1112,18 @@ export class LogisticsService {
     try {
       await client.query('BEGIN');
 
-      // Actualizar estado de la guía
-      const timestampField = {
+      // Actualizar estado de la guía (solo timestamps para estados que tienen columna; p. ej. 'generated' no)
+      const timestampMap: Record<string, string> = {
         picked_up: 'picked_up_at',
         in_transit: 'in_transit_at',
         delivered: 'delivered_at',
-      }[newStatus];
+      };
+      const timestampField = timestampMap[newStatus];
+      const extraTs = timestampField ? `, ${timestampField} = CURRENT_TIMESTAMP` : '';
 
       await client.query(
         `UPDATE orders.shipping_labels
-         SET status = $1, ${timestampField} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         SET status = $1${extraTs}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [newStatus, shippingLabelId]
       );
@@ -1166,10 +1179,114 @@ export class LogisticsService {
     }
   }
 
+  private normalizeLabelMetadata(metadata: any): any {
+    if (metadata == null) return null;
+    if (typeof metadata === 'string') {
+      try {
+        return JSON.parse(metadata);
+      } catch {
+        return null;
+      }
+    }
+    return metadata;
+  }
+
+  /** ID del shipment en Skydropx para consultar /shipments/:id (sin crear envíos nuevos). */
+  private extractSkydropxShipmentIdFromLabel(row: ShippingLabel): string | null {
+    const metadata = this.normalizeLabelMetadata(row.metadata);
+    if (!metadata) return null;
+    if (metadata.skydropx_shipment_id) return String(metadata.skydropx_shipment_id);
+    if (metadata.full_response?.data?.id) return String(metadata.full_response.data.id);
+    if (metadata.full_response?.data?.attributes?.id) {
+      return String(metadata.full_response.data.attributes.id);
+    }
+    return null;
+  }
+
   /**
-   * Obtener guía de envío por ID de orden
+   * URL de etiqueta PDF en Skydropx (sin descargar), alineada con la lógica de creación y de SkydropxService.
    */
-  async getShippingLabelByOrderId(orderId: string): Promise<ShippingLabel | null> {
+  private extractLabelUrlFromLabelRow(row: ShippingLabel): string | null {
+    if (
+      row.pdf_url &&
+      (row.pdf_url.startsWith('https://pro.skydropx.com') ||
+        row.pdf_url.startsWith('https://sandbox.skydropx.com'))
+    ) {
+      return row.pdf_url;
+    }
+    const metadata = this.normalizeLabelMetadata(row.metadata);
+    if (!metadata) return null;
+    const fullResponse = metadata.full_response || metadata;
+    const included = fullResponse?.included || [];
+    if (included.length > 0 && included[0]?.attributes?.label_url) {
+      return included[0].attributes.label_url;
+    }
+    const data = fullResponse?.data || fullResponse;
+    const attributes = data?.attributes || data;
+    if (attributes?.label_url) return attributes.label_url;
+    return null;
+  }
+
+  private extractLabelUrlFromSkydropxApiMetadata(apiMetadata: any): string | null {
+    if (!apiMetadata) return null;
+    const included = apiMetadata.included || [];
+    if (included.length > 0 && included[0]?.attributes?.label_url) {
+      return included[0].attributes.label_url;
+    }
+    const data = apiMetadata.data || apiMetadata;
+    const attributes = data?.attributes || data;
+    return attributes?.label_url || null;
+  }
+
+  private localPdfFileExists(pdfPath?: string | null): boolean {
+    if (!pdfPath || typeof pdfPath !== 'string') return false;
+    try {
+      return fs.existsSync(pdfPath) && fs.statSync(pdfPath).isFile();
+    } catch {
+      return false;
+    }
+  }
+
+  private computeShippingLabelFlags(row: ShippingLabel): {
+    pdf_ready: boolean;
+    tracking_is_pending: boolean;
+    skydropx_workflow_status: string | null;
+  } {
+    const tracking_is_pending =
+      !!row.tracking_number && String(row.tracking_number).startsWith('PENDING-');
+    const metadata = this.normalizeLabelMetadata(row.metadata);
+    const fullResponse = metadata?.full_response || metadata;
+    const data = fullResponse?.data || fullResponse;
+    const attributes = data?.attributes || data;
+    const skydropx_workflow_status =
+      (metadata?.workflow_status as string) ||
+      (attributes?.workflow_status as string) ||
+      null;
+    const labelUrl = this.extractLabelUrlFromLabelRow(row);
+    const isSkydropxLabelUrl = (u: string) =>
+      u.startsWith('https://pro.skydropx.com') || u.startsWith('https://sandbox.skydropx.com');
+    const pdfReady =
+      this.localPdfFileExists(row.pdf_path) ||
+      (!!row.pdf_url && isSkydropxLabelUrl(row.pdf_url)) ||
+      (!!labelUrl && isSkydropxLabelUrl(labelUrl));
+    return {
+      pdf_ready: pdfReady,
+      tracking_is_pending,
+      skydropx_workflow_status,
+    };
+  }
+
+  enrichShippingLabel(row: ShippingLabel): ShippingLabelResponse {
+    const flags = this.computeShippingLabelFlags(row);
+    return {
+      ...row,
+      pdf_ready: flags.pdf_ready,
+      tracking_is_pending: flags.tracking_is_pending,
+      skydropx_workflow_status: flags.skydropx_workflow_status,
+    };
+  }
+
+  private async fetchShippingLabelRowByOrderId(orderId: string): Promise<ShippingLabel | null> {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
@@ -1191,123 +1308,269 @@ export class LogisticsService {
 
     if (result.rows.length > 0) {
       const label = result.rows[0];
-      this.logger.debug(`📦 Guía de envío encontrada para orden ${orderId}: tracking_number=${label.tracking_number}, carrier=${label.carrier_name}`);
+      this.logger.debug(
+        `📦 Guía de envío encontrada para orden ${orderId}: tracking_number=${label.tracking_number}, carrier=${label.carrier_name}`
+      );
       return label;
     }
 
     return null;
   }
 
+  private async downloadRemoteLabelPdf(row: ShippingLabel, labelUrl: string): Promise<Buffer> {
+    const axios = require('axios');
+    const pdfResponse = await axios.get(labelUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'Agora-Ecosystem/1.0',
+      },
+    });
+    const buf = Buffer.from(pdfResponse.data);
+    if (row.tracking_number && dbPool) {
+      const safeTracking = String(row.tracking_number).replace(/[/\\\0]/g, '_');
+      const fileName = `shipping-label-${safeTracking}.pdf`;
+      const pdfPath = path.join(this.PDF_STORAGE_DIR, fileName);
+      fs.writeFileSync(pdfPath, buf);
+      await dbPool.query(
+        `UPDATE orders.shipping_labels 
+         SET pdf_path = $1, pdf_url = $2, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $3`,
+        [pdfPath, labelUrl, row.id]
+      );
+      this.logger.log(`✅ PDF guardado localmente y pdf_url actualizado en BD`);
+    }
+    return buf;
+  }
+
   /**
-   * Obtener PDF de guía de envío
-   * Extrae el label_url del metadata y descarga el PDF desde Skydropx
+   * Persistir snapshot de Skydropx (tracking, metadata, pdf_url) y alinear estado de guía/orden.
+   */
+  private async applySkydropxTrackingToShippingLabel(
+    orderId: string,
+    shippingLabel: ShippingLabel,
+    tracking: SkydropxTracking
+  ): Promise<void> {
+    if (!dbPool) return;
+
+    let newStatus = tracking.status;
+    if (newStatus === 'created') {
+      newStatus = 'generated';
+    } else if (newStatus === 'exception') {
+      newStatus = 'in_transit';
+    } else if (newStatus === 'cancelled' || newStatus === 'canceled') {
+      newStatus = 'cancelled';
+      this.logger.warn(`⚠️ Shipment cancelado, actualizando estado a 'cancelled'`);
+    }
+    if (newStatus === 'success' || newStatus === 'in_progress') {
+      newStatus = 'generated';
+    }
+
+    if (shippingLabel.status !== newStatus) {
+      this.logger.log(
+        `🔄 Actualizando estado de shipping_label ${shippingLabel.id}: ${shippingLabel.status} → ${newStatus}`
+      );
+      if (newStatus === 'cancelled') {
+        const client = await dbPool.connect();
+        try {
+          await client.query(
+            `UPDATE orders.shipping_labels 
+             SET status = $1, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = $2`,
+            [newStatus, shippingLabel.id]
+          );
+        } finally {
+          client.release();
+        }
+      } else {
+        await this.updateShippingStatus(shippingLabel.id, orderId, newStatus);
+      }
+    }
+
+    const labelUrl = this.extractLabelUrlFromSkydropxApiMetadata(tracking.metadata);
+    const prevMeta = this.normalizeLabelMetadata(shippingLabel.metadata) || {};
+    const shipmentId = tracking.shipment_id || this.extractSkydropxShipmentIdFromLabel(shippingLabel);
+    const dataBlock = tracking.metadata?.data || tracking.metadata;
+    const attrs = dataBlock?.attributes || dataBlock;
+    const workflowStatus = attrs?.workflow_status || prevMeta.workflow_status;
+
+    const mergedMetadata = {
+      ...prevMeta,
+      skydropx_shipment_id: shipmentId || prevMeta.skydropx_shipment_id,
+      workflow_status: workflowStatus,
+      full_response: tracking.metadata,
+    };
+
+    const newTracking =
+      tracking.tracking_number &&
+      !tracking.tracking_number.startsWith('AGO-') &&
+      tracking.tracking_number !== shippingLabel.tracking_number
+        ? tracking.tracking_number
+        : null;
+
+    const client = await dbPool.connect();
+    try {
+      await client.query(
+        `UPDATE orders.shipping_labels 
+         SET 
+           tracking_number = COALESCE($1, tracking_number),
+           pdf_url = COALESCE($2, pdf_url),
+           metadata = $3::jsonb,
+           updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $4`,
+        [newTracking, labelUrl || null, JSON.stringify(mergedMetadata), shippingLabel.id]
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Una consulta a Skydropx + persistencia; intenta guardar PDF local si hay label_url. */
+  private async refreshSkydropxShipmentData(orderId: string): Promise<ShippingLabel | null> {
+    const row = await this.fetchShippingLabelRowByOrderId(orderId);
+    if (!row) return null;
+    const shipmentId = this.extractSkydropxShipmentIdFromLabel(row);
+    if (!shipmentId) {
+      this.logger.warn(`⚠️ Sin skydropx_shipment_id; no se puede refrescar desde Skydropx para orden ${orderId}`);
+      return null;
+    }
+    try {
+      const tracking = await this.skydropxService.getShipmentTracking(shipmentId);
+      await this.applySkydropxTrackingToShippingLabel(orderId, row, tracking);
+      let fresh = await this.fetchShippingLabelRowByOrderId(orderId);
+      if (fresh) {
+        const url = this.extractLabelUrlFromLabelRow(fresh);
+        if (url && !this.localPdfFileExists(fresh.pdf_path)) {
+          try {
+            await this.downloadRemoteLabelPdf(fresh, url);
+            fresh = await this.fetchShippingLabelRowByOrderId(orderId);
+          } catch (e: any) {
+            this.logger.warn(`⚠️ No se pudo descargar PDF tras refrescar Skydropx: ${e.message}`);
+          }
+        }
+      }
+      return fresh;
+    } catch (error: any) {
+      this.logger.error(`❌ Error refrescando Skydropx para orden ${orderId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Reintentar sincronización con Skydropx y persistir PDF si ya hay label_url.
+   */
+  async syncShippingLabelFromSkydropx(orderId: string): Promise<ShippingLabelResponse> {
+    const updated = await this.refreshSkydropxShipmentData(orderId);
+    if (!updated) {
+      const row = await this.fetchShippingLabelRowByOrderId(orderId);
+      if (!row) {
+        throw new NotFoundException(`No se encontró guía de envío para la orden ${orderId}`);
+      }
+      const shipmentId = this.extractSkydropxShipmentIdFromLabel(row);
+      if (!shipmentId) {
+        throw new BadRequestException(
+          'Esta guía no tiene un envío de Skydropx asociado para sincronizar.'
+        );
+      }
+      throw new ServiceUnavailableException('No se pudo sincronizar con Skydropx. Intenta de nuevo.');
+    }
+    return this.enrichShippingLabel(updated);
+  }
+
+  /**
+   * Obtener guía de envío por ID de orden (con flags pdf_ready, tracking_is_pending, etc.)
+   */
+  async getShippingLabelByOrderId(orderId: string): Promise<ShippingLabelResponse | null> {
+    const row = await this.fetchShippingLabelRowByOrderId(orderId);
+    if (!row) return null;
+    return this.enrichShippingLabel(row);
+  }
+
+  /**
+   * Obtener PDF de guía: primero archivo local (pdf_path), luego URL Skydropx.
+   * Si el tracking sigue en PENDING o falla la descarga, intenta una sincronización con Skydropx y reintenta.
    */
   async getShippingLabelPDF(orderId: string): Promise<Buffer | null> {
-    const shippingLabel = await this.getShippingLabelByOrderId(orderId);
+    const isSkydropxHttpUrl = (u: string) =>
+      u.startsWith('https://pro.skydropx.com') || u.startsWith('https://sandbox.skydropx.com');
 
+    /** Archivo local que sabemos que vino de una descarga Skydropx (misma fuente que la URL). */
+    const isSkydropxLocalCache = (row: ShippingLabel): boolean => {
+      if (!this.localPdfFileExists(row.pdf_path)) return false;
+      if (row.pdf_url && isSkydropxHttpUrl(row.pdf_url)) return true;
+      const extracted = this.extractLabelUrlFromLabelRow(row);
+      return !!extracted && isSkydropxHttpUrl(extracted);
+    };
+
+    const tryResolvePdf = async (row: ShippingLabel): Promise<Buffer | null> => {
+      const labelUrl = this.extractLabelUrlFromLabelRow(row);
+      const skydropxShipmentId = this.extractSkydropxShipmentIdFromLabel(row);
+
+      // 1) Si hay URL de Skydropx, priorizar siempre el PDF del proveedor (no el fallback generado por Agora en disco)
+      if (labelUrl) {
+        try {
+          this.logger.log(`📄 Descargando PDF desde Skydropx (prioridad sobre archivo local): ${labelUrl}`);
+          return await this.downloadRemoteLabelPdf(row, labelUrl);
+        } catch (error: any) {
+          this.logger.error(`❌ Error descargando PDF de Skydropx: ${error.message}`);
+          if (isSkydropxLocalCache(row)) {
+            try {
+              this.logger.log(`📄 Usando PDF en caché local (misma fuente Skydropx): ${row.pdf_path}`);
+              return fs.readFileSync(row.pdf_path!);
+            } catch (e: any) {
+              this.logger.warn(`⚠️ Caché local ilegible: ${e.message}`);
+            }
+          }
+          return null;
+        }
+      }
+
+      // 2) Sin URL aún: no servir PDF local de Agora si hay envío Skydropx (debe sync / esperar label_url)
+      if (skydropxShipmentId) {
+        this.logger.warn(
+          `⚠️ Hay envío Skydropx pero sin label_url todavía; no se sirve PDF local de respaldo para orden ${orderId}`
+        );
+        return null;
+      }
+
+      // 3) Solo simulación / sin Skydropx: permitir PDF local generado por Agora
+      if (this.localPdfFileExists(row.pdf_path)) {
+        try {
+          this.logger.log(`📄 Sirviendo PDF local (sin envío Skydropx): ${row.pdf_path}`);
+          return fs.readFileSync(row.pdf_path!);
+        } catch (e: any) {
+          this.logger.warn(`⚠️ pdf_path en BD pero no legible: ${e.message}`);
+        }
+      }
+
+      this.logger.warn(`⚠️ Sin label_url Skydropx ni PDF local para orden ${orderId}`);
+      return null;
+    };
+
+    let shippingLabel = await this.fetchShippingLabelRowByOrderId(orderId);
     if (!shippingLabel) {
       this.logger.warn(`⚠️ No se encontró shipping label para orden ${orderId}`);
       return null;
     }
 
     this.logger.log(`📦 Obteniendo PDF para orden ${orderId}`);
-    this.logger.log(`📄 pdf_url en BD: ${shippingLabel.pdf_url || 'NULL'}`);
-    this.logger.log(`📦 metadata presente: ${shippingLabel.metadata ? 'SÍ' : 'NO'}`);
+    let buf = await tryResolvePdf(shippingLabel);
+    if (buf) return buf;
 
-    // Extraer label_url del metadata
-    // El label_url está en: metadata.full_response.included[0].attributes.label_url
-    let labelUrl: string | null = null;
-
-    // PRIORIDAD 1: Si ya tenemos pdf_url guardado Y es de Skydropx (no local), usarlo
-    if (shippingLabel.pdf_url) {
-      if (shippingLabel.pdf_url.startsWith('https://pro.skydropx.com')) {
-        labelUrl = shippingLabel.pdf_url;
-        this.logger.log(`✅ Usando pdf_url guardado (Skydropx): ${labelUrl}`);
-      } else {
-        this.logger.warn(`⚠️ pdf_url guardado NO es de Skydropx, ignorándolo: ${shippingLabel.pdf_url}`);
-        this.logger.warn(`⚠️ Extrayendo label_url del metadata en su lugar`);
+    if (this.extractSkydropxShipmentIdFromLabel(shippingLabel)) {
+      this.logger.log(
+        `🔄 Sincronizando con Skydropx y reintentando PDF (PENDING, sin URL o fallo de descarga)`
+      );
+      const refreshed = await this.refreshSkydropxShipmentData(orderId);
+      if (refreshed) {
+        buf = await tryResolvePdf(refreshed);
       }
-    }
-    
-    // PRIORIDAD 2: Extraer del metadata (SIEMPRE si hay metadata y no tenemos labelUrl válido)
-    if (!labelUrl && shippingLabel.metadata) {
-      try {
-        const metadata = typeof shippingLabel.metadata === 'string' 
-          ? JSON.parse(shippingLabel.metadata) 
-          : shippingLabel.metadata;
-        
-        const fullResponse = metadata.full_response || metadata;
-        const included = fullResponse?.included || [];
-        
-        this.logger.log(`🔍 Buscando label_url en metadata, included.length: ${included.length}`);
-        
-        if (included.length > 0) {
-          this.logger.log(`🔍 included[0].type: ${included[0]?.type}`);
-          this.logger.log(`🔍 included[0].attributes keys: ${Object.keys(included[0]?.attributes || {}).join(', ')}`);
-          
-          if (included[0]?.attributes?.label_url) {
-            labelUrl = included[0].attributes.label_url;
-            this.logger.log(`✅ Label URL extraído del metadata: ${labelUrl}`);
-          } else {
-            this.logger.error(`❌ included[0].attributes.label_url NO existe`);
-            this.logger.error(`❌ included[0].attributes completo: ${JSON.stringify(included[0]?.attributes || {}).substring(0, 500)}`);
-            return null;
-          }
-        } else {
-          this.logger.error(`❌ No hay elementos en included[]`);
-          return null;
-        }
-      } catch (error: any) {
-        this.logger.error(`❌ Error parseando metadata: ${error.message}`);
-        return null;
-      }
-    }
-    
-    // Validar que tenemos la URL
-    if (!labelUrl) {
-      this.logger.error(`❌ No se pudo obtener label_url ni de pdf_url ni de metadata`);
-      if (!shippingLabel.metadata) {
-        this.logger.error(`❌ No hay metadata disponible`);
-      }
-      return null;
     }
 
-    // Descargar el PDF desde Skydropx
-    try {
-      this.logger.log(`📄 Descargando PDF desde Skydropx: ${labelUrl}`);
-      const axios = require('axios');
-      const pdfResponse = await axios.get(labelUrl, { 
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        headers: {
-          'User-Agent': 'Agora-Ecosystem/1.0',
-        },
-      });
-      
-      this.logger.log(`✅ PDF descargado exitosamente, tamaño: ${pdfResponse.data.length} bytes`);
-      
-      // Guardar el PDF localmente y actualizar pdf_url en BD para futuras solicitudes
-      if (shippingLabel.tracking_number && dbPool) {
-        const fileName = `shipping-label-${shippingLabel.tracking_number}.pdf`;
-        const pdfPath = path.join(this.PDF_STORAGE_DIR, fileName);
-        fs.writeFileSync(pdfPath, pdfResponse.data);
-        
-        await dbPool.query(
-          `UPDATE orders.shipping_labels 
-           SET pdf_path = $1, pdf_url = $2, updated_at = CURRENT_TIMESTAMP 
-           WHERE id = $3`,
-          [pdfPath, labelUrl, shippingLabel.id]
-        );
-        
-        this.logger.log(`✅ PDF guardado localmente y pdf_url actualizado en BD`);
-      }
-      
-      return Buffer.from(pdfResponse.data);
-    } catch (error: any) {
-      this.logger.error(`❌ Error descargando PDF desde Skydropx: ${error.message}`);
-      this.logger.error(`❌ URL intentada: ${labelUrl}`);
-      return null;
+    if (!buf) {
+      this.logger.warn(`⚠️ No hay PDF disponible para orden ${orderId} tras intentos`);
     }
+    return buf;
   }
 
   /**
@@ -1574,35 +1837,13 @@ export class LogisticsService {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
 
-    // 1. Obtener la shipping_label de la orden
-    const shippingLabel = await this.getShippingLabelByOrderId(orderId);
-    
+    const shippingLabel = await this.fetchShippingLabelRowByOrderId(orderId);
     if (!shippingLabel) {
       this.logger.warn(`⚠️ No se encontró shipping label para orden ${orderId}`);
       return null;
     }
 
-    // 2. Extraer skydropx_shipment_id del metadata
-    let skydropxShipmentId: string | null = null;
-    
-    if (shippingLabel.metadata) {
-      // Intentar extraer de diferentes ubicaciones posibles
-      const metadata = shippingLabel.metadata;
-      
-      // Opción 1: metadata.skydropx_shipment_id (directo)
-      if (metadata.skydropx_shipment_id) {
-        skydropxShipmentId = metadata.skydropx_shipment_id;
-      }
-      // Opción 2: metadata.full_response.data.id
-      else if (metadata.full_response?.data?.id) {
-        skydropxShipmentId = metadata.full_response.data.id;
-      }
-      // Opción 3: metadata.full_response.data.attributes.id
-      else if (metadata.full_response?.data?.attributes?.id) {
-        skydropxShipmentId = metadata.full_response.data.attributes.id;
-      }
-    }
-
+    const skydropxShipmentId = this.extractSkydropxShipmentIdFromLabel(shippingLabel);
     if (!skydropxShipmentId) {
       this.logger.warn(`⚠️ No se encontró skydropx_shipment_id en metadata para orden ${orderId}`);
       return null;
@@ -1611,71 +1852,8 @@ export class LogisticsService {
     this.logger.log(`📦 Consultando tracking de Skydropx para shipment: ${skydropxShipmentId}`);
 
     try {
-      // 3. Obtener tracking de Skydropx
       const tracking = await this.skydropxService.getShipmentTracking(skydropxShipmentId);
-
-      // 4. Mapear el status de Skydropx a nuestro formato
-      // Skydropx: 'created', 'picked_up', 'in_transit', 'delivered', 'exception', 'cancelled'
-      // Nuestro sistema: 'generated', 'picked_up', 'in_transit', 'delivered', 'cancelled'
-      let newStatus = tracking.status;
-      if (newStatus === 'created') {
-        newStatus = 'generated';
-      } else if (newStatus === 'exception') {
-        newStatus = 'in_transit'; // Mantener como in_transit si hay excepción
-      } else if (newStatus === 'cancelled') {
-        // Si está cancelado, actualizar el estado a 'cancelled' pero no cambiar el estado de la orden
-        newStatus = 'cancelled';
-        this.logger.warn(`⚠️ Shipment cancelado, actualizando estado a 'cancelled'`);
-      }
-
-      // 5. Actualizar estado en BD si cambió
-      // Si está cancelado, solo actualizar el status de la shipping_label, no el de la orden
-      if (shippingLabel.status !== newStatus) {
-        this.logger.log(
-          `🔄 Actualizando estado de shipping_label ${shippingLabel.id}: ${shippingLabel.status} → ${newStatus}`
-        );
-        
-        if (newStatus === 'cancelled') {
-          // Si está cancelado, solo actualizar el status de la shipping_label, no cambiar el estado de la orden
-          const client = await dbPool.connect();
-          try {
-            await client.query(
-              `UPDATE orders.shipping_labels 
-               SET status = $1, updated_at = CURRENT_TIMESTAMP 
-               WHERE id = $2`,
-              [newStatus, shippingLabel.id]
-            );
-            this.logger.log(`✅ Estado de shipping_label actualizado a 'cancelled' (orden no modificada)`);
-          } finally {
-            client.release();
-          }
-        } else {
-          // Para otros estados, actualizar normalmente (incluyendo el estado de la orden)
-          await this.updateShippingStatus(shippingLabel.id, orderId, newStatus);
-        }
-      } else {
-        this.logger.debug(`✅ Estado ya está actualizado: ${newStatus}`);
-      }
-
-      // 6. Actualizar tracking_number si cambió
-      if (tracking.tracking_number && tracking.tracking_number !== shippingLabel.tracking_number) {
-        this.logger.log(
-          `🔄 Actualizando tracking_number: ${shippingLabel.tracking_number} → ${tracking.tracking_number}`
-        );
-        
-        const client = await dbPool.connect();
-        try {
-          await client.query(
-            `UPDATE orders.shipping_labels 
-             SET tracking_number = $1, updated_at = CURRENT_TIMESTAMP 
-             WHERE id = $2`,
-            [tracking.tracking_number, shippingLabel.id]
-          );
-        } finally {
-          client.release();
-        }
-      }
-
+      await this.applySkydropxTrackingToShippingLabel(orderId, shippingLabel, tracking);
       return tracking;
     } catch (error: any) {
       this.logger.error(`❌ Error obteniendo tracking de Skydropx: ${error.message}`);

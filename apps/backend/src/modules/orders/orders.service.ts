@@ -1721,112 +1721,141 @@ export class OrdersService {
         queryParams
       );
 
-      // Obtener items para cada orden
-      const ordersWithItems = await Promise.all(
-        result.rows.map(async (order) => {
-          // Obtener items del pedido
-          const itemsResult = await dbPool.query(
-            `SELECT 
-              id,
-              product_id,
-              collection_id,
-              item_name,
-              item_price,
-              quantity,
-              variant_selection,
-              item_subtotal,
-              special_instructions,
-              tax_breakdown,
-              created_at
-            FROM orders.order_items
-            WHERE order_id = $1
-            ORDER BY created_at ASC`,
-            [order.id]
-          );
+      if (result.rows.length === 0) {
+        return [];
+      }
 
-          // Parsear variant_selection y tax_breakdown si vienen como string (JSONB de PostgreSQL)
-          const items = itemsResult.rows.map(item => ({
-            ...item,
-            tax_breakdown: typeof item.tax_breakdown === 'string' 
-              ? JSON.parse(item.tax_breakdown) 
-              : item.tax_breakdown,
-            variant_selection: typeof item.variant_selection === 'string'
-              ? JSON.parse(item.variant_selection)
-              : item.variant_selection,
-          }));
+      const orderIds = result.rows.map((r) => r.id);
 
-          // Obtener información del último cambio de payment_status desde el historial
-          let paymentStatusChangeInfo = null;
-          try {
-            const paymentHistoryResult = await dbPool.query(
-              `SELECT 
-                osh.previous_status,
-                osh.new_status,
-                osh.created_at as changed_at,
-                osh.changed_by_user_id,
-                osh.changed_by_role,
-                osh.change_reason,
-                up.first_name,
-                up.last_name,
-                au.email
-              FROM orders.order_status_history osh
-              LEFT JOIN core.user_profiles up ON osh.changed_by_user_id = up.id
-              LEFT JOIN auth.users au ON osh.changed_by_user_id = au.id
-              WHERE osh.order_id = $1 
-                AND osh.new_status LIKE 'payment_%'
-                AND osh.new_status = $2
-              ORDER BY osh.created_at DESC
-              LIMIT 1`,
-              [order.id, `payment_${order.payment_status}`]
-            );
+      const mapParseOrderItem = (item: any) => {
+        const { order_id: _oid, ...rest } = item;
+        return {
+          ...rest,
+          tax_breakdown:
+            typeof rest.tax_breakdown === 'string' ? JSON.parse(rest.tax_breakdown) : rest.tax_breakdown,
+          variant_selection:
+            typeof rest.variant_selection === 'string'
+              ? JSON.parse(rest.variant_selection)
+              : rest.variant_selection,
+        };
+      };
 
-            if (paymentHistoryResult.rows.length > 0) {
-              const history = paymentHistoryResult.rows[0];
-              paymentStatusChangeInfo = {
-                changed_at: history.changed_at,
-                changed_by_user_id: history.changed_by_user_id,
-                changed_by_role: history.changed_by_role,
-                changed_by_name: history.first_name && history.last_name 
-                  ? `${history.first_name} ${history.last_name}` 
-                  : history.email || 'Sistema',
-                change_reason: history.change_reason,
-                is_automatic: history.change_reason?.includes('pasarela') || 
-                             history.change_reason?.includes('automático') ||
-                             history.change_reason?.includes('webhook') ||
-                             !history.changed_by_user_id,
-              };
-            }
-          } catch (historyError: any) {
-            // La tabla order_status_history puede no existir, solo loguear si es otro error
-            if (historyError?.code === '42P01') {
-              // Tabla no existe, ignorar silenciosamente
-              // console.warn(`Tabla order_status_history no existe, ignorando historial para orden ${order.id}`);
-            } else {
-              console.warn(`No se pudo obtener historial de payment_status para orden ${order.id}:`, historyError.message || historyError);
-            }
-          }
-
-          // Obtener transacciones de pago para esta orden
-          const paymentTransactionsResult = await dbPool.query(
-            `SELECT 
-              pt.*,
-              pt.payment_data->>'cardType' as card_type,
-              pt.payment_data->>'lastFour' as last_four,
-              pt.payment_data->>'referenceNumber' as reference_number
-            FROM orders.payment_transactions pt
-            WHERE pt.order_id = $1
-            ORDER BY pt.created_at ASC`,
-            [order.id]
-          );
-
-          return {
-            ...order,
-            items,
-            payment_status_change_info: paymentStatusChangeInfo,
-            payment_transactions: paymentTransactionsResult.rows,
-          };
-        })
+      // Una sola consulta de ítems para todos los pedidos (evita N+1 y agotar el pool)
+      const itemsResult = await dbPool.query(
+        `SELECT 
+            order_id,
+            id,
+            product_id,
+            collection_id,
+            item_name,
+            item_price,
+            quantity,
+            variant_selection,
+            item_subtotal,
+            special_instructions,
+            tax_breakdown,
+            created_at
+          FROM orders.order_items
+          WHERE order_id = ANY($1::uuid[])
+          ORDER BY order_id ASC, created_at ASC`,
+        [orderIds]
       );
+
+      const itemsByOrderId = new Map<string, any[]>();
+      for (const row of itemsResult.rows) {
+        const oid = row.order_id as string;
+        const list = itemsByOrderId.get(oid);
+        const parsed = mapParseOrderItem(row);
+        if (list) {
+          list.push(parsed);
+        } else {
+          itemsByOrderId.set(oid, [parsed]);
+        }
+      }
+
+      const paymentTxResult = await dbPool.query(
+        `SELECT 
+            pt.*,
+            pt.payment_data->>'cardType' as card_type,
+            pt.payment_data->>'lastFour' as last_four,
+            pt.payment_data->>'referenceNumber' as reference_number
+          FROM orders.payment_transactions pt
+          WHERE pt.order_id = ANY($1::uuid[])
+          ORDER BY pt.order_id ASC, pt.created_at ASC`,
+        [orderIds]
+      );
+
+      const txByOrderId = new Map<string, any[]>();
+      for (const row of paymentTxResult.rows) {
+        const oid = row.order_id as string;
+        const list = txByOrderId.get(oid);
+        if (list) {
+          list.push(row);
+        } else {
+          txByOrderId.set(oid, [row]);
+        }
+      }
+
+      const historyByOrderId = new Map<string, any | null>();
+      try {
+        const paymentHistoryResult = await dbPool.query(
+          `SELECT DISTINCT ON (osh.order_id)
+              osh.order_id,
+              osh.previous_status,
+              osh.new_status,
+              osh.created_at as changed_at,
+              osh.changed_by_user_id,
+              osh.changed_by_role,
+              osh.change_reason,
+              up.first_name,
+              up.last_name,
+              au.email
+            FROM orders.order_status_history osh
+            INNER JOIN orders.orders o ON o.id = osh.order_id
+              AND osh.new_status LIKE 'payment_%'
+              AND osh.new_status = ('payment_' || o.payment_status::text)
+            LEFT JOIN core.user_profiles up ON osh.changed_by_user_id = up.id
+            LEFT JOIN auth.users au ON osh.changed_by_user_id = au.id
+            WHERE osh.order_id = ANY($1::uuid[])
+            ORDER BY osh.order_id ASC, osh.created_at DESC`,
+          [orderIds]
+        );
+
+        for (const history of paymentHistoryResult.rows) {
+          const oid = history.order_id as string;
+          historyByOrderId.set(oid, {
+            changed_at: history.changed_at,
+            changed_by_user_id: history.changed_by_user_id,
+            changed_by_role: history.changed_by_role,
+            changed_by_name:
+              history.first_name && history.last_name
+                ? `${history.first_name} ${history.last_name}`
+                : history.email || 'Sistema',
+            change_reason: history.change_reason,
+            is_automatic:
+              history.change_reason?.includes('pasarela') ||
+              history.change_reason?.includes('automático') ||
+              history.change_reason?.includes('webhook') ||
+              !history.changed_by_user_id,
+          });
+        }
+      } catch (historyError: any) {
+        if (historyError?.code === '42P01') {
+          // Tabla inexistente; sin historial
+        } else {
+          console.warn(
+            'No se pudo cargar historial de payment_status en lote:',
+            historyError.message || historyError
+          );
+        }
+      }
+
+      const ordersWithItems = result.rows.map((order) => ({
+        ...order,
+        items: itemsByOrderId.get(order.id) ?? [],
+        payment_status_change_info: historyByOrderId.get(order.id) ?? null,
+        payment_transactions: txByOrderId.get(order.id) ?? [],
+      }));
 
       return ordersWithItems;
     } catch (error: any) {
@@ -2087,6 +2116,41 @@ export class OrdersService {
       console.error('❌ Error obteniendo pedido del negocio:', error);
       throw new ServiceUnavailableException(`Error al obtener pedido: ${error.message}`);
     }
+  }
+
+  /**
+   * Solo pruebas: simula el webhook de Karlopay con el mismo payload que web-local (requiere KARLOPAY_ALLOW_SIMULATE_WEBHOOK).
+   */
+  async simulateKarlopayWebhookForDev(businessId: string, orderId: string, _userId: string) {
+    const simulateEnvNorm = String(process.env.KARLOPAY_ALLOW_SIMULATE_WEBHOOK ?? '')
+      .trim()
+      .toLowerCase();
+    const simulateEnabled =
+      simulateEnvNorm === 'true' || simulateEnvNorm === '1' || simulateEnvNorm === 'yes';
+    if (!simulateEnabled) {
+      throw new ForbiddenException(
+        'La simulación del webhook Karlopay está desactivada. En apps/backend/.env define KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true y reinicia el servidor API.',
+      );
+    }
+
+    const order = await this.findOneByBusiness(orderId, businessId);
+    const txs = order.payment_transactions ?? [];
+    const hasPendingKarlopay = txs.some(
+      (t: { payment_method?: string; status?: string }) =>
+        String(t.payment_method ?? '').toLowerCase() === 'karlopay' &&
+        (String(t.status ?? '') === 'pending' || String(t.status ?? '') === 'failed'),
+    );
+    if (!hasPendingKarlopay) {
+      throw new BadRequestException(
+        'No hay transacción Karlopay pendiente o fallida para simular el webhook en este pedido.',
+      );
+    }
+
+    await this.karlopayService.assertKarlopayDevMode(businessId);
+    const payload = this.karlopayService.buildSimulatedPaymentWebhookPayload(order);
+    const rawPayload = payload as unknown as Record<string, any>;
+    await this.karlopayService.processPaymentWebhook(payload, rawPayload);
+    return { success: true, message: 'Webhook procesado exitosamente' };
   }
 
   /**

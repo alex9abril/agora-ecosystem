@@ -5,9 +5,142 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
+import { businessService, type BranchKarlopaySettings } from '@/lib/business';
 import { productsService, Product } from '@/lib/products';
 import { walletService, WalletTransaction } from '@/lib/wallet';
 import { logisticsService, ShippingLabel, ShipmentTracking, TrackingEvent } from '@/lib/logistics';
+import { Skeleton } from '@/components/ui/Skeleton';
+
+/** Layout de carga: replica cabecera, timeline, columna principal y sidebar del detalle de pedido. */
+function OrderDetailPageSkeleton() {
+  return (
+    <LocalLayout>
+      <Head>
+        <title>Detalle de pedido - AGORA Local</title>
+      </Head>
+      <div
+        className="w-full h-screen flex flex-col overflow-hidden"
+        role="status"
+        aria-busy="true"
+        aria-label="Cargando detalle del pedido"
+      >
+        <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-4">
+          <Skeleton className="h-4 w-36 mb-4" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Skeleton className="h-8 w-52 max-w-full" />
+                <Skeleton className="h-7 w-24 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-80 max-w-full" />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Skeleton className="h-9 w-28" />
+              <Skeleton className="h-9 w-32" />
+              <Skeleton className="h-9 w-28" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-6 py-3">
+          <div className="flex items-center justify-center gap-0.5">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="flex items-center">
+                <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                {i < 6 ? <Skeleton className="mx-1 h-1 w-10 shrink-0 rounded-full" /> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="space-y-6">
+              <div className="rounded-lg border border-gray-200 bg-white p-6">
+                <Skeleton className="mb-4 h-6 w-44" />
+                <div className="space-y-3 border-b border-gray-100 pb-3">
+                  <div className="flex gap-4">
+                    <Skeleton className="h-3 flex-1" />
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+                {[1, 2, 3].map((row) => (
+                  <div key={row} className="flex items-center gap-4 border-b border-gray-100 py-4">
+                    <Skeleton className="h-10 w-10 shrink-0 rounded" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-8" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white p-6">
+                <Skeleton className="mb-4 h-5 w-40" />
+                <Skeleton className="h-24 w-full rounded-md" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+                  <Skeleton className="h-5 w-40" />
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="flex justify-between gap-4">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="h-4 w-20" />
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+                  <Skeleton className="h-5 w-44" />
+                  <Skeleton className="h-6 w-36 rounded-full" />
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex justify-between gap-4">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 bg-white p-6">
+                <Skeleton className="mb-4 h-5 w-48" />
+                <Skeleton className="h-16 w-full rounded-md" />
+              </div>
+            </div>
+          </div>
+
+          <div className="w-96 shrink-0 border-l border-gray-200 bg-white">
+            <div className="h-full overflow-y-auto p-6">
+              <div className="space-y-6">
+                {[1, 2, 3].map((block) => (
+                  <div key={block}>
+                    <div className="mb-4 flex items-center justify-between">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="h-3 w-12" />
+                    </div>
+                    <div className="space-y-2">
+                      <Skeleton className="h-3 w-full" />
+                      <Skeleton className="h-3 w-5/6" />
+                      <Skeleton className="h-3 w-4/5" />
+                    </div>
+                  </div>
+                ))}
+                <div>
+                  <Skeleton className="mb-4 h-4 w-32" />
+                  <Skeleton className="h-4 w-40" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </LocalLayout>
+  );
+}
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -25,6 +158,8 @@ export default function OrderDetailPage() {
   const [shippingLabel, setShippingLabel] = useState<ShippingLabel | null>(null);
   const [loadingShippingLabel, setLoadingShippingLabel] = useState(false);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [shippingPdfError, setShippingPdfError] = useState<string | null>(null);
+  const [syncingShippingLabel, setSyncingShippingLabel] = useState(false);
   const [tracking, setTracking] = useState<ShipmentTracking | null>(null);
   const [loadingTracking, setLoadingTracking] = useState(false);
   const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
@@ -33,6 +168,7 @@ export default function OrderDetailPage() {
   const [showKarlopayJsonModal, setShowKarlopayJsonModal] = useState(false);
   const [expandedPayloadTxId, setExpandedPayloadTxId] = useState<string | null>(null);
   const [payloadViewTab, setPayloadViewTab] = useState<'resumen' | 'json'>('resumen');
+  const [branchKarlopaySettings, setBranchKarlopaySettings] = useState<BranchKarlopaySettings | null>(null);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -47,8 +183,28 @@ export default function OrderDetailPage() {
     }
   }, [id, selectedBusiness?.business_id, router.isReady]);
 
-  const loadOrder = async (businessId: string) => {
-    if (!id || !businessId) return;
+  useEffect(() => {
+    const bid = order?.business_id;
+    if (!bid) {
+      setBranchKarlopaySettings(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const s = await businessService.getBranchKarlopaySettings(bid);
+        if (!cancelled) setBranchKarlopaySettings(s);
+      } catch {
+        if (!cancelled) setBranchKarlopaySettings(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.business_id]);
+
+  const loadOrder = async (businessId: string): Promise<Order | null> => {
+    if (!id || !businessId) return null;
 
     try {
       setLoading(true);
@@ -157,6 +313,7 @@ export default function OrderDetailPage() {
           const label = await logisticsService.getShippingLabelByOrderId(orderData.id);
           if (label) {
             setShippingLabel(label);
+            setShippingPdfError(null);
             console.log('📦 [SHIPPING LABEL] Guía de envío cargada:', label.tracking_number);
           } else {
             setShippingLabel(null);
@@ -171,6 +328,8 @@ export default function OrderDetailPage() {
         setShippingLabel(null);
         setLoadingShippingLabel(false);
       }
+
+      return orderData;
     } catch (err: any) {
       console.error('❌ [LOAD ORDER] Error cargando pedido:', err);
       console.error('❌ [LOAD ORDER] Detalles del error:', {
@@ -180,6 +339,7 @@ export default function OrderDetailPage() {
         businessId,
       });
       setError(err.message || 'Error al cargar el pedido');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -289,6 +449,57 @@ export default function OrderDetailPage() {
       console.error('❌ [CONFIRMAR PAGO] Error confirmando pago:', err);
       console.error('❌ [CONFIRMAR PAGO] Error completo:', JSON.stringify(err, null, 2));
       alert(err.message || 'Error al confirmar el pago. Por favor, revisa la consola para más detalles.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSimulateKarlopayWebhook = async () => {
+    if (!order) return;
+    if (
+      !confirm(
+        '¿Simular el webhook de Karlopay para este pedido? En el servidor debe estar KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true.',
+      )
+    ) {
+      return;
+    }
+    const businessId =
+      selectedBusiness?.business_id ||
+      sessionStorage.getItem('temp_order_business_id') ||
+      order.business_id;
+    if (!businessId) {
+      alert('No se pudo determinar la tienda del pedido');
+      return;
+    }
+    try {
+      setUpdating(true);
+      await ordersService.simulateKarlopayWebhook(businessId, order.id);
+
+      const surtirStillBlocked = (o: Order) => {
+        const st = String((o as any).status ?? o.status ?? '');
+        if (st !== 'confirmed') return false;
+        const ps = String((o as any).payment_status ?? o.payment_status ?? '');
+        const hasPending = (o.payment_transactions ?? []).some((t: any) => {
+          const s = String(t.status ?? t.transaction_status ?? '').toLowerCase();
+          return s === 'pending';
+        });
+        return ps !== 'paid' || hasPending;
+      };
+
+      let last: Order | null = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (attempt > 0) {
+          await new Promise((r) => setTimeout(r, 550));
+        }
+        last = await loadOrder(businessId);
+        if (last && !surtirStillBlocked(last)) break;
+      }
+
+      alert('Webhook simulado; el pedido se actualizó.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('[simulateKarlopayWebhook]', err);
+      alert(message || 'Error al simular el webhook. Revisa la consola y que el backend permita la simulación.');
     } finally {
       setUpdating(false);
     }
@@ -670,9 +881,10 @@ export default function OrderDetailPage() {
       
       case 'confirmed': {
         const paymentStatus = (orderData as any).payment_status ?? orderData.payment_status;
-        const hasPendingTx = (orderData.payment_transactions ?? []).some(
-          (t: any) => (t.status ?? t.transaction_status ?? '') === 'pending'
-        );
+        const hasPendingTx = (orderData.payment_transactions ?? []).some((t: any) => {
+          const s = String(t.status ?? t.transaction_status ?? '').toLowerCase();
+          return s === 'pending';
+        });
         const canSurtirByPayment = paymentStatus === 'paid' && !hasPendingTx;
         // Siempre mostrar "Surtir pedido"; deshabilitar si no está pagado o hay transacciones pendientes
         const surtirDisabledReason = !canSurtirByPayment
@@ -751,19 +963,7 @@ export default function OrderDetailPage() {
   };
 
   if (loading) {
-    return (
-      <LocalLayout>
-        <Head>
-          <title>Detalle de pedido - AGORA Local</title>
-        </Head>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Cargando pedido...</p>
-          </div>
-        </div>
-      </LocalLayout>
-    );
+    return <OrderDetailPageSkeleton />;
   }
 
   if (error || !order) {
@@ -791,6 +991,15 @@ export default function OrderDetailPage() {
   const timeline = getStatusTimeline(order);
   const nextActions = getNextActions(order);
   const canFulfill = (selectedBusiness as { capabilities?: { can_fulfill?: boolean } } | null)?.capabilities?.can_fulfill !== false;
+  const canSimulateKarlopayWebhookDev =
+    process.env.NEXT_PUBLIC_ENVIRONMENT === 'development' &&
+    branchKarlopaySettings?.enabled === true &&
+    branchKarlopaySettings?.environment === 'dev' &&
+    (order.payment_transactions ?? []).some(
+      (tx) =>
+        String(tx.payment_method ?? '').toLowerCase() === 'karlopay' &&
+        (tx.status === 'pending' || tx.status === 'failed'),
+    );
 
   return (
     <LocalLayout>
@@ -887,6 +1096,17 @@ export default function OrderDetailPage() {
                   >
                     JSON Karlopay
                   </button>
+                  {canSimulateKarlopayWebhookDev && (
+                    <button
+                      type="button"
+                      onClick={handleSimulateKarlopayWebhook}
+                      disabled={updating}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-gray-900 hover:bg-gray-800 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Simula el webhook en el API (requiere KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true en el backend)"
+                    >
+                      {updating ? 'Procesando…' : 'Confirmar pago (Karlopay dev)'}
+                    </button>
+                  )}
                   <button
                     onClick={handleDeleteOrder}
                     disabled={deleting || updating}
@@ -1069,51 +1289,130 @@ export default function OrderDetailPage() {
                   const isPickup = order.delivery_address_text === 'Recoger en tienda';
                   return (
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">{isPickup ? 'Pickup' : 'Guía de Envío'}</h2>
-                    {shippingLabel && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            setDownloadingPDF(true);
-                            const blob = await logisticsService.downloadShippingLabelPDF(order.id);
-                            const url = window.URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = isPickup ? `etiqueta-pickup-${shippingLabel.tracking_number}.pdf` : `guia-envio-${shippingLabel.tracking_number}.pdf`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            window.URL.revokeObjectURL(url);
-                          } catch (err: any) {
-                            console.error('Error descargando PDF:', err);
-                            alert('Error al descargar el PDF: ' + (err.message || 'Error desconocido'));
-                          } finally {
-                            setDownloadingPDF(false);
-                          }
-                        }}
-                        disabled={downloadingPDF || !shippingLabel}
-                        className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
-                      >
-                        {downloadingPDF ? (
-                          <>
-                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Descargando...
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Descargar PDF
-                          </>
+                    {shippingLabel && !isPickup && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(shippingLabel.tracking_is_pending === true ||
+                          shippingLabel.pdf_ready === false) && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!order) return;
+                              setSyncingShippingLabel(true);
+                              setShippingPdfError(null);
+                              try {
+                                const updated = await logisticsService.syncShippingLabelByOrder(order.id);
+                                setShippingLabel(updated);
+                              } catch (err: any) {
+                                console.error('Error sincronizando guía:', err);
+                                setShippingPdfError(
+                                  err?.message || 'No se pudo sincronizar con Skydropx. Reintenta en unos segundos.'
+                                );
+                              } finally {
+                                setSyncingShippingLabel(false);
+                              }
+                            }}
+                            disabled={syncingShippingLabel || loadingShippingLabel}
+                            className="px-4 py-2 text-sm font-medium bg-black hover:bg-gray-800 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+                          >
+                            {syncingShippingLabel ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                Sincronizando...
+                              </>
+                            ) : (
+                              'Sincronizar con Skydropx'
+                            )}
+                          </button>
                         )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!order || !shippingLabel) return;
+                            try {
+                              setDownloadingPDF(true);
+                              setShippingPdfError(null);
+                              const blob = await logisticsService.downloadShippingLabelPDF(order.id);
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = isPickup
+                                ? `etiqueta-pickup-${shippingLabel.tracking_number}.pdf`
+                                : `guia-envio-${shippingLabel.tracking_number}.pdf`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              window.URL.revokeObjectURL(url);
+                            } catch (err: any) {
+                              console.error('Error descargando PDF:', err);
+                              setShippingPdfError(
+                                err?.message || 'No se pudo descargar el PDF. Puedes sincronizar e intentar de nuevo.'
+                              );
+                            } finally {
+                              setDownloadingPDF(false);
+                            }
+                          }}
+                          disabled={
+                            downloadingPDF ||
+                            !shippingLabel ||
+                            shippingLabel.tracking_is_pending === true ||
+                            shippingLabel.pdf_ready === false
+                          }
+                          className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                          {downloadingPDF ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Descargando...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Descargar PDF
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    {shippingLabel && isPickup && (
+                      <span className="text-xs text-gray-500">Usa la etiqueta pickup más abajo.</span>
                     )}
                   </div>
+                  {!isPickup &&
+                    shippingLabel &&
+                    (shippingLabel.tracking_is_pending === true || shippingLabel.pdf_ready === false) && (
+                      <div
+                        className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                        role="status"
+                      >
+                        Guía en proceso en Skydropx o PDF aún no disponible. Pulsa &quot;Sincronizar con Skydropx&quot;
+                        y luego descarga el PDF.
+                      </div>
+                    )}
+                  {shippingPdfError && !isPickup && (
+                    <div
+                      className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 flex flex-wrap items-center justify-between gap-2"
+                      role="alert"
+                    >
+                      <span>No se pudo descargar el PDF: {shippingPdfError}</span>
+                      <button
+                        type="button"
+                        onClick={() => setShippingPdfError(null)}
+                        className="text-xs font-medium text-red-900 underline"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                  )}
                   {loadingShippingLabel ? (
                     <div className="flex items-center justify-center py-4">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
@@ -1128,11 +1427,13 @@ export default function OrderDetailPage() {
                             shippingLabel.status === 'delivered' ? 'bg-green-100 text-green-800' :
                             shippingLabel.status === 'in_transit' ? 'bg-blue-100 text-blue-800' :
                             shippingLabel.status === 'picked_up' ? 'bg-yellow-100 text-yellow-800' :
+                            shippingLabel.status === 'cancelled' ? 'bg-red-100 text-red-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
                             {shippingLabel.status === 'delivered' ? 'Entregado' :
                              shippingLabel.status === 'in_transit' ? 'En Tránsito' :
                              shippingLabel.status === 'picked_up' ? 'Recolectado' :
+                             shippingLabel.status === 'cancelled' ? 'Cancelada' :
                              'Generada'}
                           </span>
                         </div>
@@ -1497,48 +1798,47 @@ export default function OrderDetailPage() {
                         onClick={async () => {
                           try {
                             setLoadingShippingLabel(true);
-                            
-                            // Crear la guía de envío (esto llama a Skydropx)
+                            setShippingPdfError(null);
+
                             const label = await logisticsService.createShippingLabel({
                               orderId: order.id,
                               packageWeight: 1.0,
                               packageDimensions: '30x20x15 cm',
                               declaredValue: parseFloat(order.subtotal.toString()), // Valor declarado = subtotal (sin envío)
                             });
-                            
-                            // Recargar la guía para obtener todos los datos actualizados
+
                             const updatedLabel = await logisticsService.getShippingLabelByOrderId(order.id);
-                            if (updatedLabel) {
-                              setShippingLabel(updatedLabel);
-                              
-                              // Intentar descargar el PDF automáticamente
+                            const toShow = updatedLabel || label;
+                            setShippingLabel(toShow);
+
+                            if (
+                              toShow.pdf_ready !== false &&
+                              !toShow.tracking_is_pending
+                            ) {
                               try {
                                 setDownloadingPDF(true);
                                 const blob = await logisticsService.downloadShippingLabelPDF(order.id);
                                 const url = window.URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
-                                a.download = `guia-envio-${updatedLabel.tracking_number || order.id}.pdf`;
+                                a.download = `guia-envio-${toShow.tracking_number || order.id}.pdf`;
                                 document.body.appendChild(a);
                                 a.click();
                                 document.body.removeChild(a);
                                 window.URL.revokeObjectURL(url);
-                                
-                                alert('✅ Guía de envío generada y descargada exitosamente');
                               } catch (pdfError: any) {
                                 console.warn('⚠️ Guía generada pero no se pudo descargar el PDF:', pdfError);
-                                // La guía se generó correctamente, solo falló la descarga del PDF
-                                alert('✅ Guía de envío generada exitosamente. Puedes descargarla usando el botón de descarga.');
+                                setShippingPdfError(
+                                  pdfError?.message ||
+                                    'La guía se registró pero el PDF no se pudo descargar. Usa Sincronizar o Descargar PDF.'
+                                );
                               } finally {
                                 setDownloadingPDF(false);
                               }
-                            } else {
-                              setShippingLabel(label);
-                              alert('✅ Guía de envío generada exitosamente');
                             }
                           } catch (err: any) {
                             console.error('Error generando guía:', err);
-                            alert('❌ Error al generar la guía: ' + (err.message || 'Error desconocido'));
+                            setShippingPdfError(err?.message || 'Error al generar la guía.');
                           } finally {
                             setLoadingShippingLabel(false);
                           }
@@ -1633,43 +1933,56 @@ export default function OrderDetailPage() {
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Resumen de pago</h2>
-                    {/* Botón para confirmar pago - Solo se muestra si hay transacciones pendientes que NO sean Karlopay (Karlopay solo se confirma por webhook) */}
-                    {(() => {
-                      const hasPendingTransactions = order.payment_transactions?.some(
-                        (tx) => tx.status === 'pending' || tx.status === 'failed'
-                      ) || false;
-                      const hasPendingNonKarlopay = order.payment_transactions?.some(
-                        (tx) => (tx.status === 'pending' || tx.status === 'failed') && tx.payment_method !== 'karlopay'
-                      ) || false;
-                      const canShowButton =
-                        hasPendingNonKarlopay &&
-                        (order.payment_status === 'pending' || order.payment_status === 'failed');
-                      return canShowButton ? (
+                    {/* Confirmar pago manual (no Karlopay) o simular webhook Karlopay en dev */}
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                      {(() => {
+                        const hasPendingNonKarlopay =
+                          order.payment_transactions?.some(
+                            (tx) =>
+                              (tx.status === 'pending' || tx.status === 'failed') &&
+                              tx.payment_method !== 'karlopay',
+                          ) || false;
+                        const canShowButton =
+                          hasPendingNonKarlopay &&
+                          (order.payment_status === 'pending' || order.payment_status === 'failed');
+                        return canShowButton ? (
+                          <button
+                            onClick={handleConfirmPayment}
+                            disabled={updating}
+                            className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                            title="Confirmar que el pago ha sido recibido"
+                          >
+                            {updating ? (
+                              <>
+                                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Confirmando...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Confirmar pago
+                              </>
+                            )}
+                          </button>
+                        ) : null;
+                      })()}
+                      {canSimulateKarlopayWebhookDev && (
                         <button
-                          onClick={handleConfirmPayment}
+                          type="button"
+                          onClick={handleSimulateKarlopayWebhook}
                           disabled={updating}
-                          className="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-                          title="Confirmar que el pago ha sido recibido"
+                          className="px-3 py-1.5 text-xs font-medium bg-gray-900 hover:bg-gray-800 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          title="Simula webhook Karlopay en el API (KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true)"
                         >
-                          {updating ? (
-                            <>
-                              <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Confirmando...
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Confirmar pago
-                            </>
-                          )}
+                          {updating ? 'Procesando…' : 'Confirmar pago (Karlopay dev)'}
                         </button>
-                      ) : null;
-                    })()}
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">Un resumen de todos los pagos de las transacciones registradas</p>
                     <div className="space-y-2 text-sm">

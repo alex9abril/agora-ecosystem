@@ -40,15 +40,26 @@ if (databaseUrl && databaseUrl.includes('[') && databaseUrl.includes(']')) {
   }
 }
 
+/**
+ * Pool: timeouts y tamaño configurables por entorno.
+ * - connectionTimeoutMillis demasiado bajo (p. ej. 2s) provoca "Connection terminated due to connection timeout"
+ *   cuando hay cola en el pool (N+1 / muchas peticiones concurrentes) o red lenta hacia Supabase.
+ * - idleTimeoutMillis: el pooler de Supabase puede cerrar conexiones inactivas; 60s suele ser más estable.
+ */
+const poolMaxRaw = parseInt(process.env.PG_POOL_MAX || '20', 10);
+const poolMax = Number.isFinite(poolMaxRaw) ? Math.min(50, Math.max(5, poolMaxRaw)) : 20;
+const idleMsRaw = parseInt(process.env.PG_IDLE_TIMEOUT_MS || '60000', 10);
+const connTimeoutRaw = parseInt(process.env.PG_CONNECTION_TIMEOUT_MS || '30000', 10);
+
 const dbConfig: PoolConfig = {
   connectionString: databaseUrl,
   // Supabase requiere SSL para conexiones directas
   ssl: {
     rejectUnauthorized: false, // Supabase usa certificados autofirmados
   },
-  max: 20, // Máximo de conexiones en el pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  max: poolMax,
+  idleTimeoutMillis: Number.isFinite(idleMsRaw) ? idleMsRaw : 60000,
+  connectionTimeoutMillis: Number.isFinite(connTimeoutRaw) ? connTimeoutRaw : 30000,
 };
 
 // Si no hay DATABASE_URL pero hay SUPABASE_URL, intentar construir la URL

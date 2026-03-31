@@ -6,6 +6,65 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { ordersService, Order, OrderItem } from '@/lib/orders';
 import { productsService, Product } from '@/lib/products';
 import { businessService } from '@/lib/business';
+import { Skeleton } from '@/components/ui/Skeleton';
+
+function PrepareOrderPageSkeleton() {
+  return (
+    <LocalLayout>
+      <Head>
+        <title>Preparar pedido - AGORA Local</title>
+      </Head>
+      <div
+        className="flex h-full w-full flex-col bg-white"
+        role="status"
+        aria-busy="true"
+        aria-label="Cargando preparación del pedido"
+      >
+        <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-4">
+          <Skeleton className="mb-4 h-5 w-24" />
+          <Skeleton className="h-8 max-w-xl" />
+        </div>
+
+        <div className="flex flex-1 flex-col overflow-auto bg-white">
+          <div className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
+            <Skeleton className="h-5 w-56" />
+          </div>
+
+          <div className="flex-1 overflow-auto">
+            <div className="w-full min-w-[800px]">
+              <div className="flex gap-4 border-b border-gray-100 bg-gray-50 px-6 py-3">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-14" />
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              {[1, 2, 3, 4].map((row) => (
+                <div
+                  key={row}
+                  className="flex items-center gap-4 border-b border-gray-100 px-6 py-4"
+                >
+                  <Skeleton className="h-10 w-10 shrink-0 rounded" />
+                  <Skeleton className="h-4 flex-1 max-w-xs" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                  <Skeleton className="h-4 w-14" />
+                  <Skeleton className="h-9 w-full max-w-[200px] rounded-md" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-shrink-0 justify-end gap-3 border-t border-gray-200 bg-white px-6 py-4">
+            <Skeleton className="h-10 w-24 rounded-md" />
+            <Skeleton className="h-10 w-48 rounded-md" />
+          </div>
+        </div>
+      </div>
+    </LocalLayout>
+  );
+}
 
 interface ProductStockInfo {
   productId: string;
@@ -346,7 +405,15 @@ export default function PrepareOrderPage() {
             trackingNumber: shippingLabel.tracking_number,
             carrier: shippingLabel.carrier_name,
             status: shippingLabel.status,
+            pdf_ready: shippingLabel.pdf_ready,
+            tracking_is_pending: shippingLabel.tracking_is_pending,
           });
+          if (shippingLabel.pdf_ready === false || shippingLabel.tracking_is_pending) {
+            setCompletionStep(
+              'Pedido completado. La guía está en proceso en Skydropx o el PDF aún no está disponible. En el detalle del pedido puedes sincronizar o descargar la guía.'
+            );
+            await new Promise((resolve) => setTimeout(resolve, 2800));
+          }
         } catch (logisticsError: any) {
           console.error('❌ Error generando guía de envío:', {
             message: logisticsError.message,
@@ -380,19 +447,7 @@ export default function PrepareOrderPage() {
   };
 
   if (loading) {
-    return (
-      <LocalLayout>
-        <Head>
-          <title>Preparar pedido - AGORA Local</title>
-        </Head>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Cargando datos del pedido...</p>
-          </div>
-        </div>
-      </LocalLayout>
-    );
+    return <PrepareOrderPageSkeleton />;
   }
 
   if (error || !order) {

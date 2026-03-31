@@ -3283,11 +3283,13 @@ export class BusinessesService {
   }
 
   async getBusinessKarlopaySettingsForUser(businessId: string, userId: string) {
-    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
-    if (!hasPermission) {
+    const hasElevated = await this.checkBusinessPermissions(businessId, userId);
+    const hasBranchMembership = await this.checkActiveBranchMembership(businessId, userId);
+    if (!hasElevated && !hasBranchMembership) {
       throw new ForbiddenException('No tienes permisos para ver esta configuracion');
     }
-    return this.getBusinessKarlopaySettings(businessId);
+    const full = await this.getBusinessKarlopaySettings(businessId);
+    return hasElevated ? full : this.sanitizeKarlopaySettingsForMembers(full);
   }
 
   async updateBusinessKarlopaySettings(
@@ -3792,6 +3794,56 @@ export class BusinessesService {
       console.error('❌ Error obteniendo branding de la sucursal:', error);
       throw new ServiceUnavailableException(`Error al obtener branding: ${error.message}`);
     }
+  }
+
+  /**
+   * Usuario con fila activa en business_users para esta sucursal (cualquier rol).
+   * Permite lecturas operativas sin exponer credenciales (p. ej. flags Karlopay en pedido).
+   */
+  private async checkActiveBranchMembership(businessId: string, userId: string): Promise<boolean> {
+    if (!dbPool) return false;
+    try {
+      const r = await dbPool.query(
+        `SELECT 1 FROM core.business_users
+         WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE
+         LIMIT 1`,
+        [businessId, userId],
+      );
+      return r.rows.length > 0;
+    } catch (e) {
+      console.error('Error verificando membresía de sucursal:', e);
+      return false;
+    }
+  }
+
+  /** Oculta secretos Karlopay para personal sin rol admin/superadmin en la sucursal. */
+  private sanitizeKarlopaySettingsForMembers(payload: {
+    karlopay: {
+      enabled: boolean;
+      mode: string;
+      environment: string;
+      dev: Record<string, unknown>;
+      prod: Record<string, unknown>;
+    };
+  }) {
+    const k = payload.karlopay;
+    const redact = (env: Record<string, unknown> | undefined) => {
+      if (!env || typeof env !== 'object') return { ...this.DEFAULT_KARLOPAY_SETTINGS.dev };
+      return {
+        ...env,
+        auth_password: '',
+        auth_email: '',
+      };
+    };
+    return {
+      karlopay: {
+        enabled: k.enabled,
+        mode: k.mode,
+        environment: k.environment,
+        dev: redact(k.dev as Record<string, unknown>),
+        prod: redact(k.prod as Record<string, unknown>),
+      },
+    };
   }
 
   /**

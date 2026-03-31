@@ -60,6 +60,21 @@ function makeId() {
   return `f-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Nueva fila vacía; por defecto usa la primera columna que aún no aparece en `currentFilters` (facilita combinar varios criterios). */
+export function createEmptyFilterRow(
+  columns: FilterColumn[],
+  currentFilters: Pick<FilterRow, 'field'>[] = [],
+): FilterRow {
+  const used = new Set(currentFilters.map((f) => f.field).filter(Boolean));
+  const col = columns.find((c) => !used.has(c.id)) ?? columns[0];
+  return {
+    id: makeId(),
+    field: col?.id ?? '',
+    operator: col?.type === 'number' ? '=' : col?.type === 'enum' ? '=' : 'contains',
+    value: '',
+  };
+}
+
 export default function TableFilters({
   columns,
   filters,
@@ -84,11 +99,7 @@ export default function TableFilters({
   }, []);
 
   const addFilter = () => {
-    const firstCol = columns[0];
-    onChange([
-      ...filters,
-      { id: makeId(), field: firstCol?.id ?? '', operator: firstCol?.type === 'number' ? '=' : 'contains', value: '' },
-    ]);
+    onChange([...filters, createEmptyFilterRow(columns, filters)]);
   };
 
   const removeFilter = (id: string) => {
@@ -127,12 +138,14 @@ export default function TableFilters({
     <div className={`rounded-lg border border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800/50 p-4 ${className}`}>
       {filters.length === 0 ? (
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            No hay filtros aplicados a esta vista.
-          </p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">
-            Agrega una columna abajo para filtrar la vista.
-          </p>
+          <div className="space-y-1 min-w-0 flex-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              No hay filtros aplicados a esta vista.
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Puedes añadir varios filtros: se combinan y deben cumplirse todos a la vez. Usa el botón de abajo para empezar.
+            </p>
+          </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <button
               type="button"
@@ -153,6 +166,10 @@ export default function TableFilters({
         </div>
       ) : (
         <>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Los criterios se combinan (todos deben cumplirse). Para filtrar por otra columna sin quitar la actual, usa{' '}
+            <span className="font-medium text-gray-600 dark:text-gray-300">Agregar filtro</span>.
+          </p>
           <div className="space-y-3">
             {filters.map((row) => {
               const col = columns.find((c) => c.id === row.field);
@@ -164,6 +181,7 @@ export default function TableFilters({
                 <div key={row.id} className="flex flex-wrap items-center gap-2">
                   <select
                     value={row.field}
+                    title="Columna de esta fila. Para añadir otro criterio sin quitar este, usa «Agregar filtro»."
                     onChange={(e) => {
                       const newField = e.target.value;
                       const newCol = columns.find((c) => c.id === newField);

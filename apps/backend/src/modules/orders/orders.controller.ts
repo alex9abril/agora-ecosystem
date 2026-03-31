@@ -207,6 +207,31 @@ export class OrdersController {
     return this.ordersService.findOneByBusiness(id, businessId);
   }
 
+  @Post('business/:businessId/:id/karlopay/simulate-webhook')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary:
+      'Solo pruebas: simular webhook Karlopay (requiere KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true en el servidor y Karlopay en modo dev)',
+  })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Webhook simulado procesado' })
+  @ApiResponse({ status: 400, description: 'No hay transacción Karlopay pendiente' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'KARLOPAY_ALLOW_SIMULATE_WEBHOOK no habilitado en el servidor, o Karlopay no está en modo desarrollo',
+  })
+  @ApiResponse({ status: 404, description: 'Pedido no encontrado' })
+  async simulateKarlopayWebhook(
+    @Param('id') id: string,
+    @Param('businessId') businessId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.ordersService.simulateKarlopayWebhookForDev(businessId, id, user.id);
+  }
+
   @Post('business/:businessId/:id/status')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Actualizar estado de pedido (para negocios)' })

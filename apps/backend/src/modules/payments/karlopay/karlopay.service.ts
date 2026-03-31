@@ -2,6 +2,7 @@ import {
   Injectable,
   ServiceUnavailableException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { IntegrationsService, KarlopayCredentials } from '../../settings/integrations.service';
@@ -1507,6 +1508,109 @@ export class KarlopayService {
       this.logger.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo
     }
+  }
+
+  /**
+   * Solo desarrollo: exige que la configuración Karlopay efectiva (sucursal → grupo → global) esté en modo dev.
+   * Debe coincidir con el selector Desarrollo/Producción que alimenta getCredentials().mode.
+   */
+  async assertKarlopayDevMode(businessId: string): Promise<void> {
+    try {
+      const creds = await this.getCredentials(businessId);
+      if (creds.mode !== 'dev') {
+        throw new ForbiddenException(
+          'La simulación de webhook solo está permitida cuando Karlopay está en modo Desarrollo para esta sucursal.',
+        );
+      }
+    } catch (e) {
+      if (e instanceof ForbiddenException) {
+        throw e;
+      }
+      throw new ForbiddenException(
+        'No se pudo verificar la configuración Karlopay o no está disponible en modo desarrollo.',
+      );
+    }
+  }
+
+  /**
+   * Payload de prueba equivalente a buildKarlopayWebhookJson en web-local (orders/[id].tsx).
+   * Mantener ambos alineados al cambiar montos o referencias.
+   */
+  buildSimulatedPaymentWebhookPayload(order: {
+    id: string;
+    total_amount: string | number;
+    order_group_id?: string | null;
+    payment_transactions?: Array<{
+      payment_method?: string;
+      external_reference?: string | null;
+      status?: string;
+    }>;
+  }): KarlopayPaymentWebhookDto {
+    const originalAmount = Math.round(parseFloat(String(order.total_amount)) * 100) / 100;
+    const pctBase = 0.0175;
+    const baseComission = Math.round(originalAmount * pctBase * 100) / 100;
+    const baseComissionIva = Math.round(baseComission * 0.16 * 100) / 100;
+    const baseComissionTotal = Math.round((baseComission + baseComissionIva) * 100) / 100;
+    const totalCommissionToBusiness = baseComissionTotal;
+    const totalToDepositBusiness = Math.round((originalAmount - totalCommissionToBusiness) * 100) / 100;
+    const customerCommissionRatio = 103.62 / 12001;
+    const totalCommissionToCustomer = Math.round(originalAmount * customerCommissionRatio * 100) / 100;
+    const totalPayment = Math.round((originalAmount + totalCommissionToCustomer) * 100) / 100;
+    const now = new Date();
+    const paymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const orderGroupId = order.order_group_id ?? '00000000-0000-0000-0000-000000000001';
+    const karlopayTx = (order.payment_transactions ?? []).find(
+      (t) => String(t.payment_method ?? '').toLowerCase() === 'karlopay',
+    );
+    const refForWebhook = karlopayTx?.external_reference ?? order.id;
+
+    return {
+      numberOfOrder: refForWebhook,
+      cardType: 'CREDIT MASTERCARD',
+      paymentDate,
+      cardDC: 'mastercard',
+      bankName: 'n/a',
+      bankCode: '999',
+      postalCode: '63915',
+      meses: 0,
+      paymentMethod: 'PUE',
+      paymentForm: '04',
+      promotion: false,
+      taxData: {
+        socialReason: 'zuriel test',
+        postalCodeTax: '63915',
+        RFC: 'XAXX010101000',
+        taxRegime: '616',
+        CFDI: 'S01',
+        email: 'zuriel@karlo.io',
+      },
+      paymentInformation: {
+        percentageBaseComission: pctBase,
+        percentageBaseSurcharge: 0,
+        commissions: {
+          baseComission,
+          baseComissionIva,
+          baseComissionTotal,
+        },
+        surcharges: {
+          baseSurcharge: 0,
+          baseSurchargeIva: 0,
+          baseSurchargeTotal: 0,
+        },
+        originalAmount,
+        totalCommissionForTerminalUse: totalCommissionToCustomer,
+        totalCommissionForDeferringToMonths: 0,
+        totalCommissionToCustomer,
+        totalCommissionToBusiness,
+        totalToDepositBusiness,
+        totalPaymentPerMonth: totalPayment,
+        totalPayment,
+      },
+      additional: {
+        session_id: refForWebhook,
+        order_group_id: orderGroupId,
+      },
+    };
   }
 }
 

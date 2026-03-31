@@ -46,7 +46,8 @@ export class LogisticsController {
   })
   @ApiResponse({
     status: 201,
-    description: 'Guía de envío generada exitosamente',
+    description:
+      'Guía de envío generada exitosamente. Respuesta incluye pdf_ready, tracking_is_pending y skydropx_workflow_status cuando aplica.',
   })
   @ApiResponse({
     status: 400,
@@ -73,6 +74,8 @@ export class LogisticsController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Obtener guía de envío por ID de orden',
+    description:
+      'Incluye flags calculados: pdf_ready, tracking_is_pending, skydropx_workflow_status (sin columnas extra en BD).',
   })
   @ApiParam({
     name: 'orderId',
@@ -81,7 +84,8 @@ export class LogisticsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Guía de envío obtenida exitosamente',
+    description:
+      'Guía de envío obtenida exitosamente. Campos opcionales: pdf_ready (boolean), tracking_is_pending (boolean), skydropx_workflow_status (string).',
   })
   @ApiResponse({
     status: 404,
@@ -93,6 +97,26 @@ export class LogisticsController {
       throw new NotFoundException(`No se encontró guía de envío para la orden ${orderId}`);
     }
     return shippingLabel;
+  }
+
+  @Post('shipping-labels/order/:orderId/sync')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Sincronizar guía con Skydropx',
+    description:
+      'Consulta el shipment existente en Skydropx (GET /shipments/:id), actualiza tracking, metadata, pdf_url e intenta descargar el PDF localmente. No crea un envío nuevo.',
+  })
+  @ApiParam({ name: 'orderId', description: 'ID de la orden', type: String })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Guía actualizada con pdf_ready, tracking_is_pending y skydropx_workflow_status.',
+  })
+  @ApiResponse({ status: 400, description: 'La guía no tiene envío Skydropx asociado' })
+  @ApiResponse({ status: 404, description: 'Guía no encontrada' })
+  @ApiResponse({ status: 503, description: 'Error al consultar Skydropx' })
+  async syncShippingLabelByOrder(@Param('orderId') orderId: string) {
+    return this.logisticsService.syncShippingLabelFromSkydropx(orderId);
   }
 
   @Get('shipping-labels/tracking/:trackingNumber')

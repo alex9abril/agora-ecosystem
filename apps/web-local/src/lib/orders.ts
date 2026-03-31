@@ -32,6 +32,8 @@ export interface Order {
   client_last_name?: string;
   client_phone?: string;
   client_email?: string;
+  /** Canal de venta (ej. web, app). Si no viene del API, el front asume `web`. */
+  sales_channel?: string;
   item_count?: number;
   total_quantity?: number;
   items?: OrderItem[];
@@ -187,6 +189,19 @@ export const ordersService = {
     });
 
     return response;
+  },
+
+  /**
+   * Solo pruebas: simula el webhook Karlopay (backend requiere KARLOPAY_ALLOW_SIMULATE_WEBHOOK=true y Karlopay en dev).
+   */
+  async simulateKarlopayWebhook(
+    businessId: string,
+    orderId: string,
+  ): Promise<{ success: boolean; message?: string }> {
+    return apiRequest<{ success: boolean; message?: string }>(
+      `/orders/business/${businessId}/${orderId}/karlopay/simulate-webhook`,
+      { method: 'POST' },
+    );
   },
 
   /**

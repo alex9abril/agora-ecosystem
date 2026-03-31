@@ -9,7 +9,7 @@ export interface ShippingLabel {
   order_id: string;
   tracking_number: string;
   carrier_name: string;
-  status: 'generated' | 'picked_up' | 'in_transit' | 'delivered';
+  status: 'generated' | 'picked_up' | 'in_transit' | 'delivered' | 'cancelled';
   origin_address: string;
   destination_address: string;
   destination_name: string;
@@ -19,6 +19,11 @@ export interface ShippingLabel {
   declared_value?: number;
   pdf_url?: string;
   pdf_path?: string;
+  metadata?: unknown;
+  /** Derivados en API (GET/POST guía); sirven para UI sin leer metadata */
+  pdf_ready?: boolean;
+  tracking_is_pending?: boolean;
+  skydropx_workflow_status?: string | null;
   generated_at: string;
   picked_up_at?: string;
   in_transit_at?: string;
@@ -75,6 +80,15 @@ export const logisticsService = {
   },
 
   /**
+   * Re-sincronizar guía existente con Skydropx (tracking, metadata, descarga de PDF si hay URL).
+   */
+  async syncShippingLabelByOrder(orderId: string): Promise<ShippingLabel> {
+    return apiRequest<ShippingLabel>(`/logistics/shipping-labels/order/${orderId}/sync`, {
+      method: 'POST',
+    });
+  },
+
+  /**
    * Obtener guía de envío por ID de orden
    */
   async getShippingLabelByOrderId(orderId: string): Promise<ShippingLabel | null> {
@@ -114,7 +128,7 @@ export const logisticsService = {
    */
   async downloadShippingLabelPDF(orderId: string): Promise<Blob> {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
     const url = `${API_URL}/logistics/shipping-labels/${orderId}/pdf`;
 
@@ -126,8 +140,33 @@ export const logisticsService = {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error descargando PDF: ${errorText}`);
+      const contentType = response.headers.get('Content-Type') || '';
+      let message = `No se pudo descargar el PDF (${response.status}).`;
+
+      if (contentType.includes('application/json')) {
+        try {
+          const body = await response.json();
+          const extracted =
+            (typeof body?.message === 'string' && body.message) ||
+            (Array.isArray(body?.message) && body.message.join(', ')) ||
+            (typeof body?.error === 'string' && body.error);
+          if (extracted) message = extracted;
+        } catch {
+          /* ignore */
+        }
+      } else {
+        const errorText = await response.text();
+        try {
+          const parsed = JSON.parse(errorText) as { message?: string; error?: string };
+          if (parsed?.message) message = parsed.message;
+          else if (parsed?.error) message = parsed.error;
+          else if (errorText) message = errorText.slice(0, 400);
+        } catch {
+          if (errorText) message = errorText.slice(0, 400);
+        }
+      }
+
+      throw new Error(message);
     }
 
     return response.blob();
