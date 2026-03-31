@@ -5,10 +5,11 @@ import {
   Body,
   Param,
   Res,
+  Req,
   UseGuards,
   NotFoundException,
-  BadRequestException,
   Logger,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,12 +18,13 @@ import {
   ApiBearerAuth,
   ApiParam,
 } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { LogisticsService } from './logistics.service';
 import { CreateShippingLabelDto } from './dto/create-shipping-label.dto';
 import { SkydropxService } from './skydropx/skydropx.service';
 import { QuotationRequestDto } from './skydropx/dto/quotation-request.dto';
-import { CreateShipmentDto } from './skydropx/dto/create-shipment.dto';
+import { CreateSkydropxShipmentDirectDto } from './skydropx/dto/skydropx-shipment-direct.dto';
+import { CancelSkydropxDto } from './skydropx/dto/cancel-skydropx.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -42,7 +44,7 @@ export class LogisticsController {
   @ApiOperation({
     summary: 'Generar guía de envío para una orden',
     description:
-      'Genera una guía de envío con número de seguimiento y PDF cuando la orden está lista para recoger (status: completed). Inicia la simulación automática de estados.',
+      'Genera una guía cuando la orden está en completed. Con Skydropx (rate_id) no se simulan estados locales; sin Skydropx puede aplicarse simulación de estados si no hay quotation_id en ítems.',
   })
   @ApiResponse({
     status: 201,
@@ -117,6 +119,76 @@ export class LogisticsController {
   @ApiResponse({ status: 503, description: 'Error al consultar Skydropx' })
   async syncShippingLabelByOrder(@Param('orderId') orderId: string) {
     return this.logisticsService.syncShippingLabelFromSkydropx(orderId);
+  }
+
+  @Post('shipping-labels/order/:orderId/cancel-skydropx')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Cancelar envío en Skydropx',
+    description:
+      'Llama a POST /shipments/:id/cancellations en Skydropx y marca la guía local como cancelada.',
+  })
+  @ApiParam({ name: 'orderId', description: 'ID de la orden', type: String })
+  @ApiResponse({ status: 200, description: 'Guía cancelada' })
+  @ApiResponse({ status: 400, description: 'Sin envío Skydropx asociado' })
+  @ApiResponse({ status: 404, description: 'Guía no encontrada' })
+  @ApiResponse({ status: 503, description: 'Error en Skydropx' })
+  async cancelSkydropxShippingLabel(
+    @Param('orderId') orderId: string,
+    @Body() body: CancelSkydropxDto
+  ) {
+    return this.logisticsService.cancelSkydropxShippingLabel(orderId, body?.reason);
+  }
+
+  @Post('skydropx/webhook')
+  @Public()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Webhook Skydropx (eventos de paquete)',
+    description:
+      'Validación: Authorization HMAC más hex en minúsculas (SHA-512 del body crudo) o Bearer. Variables: SKYDROPPX_WEBHOOK_HMAC_SECRET o SKYDROPPX_WEBHOOK_BEARER.',
+  })
+  @ApiResponse({ status: 200, description: 'Evento aceptado' })
+  @ApiResponse({ status: 401, description: 'Firma o token inválido' })
+  @ApiResponse({ status: 503, description: 'Webhook no configurado en el servidor' })
+  async skydropxWebhook(@Req() req: Request & { rawBody?: Buffer }) {
+    return this.logisticsService.processSkydropxWebhookPackage(
+      req.body,
+      req.headers.authorization,
+      req.rawBody
+    );
+  }
+
+  @Get('skydropx/catalog/carrier-services')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Catálogo Skydropx: servicios de paquetería',
+    description: 'Proxy GET con caché en memoria (~5 min).',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 503 })
+  async skydropxCarrierServices() {
+    return this.skydropxService.getCarrierServicesCached();
+  }
+
+  @Get('skydropx/catalog/consignment-notes')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Catálogo Skydropx: carta porte (consignment notes)',
+    description: 'Proxy GET con caché en memoria (~5 min).',
+  })
+  async skydropxConsignmentNotes() {
+    return this.skydropxService.getConsignmentNotesCached();
+  }
+
+  @Get('skydropx/catalog/packagings')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Catálogo Skydropx: tipos de empaque',
+    description: 'Proxy GET con caché en memoria (~5 min).',
+  })
+  async skydropxPackagings() {
+    return this.skydropxService.getPackagingsCached();
   }
 
   @Get('shipping-labels/tracking/:trackingNumber')
@@ -400,17 +472,42 @@ export class LogisticsController {
     const destinationCountry = normalizeCountryCode(quotationRequest.destination.country);
     const isInternational = originCountry !== destinationCountry;
 
+    const defaultCarriers = ['fedex', 'dhl', 'ups', 'estafeta'];
+    const requestedCarriers =
+      quotationRequest.requested_carriers &&
+      quotationRequest.requested_carriers.length > 0
+        ? quotationRequest.requested_carriers
+            .map((c) => String(c).toLowerCase().trim())
+            .filter(Boolean)
+        : defaultCarriers;
+
+    const internationalProducts =
+      isInternational && quotationRequest.international_products?.length
+        ? quotationRequest.international_products.map((p) => {
+            const digits = String(p.hs_code).replace(/\D/g, '');
+            const hs = digits.padStart(10, '0').slice(0, 10);
+            return {
+              hs_code: hs,
+              description_en: p.description_en.trim(),
+              country_code: p.country_code.trim().toUpperCase().slice(0, 2),
+              quantity: Math.max(1, Math.round(Number(p.quantity))),
+              price: Math.max(0, Number(p.price)),
+            };
+          })
+        : [];
+
     // Construir el payload según la especificación de Skydropx
     const skydropxRequest = {
       quotation: {
         address_from: buildSkydropxAddress(quotationRequest.origin),
         address_to: buildSkydropxAddress(quotationRequest.destination),
         parcels: quotationRequest.parcels.map(normalizeParcel),
-        requested_carriers: ['fedex', 'dhl', 'ups', 'estafeta'], // Carriers comunes en México
-        // products solo se incluye para envíos internacionales
-        ...(isInternational ? {
-          products: [] // Por ahora vacío, se puede implementar después si es necesario
-        } : {}),
+        requested_carriers: requestedCarriers,
+        ...(isInternational
+          ? {
+              products: internationalProducts,
+            }
+          : {}),
       },
     };
 
@@ -420,9 +517,9 @@ export class LogisticsController {
   @Post('shipments')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Crear envío usando un rate_id',
+    summary: 'Crear envío en Skydropx (payload completo)',
     description:
-      'Crea un envío real en Skydropx usando el rate_id de una cotización previamente obtenida. Este endpoint requiere el payload completo con direcciones y paquetes. Para uso interno, se recomienda usar /logistics/shipping-labels que construye el payload automáticamente.',
+      'Pasa rate_id, direcciones y paquetes según la API Skydropx. El flujo recomendado en Agora sigue siendo POST /logistics/shipping-labels con orderId.',
   })
   @ApiResponse({
     status: 201,
@@ -436,13 +533,14 @@ export class LogisticsController {
     status: 503,
     description: 'Skydropx no está disponible o no está habilitado',
   })
-  async createShipment(@Body() createShipmentDto: CreateShipmentDto) {
-    // Este endpoint está deprecado en favor de /logistics/shipping-labels
-    // que construye el payload completo automáticamente desde la orden
-    // Se mantiene por compatibilidad pero requiere el payload completo
-    throw new BadRequestException(
-      'Este endpoint requiere el payload completo de Skydropx. Use /logistics/shipping-labels con orderId para crear el shipment automáticamente.'
-    );
+  async createSkydropxShipment(@Body() dto: CreateSkydropxShipmentDirectDto) {
+    return this.skydropxService.createShipment({
+      rate_id: dto.rate_id,
+      printing_format: dto.printing_format || 'thermal',
+      address_from: dto.address_from as any,
+      address_to: dto.address_to as any,
+      packages: dto.packages as any,
+    });
   }
 }
 

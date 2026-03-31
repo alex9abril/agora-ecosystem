@@ -1,6 +1,40 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsArray, ValidateNested, IsOptional, IsNumber, IsIn } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsArray,
+  ValidateNested,
+  IsOptional,
+  IsNumber,
+  IsIn,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+
+/** Productos para cotización internacional (aranceles / aduanas en Skydropx). */
+export class InternationalQuotationProductDto {
+  @ApiProperty({ description: 'Código HS (se normaliza a 10 dígitos)' })
+  @IsNotEmpty()
+  @IsString()
+  hs_code: string;
+
+  @ApiProperty({ description: 'Descripción en inglés' })
+  @IsNotEmpty()
+  @IsString()
+  description_en: string;
+
+  @ApiProperty({ description: 'ISO 3166-1 alpha-2 país de origen', example: 'MX' })
+  @IsNotEmpty()
+  @IsString()
+  country_code: string;
+
+  @ApiProperty()
+  @IsNumber()
+  quantity: number;
+
+  @ApiProperty()
+  @IsNumber()
+  price: number;
+}
 
 export class AddressDto {
   @ApiProperty({ description: 'Nombre del destinatario/origen' })
@@ -105,5 +139,28 @@ export class QuotationRequestDto {
   @ValidateNested({ each: true })
   @Type(() => ParcelDto)
   parcels: ParcelDto[];
+
+  @ApiProperty({
+    description:
+      'Carriers a consultar (slugs Skydropx). Si se omite, se usan fedex, dhl, ups, estafeta.',
+    required: false,
+    type: [String],
+    example: ['fedex', 'dhl'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requested_carriers?: string[];
+
+  @ApiProperty({
+    description: 'Solo envíos internacionales: líneas de producto para la cotización',
+    required: false,
+    type: [InternationalQuotationProductDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => InternationalQuotationProductDto)
+  international_products?: InternationalQuotationProductDto[];
 }
 

@@ -15,7 +15,18 @@ async function bootstrap() {
 
   // Aumentar el límite del body parser para permitir imágenes en base64
   // El límite por defecto es 100KB, lo aumentamos a 10MB
-  app.use(express.json({ limit: '10mb' }));
+  // rawBody en webhook Skydropx (HMAC SHA-512 sobre bytes exactos del cuerpo)
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req: express.Request & { rawBody?: Buffer }, _res, buf: Buffer) => {
+        const url = req.originalUrl || req.url || '';
+        if (url.includes('/logistics/skydropx/webhook')) {
+          req.rawBody = buf;
+        }
+      },
+    })
+  );
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Validación global de DTOs

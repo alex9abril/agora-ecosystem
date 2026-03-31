@@ -1,16 +1,21 @@
 /**
  * Servicio para integración con Skydropx
- * Maneja cotizaciones y creación de envíos
+ * Maneja cotizaciones y creación de envíos.
+ *
+ * Recolecciones (pickups: coverage, POST /pickups, reschedule) y API V2 no están
+ * implementadas; ver https://pro.skydropx.com/es-MX/api-docs si el negocio las requiere.
  */
 
 import {
   Injectable,
   ServiceUnavailableException,
   BadRequestException,
+  UnauthorizedException,
   Logger,
 } from '@nestjs/common';
 import { IntegrationsService } from '../../settings/integrations.service';
 import axios from 'axios';
+import * as crypto from 'crypto';
 
 export interface SkydropxAddress {
   country_code: string; // ISO 3166-1 alpha-2 (ej: "MX")
@@ -138,6 +143,9 @@ interface CachedToken {
 export class SkydropxService {
   private readonly logger = new Logger(SkydropxService.name);
   private tokenCache: CachedToken | null = null; // Cache del token OAuth
+  /** Caché en memoria para catálogos GET (carrier_services, consignment_notes, packagings). */
+  private readonly catalogCache = new Map<string, { at: number; data: unknown }>();
+  private readonly catalogTtlMs = 5 * 60 * 1000;
 
   constructor(private readonly integrationsService: IntegrationsService) {}
 
@@ -1032,6 +1040,208 @@ export class SkydropxService {
         `Error obteniendo eventos de tracking: ${error.message}`
       );
     }
+  }
+
+  /**
+   * Valida el encabezado Authorization del webhook Skydropx.
+   * HMAC: SHA-512 sobre el cuerpo crudo (hex minúsculas). Bearer: token fijo en env.
+   * @see https://pro.skydropx.com/es-MX/api-docs#webhooks
+   */
+  verifyWebhookAuthorization(
+    authorization: string | undefined,
+    rawBody: Buffer | undefined
+  ): void {
+    const hmacSecret =
+      process.env.SKYDROPPX_WEBHOOK_HMAC_SECRET ||
+      process.env.SKYDROPPX_WEBHOOK_SECRET;
+    const bearerToken = process.env.SKYDROPPX_WEBHOOK_BEARER;
+
+    if (!hmacSecret && !bearerToken) {
+      throw new ServiceUnavailableException(
+        'Webhook Skydropx no configurado: defina SKYDROPPX_WEBHOOK_HMAC_SECRET o SKYDROPPX_WEBHOOK_BEARER'
+      );
+    }
+
+    const auth = (authorization || '').trim();
+    if (auth.toUpperCase().startsWith('HMAC ')) {
+      if (!hmacSecret) {
+        throw new UnauthorizedException('HMAC no habilitado en el servidor');
+      }
+      if (!rawBody || rawBody.length === 0) {
+        throw new UnauthorizedException('Cuerpo vacío; se requiere body crudo para HMAC');
+      }
+      const sig = auth.slice(5).trim().toLowerCase();
+      const expected = crypto
+        .createHmac('sha512', hmacSecret)
+        .update(rawBody)
+        .digest('hex');
+      const a = Buffer.from(sig, 'utf8');
+      const b = Buffer.from(expected, 'utf8');
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        throw new UnauthorizedException('Firma HMAC inválida');
+      }
+      return;
+    }
+
+    if (auth.toLowerCase().startsWith('bearer ')) {
+      if (!bearerToken) {
+        throw new UnauthorizedException('Bearer no habilitado en el servidor');
+      }
+      const token = auth.slice(7).trim();
+      const tb = Buffer.from(token, 'utf8');
+      const bb = Buffer.from(bearerToken, 'utf8');
+      if (tb.length !== bb.length || !crypto.timingSafeEqual(tb, bb)) {
+        throw new UnauthorizedException('Token Bearer inválido');
+      }
+      return;
+    }
+
+    throw new UnauthorizedException(
+      'Authorization inválido: use "HMAC <hex>" o "Bearer <token>"'
+    );
+  }
+
+  /**
+   * Construye un SkydropxTracking mínimo desde el payload webhook (type packages).
+   */
+  trackingFromPackageWebhook(payload: unknown): SkydropxTracking | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const root = payload as { data?: any };
+    const data = root.data;
+    if (!data || data.type !== 'packages') return null;
+    const attrs = data.attributes || {};
+    const shipmentRel = data.relationships?.shipment?.data;
+    const shipmentId = shipmentRel?.id;
+    if (!shipmentId || typeof shipmentId !== 'string') return null;
+
+    const raw = String(attrs.status || '')
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    let mapped = 'generated' as SkydropxTracking['status'];
+    if (raw === 'delivered') mapped = 'delivered';
+    else if (raw === 'in_transit' || raw === 'in-transit') mapped = 'in_transit';
+    else if (raw === 'picked_up' || raw === 'picked-up') mapped = 'picked_up';
+    else if (raw === 'cancelled' || raw === 'canceled') mapped = 'cancelled';
+    else if (raw === 'exception') mapped = 'exception';
+    else if (raw === 'created' || raw === 'generated') mapped = 'generated';
+
+    const trackingNumber =
+      attrs.tracking_number != null ? String(attrs.tracking_number) : null;
+
+    return {
+      shipment_id: shipmentId,
+      tracking_number: trackingNumber,
+      status: mapped,
+      carrier: attrs.carrier_name || attrs.carrier || null,
+      service: attrs.service_name || attrs.service || null,
+      estimated_delivery: attrs.estimated_delivery || null,
+      current_location: attrs.current_location || attrs.location || null,
+      tracking_events: [],
+      tracking_url: attrs.tracking_url_provider || attrs.tracking_url || null,
+      metadata: { data: root.data, source: 'skydropx_webhook' },
+    };
+  }
+
+  /**
+   * Cancelar envío en Skydropx.
+   * POST /shipments/{id}/cancellations
+   */
+  async cancelShipment(shipmentId: string, reason?: string): Promise<void> {
+    const enabled = await this.isEnabled();
+    if (!enabled) {
+      throw new ServiceUnavailableException('Skydropx no está habilitado');
+    }
+    if (!shipmentId) {
+      throw new BadRequestException('shipmentId es requerido');
+    }
+    try {
+      const { endpoint } = await this.getCredentials();
+      const headers = await this.getAuthHeaders();
+      const body = reason?.trim() ? { reason: reason.trim() } : {};
+      const response = await axios.post(
+        `${endpoint}/shipments/${encodeURIComponent(shipmentId)}/cancellations`,
+        body,
+        { headers, validateStatus: (status) => status < 500 }
+      );
+      if (response.status >= 400) {
+        const err =
+          response.data?.message ||
+          response.data?.error ||
+          response.statusText;
+        throw new ServiceUnavailableException(
+          `Skydropx cancelación (${response.status}): ${err}`
+        );
+      }
+      this.logger.log(`✅ Envío Skydropx cancelado: ${shipmentId}`);
+    } catch (error: any) {
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.error(`❌ Error cancelando envío Skydropx: ${error.message}`);
+      throw new ServiceUnavailableException(
+        `Error al cancelar envío: ${error.message}`
+      );
+    }
+  }
+
+  private getCachedCatalog(key: string): unknown | undefined {
+    const hit = this.catalogCache.get(key);
+    if (hit && Date.now() - hit.at < this.catalogTtlMs) return hit.data;
+    return undefined;
+  }
+
+  private setCachedCatalog(key: string, data: unknown): void {
+    this.catalogCache.set(key, { at: Date.now(), data });
+  }
+
+  private async fetchCatalogPath(pathSuffix: string): Promise<unknown> {
+    const { endpoint } = await this.getCredentials();
+    const headers = await this.getAuthHeaders();
+    const url = `${endpoint}/shipments/${pathSuffix}`;
+    const response = await axios.get(url, {
+      headers,
+      validateStatus: (status) => status < 500,
+    });
+    if (response.status >= 400) {
+      const msg =
+        response.data?.message ||
+        response.data?.error ||
+        response.statusText;
+      throw new ServiceUnavailableException(
+        `Skydropx (${response.status}): ${msg}`
+      );
+    }
+    return response.data;
+  }
+
+  async getCarrierServicesCached(): Promise<unknown> {
+    const key = 'carrier_services';
+    const hit = this.getCachedCatalog(key);
+    if (hit !== undefined) return hit;
+    const data = await this.fetchCatalogPath('carrier_services');
+    this.setCachedCatalog(key, data);
+    return data;
+  }
+
+  async getConsignmentNotesCached(): Promise<unknown> {
+    const key = 'consignment_notes';
+    const hit = this.getCachedCatalog(key);
+    if (hit !== undefined) return hit;
+    const data = await this.fetchCatalogPath('consignment_notes');
+    this.setCachedCatalog(key, data);
+    return data;
+  }
+
+  async getPackagingsCached(): Promise<unknown> {
+    const key = 'packagings';
+    const hit = this.getCachedCatalog(key);
+    if (hit !== undefined) return hit;
+    const data = await this.fetchCatalogPath('packagings');
+    this.setCachedCatalog(key, data);
+    return data;
   }
 }
 

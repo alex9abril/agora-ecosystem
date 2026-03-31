@@ -4,6 +4,15 @@
  * Este archivo debe importarse ANTES de cualquier otro módulo
  * que use variables de entorno (como supabase.config.ts)
  */
+import * as nodeCrypto from 'crypto';
+
+// @nestjs/schedule llama a crypto.randomUUID() sin import (asume global como en Node 19+).
+// En Node 18.x globalThis.crypto no expone el módulo completo → ReferenceError al arrancar.
+const g = globalThis as typeof globalThis & { crypto?: { randomUUID?: () => string } };
+if (typeof g.crypto?.randomUUID !== 'function') {
+  Object.assign(globalThis, { crypto: nodeCrypto });
+}
+
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';

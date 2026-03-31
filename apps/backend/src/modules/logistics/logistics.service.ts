@@ -1033,8 +1033,8 @@ export class LogisticsService {
       this.logger.log(`📦 Tracking number guardado en BD: ${shippingLabel.tracking_number}`);
       this.logger.log(`📋 Carrier: ${shippingLabel.carrier_name}`);
 
-      // 8. Iniciar simulación automática de estados (solo si no es Skydropx)
-      if (!quotationId) {
+      // 8. Simulación solo para guías locales: nunca si hubo envío real en Skydropx
+      if (!shipmentMetadata?.skydropx_shipment_id && !quotationId) {
         this.startStatusSimulation(shippingLabel.id, createDto.orderId);
       }
 
@@ -1315,6 +1315,168 @@ export class LogisticsService {
     }
 
     return null;
+  }
+
+  /**
+   * Buscar la guía más reciente por shipment Skydropx o por tracking (excluye prefijo PENDING-).
+   */
+  private async fetchShippingLabelBySkydropxLookup(
+    skydropxShipmentId: string,
+    trackingNumber: string | null
+  ): Promise<ShippingLabel | null> {
+    if (!dbPool) return null;
+    const tn =
+      trackingNumber &&
+      !trackingNumber.startsWith('PENDING-') &&
+      !trackingNumber.startsWith('AGO-')
+        ? trackingNumber
+        : null;
+    const result = await dbPool.query(
+      `SELECT 
+        id, order_id, tracking_number, carrier_name, status,
+        origin_address, destination_address, destination_name, destination_phone,
+        package_weight, package_dimensions, declared_value,
+        pdf_path, pdf_url, metadata,
+        generated_at, picked_up_at, in_transit_at, delivered_at,
+        created_at, updated_at
+       FROM orders.shipping_labels 
+       WHERE (metadata->>'skydropx_shipment_id') = $1
+          OR ($2::text IS NOT NULL AND tracking_number = $2)
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [skydropxShipmentId, tn]
+    );
+    return result.rows[0] || null;
+  }
+
+  /**
+   * Webhook Skydropx (packages): validar firma en controller y persistir estado.
+   */
+  async processSkydropxWebhookPackage(
+    body: unknown,
+    authorization: string | undefined,
+    rawBody: Buffer | undefined
+  ): Promise<{ ok: boolean; ignored?: boolean; orderId?: string }> {
+    this.skydropxService.verifyWebhookAuthorization(authorization, rawBody);
+    const tracking = this.skydropxService.trackingFromPackageWebhook(body);
+    if (!tracking) {
+      this.logger.debug('Webhook Skydropx: evento no es package o sin shipment id; OK');
+      return { ok: true, ignored: true };
+    }
+    const attrs = (body as any)?.data?.attributes;
+    const trackingNum =
+      (attrs?.tracking_number != null ? String(attrs.tracking_number) : null) ||
+      tracking.tracking_number;
+    const row = await this.fetchShippingLabelBySkydropxLookup(
+      tracking.shipment_id,
+      trackingNum
+    );
+    if (!row) {
+      this.logger.warn(
+        `Webhook Skydropx: sin guía local para shipment ${tracking.shipment_id}`
+      );
+      return { ok: true, ignored: true };
+    }
+    await this.applySkydropxTrackingToShippingLabel(row.order_id, row, tracking);
+    if (dbPool) {
+      const ts = new Date().toISOString();
+      await dbPool.query(
+        `UPDATE orders.shipping_labels 
+         SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $1`,
+        [
+          row.id,
+          JSON.stringify({
+            skydropx_last_webhook_at: ts,
+            skydropx_last_webhook_status: tracking.status,
+          }),
+        ]
+      );
+    }
+    this.logger.log(
+      `✅ Webhook Skydropx aplicado: orden ${row.order_id} → ${tracking.status}`
+    );
+    return { ok: true, orderId: row.order_id };
+  }
+
+  /**
+   * Refresco batch de guías con envío Skydropx no terminal (cron). Respeta delay entre llamadas.
+   */
+  async refreshSkydropxOpenShipmentsBatch(): Promise<void> {
+    if (process.env.SKYDROPPX_SYNC_ENABLED !== 'true') {
+      return;
+    }
+    if (!dbPool) return;
+    const delayMs = Math.max(
+      200,
+      parseInt(process.env.SKYDROPPX_SYNC_BATCH_DELAY_MS || '600', 10)
+    );
+    const batchLimit = Math.min(
+      100,
+      Math.max(1, parseInt(process.env.SKYDROPPX_SYNC_BATCH_LIMIT || '40', 10))
+    );
+    const res = await dbPool.query<{ order_id: string }>(
+      `SELECT order_id FROM orders.shipping_labels sl
+       WHERE sl.status NOT IN ('delivered', 'cancelled')
+       AND COALESCE(sl.metadata->>'skydropx_shipment_id', '') <> ''
+       ORDER BY sl.updated_at ASC
+       LIMIT $1`,
+      [batchLimit]
+    );
+    this.logger.log(
+      `🔄 Skydropx batch sync: ${res.rows.length} orden(es) (delay ${delayMs}ms)`
+    );
+    for (const { order_id } of res.rows) {
+      try {
+        await this.refreshSkydropxShipmentData(order_id);
+      } catch (e: any) {
+        this.logger.warn(
+          `⚠️ Batch Skydropx falló para orden ${order_id}: ${e?.message || e}`
+        );
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+
+  /**
+   * Cancelar envío en Skydropx y marcar guía local como cancelada.
+   */
+  async cancelSkydropxShippingLabel(
+    orderId: string,
+    reason?: string
+  ): Promise<ShippingLabelResponse> {
+    const row = await this.fetchShippingLabelRowByOrderId(orderId);
+    if (!row) {
+      throw new NotFoundException(`No se encontró guía de envío para la orden ${orderId}`);
+    }
+    const sid = this.extractSkydropxShipmentIdFromLabel(row);
+    if (!sid) {
+      throw new BadRequestException(
+        'Esta guía no tiene un envío de Skydropx asociado para cancelar.'
+      );
+    }
+    await this.skydropxService.cancelShipment(sid, reason);
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    const meta = this.normalizeLabelMetadata(row.metadata) || {};
+    const merged = {
+      ...meta,
+      skydropx_shipment_id: sid,
+      skydropx_cancelled_at: new Date().toISOString(),
+      skydropx_cancel_reason: reason?.trim() || null,
+    };
+    await dbPool.query(
+      `UPDATE orders.shipping_labels 
+       SET status = 'cancelled', metadata = $2::jsonb, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1`,
+      [row.id, JSON.stringify(merged)]
+    );
+    const fresh = await this.fetchShippingLabelRowByOrderId(orderId);
+    if (!fresh) {
+      throw new ServiceUnavailableException('Guía actualizada pero no se pudo releer');
+    }
+    return this.enrichShippingLabel(fresh);
   }
 
   private async downloadRemoteLabelPdf(row: ShippingLabel, labelUrl: string): Promise<Buffer> {

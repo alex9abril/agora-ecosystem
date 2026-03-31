@@ -34,9 +34,11 @@ import { EmailTemplatesModule } from './modules/email-templates/email-templates.
 import { EmailModule } from './modules/email/email.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { IntegrationCartModule } from './modules/integration-cart/integration-cart.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     AuthModule,
     HealthModule,
     ApiKeysModule,
