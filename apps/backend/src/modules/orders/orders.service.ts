@@ -21,6 +21,7 @@ import { IntegrationLogsService } from '../settings/integration-logs.service';
 import { StoresService } from '../stores/stores.service';
 import { BusinessUsersService } from '../business-users/business-users.service';
 import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
+import type { OperationsDashboardResponse, OperationsDashboardActivityItem } from './dto/operations-dashboard.types';
 
 const DEFAULT_TAX_SETTINGS = {
   included_in_price: false,
@@ -1160,7 +1161,21 @@ export class OrdersService {
       let shippingLabel = null;
       try {
         const shippingLabelResult = await dbPool.query(
-          `SELECT tracking_number, carrier_name, status, generated_at, picked_up_at, in_transit_at, delivered_at
+          `SELECT
+             tracking_number,
+             carrier_name,
+             status,
+             generated_at,
+             picked_up_at,
+             in_transit_at,
+             delivered_at,
+             logistics_status_normalized,
+             tracking_status_raw,
+             master_tracking_number,
+             tracking_url,
+             logistics_sync_source,
+             logistics_last_event_at,
+             pickup_snapshot
            FROM orders.shipping_labels
            WHERE order_id = $1
            ORDER BY created_at DESC
@@ -1621,6 +1636,10 @@ export class OrdersService {
     startDate?: string;
     endDate?: string;
     search?: string;
+    /** Filtro operativo alineado con tabs de la consola de pedidos */
+    attention?: string;
+    /** Máximo de filas (solo con attention); tope 100 */
+    limit?: number;
   }) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
@@ -1635,7 +1654,7 @@ export class OrdersService {
       let paramIndex = 2;
 
       if (filters?.status) {
-        whereClause += ` AND o.status = $${paramIndex}`;
+        whereClause += ` AND o.status::text = $${paramIndex}`;
         queryParams.push(filters.status);
         paramIndex++;
       }
@@ -1692,6 +1711,23 @@ export class OrdersService {
         paramIndex += 2;
       }
 
+      const attentionClause = this.buildAttentionWhereClause(filters?.attention);
+      if (attentionClause) {
+        whereClause += attentionClause;
+      }
+
+      const orderBy =
+        filters?.attention && filters?.limit
+          ? 'ORDER BY o.updated_at DESC'
+          : 'ORDER BY o.created_at DESC';
+
+      let limitClause = '';
+      if (filters?.attention && filters?.limit != null && filters.limit > 0) {
+        limitClause = ` LIMIT $${paramIndex}`;
+        queryParams.push(Math.min(Math.floor(filters.limit), 100));
+        paramIndex++;
+      }
+
       const result = await dbPool.query(
         `SELECT 
           o.id,
@@ -1723,6 +1759,13 @@ export class OrdersService {
           sl_latest.tracking_number,
           (sl_latest.id IS NOT NULL) as has_shipping_label,
           sl_latest.status as shipping_label_status,
+          sl_latest.logistics_status_normalized as shipping_logistics_status_normalized,
+          sl_latest.tracking_status_raw as shipping_tracking_status_raw,
+          sl_latest.master_tracking_number as shipping_master_tracking_number,
+          sl_latest.tracking_url as shipping_tracking_url,
+          sl_latest.logistics_sync_source as shipping_logistics_sync_source,
+          sl_latest.logistics_last_event_at as shipping_logistics_last_event_at,
+          sl_latest.pickup_snapshot as shipping_pickup_snapshot,
           (
             SELECT COUNT(*)::integer
             FROM orders.order_items
@@ -1737,14 +1780,26 @@ export class OrdersService {
         LEFT JOIN core.user_profiles up ON o.client_id = up.id
         LEFT JOIN auth.users au ON o.client_id = au.id
         LEFT JOIN LATERAL (
-          SELECT sl.id, sl.tracking_number, sl.status, sl.created_at
+          SELECT
+            sl.id,
+            sl.tracking_number,
+            sl.status,
+            sl.created_at,
+            sl.logistics_status_normalized,
+            sl.tracking_status_raw,
+            sl.master_tracking_number,
+            sl.tracking_url,
+            sl.logistics_sync_source,
+            sl.logistics_last_event_at,
+            sl.pickup_snapshot
           FROM orders.shipping_labels sl
           WHERE sl.order_id = o.id
           ORDER BY sl.created_at DESC
           LIMIT 1
         ) sl_latest ON true
         ${whereClause}
-        ORDER BY o.created_at DESC`,
+        ${orderBy}
+        ${limitClause}`,
         queryParams
       );
 
@@ -2112,7 +2167,21 @@ export class OrdersService {
       let shippingLabel = null;
       try {
         const shippingLabelResult = await dbPool.query(
-          `SELECT tracking_number, carrier_name, status, generated_at, picked_up_at, in_transit_at, delivered_at
+          `SELECT
+             tracking_number,
+             carrier_name,
+             status,
+             generated_at,
+             picked_up_at,
+             in_transit_at,
+             delivered_at,
+             logistics_status_normalized,
+             tracking_status_raw,
+             master_tracking_number,
+             tracking_url,
+             logistics_sync_source,
+             logistics_last_event_at,
+             pickup_snapshot
            FROM orders.shipping_labels
            WHERE order_id = $1
            ORDER BY created_at DESC
@@ -3342,6 +3411,467 @@ export class OrdersService {
         avgDeliveryHours,
       },
       previous,
+    };
+  }
+
+  /** Filtro SQL para listados por tipo de atención (consola de pedidos). */
+  private buildAttentionWhereClause(attention?: string): string {
+    if (!attention) return '';
+    const a = attention.trim().toLowerCase();
+    /** Esquema simplificado (migration_update_order_status_simplified): sin ready/assigned/picked_up; usa completed. */
+    const notTerminal = `o.status NOT IN ('cancelled', 'refunded', 'delivered')`;
+    const notPickup = `COALESCE(TRIM(o.delivery_address_text), '') <> 'Recoger en tienda'`;
+    const paidOk = `o.payment_status IN ('paid', 'overcharged')`;
+    const noLabel = `NOT EXISTS (SELECT 1 FROM orders.shipping_labels slm WHERE slm.order_id = o.id)`;
+    const postFulfillmentNoGuide = `o.status::text = ANY (ARRAY['preparing', 'ready', 'completed', 'assigned', 'picked_up', 'in_transit'])`;
+    const inTransitLike = `o.status::text = ANY (ARRAY['assigned', 'picked_up', 'in_transit'])`;
+
+    const missingGuide = `
+      ${notPickup}
+      AND ${paidOk}
+      AND ${noLabel}
+      AND ${postFulfillmentNoGuide}
+    `;
+
+    const incidents = `
+      ${notTerminal}
+      AND (
+        (o.payment_status IN ('pending', 'failed') AND o.created_at <= NOW() - INTERVAL '24 hours')
+        OR (${paidOk} AND o.status = 'confirmed' AND o.created_at <= NOW() - INTERVAL '12 hours')
+        OR (
+          ${notPickup}
+          AND ${paidOk}
+          AND ${noLabel}
+          AND o.status::text = ANY (ARRAY['ready', 'completed'])
+          AND o.updated_at <= NOW() - INTERVAL '6 hours'
+        )
+      )
+    `;
+
+    const requiresAction = `
+      ${notTerminal}
+      AND (
+        (o.payment_status IN ('pending', 'failed') AND o.created_at <= NOW() - INTERVAL '24 hours')
+        OR (${paidOk} AND o.status = 'confirmed' AND o.created_at <= NOW() - INTERVAL '12 hours')
+        OR (${missingGuide})
+        OR (o.created_at <= NOW() - INTERVAL '48 hours')
+      )
+    `;
+
+    switch (a) {
+      case 'requires_action':
+        return ` AND (${requiresAction})`;
+      case 'pending_payment':
+        return ` AND o.payment_status IN ('pending', 'failed') AND o.status NOT IN ('cancelled', 'refunded')`;
+      case 'to_fulfill':
+        return ` AND ${paidOk} AND o.status = 'confirmed'`;
+      case 'in_transit':
+        return ` AND (${inTransitLike})`;
+      case 'incidents':
+        return ` AND (${incidents})`;
+      case 'missing_guide':
+        return ` AND (${missingGuide})`;
+      default:
+        return '';
+    }
+  }
+
+  private opsDashboardFilterSql(
+    startParam: number,
+    filterStatus?: string,
+    filterPaymentStatus?: string,
+    filterCarrier?: string,
+  ): { sql: string; params: any[] } {
+    const parts: string[] = [];
+    const params: any[] = [];
+    let i = startParam;
+    if (filterStatus) {
+      parts.push(`o.status::text = $${i}`);
+      params.push(filterStatus);
+      i++;
+    }
+    if (filterPaymentStatus) {
+      parts.push(`o.payment_status = $${i}`);
+      params.push(filterPaymentStatus);
+      i++;
+    }
+    const c = filterCarrier?.trim();
+    if (c) {
+      parts.push(
+        `EXISTS (
+          SELECT 1 FROM (
+            SELECT carrier_name FROM orders.shipping_labels slc
+            WHERE slc.order_id = o.id
+            ORDER BY slc.created_at DESC
+            LIMIT 1
+          ) lc WHERE lc.carrier_name ILIKE $${i}
+        )`,
+      );
+      params.push(`%${c}%`);
+      i++;
+    }
+    return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params };
+  }
+
+  /**
+   * Torre de control: métricas de período, embudo abierto, atención, logística y actividad.
+   * Métricas logísticas extendidas requieren la migración
+   * `database/agora/migration_shipping_labels_logistics_normalized.sql` aplicada en la BD.
+   */
+  async getOperationsDashboard(
+    businessId: string,
+    startDate: string,
+    endDate: string,
+    previousStartDate?: string,
+    previousEndDate?: string,
+    filterStatus?: string,
+    filterPaymentStatus?: string,
+    filterCarrier?: string,
+  ): Promise<OperationsDashboardResponse> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const paidWhere = `o.payment_status IN ('paid', 'overcharged') AND o.status NOT IN ('cancelled', 'refunded')`;
+    const baseWhere = `o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3`;
+    const { sql: extraPeriodFilter, params: extraPeriodParams } = this.opsDashboardFilterSql(
+      4,
+      filterStatus,
+      filterPaymentStatus,
+      filterCarrier,
+    );
+
+    const summaryResult = await dbPool.query(
+      `SELECT
+        COALESCE(SUM(CASE WHEN ${paidWhere} THEN o.total_amount::numeric ELSE 0 END), 0)::float AS total_revenue,
+        COUNT(*)::int AS order_count,
+        COUNT(DISTINCT o.client_id)::int AS distinct_clients
+       FROM orders.orders o
+       WHERE ${baseWhere}${extraPeriodFilter}`,
+      [businessId, startDate, endDate, ...extraPeriodParams],
+    );
+    const s = summaryResult.rows[0];
+    const totalRevenue = parseFloat(s?.total_revenue ?? '0') || 0;
+    const orderCount = parseInt(s?.order_count ?? '0', 10) || 0;
+    const averageTicket = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+    const byDayResult = await dbPool.query(
+      `SELECT (o.created_at AT TIME ZONE 'UTC')::date AS day,
+              COALESCE(SUM(o.total_amount::numeric), 0)::float AS revenue,
+              COUNT(*)::int AS cnt
+       FROM orders.orders o
+       WHERE ${baseWhere}${extraPeriodFilter}
+         AND ${paidWhere}
+       GROUP BY (o.created_at AT TIME ZONE 'UTC')::date
+       ORDER BY day ASC`,
+      [businessId, startDate, endDate, ...extraPeriodParams],
+    );
+
+    const ordersByDayMap = new Map<string, { revenue: number; count: number }>();
+    for (const r of byDayResult.rows || []) {
+      const d = r.day ? new Date(r.day).toISOString().slice(0, 10) : '';
+      ordersByDayMap.set(d, {
+        revenue: parseFloat(r.revenue ?? '0') || 0,
+        count: 0,
+      });
+    }
+
+    const allDaysResult = await dbPool.query(
+      `SELECT (o.created_at AT TIME ZONE 'UTC')::date AS day,
+              COUNT(*)::int AS cnt
+       FROM orders.orders o
+       WHERE ${baseWhere}${extraPeriodFilter}
+       GROUP BY (o.created_at AT TIME ZONE 'UTC')::date
+       ORDER BY day ASC`,
+      [businessId, startDate, endDate, ...extraPeriodParams],
+    );
+    for (const r of allDaysResult.rows || []) {
+      const d = r.day ? new Date(r.day).toISOString().slice(0, 10) : '';
+      const cnt = parseInt(r.cnt, 10) || 0;
+      const ex = ordersByDayMap.get(d);
+      if (ex) ex.count = cnt;
+      else ordersByDayMap.set(d, { revenue: 0, count: cnt });
+    }
+
+    const revenueByDay = Array.from(ordersByDayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({ date, revenue: v.revenue }));
+    const ordersByDay = Array.from(ordersByDayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({ date, count: v.count }));
+
+    let previous: { totalRevenue: number; orderCount: number } | undefined;
+    if (previousStartDate && previousEndDate) {
+      const { sql: prevExtra, params: prevExtraParams } = this.opsDashboardFilterSql(
+        4,
+        filterStatus,
+        filterPaymentStatus,
+        filterCarrier,
+      );
+      const prevResult = await dbPool.query(
+        `SELECT
+           COALESCE(SUM(CASE WHEN ${paidWhere} THEN o.total_amount::numeric ELSE 0 END), 0)::float AS total_revenue,
+           COUNT(*)::int AS order_count
+         FROM orders.orders o
+         WHERE o.business_id = $1 AND o.created_at >= $2 AND o.created_at <= $3${prevExtra}`,
+        [businessId, previousStartDate, previousEndDate, ...prevExtraParams],
+      );
+      const p = prevResult.rows[0];
+      previous = {
+        totalRevenue: parseFloat(p?.total_revenue ?? '0') || 0,
+        orderCount: parseInt(p?.order_count ?? '0', 10) || 0,
+      };
+    }
+
+    const { sql: openExtra, params: openExtraParams } = this.opsDashboardFilterSql(
+      2,
+      filterStatus,
+      filterPaymentStatus,
+      filterCarrier,
+    );
+
+    const openPipelineResult = await dbPool.query(
+      `SELECT o.status, COUNT(*)::int AS cnt
+       FROM orders.orders o
+       WHERE o.business_id = $1
+         AND o.status NOT IN ('cancelled', 'refunded', 'delivered')${openExtra}
+       GROUP BY o.status`,
+      [businessId, ...openExtraParams],
+    );
+    const openPipelineByStatus: Record<string, number> = {};
+    for (const row of openPipelineResult.rows || []) {
+      openPipelineByStatus[row.status || 'unknown'] = parseInt(row.cnt, 10) || 0;
+    }
+
+    const openNotTerminal = `o.status NOT IN ('cancelled', 'refunded', 'delivered')`;
+    const postFulfillmentNoGuide = `o.status::text = ANY (ARRAY['preparing', 'ready', 'completed', 'assigned', 'picked_up', 'in_transit'])`;
+    const inTransitLike = `o.status::text = ANY (ARRAY['assigned', 'picked_up', 'in_transit'])`;
+
+    const attentionResult = await dbPool.query(
+      `SELECT
+        COUNT(*) FILTER (
+          WHERE ${openNotTerminal}
+            AND (
+              (o.payment_status IN ('pending', 'failed') AND o.created_at <= NOW() - INTERVAL '24 hours')
+              OR (o.payment_status IN ('paid', 'overcharged') AND o.status = 'confirmed' AND o.created_at <= NOW() - INTERVAL '12 hours')
+              OR (
+                COALESCE(TRIM(o.delivery_address_text), '') <> 'Recoger en tienda'
+                AND o.payment_status IN ('paid', 'overcharged')
+                AND NOT EXISTS (SELECT 1 FROM orders.shipping_labels slx WHERE slx.order_id = o.id)
+                AND ${postFulfillmentNoGuide}
+              )
+              OR (o.created_at <= NOW() - INTERVAL '48 hours')
+            )
+        )::int AS requires_action,
+        COUNT(*) FILTER (
+          WHERE o.payment_status IN ('pending', 'failed') AND o.status NOT IN ('cancelled', 'refunded')
+        )::int AS pending_payment,
+        COUNT(*) FILTER (
+          WHERE o.payment_status IN ('paid', 'overcharged') AND o.status = 'confirmed'
+        )::int AS to_fulfill,
+        COUNT(*) FILTER (
+          WHERE ${inTransitLike}
+        )::int AS in_transit,
+        COUNT(*) FILTER (
+          WHERE ${openNotTerminal}
+            AND (
+              (o.payment_status IN ('pending', 'failed') AND o.created_at <= NOW() - INTERVAL '24 hours')
+              OR (o.payment_status IN ('paid', 'overcharged') AND o.status = 'confirmed' AND o.created_at <= NOW() - INTERVAL '12 hours')
+              OR (
+                COALESCE(TRIM(o.delivery_address_text), '') <> 'Recoger en tienda'
+                AND o.payment_status IN ('paid', 'overcharged')
+                AND NOT EXISTS (SELECT 1 FROM orders.shipping_labels sli WHERE sli.order_id = o.id)
+                AND o.status::text = ANY (ARRAY['ready', 'completed'])
+                AND o.updated_at <= NOW() - INTERVAL '6 hours'
+              )
+            )
+        )::int AS incidents,
+        COUNT(*) FILTER (
+          WHERE COALESCE(TRIM(o.delivery_address_text), '') <> 'Recoger en tienda'
+            AND o.payment_status IN ('paid', 'overcharged')
+            AND NOT EXISTS (SELECT 1 FROM orders.shipping_labels slg WHERE slg.order_id = o.id)
+            AND ${postFulfillmentNoGuide}
+        )::int AS missing_guide,
+        COUNT(*) FILTER (
+          WHERE ${openNotTerminal} AND o.created_at <= NOW() - INTERVAL '48 hours'
+        )::int AS stale_open_48h
+       FROM orders.orders o
+       WHERE o.business_id = $1${openExtra}`,
+      [businessId, ...openExtraParams],
+    );
+
+    const ar = attentionResult.rows[0] || {};
+    const attention = {
+      requiresAction: parseInt(ar.requires_action, 10) || 0,
+      pendingPayment: parseInt(ar.pending_payment, 10) || 0,
+      toFulfill: parseInt(ar.to_fulfill, 10) || 0,
+      inTransit: parseInt(ar.in_transit, 10) || 0,
+      incidents: parseInt(ar.incidents, 10) || 0,
+      missingGuide: parseInt(ar.missing_guide, 10) || 0,
+      staleOpen48h: parseInt(ar.stale_open_48h, 10) || 0,
+    };
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setUTCHours(23, 59, 59, 999);
+
+    const { sql: todayExtra, params: todayExtraParams } = this.opsDashboardFilterSql(
+      4,
+      filterStatus,
+      filterPaymentStatus,
+      filterCarrier,
+    );
+    const todayRowResult = await dbPool.query(
+      `SELECT
+        COUNT(*)::int AS cnt,
+        COALESCE(SUM(CASE WHEN ${paidWhere} THEN o.total_amount::numeric ELSE 0 END), 0)::float AS rev
+       FROM orders.orders o
+       WHERE o.business_id = $1
+         AND o.created_at >= $2 AND o.created_at <= $3${todayExtra}`,
+      [businessId, todayStart.toISOString(), todayEnd.toISOString(), ...todayExtraParams],
+    );
+    const todayRow = todayRowResult.rows[0];
+
+    const todayOrdersCreated = parseInt(todayRow?.cnt, 10) || 0;
+    const todayRevenuePaid = parseFloat(todayRow?.rev ?? '0') || 0;
+
+    let logistics: OperationsDashboardResponse['logistics'] = null;
+    let logisticsDegraded = false;
+    try {
+      const carrierAgg = await dbPool.query(
+        `SELECT COALESCE(NULLIF(TRIM(sl.carrier_name), ''), 'Sin carrier') AS carrier, COUNT(DISTINCT sl.order_id)::int AS cnt
+         FROM orders.shipping_labels sl
+         INNER JOIN orders.orders o ON o.id = sl.order_id AND o.business_id = $1
+         WHERE o.created_at >= $2 AND o.created_at <= $3${extraPeriodFilter}
+         GROUP BY 1
+         ORDER BY cnt DESC
+         LIMIT 12`,
+        [businessId, startDate, endDate, ...extraPeriodParams],
+      );
+      const normAgg = await dbPool.query(
+        `SELECT COALESCE(sl.logistics_status_normalized, sl.status, 'unknown') AS st, COUNT(DISTINCT sl.order_id)::int AS cnt
+         FROM orders.shipping_labels sl
+         INNER JOIN orders.orders o ON o.id = sl.order_id AND o.business_id = $1
+         WHERE o.created_at >= $2 AND o.created_at <= $3${extraPeriodFilter}
+         GROUP BY 1
+         ORDER BY cnt DESC`,
+        [businessId, startDate, endDate, ...extraPeriodParams],
+      );
+      const staleTr = await dbPool.query(
+        `SELECT COUNT(DISTINCT o.id)::int AS cnt
+         FROM orders.orders o
+         INNER JOIN LATERAL (
+           SELECT sl.logistics_status_normalized, sl.logistics_last_event_at
+           FROM orders.shipping_labels sl
+           WHERE sl.order_id = o.id
+           ORDER BY sl.created_at DESC
+           LIMIT 1
+         ) slz ON true
+         WHERE o.business_id = $1${openExtra}
+           AND slz.logistics_status_normalized IN ('in_transit', 'carrier_received')
+           AND (
+             slz.logistics_last_event_at IS NULL
+             OR slz.logistics_last_event_at < NOW() - INTERVAL '48 hours'
+           )
+           AND o.status NOT IN ('cancelled', 'refunded', 'delivered')`,
+        [businessId, ...openExtraParams],
+      );
+      const inTr = await dbPool.query(
+        `SELECT COUNT(DISTINCT o.id)::int AS cnt
+         FROM orders.orders o
+         INNER JOIN LATERAL (
+           SELECT sl.logistics_status_normalized
+           FROM orders.shipping_labels sl
+           WHERE sl.order_id = o.id
+           ORDER BY sl.created_at DESC
+           LIMIT 1
+         ) slz ON true
+         WHERE o.business_id = $1${openExtra}
+           AND slz.logistics_status_normalized = 'in_transit'
+           AND o.status NOT IN ('cancelled', 'refunded', 'delivered')`,
+        [businessId, ...openExtraParams],
+      );
+      logistics = {
+        byCarrier: (carrierAgg.rows || []).map((r: any) => ({
+          carrier: String(r.carrier),
+          count: parseInt(r.cnt, 10) || 0,
+        })),
+        byNormalizedStatus: (normAgg.rows || []).map((r: any) => ({
+          status: String(r.st),
+          count: parseInt(r.cnt, 10) || 0,
+        })),
+        staleInTransitCount: parseInt(staleTr.rows[0]?.cnt, 10) || 0,
+        inTransitWithLabelCount: parseInt(inTr.rows[0]?.cnt, 10) || 0,
+      };
+    } catch {
+      logisticsDegraded = true;
+      logistics = {
+        byCarrier: [],
+        byNormalizedStatus: [],
+        staleInTransitCount: 0,
+        inTransitWithLabelCount: 0,
+      };
+    }
+
+    const activityRows = await dbPool.query(
+      `SELECT l.id, l.created_at, l.integration, l.event_type, l.status, l.order_id, l.message
+       FROM communication.integration_logs l
+       INNER JOIN orders.orders o ON o.id = l.order_id AND o.business_id = $1
+       ORDER BY l.created_at DESC
+       LIMIT 20`,
+      [businessId],
+    );
+    const recentActivity: OperationsDashboardActivityItem[] = (activityRows.rows || []).map(
+      (r: any) => ({
+        id: String(r.id),
+        createdAt: r.created_at ? new Date(r.created_at).toISOString() : '',
+        integration: String(r.integration ?? ''),
+        eventType: String(r.event_type ?? ''),
+        status: String(r.status ?? ''),
+        orderId: r.order_id ? String(r.order_id) : null,
+        message: r.message ? String(r.message) : null,
+      }),
+    );
+
+    const list = await this.findAllByBusiness(businessId, {
+      attention: 'requires_action',
+      limit: 25,
+    });
+    const attentionOrders = list.map((ord: any) => ({
+      id: ord.id,
+      status: ord.status,
+      payment_status: ord.payment_status,
+      total_amount: ord.total_amount,
+      created_at: ord.created_at,
+      updated_at: ord.updated_at,
+      client_first_name: ord.client_first_name ?? null,
+      client_last_name: ord.client_last_name ?? null,
+      has_shipping_label: Boolean(ord.has_shipping_label),
+      tracking_number: ord.tracking_number ?? null,
+    }));
+
+    return {
+      period: {
+        startDate,
+        endDate,
+        totalRevenue,
+        orderCount,
+        averageTicket,
+        previous,
+        revenueByDay,
+        ordersByDay,
+      },
+      today: {
+        ordersCreated: todayOrdersCreated,
+        revenuePaid: todayRevenuePaid,
+      },
+      openPipelineByStatus,
+      attention,
+      logistics,
+      recentActivity,
+      attentionOrders,
+      logisticsDegraded,
     };
   }
 }

@@ -1,0 +1,130 @@
+{
+  "info": {
+    "name": "AGORA — Skydropx / Logistics (pruebas internas)",
+    "description": "Webhook POST /api/logistics/skydropx/webhook y endpoints relacionados.\n\n**Claves:** validación contra `core.webhook_secrets` (provider `skydropx`, activas) y/o env `SKYDROPPX_WEBHOOK_*`.\n\n**HMAC:** SHA-512 del body crudo. Request \"Webhook (HMAC)\": Pre-request con `webhookHmacSecret`.\n\n**Bearer:** el token debe coincidir con un secreto activo (BD o env).\n\nSustituye `shipmentId` por el `skydropx_shipment_id` real de tu guía.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "jwtToken", "value": "" },
+    { "key": "orderId", "value": "00000000-0000-0000-0000-000000000001" },
+    { "key": "shipmentId", "value": "REEMPLAZA_CON_SKYDROPX_SHIPMENT_ID_REAL" },
+    { "key": "trackingNumber", "value": "123456789012" },
+    { "key": "webhookBearer", "value": "", "type": "string" },
+    { "key": "webhookHmacSecret", "value": "" },
+    { "key": "packageEventId", "value": "00000000-0000-0000-0000-000000000099" }
+  ],
+  "item": [
+    {
+      "name": "Webhooks (público, sin JWT)",
+      "item": [
+        {
+          "name": "Skydropx webhook — packages (Bearer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{webhookBearer}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"id\": \"{{packageEventId}}\",\n    \"type\": \"packages\",\n    \"attributes\": {\n      \"status\": \"in_transit\",\n      \"tracking_number\": \"{{trackingNumber}}\",\n      \"carrier_name\": \"fedex\",\n      \"updated_at\": \"2026-03-31T18:00:00.000Z\"\n    },\n    \"relationships\": {\n      \"shipment\": {\n        \"data\": { \"type\": \"shipments\", \"id\": \"{{shipmentId}}\" }\n      }\n    }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/logistics/skydropx/webhook",
+            "description": "Mismo formato mínimo que consume `trackingFromPackageWebhook` (type `packages` + `relationships.shipment.data.id`).\n\n**Bearer:** en Variables de colección pon `webhookBearer` = valor completo de `core.webhook_secrets.secret` (ej. `ago_secret_...`), no el prefijo. El backend local debe tener `DATABASE_URL` apuntando a esa misma BD. Si en .env tienes `SKYDROPPX_WEBHOOK_BEARER` distinto, gana la comparación contra ese env y fallará si Postman usa solo el de BD. Revisa la consola del backend (NODE_ENV!=production) tras un 401."
+          }
+        },
+        {
+          "name": "Skydropx webhook — packages (HMAC SHA-512)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const secret = pm.collectionVariables.get('webhookHmacSecret');",
+                  "const raw = pm.request.body.raw;",
+                  "if (!secret) { console.warn('Define webhookHmacSecret en variables de colección'); }",
+                  "else if (raw) {",
+                  "  const hex = CryptoJS.HmacSHA512(raw, secret).toString(CryptoJS.enc.Hex);",
+                  "  pm.request.headers.upsert({ key: 'Authorization', value: 'HMAC ' + hex });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"id\": \"{{packageEventId}}\",\n    \"type\": \"packages\",\n    \"attributes\": {\n      \"status\": \"picked_up\",\n      \"tracking_number\": \"{{trackingNumber}}\",\n      \"updated_at\": \"2026-03-31T18:05:00.000Z\"\n    },\n    \"relationships\": {\n      \"shipment\": {\n        \"data\": { \"type\": \"shipments\", \"id\": \"{{shipmentId}}\" }\n      }\n    }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/logistics/skydropx/webhook"
+          }
+        },
+        {
+          "name": "Skydropx webhook — delivered (Bearer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{webhookBearer}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"id\": \"{{packageEventId}}\",\n    \"type\": \"packages\",\n    \"attributes\": {\n      \"status\": \"delivered\",\n      \"tracking_number\": \"{{trackingNumber}}\",\n      \"updated_at\": \"2026-03-31T20:00:00.000Z\"\n    },\n    \"relationships\": {\n      \"shipment\": {\n        \"data\": { \"type\": \"shipments\", \"id\": \"{{shipmentId}}\" }\n      }\n    }\n  }\n}"
+            },
+            "url": "{{baseUrl}}/api/logistics/skydropx/webhook"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Logistics (JWT)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{jwtToken}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "GET guía por orderId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/logistics/shipping-labels/order/{{orderId}}"
+          }
+        },
+        {
+          "name": "GET eventos logísticos persistidos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/logistics/shipping-labels/order/{{orderId}}/logistics-events"
+          }
+        },
+        {
+          "name": "POST sync Skydropx (manual)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/logistics/shipping-labels/order/{{orderId}}/sync"
+          }
+        },
+        {
+          "name": "GET tracking (consulta Skydropx + persiste)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/logistics/shipments/{{orderId}}/tracking"
+          }
+        }
+      ]
+    }
+  ]
+}

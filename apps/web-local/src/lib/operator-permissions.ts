@@ -4,6 +4,7 @@
  */
 
 export const MODULE_KEYS = [
+  'dashboard',
   'products',
   'clients',
   'orders',
@@ -41,6 +42,7 @@ export interface OperatorPermissions {
 }
 
 const emptyModules: Record<ModuleKey, boolean> = {
+  dashboard: false,
   products: false,
   clients: false,
   orders: false,
@@ -77,6 +79,7 @@ export const EMPTY_OPERATOR_PERMISSIONS: OperatorPermissions = {
 
 /** Labels para UI (módulos) */
 export const MODULE_LABELS: Record<ModuleKey, string> = {
+  dashboard: 'Dashboard',
   products: 'Productos',
   clients: 'Clientes',
   orders: 'Pedidos',
@@ -87,12 +90,14 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
 
 /** Descripciones cortas para cada módulo (permiso) */
 export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
+  dashboard:
+    'Torre de control: KPIs, embudo de pedidos, logística y actividad en tiempo casi real por sucursal.',
   products: 'Ver, crear y editar productos; precios y disponibilidad por sucursal.',
   clients: 'Consultar y gestionar clientes del negocio.',
   orders: 'Ver y gestionar pedidos (confirmar, surtir, cancelar según rol).',
   sliders: 'Gestionar banners y sliders de la tienda.',
   collections: 'Gestionar colecciones y catálogo.',
-  reports: 'Ver estadísticas, reportes y dashboards.',
+  reports: 'Ver estadísticas y reportes (aparte del dashboard operativo).',
 };
 
 /** Labels para UI (settings) */

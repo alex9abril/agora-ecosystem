@@ -8,9 +8,23 @@ import {
 import { dbPool } from '../../config/database.config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 const PDFDocument = require('pdfkit');
 import { CreateShippingLabelDto } from './dto/create-shipping-label.dto';
 import { SkydropxService, SkydropxTracking, SkydropxTrackingEvent } from './skydropx/skydropx.service';
+import {
+  mapLabelLifecycleToNormalized,
+  parseLabelLifecycle,
+  shouldAdvanceLabelStatus,
+  type LabelLifecycleStatus,
+} from './skydropx/skydropx-logistics-state.mapper';
+
+export type LogisticsSyncSource =
+  | 'webhook'
+  | 'polling'
+  | 'manual_sync'
+  | 'simulation'
+  | 'label_creation';
 
 export interface ShippingLabel {
   id: string;
@@ -34,6 +48,13 @@ export interface ShippingLabel {
   delivered_at?: Date;
   created_at: Date;
   updated_at: Date;
+  logistics_status_normalized?: string;
+  tracking_status_raw?: string | null;
+  master_tracking_number?: string | null;
+  tracking_url?: string | null;
+  logistics_sync_source?: string | null;
+  logistics_last_event_at?: Date | null;
+  pickup_snapshot?: unknown;
 }
 
 /** Respuesta enriquecida con flags derivados (sin columnas extra en BD). */
@@ -41,6 +62,8 @@ export interface ShippingLabelResponse extends ShippingLabel {
   pdf_ready: boolean;
   tracking_is_pending: boolean;
   skydropx_workflow_status?: string | null;
+  /** Alias de picked_up_at: paquete en manos de la paquetera / recolectado. */
+  carrier_received_at?: Date | null;
 }
 
 @Injectable()
@@ -948,8 +971,12 @@ export class LogisticsService {
           pdf_path,
           pdf_url,
           metadata,
+          logistics_status_normalized,
+          tracking_status_raw,
+          logistics_sync_source,
+          logistics_last_event_at,
           generated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING id, order_id, tracking_number, pdf_url, pdf_path`,
         [
           shippingLabelData.order_id,
@@ -966,6 +993,9 @@ export class LogisticsService {
           pdfPath,
           labelUrl,
           shipmentMetadata ? JSON.stringify(shipmentMetadata) : null,
+          'prepared',
+          'generated',
+          'label_creation',
         ]
       );
       
@@ -975,6 +1005,19 @@ export class LogisticsService {
       await client.query('COMMIT');
 
       const shippingLabel = insertResult.rows[0];
+
+      await this.applyLogisticsStatusUpdate({
+        shippingLabelId: shippingLabel.id,
+        orderId: createDto.orderId,
+        incomingLifecycle: 'generated',
+        rawStatus: 'generated',
+        eventSource: 'label_creation',
+        occurredAt: new Date(),
+        skipOrderStatusUpdate: true,
+        externalKeyPart: `init_${shippingLabel.id}`,
+        trackingNumber: shippingLabelData.tracking_number,
+        carrierName: shippingLabelData.carrier_name,
+      });
 
       // Si el tracking_number guardado es temporal (AGO- o PENDING-) pero hay metadata de Skydropx,
       // intentar extraer el tracking_number real del metadata y actualizarlo
@@ -1094,89 +1137,235 @@ export class LogisticsService {
     );
   }
 
+  private buildLogisticsIdempotencyKey(parts: {
+    shippingLabelId: string;
+    eventSource: LogisticsSyncSource;
+    rawStatus: string | null;
+    occurredAtIso: string;
+    externalKeyPart?: string | null;
+  }): string {
+    const base = [
+      parts.shippingLabelId,
+      parts.eventSource,
+      parts.rawStatus ?? '',
+      parts.occurredAtIso,
+      parts.externalKeyPart ?? '',
+    ].join('|');
+    return crypto.createHash('sha256').update(base, 'utf8').digest('hex');
+  }
+
   /**
-   * Actualizar estado de la guía y de la orden
+   * Persiste evento logístico (idempotente), avanza estado de guía de forma monótona
+   * y alinea pedido + historial cuando aplica.
    */
-  private async updateShippingStatus(
-    shippingLabelId: string,
-    orderId: string,
-    newStatus: string
-  ): Promise<void> {
+  private async applyLogisticsStatusUpdate(options: {
+    shippingLabelId: string;
+    orderId: string;
+    incomingLifecycle: LabelLifecycleStatus;
+    rawStatus: string | null;
+    eventSource: LogisticsSyncSource;
+    occurredAt: Date;
+    payload?: unknown;
+    trackingNumber?: string | null;
+    masterTrackingNumber?: string | null;
+    trackingUrl?: string | null;
+    carrierName?: string | null;
+    externalKeyPart?: string | null;
+    skipOrderStatusUpdate?: boolean;
+    /** Si se envía, reemplaza metadata completo de la guía (JSON ya mergeado en caller). */
+    replaceMetadataJson?: string | null;
+    /** URL del PDF de etiqueta en Skydropx (no confundir con tracking_url del carrier). */
+    labelPdfUrl?: string | null;
+  }): Promise<void> {
     if (!dbPool) {
       this.logger.error('❌ No hay conexión a base de datos');
       return;
     }
 
     const client = await dbPool.connect();
-
     try {
       await client.query('BEGIN');
 
-      // Actualizar estado de la guía (solo timestamps para estados que tienen columna; p. ej. 'generated' no)
-      const timestampMap: Record<string, string> = {
-        picked_up: 'picked_up_at',
-        in_transit: 'in_transit_at',
-        delivered: 'delivered_at',
-      };
-      const timestampField = timestampMap[newStatus];
-      const extraTs = timestampField ? `, ${timestampField} = CURRENT_TIMESTAMP` : '';
+      const labelRow = await client.query<{
+        status: string;
+        logistics_status_normalized: string | null;
+      }>(
+        `SELECT status, logistics_status_normalized FROM orders.shipping_labels WHERE id = $1`,
+        [options.shippingLabelId]
+      );
+      const curStatus = labelRow.rows[0]?.status ?? 'generated';
+
+      const advance =
+        options.incomingLifecycle === 'cancelled' ||
+        shouldAdvanceLabelStatus(curStatus, options.incomingLifecycle);
+
+      let nextLabelStatus: LabelLifecycleStatus;
+      if (options.incomingLifecycle === 'cancelled') {
+        nextLabelStatus = 'cancelled';
+      } else if (advance) {
+        nextLabelStatus = options.incomingLifecycle;
+      } else {
+        nextLabelStatus = parseLabelLifecycle(curStatus);
+      }
+
+      const nextNorm = mapLabelLifecycleToNormalized(nextLabelStatus);
+      const occurredIso = options.occurredAt.toISOString();
+      const idempotencyKey = this.buildLogisticsIdempotencyKey({
+        shippingLabelId: options.shippingLabelId,
+        eventSource: options.eventSource,
+        rawStatus: options.rawStatus,
+        occurredAtIso: occurredIso,
+        externalKeyPart: options.externalKeyPart,
+      });
+
+      try {
+        await client.query(
+          `INSERT INTO orders.shipping_label_logistics_events (
+            shipping_label_id, order_id, event_source, raw_status, normalized_status,
+            label_status, carrier_name, tracking_number, idempotency_key, occurred_at, payload
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+          ON CONFLICT (idempotency_key) DO NOTHING`,
+          [
+            options.shippingLabelId,
+            options.orderId,
+            options.eventSource,
+            options.rawStatus,
+            nextNorm,
+            nextLabelStatus,
+            options.carrierName ?? null,
+            options.trackingNumber ?? null,
+            idempotencyKey,
+            occurredIso,
+            options.payload != null ? JSON.stringify(options.payload) : null,
+          ]
+        );
+      } catch (evErr: any) {
+        this.logger.warn(
+          `⚠️ No se pudo insertar shipping_label_logistics_events (¿migración pendiente?): ${evErr?.message || evErr}`
+        );
+      }
+
+      const setPickupTs =
+        advance && options.incomingLifecycle === 'picked_up' ? 'picked_up_at = CURRENT_TIMESTAMP' : null;
+      const setTransitTs =
+        advance && options.incomingLifecycle === 'in_transit' ? 'in_transit_at = CURRENT_TIMESTAMP' : null;
+      const setDeliveredTs =
+        advance && options.incomingLifecycle === 'delivered' ? 'delivered_at = CURRENT_TIMESTAMP' : null;
+      const extraTsParts = [setPickupTs, setTransitTs, setDeliveredTs].filter(Boolean);
+      const extraTsSql = extraTsParts.length ? `, ${extraTsParts.join(', ')}` : '';
+
+      const metaFragment = options.replaceMetadataJson
+        ? `, metadata = $12::jsonb`
+        : '';
+
+      const baseParams = [
+        nextLabelStatus,
+        nextNorm,
+        options.rawStatus,
+        options.trackingNumber ?? null,
+        options.masterTrackingNumber ?? null,
+        options.trackingUrl ?? null,
+        options.labelPdfUrl ?? null,
+        options.carrierName ?? null,
+        options.eventSource,
+        occurredIso,
+        options.shippingLabelId,
+      ];
 
       await client.query(
         `UPDATE orders.shipping_labels
-         SET status = $1${extraTs}, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [newStatus, shippingLabelId]
+         SET
+           status = $1,
+           logistics_status_normalized = $2,
+           tracking_status_raw = COALESCE($3, tracking_status_raw),
+           tracking_number = COALESCE($4, tracking_number),
+           master_tracking_number = COALESCE($5, master_tracking_number),
+           tracking_url = COALESCE($6, tracking_url),
+           pdf_url = COALESCE($7, pdf_url),
+           carrier_name = COALESCE($8, carrier_name),
+           logistics_sync_source = $9,
+           logistics_last_event_at = $10::timestamptz
+           ${extraTsSql}
+           ${metaFragment},
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $11`,
+        options.replaceMetadataJson
+          ? [...baseParams, options.replaceMetadataJson]
+          : baseParams
       );
 
-      // Actualizar estado de la orden
-      let orderStatus = newStatus;
-      if (newStatus === 'picked_up' || newStatus === 'in_transit') {
-        orderStatus = 'in_transit';
-      } else if (newStatus === 'delivered') {
-        orderStatus = 'delivered';
-      }
+      if (!options.skipOrderStatusUpdate && nextLabelStatus !== 'cancelled') {
+        let orderNew: string | null = null;
+        if (nextLabelStatus === 'picked_up' || nextLabelStatus === 'in_transit') {
+          orderNew = 'in_transit';
+        } else if (nextLabelStatus === 'delivered') {
+          orderNew = 'delivered';
+        }
 
-      await client.query(
-        `UPDATE orders.orders
-         SET status = $1, updated_at = CURRENT_TIMESTAMP
-         ${orderStatus === 'delivered' ? ', delivered_at = CURRENT_TIMESTAMP' : ''}
-         WHERE id = $2`,
-        [orderStatus, orderId]
-      );
+        if (orderNew) {
+          const ordRes = await client.query(`SELECT status FROM orders.orders WHERE id = $1 FOR UPDATE`, [
+            options.orderId,
+          ]);
+          const previousOrderStatus = ordRes.rows[0]?.status as string;
 
-      // Registrar en historial de estados (opcional: la tabla puede no existir si no se corrió la migración)
-      try {
-        await client.query(
-          `INSERT INTO orders.order_status_history (order_id, previous_status, new_status, changed_by_user_id, changed_by_role, change_reason)
-           SELECT 
-             $1,
-             o.status,
-             $2,
-             NULL,
-             NULL,
-             'Actualización automática desde servicio de logística'
-           FROM orders.orders o
-           WHERE o.id = $1`,
-          [orderId, orderStatus]
-        );
-      } catch (historyError: any) {
-        // No fallar la actualización del pedido si la tabla order_status_history no existe
-        this.logger.warn(
-          `⚠️ No se pudo registrar en order_status_history (puede que la tabla no exista): ${historyError?.message || historyError}`
-        );
+          await client.query(
+            `UPDATE orders.orders
+             SET status = $1, updated_at = CURRENT_TIMESTAMP
+             ${orderNew === 'delivered' ? ', delivered_at = CURRENT_TIMESTAMP' : ''}
+             WHERE id = $2`,
+            [orderNew, options.orderId]
+          );
+
+          if (previousOrderStatus && previousOrderStatus !== orderNew) {
+            try {
+              await client.query(
+                `INSERT INTO orders.order_status_history (
+                  order_id, previous_status, new_status, changed_by_user_id, changed_by_role, change_reason
+                ) VALUES ($1, $2::order_status, $3::order_status, NULL, NULL, $4)`,
+                [
+                  options.orderId,
+                  previousOrderStatus,
+                  orderNew,
+                  'Actualización automática desde servicio de logística',
+                ]
+              );
+            } catch (historyError: any) {
+              this.logger.warn(
+                `⚠️ No se pudo registrar en order_status_history: ${historyError?.message || historyError}`
+              );
+            }
+          }
+        }
       }
 
       await client.query('COMMIT');
-
       this.logger.log(
-        `✅ Estado actualizado: Guía ${shippingLabelId} → ${newStatus}, Orden ${orderId} → ${orderStatus}`
+        `✅ Logística: guía ${options.shippingLabelId} → ${nextLabelStatus} (${nextNorm}) [${options.eventSource}]`
       );
     } catch (error: any) {
       await client.query('ROLLBACK');
-      this.logger.error(`❌ Error actualizando estado: ${error.message}`);
+      this.logger.error(`❌ Error applyLogisticsStatusUpdate: ${error.message}`);
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Simulación local de estados (sin Skydropx).
+   */
+  private async updateShippingStatus(
+    shippingLabelId: string,
+    orderId: string,
+    newStatus: string
+  ): Promise<void> {
+    await this.applyLogisticsStatusUpdate({
+      shippingLabelId,
+      orderId,
+      incomingLifecycle: parseLabelLifecycle(newStatus),
+      rawStatus: newStatus,
+      eventSource: 'simulation',
+      occurredAt: new Date(),
+    });
   }
 
   private normalizeLabelMetadata(metadata: any): any {
@@ -1283,6 +1472,7 @@ export class LogisticsService {
       pdf_ready: flags.pdf_ready,
       tracking_is_pending: flags.tracking_is_pending,
       skydropx_workflow_status: flags.skydropx_workflow_status,
+      carrier_received_at: row.picked_up_at ?? null,
     };
   }
 
@@ -1298,7 +1488,9 @@ export class LogisticsService {
         package_weight, package_dimensions, declared_value,
         pdf_path, pdf_url, metadata,
         generated_at, picked_up_at, in_transit_at, delivered_at,
-        created_at, updated_at
+        created_at, updated_at,
+        logistics_status_normalized, tracking_status_raw, master_tracking_number,
+        tracking_url, logistics_sync_source, logistics_last_event_at, pickup_snapshot
        FROM orders.shipping_labels 
        WHERE order_id = $1 
        ORDER BY created_at DESC 
@@ -1338,7 +1530,9 @@ export class LogisticsService {
         package_weight, package_dimensions, declared_value,
         pdf_path, pdf_url, metadata,
         generated_at, picked_up_at, in_transit_at, delivered_at,
-        created_at, updated_at
+        created_at, updated_at,
+        logistics_status_normalized, tracking_status_raw, master_tracking_number,
+        tracking_url, logistics_sync_source, logistics_last_event_at, pickup_snapshot
        FROM orders.shipping_labels 
        WHERE (metadata->>'skydropx_shipment_id') = $1
           OR ($2::text IS NOT NULL AND tracking_number = $2)
@@ -1357,7 +1551,7 @@ export class LogisticsService {
     authorization: string | undefined,
     rawBody: Buffer | undefined
   ): Promise<{ ok: boolean; ignored?: boolean; orderId?: string }> {
-    this.skydropxService.verifyWebhookAuthorization(authorization, rawBody);
+    await this.skydropxService.verifyWebhookAuthorization(authorization, rawBody);
     const tracking = this.skydropxService.trackingFromPackageWebhook(body);
     if (!tracking) {
       this.logger.debug('Webhook Skydropx: evento no es package o sin shipment id; OK');
@@ -1377,22 +1571,24 @@ export class LogisticsService {
       );
       return { ok: true, ignored: true };
     }
-    await this.applySkydropxTrackingToShippingLabel(row.order_id, row, tracking);
-    if (dbPool) {
-      const ts = new Date().toISOString();
-      await dbPool.query(
-        `UPDATE orders.shipping_labels 
-         SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $1`,
-        [
-          row.id,
-          JSON.stringify({
-            skydropx_last_webhook_at: ts,
-            skydropx_last_webhook_status: tracking.status,
-          }),
-        ]
-      );
+    const attrsWh = (body as any)?.data?.attributes;
+    let occurredAt = new Date();
+    if (attrsWh?.updated_at) {
+      const d = new Date(attrsWh.updated_at);
+      if (!isNaN(d.getTime())) occurredAt = d;
+    } else if (attrsWh?.created_at) {
+      const d = new Date(attrsWh.created_at);
+      if (!isNaN(d.getTime())) occurredAt = d;
     }
+    const packageId = (body as any)?.data?.id != null ? String((body as any).data.id) : null;
+    await this.applySkydropxTrackingToShippingLabel(row.order_id, row, tracking, 'webhook', {
+      occurredAt,
+      externalKeyPart: packageId,
+      webhookMeta: {
+        skydropx_last_webhook_at: occurredAt.toISOString(),
+        skydropx_last_webhook_status: tracking.status,
+      },
+    });
     this.logger.log(
       `✅ Webhook Skydropx aplicado: orden ${row.order_id} → ${tracking.status}`
     );
@@ -1466,12 +1662,17 @@ export class LogisticsService {
       skydropx_cancelled_at: new Date().toISOString(),
       skydropx_cancel_reason: reason?.trim() || null,
     };
-    await dbPool.query(
-      `UPDATE orders.shipping_labels 
-       SET status = 'cancelled', metadata = $2::jsonb, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1`,
-      [row.id, JSON.stringify(merged)]
-    );
+    await this.applyLogisticsStatusUpdate({
+      shippingLabelId: row.id,
+      orderId,
+      incomingLifecycle: 'cancelled',
+      rawStatus: 'cancelled',
+      eventSource: 'manual_sync',
+      occurredAt: new Date(),
+      skipOrderStatusUpdate: true,
+      replaceMetadataJson: JSON.stringify(merged),
+      externalKeyPart: 'skydropx_cancel',
+    });
     const fresh = await this.fetchShippingLabelRowByOrderId(orderId);
     if (!fresh) {
       throw new ServiceUnavailableException('Guía actualizada pero no se pudo releer');
@@ -1511,7 +1712,13 @@ export class LogisticsService {
   private async applySkydropxTrackingToShippingLabel(
     orderId: string,
     shippingLabel: ShippingLabel,
-    tracking: SkydropxTracking
+    tracking: SkydropxTracking,
+    eventSource: LogisticsSyncSource,
+    extras?: {
+      occurredAt?: Date;
+      externalKeyPart?: string | null;
+      webhookMeta?: Record<string, unknown>;
+    }
   ): Promise<void> {
     if (!dbPool) return;
 
@@ -1532,21 +1739,6 @@ export class LogisticsService {
       this.logger.log(
         `🔄 Actualizando estado de shipping_label ${shippingLabel.id}: ${shippingLabel.status} → ${newStatus}`
       );
-      if (newStatus === 'cancelled') {
-        const client = await dbPool.connect();
-        try {
-          await client.query(
-            `UPDATE orders.shipping_labels 
-             SET status = $1, updated_at = CURRENT_TIMESTAMP 
-             WHERE id = $2`,
-            [newStatus, shippingLabel.id]
-          );
-        } finally {
-          client.release();
-        }
-      } else {
-        await this.updateShippingStatus(shippingLabel.id, orderId, newStatus);
-      }
     }
 
     const labelUrl = this.extractLabelUrlFromSkydropxApiMetadata(tracking.metadata);
@@ -1555,40 +1747,55 @@ export class LogisticsService {
     const dataBlock = tracking.metadata?.data || tracking.metadata;
     const attrs = dataBlock?.attributes || dataBlock;
     const workflowStatus = attrs?.workflow_status || prevMeta.workflow_status;
+    const included = tracking.metadata?.included || [];
+    const masterTn =
+      attrs?.master_tracking_number ||
+      (included.length > 0 ? (included[0] as any)?.attributes?.master_tracking_number : null);
 
     const mergedMetadata = {
       ...prevMeta,
       skydropx_shipment_id: shipmentId || prevMeta.skydropx_shipment_id,
       workflow_status: workflowStatus,
       full_response: tracking.metadata,
+      ...(extras?.webhookMeta || {}),
     };
 
     const newTracking =
       tracking.tracking_number &&
       !tracking.tracking_number.startsWith('AGO-') &&
-      tracking.tracking_number !== shippingLabel.tracking_number
+      !tracking.tracking_number.startsWith('PENDING-')
         ? tracking.tracking_number
         : null;
 
-    const client = await dbPool.connect();
-    try {
-      await client.query(
-        `UPDATE orders.shipping_labels 
-         SET 
-           tracking_number = COALESCE($1, tracking_number),
-           pdf_url = COALESCE($2, pdf_url),
-           metadata = $3::jsonb,
-           updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $4`,
-        [newTracking, labelUrl || null, JSON.stringify(mergedMetadata), shippingLabel.id]
-      );
-    } finally {
-      client.release();
-    }
+    const incomingLifecycle = parseLabelLifecycle(newStatus);
+    const rawForEvent =
+      tracking.raw_status != null && String(tracking.raw_status).length > 0
+        ? String(tracking.raw_status)
+        : newStatus;
+
+    await this.applyLogisticsStatusUpdate({
+      shippingLabelId: shippingLabel.id,
+      orderId,
+      incomingLifecycle,
+      rawStatus: rawForEvent,
+      eventSource,
+      occurredAt: extras?.occurredAt ?? new Date(),
+      payload: tracking,
+      trackingNumber: newTracking,
+      masterTrackingNumber: masterTn != null ? String(masterTn) : null,
+      trackingUrl: tracking.tracking_url ?? null,
+      labelPdfUrl: labelUrl ?? null,
+      carrierName: tracking.carrier != null ? String(tracking.carrier) : null,
+      externalKeyPart: extras?.externalKeyPart ?? null,
+      replaceMetadataJson: JSON.stringify(mergedMetadata),
+    });
   }
 
   /** Una consulta a Skydropx + persistencia; intenta guardar PDF local si hay label_url. */
-  private async refreshSkydropxShipmentData(orderId: string): Promise<ShippingLabel | null> {
+  private async refreshSkydropxShipmentData(
+    orderId: string,
+    eventSource: LogisticsSyncSource = 'polling'
+  ): Promise<ShippingLabel | null> {
     const row = await this.fetchShippingLabelRowByOrderId(orderId);
     if (!row) return null;
     const shipmentId = this.extractSkydropxShipmentIdFromLabel(row);
@@ -1598,7 +1805,7 @@ export class LogisticsService {
     }
     try {
       const tracking = await this.skydropxService.getShipmentTracking(shipmentId);
-      await this.applySkydropxTrackingToShippingLabel(orderId, row, tracking);
+      await this.applySkydropxTrackingToShippingLabel(orderId, row, tracking, eventSource);
       let fresh = await this.fetchShippingLabelRowByOrderId(orderId);
       if (fresh) {
         const url = this.extractLabelUrlFromLabelRow(fresh);
@@ -1622,7 +1829,7 @@ export class LogisticsService {
    * Reintentar sincronización con Skydropx y persistir PDF si ya hay label_url.
    */
   async syncShippingLabelFromSkydropx(orderId: string): Promise<ShippingLabelResponse> {
-    const updated = await this.refreshSkydropxShipmentData(orderId);
+    const updated = await this.refreshSkydropxShipmentData(orderId, 'manual_sync');
     if (!updated) {
       const row = await this.fetchShippingLabelRowByOrderId(orderId);
       if (!row) {
@@ -2015,11 +2222,57 @@ export class LogisticsService {
 
     try {
       const tracking = await this.skydropxService.getShipmentTracking(skydropxShipmentId);
-      await this.applySkydropxTrackingToShippingLabel(orderId, shippingLabel, tracking);
+      await this.applySkydropxTrackingToShippingLabel(
+        orderId,
+        shippingLabel,
+        tracking,
+        'manual_sync'
+      );
       return tracking;
     } catch (error: any) {
       this.logger.error(`❌ Error obteniendo tracking de Skydropx: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Historial persistido de eventos logísticos (webhook, polling, sync manual, etc.).
+   */
+  async getShippingLabelLogisticsEvents(orderId: string, limit = 80): Promise<
+    Array<{
+      id: string;
+      shipping_label_id: string;
+      order_id: string;
+      event_source: string;
+      raw_status: string | null;
+      normalized_status: string;
+      label_status: string;
+      carrier_name: string | null;
+      tracking_number: string | null;
+      occurred_at: Date;
+      payload: unknown;
+      created_at: Date;
+    }>
+  > {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    try {
+      const res = await dbPool.query(
+        `SELECT id, shipping_label_id, order_id, event_source, raw_status, normalized_status,
+                label_status, carrier_name, tracking_number, occurred_at, payload, created_at
+         FROM orders.shipping_label_logistics_events
+         WHERE order_id = $1
+         ORDER BY occurred_at DESC, created_at DESC
+         LIMIT $2`,
+        [orderId, Math.min(200, Math.max(1, limit))]
+      );
+      return res.rows;
+    } catch (e: any) {
+      this.logger.warn(
+        `⚠️ getShippingLabelLogisticsEvents: ${e?.message || e} (¿migración pendiente?)`
+      );
+      return [];
     }
   }
 

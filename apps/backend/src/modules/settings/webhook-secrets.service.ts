@@ -46,28 +46,39 @@ export interface WebhookSecretCreated {
 export class WebhookSecretsService {
   /**
    * Listar claves (incluye secret para que el admin pueda copiar).
+   * Sin `provider`, devuelve todas las claves (karlopay, integration_cart, etc.).
    * Si la columna secret_prefix no existe (migración no ejecutada), se devuelve null para ese campo.
    */
-  async list(provider: string = 'karlopay'): Promise<WebhookSecretListItem[]> {
+  async list(provider?: string): Promise<WebhookSecretListItem[]> {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
     }
-    const withPrefix = `SELECT id, name, secret, secret_prefix, provider, expires_at, is_active, created_at, updated_at
+    const withPrefix = provider
+      ? `SELECT id, name, secret, secret_prefix, provider, expires_at, is_active, created_at, updated_at
        FROM core.webhook_secrets
-       WHERE provider = $1
-       ORDER BY created_at DESC`;
-    const withoutPrefix = `SELECT id, name, secret, provider, expires_at, is_active, created_at, updated_at
+       WHERE LOWER(TRIM(COALESCE(provider, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+       ORDER BY created_at DESC`
+      : `SELECT id, name, secret, secret_prefix, provider, expires_at, is_active, created_at, updated_at
        FROM core.webhook_secrets
-       WHERE provider = $1
        ORDER BY created_at DESC`;
+    const withoutPrefix = provider
+      ? `SELECT id, name, secret, provider, expires_at, is_active, created_at, updated_at
+       FROM core.webhook_secrets
+       WHERE LOWER(TRIM(COALESCE(provider, ''))) = LOWER(TRIM(COALESCE($1::text, '')))
+       ORDER BY created_at DESC`
+      : `SELECT id, name, secret, provider, expires_at, is_active, created_at, updated_at
+       FROM core.webhook_secrets
+       ORDER BY created_at DESC`;
+
+    const params = provider ? [provider] : [];
 
     let result: { rows: (WebhookSecretRow & { secret?: string })[] };
     try {
-      result = await dbPool.query<WebhookSecretRow & { secret?: string }>(withPrefix, [provider]);
+      result = await dbPool.query<WebhookSecretRow & { secret?: string }>(withPrefix, params);
     } catch (err: any) {
       const isMissingColumn = err?.code === '42703' || /column.*secret_prefix|secret_prefix.*does not exist/i.test(err?.message || '');
       if (isMissingColumn) {
-        result = await dbPool.query<WebhookSecretRow & { secret?: string }>(withoutPrefix, [provider]);
+        result = await dbPool.query<WebhookSecretRow & { secret?: string }>(withoutPrefix, params);
         result.rows = result.rows.map((r) => ({ ...r, secret_prefix: null }));
       } else {
         throw err;

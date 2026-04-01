@@ -205,20 +205,36 @@ export class SettingsController {
 
   @Get('webhook-secrets')
   @ApiOperation({ summary: 'Listar claves de webhook (incluye secret para copiar en admin)' })
+  @ApiQuery({
+    name: 'provider',
+    required: false,
+    description: 'Filtrar por proveedor (ej. karlopay, integration_cart). Sin parámetro: todas.',
+  })
   @ApiResponse({ status: 200, description: 'Listado de claves' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  async listWebhookSecrets() {
-    return this.webhookSecretsService.list();
+  async listWebhookSecrets(@Query('provider') provider?: string) {
+    const trimmed = provider?.trim();
+    return this.webhookSecretsService.list(trimmed || undefined);
   }
 
   @Post('webhook-secrets')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Crear clave de webhook; el secret se devuelve solo en esta respuesta' })
+  @ApiQuery({
+    name: 'provider',
+    required: false,
+    description:
+      'Proveedor (ej. karlopay, integration_cart, skydropx). Por defecto karlopay. Para webhook Skydropx use skydropx.',
+  })
   @ApiResponse({ status: 201, description: 'Clave creada; incluye secret (mostrar una sola vez)' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  async createWebhookSecret(@Body() dto: CreateWebhookSecretDto) {
-    return this.webhookSecretsService.create(dto);
+  async createWebhookSecret(
+    @Body() dto: CreateWebhookSecretDto,
+    @Query('provider') provider?: string,
+  ) {
+    const p = provider?.trim() || 'karlopay';
+    return this.webhookSecretsService.create(dto, p);
   }
 
   @Get('webhook-secrets/:id/secret')

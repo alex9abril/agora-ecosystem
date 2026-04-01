@@ -101,6 +101,20 @@ export class LogisticsController {
     return shippingLabel;
   }
 
+  @Get('shipping-labels/order/:orderId/logistics-events')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Historial de eventos logísticos persistidos (Skydropx)',
+    description:
+      'Lee orders.shipping_label_logistics_events: fuente webhook, polling, manual_sync, etc.',
+  })
+  @ApiParam({ name: 'orderId', description: 'ID de la orden', type: String })
+  @ApiResponse({ status: 200, description: 'Lista de eventos (más reciente primero)' })
+  async getShippingLabelLogisticsEvents(@Param('orderId') orderId: string) {
+    const events = await this.logisticsService.getShippingLabelLogisticsEvents(orderId);
+    return { success: true, data: events, count: events.length };
+  }
+
   @Post('shipping-labels/order/:orderId/sync')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
@@ -146,7 +160,7 @@ export class LogisticsController {
   @ApiOperation({
     summary: 'Webhook Skydropx (eventos de paquete)',
     description:
-      'Validación: Authorization HMAC más hex en minúsculas (SHA-512 del body crudo) o Bearer. Variables: SKYDROPPX_WEBHOOK_HMAC_SECRET o SKYDROPPX_WEBHOOK_BEARER.',
+      'Validación: HMAC SHA-512 del body crudo (hex minúsculas) o Bearer. Claves: core.webhook_secrets provider skydropx (activas, no expiradas), más env SKYDROPPX_WEBHOOK_HMAC_SECRET / SKYDROPPX_WEBHOOK_BEARER opcional.',
   })
   @ApiResponse({ status: 200, description: 'Evento aceptado' })
   @ApiResponse({ status: 401, description: 'Firma o token inválido' })

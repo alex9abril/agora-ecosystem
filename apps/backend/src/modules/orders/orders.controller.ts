@@ -134,6 +134,13 @@ export class OrdersController {
     required: false,
     description: 'Búsqueda por folio/ID, cliente, teléfono, correo, producto, SKU o guía',
   })
+  @ApiQuery({
+    name: 'attention',
+    required: false,
+    description:
+      'Filtro operativo: requires_action, pending_payment, to_fulfill, in_transit, incidents, missing_guide',
+  })
+  @ApiQuery({ name: 'limit', required: false, description: 'Tope de filas (con attention), máx. 100' })
   @ApiResponse({ status: 200, description: 'Lista de pedidos obtenida exitosamente' })
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async findAllByBusiness(
@@ -143,13 +150,18 @@ export class OrdersController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('search') search?: string,
+    @Query('attention') attention?: string,
+    @Query('limit') limit?: string,
   ) {
+    const lim = limit != null && limit !== '' ? parseInt(limit, 10) : undefined;
     return this.ordersService.findAllByBusiness(businessId, {
       status,
       payment_status,
       startDate,
       endDate,
       search,
+      attention,
+      limit: Number.isFinite(lim) ? lim : undefined,
     });
   }
 
@@ -179,6 +191,44 @@ export class OrdersController {
       endDate,
       previousStartDate,
       previousEndDate,
+    );
+  }
+
+  @Get('business/:businessId/operations-dashboard')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Torre de control operativa (embudo, atención, logística, actividad)' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiQuery({ name: 'startDate', required: true, description: 'Inicio del período (ISO)' })
+  @ApiQuery({ name: 'endDate', required: true, description: 'Fin del período (ISO)' })
+  @ApiQuery({ name: 'previousStartDate', required: false })
+  @ApiQuery({ name: 'previousEndDate', required: false })
+  @ApiQuery({ name: 'filterStatus', required: false, description: 'Filtrar métricas de período por estado de pedido' })
+  @ApiQuery({ name: 'filterPaymentStatus', required: false })
+  @ApiQuery({ name: 'filterCarrier', required: false, description: 'Substring ILIKE sobre carrier de última guía' })
+  @ApiResponse({ status: 200, description: 'Resumen operativo' })
+  @ApiResponse({ status: 400, description: 'Fechas requeridas' })
+  async getOperationsDashboard(
+    @Param('businessId') businessId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('previousStartDate') previousStartDate?: string,
+    @Query('previousEndDate') previousEndDate?: string,
+    @Query('filterStatus') filterStatus?: string,
+    @Query('filterPaymentStatus') filterPaymentStatus?: string,
+    @Query('filterCarrier') filterCarrier?: string,
+  ) {
+    if (!startDate || !endDate) {
+      throw new BadRequestException('startDate y endDate son requeridos');
+    }
+    return this.ordersService.getOperationsDashboard(
+      businessId,
+      startDate,
+      endDate,
+      previousStartDate,
+      previousEndDate,
+      filterStatus,
+      filterPaymentStatus,
+      filterCarrier,
     );
   }
 

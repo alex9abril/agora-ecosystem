@@ -145,6 +145,68 @@ export interface DashboardStatsResponse {
   previous?: { totalRevenue: number; orderCount: number };
 }
 
+export interface OperationsDashboardParams {
+  startDate: string;
+  endDate: string;
+  previousStartDate?: string;
+  previousEndDate?: string;
+  filterStatus?: string;
+  filterPaymentStatus?: string;
+  filterCarrier?: string;
+}
+
+export interface OperationsDashboardResponse {
+  period: {
+    startDate: string;
+    endDate: string;
+    totalRevenue: number;
+    orderCount: number;
+    averageTicket: number;
+    previous?: { totalRevenue: number; orderCount: number };
+    revenueByDay: { date: string; revenue: number }[];
+    ordersByDay: { date: string; count: number }[];
+  };
+  today: { ordersCreated: number; revenuePaid: number };
+  openPipelineByStatus: Record<string, number>;
+  attention: {
+    requiresAction: number;
+    pendingPayment: number;
+    toFulfill: number;
+    inTransit: number;
+    incidents: number;
+    missingGuide: number;
+    staleOpen48h: number;
+  };
+  logistics: {
+    byCarrier: { carrier: string; count: number }[];
+    byNormalizedStatus: { status: string; count: number }[];
+    staleInTransitCount: number;
+    inTransitWithLabelCount: number;
+  } | null;
+  recentActivity: {
+    id: string;
+    createdAt: string;
+    integration: string;
+    eventType: string;
+    status: string;
+    orderId: string | null;
+    message: string | null;
+  }[];
+  attentionOrders: {
+    id: string;
+    status: string;
+    payment_status: string;
+    total_amount: string | number;
+    created_at: string;
+    updated_at: string;
+    client_first_name: string | null;
+    client_last_name: string | null;
+    has_shipping_label: boolean;
+    tracking_number: string | null;
+  }[];
+  logisticsDegraded?: boolean;
+}
+
 export const ordersService = {
   /**
    * Estadísticas del dashboard para un negocio (sucursal) en un rango de fechas
@@ -160,6 +222,22 @@ export const ordersService = {
     if (params.previousEndDate) search.set('previousEndDate', params.previousEndDate);
     const url = `/orders/business/${businessId}/dashboard-stats?${search.toString()}`;
     return apiRequest<DashboardStatsResponse>(url, { method: 'GET' });
+  },
+
+  async getOperationsDashboard(
+    businessId: string,
+    params: OperationsDashboardParams,
+  ): Promise<OperationsDashboardResponse> {
+    const search = new URLSearchParams();
+    search.set('startDate', params.startDate);
+    search.set('endDate', params.endDate);
+    if (params.previousStartDate) search.set('previousStartDate', params.previousStartDate);
+    if (params.previousEndDate) search.set('previousEndDate', params.previousEndDate);
+    if (params.filterStatus) search.set('filterStatus', params.filterStatus);
+    if (params.filterPaymentStatus) search.set('filterPaymentStatus', params.filterPaymentStatus);
+    if (params.filterCarrier) search.set('filterCarrier', params.filterCarrier);
+    const url = `/orders/business/${businessId}/operations-dashboard?${search.toString()}`;
+    return apiRequest<OperationsDashboardResponse>(url, { method: 'GET' });
   },
 
   /**

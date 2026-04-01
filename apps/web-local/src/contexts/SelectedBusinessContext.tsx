@@ -56,7 +56,7 @@ interface StoredBusinessData {
 }
 
 export function SelectedBusinessProvider({ children }: { children: ReactNode }) {
-  const { user, token } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const [selectedBusiness, setSelectedBusiness] = useState<BusinessSummary | null>(null);
   const [availableBusinesses, setAvailableBusinesses] = useState<BusinessSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -270,10 +270,14 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
   };
 
   useEffect(() => {
+    // Mientras Auth hidrata desde localStorage, user/token pueden ser null en el primer ciclo.
+    // Limpiar storage ahí borraba la sucursal guardada antes de que loadBusinesses pudiera leerla.
+    if (authLoading) {
+      return;
+    }
     if (user && token) {
       loadBusinesses();
     } else {
-      // Limpiar al cerrar sesión
       setSelectedBusiness(null);
       setAvailableBusinesses([]);
       localStorage.removeItem(STORAGE_KEY_ID);
@@ -281,7 +285,7 @@ export function SelectedBusinessProvider({ children }: { children: ReactNode }) 
       localStorage.removeItem(LEGACY_STORAGE_KEY_ID);
       localStorage.removeItem(LEGACY_STORAGE_KEY_DATA);
     }
-  }, [user, token]);
+  }, [user, token, authLoading]);
 
   // Si la sucursal seleccionada ya no está en la lista permitida, limpiar selección
   // para evitar mensajes "No tienes autorización" en peticiones posteriores

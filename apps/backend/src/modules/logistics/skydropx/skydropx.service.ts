@@ -14,8 +14,27 @@ import {
   Logger,
 } from '@nestjs/common';
 import { IntegrationsService } from '../../settings/integrations.service';
+import { WebhookSecretsService } from '../../settings/webhook-secrets.service';
 import axios from 'axios';
 import * as crypto from 'crypto';
+
+/** Claves en core.webhook_secrets con este provider se usan para Bearer y HMAC del webhook. */
+export const SKYDROPX_WEBHOOK_SECRET_PROVIDER = 'skydropx';
+
+function normalizeWebhookSecret(s: string): string {
+  return s.replace(/\r/g, '').trim();
+}
+
+/** Primera variable de entorno no vacía (alias SKYDROPX vs SKYDROPPX por typo frecuente). */
+function firstNormalizedEnv(...keys: string[]): string {
+  for (const k of keys) {
+    const v = process.env[k];
+    if (v && normalizeWebhookSecret(v).length > 0) {
+      return normalizeWebhookSecret(v);
+    }
+  }
+  return '';
+}
 
 export interface SkydropxAddress {
   country_code: string; // ISO 3166-1 alpha-2 (ej: "MX")
@@ -123,6 +142,8 @@ export interface SkydropxTrackingEvent {
 export interface SkydropxTracking {
   shipment_id: string;
   tracking_number: string | null;
+  /** Valor crudo de tracking_status / estado de paquete antes del mapeo interno. */
+  raw_status?: string | null;
   status: string; // 'created', 'picked_up', 'in_transit', 'delivered', 'exception', 'cancelled'
   carrier: string | null;
   service: string | null;
@@ -147,7 +168,10 @@ export class SkydropxService {
   private readonly catalogCache = new Map<string, { at: number; data: unknown }>();
   private readonly catalogTtlMs = 5 * 60 * 1000;
 
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly webhookSecretsService: WebhookSecretsService
+  ) {}
 
   /**
    * Obtener credenciales de Skydropx desde variables de entorno y configuración
@@ -839,18 +863,27 @@ export class SkydropxService {
       
       // Prioridad: tracking_status del package > workflow_status > status general
       let mappedStatus = 'created';
-      
+      let rawStatusCapture: string | null = null;
+
       // Primero intentar obtener el tracking_status del package (más preciso)
       if (included.length > 0) {
         const packageTrackingStatus = included[0]?.attributes?.tracking_status;
         if (packageTrackingStatus) {
+          rawStatusCapture = String(packageTrackingStatus);
           mappedStatus = packageTrackingStatus;
         }
       }
-      
+
       // Si no hay tracking_status del package, usar workflow_status o status general
       if (mappedStatus === 'created') {
-        mappedStatus = attributes.workflow_status || attributes.status || attributes.tracking_status || 'created';
+        const fallbacks =
+          attributes.workflow_status || attributes.status || attributes.tracking_status || 'created';
+        if (!rawStatusCapture && fallbacks) {
+          rawStatusCapture = String(fallbacks);
+        }
+        mappedStatus = fallbacks;
+      } else if (!rawStatusCapture) {
+        rawStatusCapture = String(mappedStatus);
       }
       
       // Normalizar variantes de "cancelled"
@@ -886,6 +919,7 @@ export class SkydropxService {
       const tracking: SkydropxTracking = {
         shipment_id: data.id || attributes.id || shipmentId,
         tracking_number: trackingNumber,
+        raw_status: rawStatusCapture || String(mappedStatus),
         status: mappedStatus,
         carrier: attributes.carrier_name || attributes.carrier || null,
         service: attributes.service_name || attributes.service || null,
@@ -1044,56 +1078,90 @@ export class SkydropxService {
 
   /**
    * Valida el encabezado Authorization del webhook Skydropx.
-   * HMAC: SHA-512 sobre el cuerpo crudo (hex minúsculas). Bearer: token fijo en env.
+   * Origen de claves (mismo patrón que integration_cart):
+   * - **core.webhook_secrets** filas con `provider = skydropx`, `is_active`, no expiradas.
+   * - **Variables de entorno** (opcional, p. ej. local): SKYDROPPX_WEBHOOK_HMAC_SECRET,
+   *   SKYDROPPX_WEBHOOK_SECRET (alias), SKYDROPPX_WEBHOOK_BEARER.
+   * HMAC: SHA-512 sobre el cuerpo crudo (hex minúsculas). Bearer: token que coincida con algún secreto activo.
    * @see https://pro.skydropx.com/es-MX/api-docs#webhooks
    */
-  verifyWebhookAuthorization(
+  async verifyWebhookAuthorization(
     authorization: string | undefined,
     rawBody: Buffer | undefined
-  ): void {
-    const hmacSecret =
-      process.env.SKYDROPPX_WEBHOOK_HMAC_SECRET ||
-      process.env.SKYDROPPX_WEBHOOK_SECRET;
-    const bearerToken = process.env.SKYDROPPX_WEBHOOK_BEARER;
+  ): Promise<void> {
+    let fromDb: string[] = [];
+    try {
+      fromDb = await this.webhookSecretsService.getActiveSecrets(SKYDROPX_WEBHOOK_SECRET_PROVIDER);
+    } catch (e: any) {
+      this.logger.warn(
+        `Webhook Skydropx: no se pudieron leer core.webhook_secrets (${e?.message || e}); se usarán solo variables de entorno si existen`
+      );
+      fromDb = [];
+    }
 
-    if (!hmacSecret && !bearerToken) {
+    const envHmac = [
+      firstNormalizedEnv('SKYDROPPX_WEBHOOK_HMAC_SECRET', 'SKYDROPX_WEBHOOK_HMAC_SECRET'),
+      firstNormalizedEnv('SKYDROPPX_WEBHOOK_SECRET', 'SKYDROPX_WEBHOOK_SECRET'),
+    ].filter((s) => s.length > 0);
+
+    const envBearer = firstNormalizedEnv(
+      'SKYDROPPX_WEBHOOK_BEARER',
+      'SKYDROPX_WEBHOOK_BEARER',
+    );
+
+    const dbNorm = fromDb.map(normalizeWebhookSecret).filter((s) => s.length > 0);
+    const hmacKeys = [...new Set([...dbNorm, ...envHmac])];
+    const bearerTokens = [...new Set([...dbNorm, ...(envBearer ? [envBearer] : [])])];
+
+    if (hmacKeys.length === 0 && bearerTokens.length === 0) {
       throw new ServiceUnavailableException(
-        'Webhook Skydropx no configurado: defina SKYDROPPX_WEBHOOK_HMAC_SECRET o SKYDROPPX_WEBHOOK_BEARER'
+        'Webhook Skydropx: sin secretos activos. En Supabase, core.webhook_secrets con provider skydropx (is_active, no expirado) o defina SKYDROPPX_WEBHOOK_HMAC_SECRET / SKYDROPPX_WEBHOOK_BEARER en el servidor.'
       );
     }
 
     const auth = (authorization || '').trim();
     if (auth.toUpperCase().startsWith('HMAC ')) {
-      if (!hmacSecret) {
-        throw new UnauthorizedException('HMAC no habilitado en el servidor');
+      if (hmacKeys.length === 0) {
+        throw new UnauthorizedException(
+          'HMAC no habilitado: no hay claves (provider skydropx en BD ni variables HMAC en env)'
+        );
       }
       if (!rawBody || rawBody.length === 0) {
         throw new UnauthorizedException('Cuerpo vacío; se requiere body crudo para HMAC');
       }
       const sig = auth.slice(5).trim().toLowerCase();
-      const expected = crypto
-        .createHmac('sha512', hmacSecret)
-        .update(rawBody)
-        .digest('hex');
       const a = Buffer.from(sig, 'utf8');
-      const b = Buffer.from(expected, 'utf8');
-      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-        throw new UnauthorizedException('Firma HMAC inválida');
+      for (const key of hmacKeys) {
+        const expected = crypto.createHmac('sha512', key).update(rawBody).digest('hex');
+        const b = Buffer.from(expected, 'utf8');
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+          return;
+        }
       }
-      return;
+      throw new UnauthorizedException('Firma HMAC inválida');
     }
 
     if (auth.toLowerCase().startsWith('bearer ')) {
-      if (!bearerToken) {
-        throw new UnauthorizedException('Bearer no habilitado en el servidor');
+      if (bearerTokens.length === 0) {
+        throw new UnauthorizedException(
+          'Bearer no habilitado: no hay secretos (provider skydropx en BD ni SKYDROPPX_WEBHOOK_BEARER)'
+        );
       }
-      const token = auth.slice(7).trim();
+      const token = normalizeWebhookSecret(auth.slice(7));
       const tb = Buffer.from(token, 'utf8');
-      const bb = Buffer.from(bearerToken, 'utf8');
-      if (tb.length !== bb.length || !crypto.timingSafeEqual(tb, bb)) {
-        throw new UnauthorizedException('Token Bearer inválido');
+      for (const t of bearerTokens) {
+        const bb = Buffer.from(t, 'utf8');
+        if (tb.length === bb.length && crypto.timingSafeEqual(tb, bb)) {
+          return;
+        }
       }
-      return;
+      if (process.env.NODE_ENV !== 'production') {
+        this.logger.warn(
+          `Webhook Skydropx: Bearer rechazado. Filas leídas de BD (raw): ${fromDb.length}, candidatos Bearer: ${bearerTokens.length}, longitud del token recibido: ${token.length}. ` +
+            'Si las filas BD son 0, configura DATABASE_URL / SUPABASE_DB_URL en el proceso del backend (misma BD donde insertaste el secreto). En Postman, edita la variable de colección webhookBearer con el valor completo de la columna secret (no solo secret_prefix); desactiva Auth heredada que sobrescriba el header Authorization.'
+        );
+      }
+      throw new UnauthorizedException('Token Bearer inválido');
     }
 
     throw new UnauthorizedException(
@@ -1114,9 +1182,8 @@ export class SkydropxService {
     const shipmentId = shipmentRel?.id;
     if (!shipmentId || typeof shipmentId !== 'string') return null;
 
-    const raw = String(attrs.status || '')
-      .toLowerCase()
-      .replace(/\s+/g, '_');
+    const rawOriginal = attrs.status != null ? String(attrs.status) : '';
+    const raw = rawOriginal.toLowerCase().replace(/\s+/g, '_');
     let mapped = 'generated' as SkydropxTracking['status'];
     if (raw === 'delivered') mapped = 'delivered';
     else if (raw === 'in_transit' || raw === 'in-transit') mapped = 'in_transit';
@@ -1131,6 +1198,7 @@ export class SkydropxService {
     return {
       shipment_id: shipmentId,
       tracking_number: trackingNumber,
+      raw_status: rawOriginal || null,
       status: mapped,
       carrier: attrs.carrier_name || attrs.carrier || null,
       service: attrs.service_name || attrs.service || null,

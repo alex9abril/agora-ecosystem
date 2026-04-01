@@ -11,6 +11,8 @@ import { isOperatorRole, normalizeOperatorPermissions } from './operator-permiss
 export type { BusinessRole };
 
 export interface RolePermissions {
+  /** Torre de control /dashboard (operadores con permiso explícito) */
+  canViewDashboard: boolean;
   canManageProducts: boolean;
   canManageClients: boolean;
   canManagePrices: boolean;
@@ -29,6 +31,7 @@ export interface RolePermissions {
 }
 
 const fullPermissions: RolePermissions = {
+  canViewDashboard: true,
   canManageProducts: true,
   canManageClients: true,
   canManagePrices: true,
@@ -52,6 +55,7 @@ export const ROLE_PERMISSIONS: Record<BusinessRole, RolePermissions> = {
     canManageUsers: false,
   },
   operations_staff: {
+    canViewDashboard: false,
     canManageProducts: false,
     canManageClients: false,
     canManagePrices: false,
@@ -67,6 +71,7 @@ export const ROLE_PERMISSIONS: Record<BusinessRole, RolePermissions> = {
     canManageCollections: false,
   },
   kitchen_staff: {
+    canViewDashboard: false,
     canManageProducts: false,
     canManageClients: false,
     canManagePrices: false,
@@ -112,6 +117,7 @@ function rolePermissionsFromOperator(op: OperatorPermissions): RolePermissions {
   }
   return {
     ...base,
+    canViewDashboard: p.modules?.dashboard === undefined ? base.canViewDashboard : p.modules.dashboard === true,
     canManageProducts: p.modules?.products === undefined ? base.canManageProducts : p.modules.products === true,
     canManageClients: p.modules?.clients === undefined ? base.canManageClients : p.modules.clients === true,
     canManageOrders: p.modules?.orders === undefined ? base.canManageOrders : p.modules.orders === true,
@@ -181,6 +187,8 @@ export function canAccessRoute(
   operatorPermissions?: OperatorPermissions | Record<string, unknown> | null
 ): boolean {
   const permissions = getRolePermissions(role, operatorPermissions);
+
+  if (route === '/dashboard' || route.startsWith('/dashboard/')) return permissions.canViewDashboard;
 
   if (route.startsWith('/operations')) return permissions.canManageOrders;
   if (route.startsWith('/kitchen')) return permissions.canPrepareOrders;

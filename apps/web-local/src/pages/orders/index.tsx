@@ -263,6 +263,27 @@ export default function OrdersPage() {
     }
   }, [isLoadingBusiness, selectedBusiness?.business_id]);
 
+  /** Prioridad sobre localStorage: enlaces desde Dashboard u otras vistas. */
+  useEffect(() => {
+    if (!router.isReady || !filtersHydrated) return;
+    const q = router.query;
+    if (typeof q.tab === 'string' && isValidOrderTabId(q.tab)) {
+      setActiveTab(q.tab);
+    }
+    if (q.onlyNoGuide === '1' || q.onlyNoGuide === 'true') {
+      setOnlyNoGuide(true);
+    }
+    if (q.onlyStale === '1' || q.onlyStale === 'true') {
+      setOnlyStale(true);
+    }
+    if (typeof q.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.startDate)) {
+      setStartDate(q.startDate);
+    }
+    if (typeof q.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(q.endDate)) {
+      setEndDate(q.endDate);
+    }
+  }, [router.isReady, router.asPath, filtersHydrated, router.query]);
+
   useEffect(() => {
     if (!filtersHydrated || typeof window === 'undefined') return;
     if (persistSkipOnce.current) {
