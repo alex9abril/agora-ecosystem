@@ -380,10 +380,11 @@ def deployApp(String appName, String port) {
                 rm -f /tmp/${appName}-deploy.tar.gz
                 
                 # Aplicar permisos correctos: directorios 2750 (setgid + grupo rwx), archivos 640
-                echo "🔐 Aplicando permisos correctos..."
+                # No recorrer node_modules ni .next: cientos de miles de archivos → chmod puede morir por OOM (señal 9)
+                echo "🔐 Aplicando permisos correctos (sin node_modules/.next)..."
                 chgrp -R jenkins ${deployPath}
-                find ${deployPath} -type d -exec chmod 2750 {} +
-                find ${deployPath} -type f -exec chmod 640 {} +
+                find ${deployPath} -type d -not -path "*/node_modules/*" -not -path "*/.next/*" -exec chmod 2750 {} +
+                find ${deployPath} -type f -not -path "*/node_modules/*" -not -path "*/.next/*" -exec chmod 640 {} +
                 # Asegurar que el directorio base tenga permisos de ejecución
                 chmod 2750 ${deployPath}
                 
@@ -563,10 +564,11 @@ def deployApp(String appName, String port) {
             rm -f "${deployTarball}"
             
             # Aplicar permisos correctos: directorios 2750 (setgid + grupo rwx), archivos 640
-            echo "🔐 Aplicando permisos correctos..."
+            # No recorrer node_modules ni .next: cientos de miles de archivos → chmod puede morir por OOM (señal 9)
+            echo "🔐 Aplicando permisos correctos (sin node_modules/.next)..."
             chgrp -R jenkins ${deployPath}
-            find ${deployPath} -type d -exec chmod 2750 {} +
-            find ${deployPath} -type f -exec chmod 640 {} +
+            find ${deployPath} -type d -not -path "*/node_modules/*" -not -path "*/.next/*" -exec chmod 2750 {} +
+            find ${deployPath} -type f -not -path "*/node_modules/*" -not -path "*/.next/*" -exec chmod 640 {} +
             # Asegurar que el directorio base tenga permisos de ejecución
             chmod 2750 ${deployPath}
             
