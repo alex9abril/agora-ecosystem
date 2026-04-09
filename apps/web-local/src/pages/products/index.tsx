@@ -2,7 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import LocalLayout from "@/components/layout/LocalLayout";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSelectedBusiness } from "@/contexts/SelectedBusinessContext";
 import {
   productsService,
@@ -33,7 +33,12 @@ import {
 } from "@/lib/product-collections";
 import { businessService } from "@/lib/business";
 import { Skeleton, SkeletonFilters, SkeletonTable } from "@/components/ui/Skeleton";
-import TableFilters, { type FilterRow, type FilterColumn } from "@/components/TableFilters";
+import TableFilters, {
+  ActiveFilterChips,
+  type FilterRow,
+  type FilterColumn,
+} from "@/components/TableFilters";
+import { getSkuLineFromSku } from "@/lib/sku-line";
 
 // Formateador de precios con separación de miles (ej: 6,589.32)
 const priceFormatter = new Intl.NumberFormat("es-MX", {
@@ -43,7 +48,40 @@ const priceFormatter = new Intl.NumberFormat("es-MX", {
 
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
+const ADVANCED_FILTERS_STORAGE_KEY = "products_advanced_filters";
+
+function parseStoredAdvancedFilters(raw: string | null): FilterRow[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: FilterRow[] = [];
+    for (const item of parsed) {
+      if (
+        item &&
+        typeof item === "object" &&
+        typeof (item as FilterRow).id === "string" &&
+        typeof (item as FilterRow).field === "string" &&
+        typeof (item as FilterRow).operator === "string" &&
+        typeof (item as FilterRow).value === "string"
+      ) {
+        out.push({
+          id: (item as FilterRow).id,
+          field: (item as FilterRow).field,
+          operator: (item as FilterRow).operator,
+          value: (item as FilterRow).value,
+        });
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+/** Máximo por página en el API de catálogo (ListProductsDto @Max(100)) */
+const API_PRODUCTS_PAGE_LIMIT = 100;
+const BRANCH_MAP_CHUNK_SIZE = 25;
 const DEFAULT_PAGE_SIZE = 20;
 const PRODUCTS_ROUTE_PREFIX = "/products";
 
@@ -106,9 +144,52 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Filtros acumulables por columna (campo, operador, valor)
+  // Filtros acumulables por columna (campo, operador, valor); persistidos en localStorage
   const [advancedFilters, setAdvancedFilters] = useState<FilterRow[]>([]);
+  const [advancedFiltersStorageReady, setAdvancedFiltersStorageReady] =
+    useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(ADVANCED_FILTERS_STORAGE_KEY)
+          : null;
+      setAdvancedFilters(parseStoredAdvancedFilters(raw));
+    } finally {
+      setAdvancedFiltersStorageReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!advancedFiltersStorageReady || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        ADVANCED_FILTERS_STORAGE_KEY,
+        JSON.stringify(advancedFilters),
+      );
+    } catch {
+      // quota / modo privado
+    }
+  }, [advancedFilters, advancedFiltersStorageReady]);
+
+  /** Con filtros por columna activos se carga todo el catálogo (misma búsqueda) y se pagina en cliente. */
+  const hasActiveAdvancedFilters = useMemo(
+    () =>
+      advancedFilters.some(
+        (f) => f.field && String(f.value).trim() !== "",
+      ),
+    [advancedFilters],
+  );
+
+  const prevHadAdvancedFiltersRef = useRef(false);
+  useEffect(() => {
+    if (hasActiveAdvancedFilters && !prevHadAdvancedFiltersRef.current) {
+      setCurrentPage(1);
+    }
+    prevHadAdvancedFiltersRef.current = hasActiveAdvancedFilters;
+  }, [hasActiveAdvancedFilters]);
 
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState<number>(() => {
@@ -316,33 +397,38 @@ export default function ProductsPage() {
     }
   };
 
-  // Cargar el mapa de productos -> sucursales asignadas
+  // Cargar el mapa de productos -> sucursales asignadas (por lotes para no saturar la red)
   const loadProductBranchMap = async (productsToLoad: Product[]) => {
+    if (productsToLoad.length === 0) {
+      setProductBranchMap(new Map());
+      return;
+    }
     try {
       setLoadingBranchMap(true);
       const newMap = new Map<string, Set<string>>();
 
-      // Cargar disponibilidad para cada producto
-      await Promise.all(
-        productsToLoad.map(async (product) => {
-          try {
-            const availability =
-              await productsService.getProductBranchAvailability(product.id);
-            const assignedBranches = new Set<string>();
+      for (let i = 0; i < productsToLoad.length; i += BRANCH_MAP_CHUNK_SIZE) {
+        const chunk = productsToLoad.slice(i, i + BRANCH_MAP_CHUNK_SIZE);
+        await Promise.all(
+          chunk.map(async (product) => {
+            try {
+              const availability =
+                await productsService.getProductBranchAvailability(product.id);
+              const assignedBranches = new Set<string>();
 
-            availability.availabilities.forEach((avail) => {
-              if (avail.is_enabled) {
-                assignedBranches.add(avail.branch_id);
-              }
-            });
+              availability.availabilities.forEach((avail) => {
+                if (avail.is_enabled) {
+                  assignedBranches.add(avail.branch_id);
+                }
+              });
 
-            newMap.set(product.id, assignedBranches);
-          } catch (err) {
-            // Si falla, asumir que no tiene asignaciones
-            newMap.set(product.id, new Set());
-          }
-        }),
-      );
+              newMap.set(product.id, assignedBranches);
+            } catch (err) {
+              newMap.set(product.id, new Set());
+            }
+          }),
+        );
+      }
 
       setProductBranchMap(newMap);
     } catch (err: any) {
@@ -352,17 +438,112 @@ export default function ProductsPage() {
     }
   };
 
+  /** Todos los productos que coinciden con la búsqueda (varias páginas API). Usado cuando hay filtros por columna activos. */
+  const loadEntireCatalogForSearch = async (
+    searchValue: string,
+    options?: { signal?: AbortSignal },
+  ) => {
+    const signal = options?.signal;
+    try {
+      setLoading(true);
+      setError(null);
+
+      const userVehicle = getUserVehicle();
+
+      const [firstResponse, categoriesData] = await Promise.all([
+        productsService.getProducts(undefined, userVehicle || undefined, {
+          page: 1,
+          limit: API_PRODUCTS_PAGE_LIMIT,
+          search: searchValue || undefined,
+          includeZeroPrice: true,
+        }),
+        productsService.getCategories(),
+      ]);
+
+      if (signal?.aborted) return;
+
+      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+
+      const total = firstResponse.pagination?.total ?? 0;
+      const totalPagesApi =
+        firstResponse.pagination?.totalPages ??
+        Math.max(1, Math.ceil(total / API_PRODUCTS_PAGE_LIMIT) || 1);
+
+      let all: Product[] = Array.isArray(firstResponse.data)
+        ? [...firstResponse.data]
+        : [];
+
+      for (let p = 2; p <= totalPagesApi; p++) {
+        if (signal?.aborted) return;
+        const res = await productsService.getProducts(
+          undefined,
+          userVehicle || undefined,
+          {
+            page: p,
+            limit: API_PRODUCTS_PAGE_LIMIT,
+            search: searchValue || undefined,
+            includeZeroPrice: true,
+          },
+        );
+        all = all.concat(Array.isArray(res.data) ? res.data : []);
+      }
+
+      if (signal?.aborted) return;
+
+      setProducts(all);
+      setTotalProducts(total);
+      setTotalPages(totalPagesApi);
+
+      if (all.length > 0 && availableBusinesses.length > 0) {
+        loadProductBranchMap(all).catch((err) => {
+          console.error("Error cargando mapa de sucursales:", err);
+        });
+      }
+    } catch (err: unknown) {
+      if (!signal?.aborted) {
+        console.error("Error cargando catálogo completo para filtros:", err);
+        setError("Error al cargar los productos");
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
+  };
+
   // Cargar datos iniciales - productos son globales, no requieren tienda
   useEffect(() => {
     loadTaxTypes();
   }, []); // Cargar una sola vez al montar
 
-  // Recargar cuando cambie la página, el tamaño de página o el término de búsqueda
+  // Con filtros por columna: catálogo completo (paginado en API por lotes de 100)
   useEffect(() => {
+    if (!advancedFiltersStorageReady || !hasActiveAdvancedFilters) return;
+
+    const ac = new AbortController();
+    void loadEntireCatalogForSearch(searchTerm, { signal: ac.signal });
+    return () => ac.abort();
+  }, [
+    advancedFiltersStorageReady,
+    hasActiveAdvancedFilters,
+    searchTerm,
+    availableBusinesses.length,
+  ]);
+
+  // Sin filtros por columna: paginación en el servidor como antes
+  useEffect(() => {
+    if (!advancedFiltersStorageReady) return;
+    if (hasActiveAdvancedFilters) return;
     if (currentPage > 0) {
       loadData(currentPage, pageSize, searchTerm);
     }
-  }, [currentPage, pageSize, searchTerm]); // Recargar cuando cambie la página, el tamaño de página o la búsqueda
+  }, [
+    currentPage,
+    pageSize,
+    searchTerm,
+    advancedFiltersStorageReady,
+    hasActiveAdvancedFilters,
+  ]);
 
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) {
@@ -793,7 +974,11 @@ export default function ProductsPage() {
         }
       }
 
-      await loadData();
+      if (hasActiveAdvancedFilters) {
+        await loadEntireCatalogForSearch(searchTerm);
+      } else {
+        await loadData();
+      }
       if (!editingProduct) {
         if (savedProduct?.id) {
           router.push(`/products/${savedProduct.id}`);
@@ -880,7 +1065,11 @@ export default function ProductsPage() {
         id: product.id,
         is_available: !product.is_available,
       });
-      await loadData();
+      if (hasActiveAdvancedFilters) {
+        await loadEntireCatalogForSearch(searchTerm);
+      } else {
+        await loadData();
+      }
     } catch (err: any) {
       console.error(`Error ${action} producto:`, err);
       setError(`Error al ${action} el producto`);
@@ -907,6 +1096,18 @@ export default function ProductsPage() {
     () => [
       { id: "name", label: "Producto", type: "text" },
       { id: "sku", label: "SKU", type: "text" },
+      {
+        id: "sku_line",
+        label: "Línea SKU",
+        type: "enum",
+        options: [
+          { value: "PT", label: "PT" },
+          { value: "PK", label: "PK" },
+          { value: "PU", label: "PU" },
+          { value: "PW", label: "PW" },
+          { value: "otro", label: "Otro (sin prefijo PT/PK/PU/PW)" },
+        ],
+      },
       { id: "description", label: "Descripción", type: "text" },
       { id: "price", label: "Precio", type: "number" },
       {
@@ -951,6 +1152,7 @@ export default function ProductsPage() {
     return {
       name: Array.from(nameSet).sort(),
       sku: Array.from(skuSet).sort(),
+      sku_line: ["PT", "PK", "PU", "PW", "otro"],
       description: Array.from(descSet).sort(),
     };
   }, [products]);
@@ -979,6 +1181,18 @@ export default function ProductsPage() {
         if (row.operator === "not_contains") return !val.includes(v);
         if (row.operator === "not_equals") return val !== v;
         return true;
+      }
+      case "sku_line": {
+        // getSkuLineFromSku devuelve PT|PK|PU|PW o ""; comparar en mayúsculas (mismo criterio que la columna).
+        const line = getSkuLineFromSku(product.sku);
+        const want = String(row.value).trim().toUpperCase();
+        const isOtro = want === "OTRO";
+        const neg = row.operator === "!=";
+        const same =
+          isOtro ? line === "" : line === want;
+        const diff =
+          isOtro ? line !== "" : line !== want;
+        return neg ? diff : same;
       }
       case "description": {
         const val = (product.description ?? "").toLowerCase();
@@ -1045,6 +1259,7 @@ export default function ProductsPage() {
       // Filtros avanzados acumulables (todas las condiciones con AND)
       for (const row of advancedFilters) {
         if (!row.field) continue;
+        if (String(row.value).trim() === "") continue;
         if (!productMatchesFilter(product, row)) return false;
       }
 
@@ -1068,6 +1283,40 @@ export default function ProductsPage() {
       }
       return 0;
     });
+
+  const filteredProductCount = filteredAndSortedProducts.length;
+  const effectiveTotalPages = hasActiveAdvancedFilters
+    ? Math.max(1, Math.ceil(filteredProductCount / pageSize) || 1)
+    : totalPages;
+  const pageForDisplay = hasActiveAdvancedFilters
+    ? Math.min(currentPage, effectiveTotalPages)
+    : currentPage;
+
+  useEffect(() => {
+    if (!hasActiveAdvancedFilters) return;
+    if (currentPage > effectiveTotalPages && effectiveTotalPages >= 1) {
+      setCurrentPage(effectiveTotalPages);
+    }
+  }, [hasActiveAdvancedFilters, currentPage, effectiveTotalPages]);
+
+  const displayedProducts = hasActiveAdvancedFilters
+    ? filteredAndSortedProducts.slice(
+        (pageForDisplay - 1) * pageSize,
+        pageForDisplay * pageSize,
+      )
+    : filteredAndSortedProducts;
+
+  const listRangeStart =
+    filteredProductCount === 0
+      ? 0
+      : (pageForDisplay - 1) * pageSize + 1;
+  const listRangeEnd = Math.min(
+    pageForDisplay * pageSize,
+    filteredProductCount,
+  );
+  const listTotalLabel = hasActiveAdvancedFilters
+    ? filteredProductCount
+    : totalProducts;
 
   if (loading) {
     return (
@@ -1435,11 +1684,11 @@ export default function ProductsPage() {
             {/* Tabla de productos */}
             <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 overflow-hidden flex-1 flex flex-col min-h-0">
               {/* Esquina superior: botón Filtros (panel flotante, igual que pedidos) */}
-              <div className="flex items-center border-b border-gray-200 dark:border-neutral-700 px-4 py-2 flex-shrink-0 relative">
+              <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-neutral-700 px-4 py-2 flex-shrink-0 relative">
                 <button
                   type="button"
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded-md border transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-sm font-normal rounded-md border transition-colors ${
                     advancedFilters.some((f) => f.field && String(f.value).trim())
                       ? "bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-600 dark:border-emerald-500 hover:bg-emerald-700 dark:hover:bg-emerald-600"
                       : showAdvancedFilters
@@ -1455,6 +1704,12 @@ export default function ProductsPage() {
                   return n > 0 ? `Filtrado por ${n} regla${n === 1 ? "" : "s"}` : "Filtros por columna";
                 })()}
                 </button>
+                <ActiveFilterChips
+                  columns={productFilterColumns}
+                  filters={advancedFilters}
+                  onChange={setAdvancedFilters}
+                  valueSuggestions={filterValueSuggestions}
+                />
 
                 {/* Panel flotante de filtros (igual que en pedidos) */}
                 {showAdvancedFilters && (
@@ -1522,6 +1777,13 @@ export default function ProductsPage() {
                       </th>
                       <th
                         scope="col"
+                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider max-w-[100px]"
+                        title="Prefijo de familia: PT, PK, PU o PW según el inicio del SKU"
+                      >
+                        Línea SKU
+                      </th>
+                      <th
+                        scope="col"
                         className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                       >
                         Imagen
@@ -1578,7 +1840,7 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-neutral-800 divide-y divide-gray-200 dark:divide-neutral-700">
-                    {filteredAndSortedProducts.map((product) => {
+                    {displayedProducts.map((product) => {
                       const productTypeLabels: Record<
                         ProductType,
                         { label: string; color: string }
@@ -1647,6 +1909,30 @@ export default function ProductsPage() {
                               </div>
                             )}
                           </td>
+                          <td className="px-3 py-2 align-top whitespace-nowrap max-w-[100px]">
+                            {(() => {
+                              const line = getSkuLineFromSku(product.sku);
+                              if (!product.sku?.trim()) {
+                                return (
+                                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                    —
+                                  </span>
+                                );
+                              }
+                              if (!line) {
+                                return (
+                                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                    Otro
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
+                                  {line}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="px-3 py-2 whitespace-nowrap">
                             {product.image_url || product.primary_image_url ? (
                               <img
@@ -1708,7 +1994,7 @@ export default function ProductsPage() {
                 </table>
               </div>
 
-              {filteredAndSortedProducts.length === 0 && (
+              {filteredProductCount === 0 && (
                 <div className="text-center py-6">
                   <p className="text-xs font-light text-gray-500 dark:text-gray-400">
                     {searchTerm
@@ -1726,13 +2012,12 @@ export default function ProductsPage() {
                 </div>
               )}
 
-              {filteredAndSortedProducts.length > 0 && (
+              {filteredProductCount > 0 && (
                 <div className="px-6 py-3 border-t border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-500 dark:text-gray-400">
-                      Mostrando {(currentPage - 1) * pageSize + 1} -{" "}
-                      {Math.min(currentPage * pageSize, totalProducts)} de{" "}
-                      {totalProducts} productos
+                      Mostrando {listRangeStart} - {listRangeEnd} de{" "}
+                      {listTotalLabel} productos
                     </div>
                     <div className="flex items-center gap-2">
                       {/* Selector de tamaño de página */}
@@ -1760,34 +2045,34 @@ export default function ProductsPage() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => setCurrentPage(1)}
-                          disabled={currentPage === 1}
+                          disabled={pageForDisplay === 1}
                           className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Primera página"
                         >
                           ««
                         </button>
                         <button
-                          onClick={() => setCurrentPage(currentPage - 1)}
-                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(pageForDisplay - 1)}
+                          disabled={pageForDisplay === 1}
                           className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Página anterior"
                         >
                           «
                         </button>
                         <span className="px-3 py-1 text-sm text-gray-700 dark:text-gray-300">
-                          Página {currentPage} de {totalPages || 1}
+                          Página {pageForDisplay} de {effectiveTotalPages || 1}
                         </span>
                         <button
-                          onClick={() => setCurrentPage(currentPage + 1)}
-                          disabled={currentPage >= totalPages}
+                          onClick={() => setCurrentPage(pageForDisplay + 1)}
+                          disabled={pageForDisplay >= effectiveTotalPages}
                           className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Página siguiente"
                         >
                           »
                         </button>
                         <button
-                          onClick={() => setCurrentPage(totalPages)}
-                          disabled={currentPage >= totalPages}
+                          onClick={() => setCurrentPage(effectiveTotalPages)}
+                          disabled={pageForDisplay >= effectiveTotalPages}
                           className="px-2 py-1 text-sm border border-gray-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Última página"
                         >

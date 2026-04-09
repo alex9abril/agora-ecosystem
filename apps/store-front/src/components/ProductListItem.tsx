@@ -7,6 +7,7 @@ import React from 'react';
 import ContextualLink from './ContextualLink';
 import { Product } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
+import { useFavorites } from '@/contexts/FavoritesContext';
 import { formatPrice } from '@/lib/format';
 
 interface ProductListItemProps {
@@ -18,6 +19,8 @@ interface ProductListItemProps {
 
 export default function ProductListItem({ product, onAddToCart, overridePrice, pricePending }: ProductListItemProps) {
   const { contextType, branchId } = useStoreContext();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorite = isFavorite(product.id);
 
   // Determinar precio a mostrar
   const displayPrice =
@@ -49,6 +52,22 @@ export default function ProductListItem({ product, onAddToCart, overridePrice, p
         <div className="flex flex-row">
           {/* Imagen - lado izquierdo */}
           <div className="w-48 h-48 bg-gray-100 relative overflow-hidden flex items-center justify-center flex-shrink-0">
+            <button
+              type="button"
+              className={`absolute top-2 right-2 z-20 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center transition-colors ${
+                favorite ? 'text-red-500' : 'text-gray-700'
+              }`}
+              aria-label={favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleFavorite(product);
+              }}
+            >
+              <svg className="w-4 h-4" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 8.25c0-2.485-2.099-4.5-4.687-4.5-1.935 0-3.597 1.126-4.313 2.733-.716-1.607-2.378-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 6.75 9 11.25 9 11.25s9-4.5 9-11.25z" />
+              </svg>
+            </button>
             {/* Badge de Destacado */}
             {product.is_featured && (
               <div className="absolute top-2 left-2 z-10 bg-toyota-red text-white px-2 py-1 rounded-md text-xs font-semibold shadow-md flex items-center gap-1">

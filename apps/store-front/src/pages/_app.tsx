@@ -4,6 +4,7 @@ import { store } from '@/store';
 import { StoreProvider } from '@/contexts/StoreContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
+import { FavoritesProvider } from '@/contexts/FavoritesContext';
 import CategoriesInitializer from '@/components/CategoriesInitializer';
 import '../styles/globals.css';
 
@@ -12,10 +13,12 @@ export default function App({ Component, pageProps }: AppProps) {
     <Provider store={store}>
       <StoreProvider>
         <AuthProvider>
-          <CartProvider>
-            <CategoriesInitializer />
-            <Component {...pageProps} />
-          </CartProvider>
+          <FavoritesProvider>
+            <CartProvider>
+              <CategoriesInitializer />
+              <Component {...pageProps} />
+            </CartProvider>
+          </FavoritesProvider>
         </AuthProvider>
       </StoreProvider>
     </Provider>

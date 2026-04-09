@@ -17,6 +17,7 @@ import { categoriesService, ProductCategory } from '@/lib/categories';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStoreContext } from '@/contexts/StoreContext';
+import { useFavorites } from '@/contexts/FavoritesContext';
 import { useStoreRouting } from '@/hooks/useStoreRouting';
 import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -41,6 +42,7 @@ export default function ProductDetailPage() {
   const { id } = router.query;
   const { isAuthenticated } = useAuth();
   const { addItem } = useCart();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const { contextType, branchId, groupId, brandId, branchData, isLoading: contextLoading } = useStoreContext();
   const { push } = useStoreRouting();
   const [product, setProduct] = useState<Product | null>(null);
@@ -1020,6 +1022,38 @@ export default function ProductDetailPage() {
             {/* Información */}
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+              <button
+                type="button"
+                className={`mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  isFavorite(product.id)
+                    ? 'border-red-200 bg-red-50 text-red-600'
+                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+                onClick={() => {
+                  const nowFavorite = toggleFavorite(product);
+                  setSnackbarSeverity('success');
+                  setSnackbarMessage(
+                    nowFavorite ? 'Producto agregado a favoritos' : 'Producto eliminado de favoritos'
+                  );
+                  setSnackbarOpen(true);
+                }}
+                aria-label={isFavorite(product.id) ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill={isFavorite(product.id) ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M21 8.25c0-2.485-2.099-4.5-4.687-4.5-1.935 0-3.597 1.126-4.313 2.733-.716-1.607-2.378-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 6.75 9 11.25 9 11.25s9-4.5 9-11.25z"
+                  />
+                </svg>
+                {isFavorite(product.id) ? 'En favoritos' : 'Agregar a favoritos'}
+              </button>
               {product.sku && (
                 <p className="text-sm text-gray-500 mb-4">SKU: {product.sku}</p>
               )}

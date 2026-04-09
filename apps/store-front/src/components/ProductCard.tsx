@@ -7,6 +7,7 @@ import React from 'react';
 import ContextualLink from './ContextualLink';
 import { Product } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
+import { useFavorites } from '@/contexts/FavoritesContext';
 import { formatPrice } from '@/lib/format';
 
 interface ProductCardProps {
@@ -18,6 +19,8 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onAddToCart, overridePrice, pricePending }: ProductCardProps) {
   const { contextType, branchData } = useStoreContext();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorite = isFavorite(product.id);
 
   // Determinar precio a mostrar
   const displayPrice =
@@ -62,10 +65,17 @@ export default function ProductCard({ product, onAddToCart, overridePrice, price
         <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden flex items-center justify-center">
           <button
             type="button"
-            className="absolute top-3 right-3 z-10 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center text-gray-700"
-            aria-label="Agregar a favoritos"
+            className={`absolute top-3 right-3 z-10 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center transition-colors ${
+              favorite ? 'text-red-500' : 'text-gray-700'
+            }`}
+            aria-label={favorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleFavorite(product);
+            }}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 8.25c0-2.485-2.099-4.5-4.687-4.5-1.935 0-3.597 1.126-4.313 2.733-.716-1.607-2.378-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 6.75 9 11.25 9 11.25s9-4.5 9-11.25z" />
             </svg>
           </button>

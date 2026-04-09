@@ -1,7 +1,14 @@
 {
-    "mcpServers": {
-      "supabase": {
-        "url": "https://mcp.supabase.com/mcp?project_ref=jjuwvgezbgxlabofphzr"
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=jjuwvgezbgxlabofphzr"
+    },
+    "nextasis-4d56e31c-ed9c-44c5-829b-d843e0432ad9": {
+      "type": "streamableHttp",
+      "url": "http://127.0.0.1:5100/api/mcp",
+      "headers": {
+        "x-mcp-token": "nxmcp_5904c089208237e24468d9c41a1c92c03fde58dc9c077d43"
       }
     }
   }
+}
