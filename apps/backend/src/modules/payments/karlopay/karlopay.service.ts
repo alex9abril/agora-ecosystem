@@ -12,6 +12,7 @@ import { KarbotService } from '../../businesses/karbot.service';
 import { IntegrationLogsService } from '../../settings/integration-logs.service';
 import { supabaseAdmin } from '../../../config/supabase.config';
 import { resolveProductImagePublicUrl } from '../../../utils/storage.utils';
+import { formatOrderFolioFromUuid } from '../../../utils/order-folio.util';
 import axios, { AxiosInstance } from 'axios';
 import { CreateKarlopayOrderDto } from './dto/create-karlopay-order.dto';
 import { KarlopayPaymentWebhookDto } from './dto/karlopay-payment-webhook.dto';
@@ -1430,7 +1431,7 @@ export class KarlopayService {
       }
 
       // Formatear datos
-      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderNumber = formatOrderFolioFromUuid(order.id);
       const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
         year: 'numeric',
         month: 'long',

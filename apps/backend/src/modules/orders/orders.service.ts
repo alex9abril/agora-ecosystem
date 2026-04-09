@@ -21,6 +21,7 @@ import { IntegrationLogsService } from '../settings/integration-logs.service';
 import { StoresService } from '../stores/stores.service';
 import { BusinessUsersService } from '../business-users/business-users.service';
 import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
+import { formatOrderFolioFromUuid } from '../../utils/order-folio.util';
 import type { OperationsDashboardResponse, OperationsDashboardActivityItem } from './dto/operations-dashboard.types';
 
 const DEFAULT_TAX_SETTINGS = {
@@ -3068,7 +3069,7 @@ export class OrdersService {
       }
 
       // Formatear datos
-      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderNumber = formatOrderFolioFromUuid(order.id);
       const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
         year: 'numeric',
         month: 'long',
@@ -3242,7 +3243,7 @@ export class OrdersService {
       const userName = await this.getClientDisplayName(order.client_id);
       const previousStatusLabel = this.orderStatusLabelEs(oldStatus);
       const currentStatusLabel = this.orderStatusLabelEs(newStatus);
-      const orderNumber = order.id.substring(0, 8).toUpperCase();
+      const orderNumber = formatOrderFolioFromUuid(order.id);
       const orderUrl = this.buildOrderDetailUrl(
         process.env.FRONTEND_URL || 'https://agoramp.mx',
         order.id,
