@@ -39,6 +39,9 @@ import TableFilters, {
   type FilterColumn,
 } from "@/components/TableFilters";
 import { getSkuLineFromSku } from "@/lib/sku-line";
+import BulkActionsBar from "@/components/BulkActionsBar";
+import ProductGrid from "@/components/ProductGrid";
+import { exportProductsToCsv } from "@/utils/exportCsv";
 
 // Formateador de precios con separación de miles (ej: 6,589.32)
 const priceFormatter = new Intl.NumberFormat("es-MX", {
@@ -49,6 +52,15 @@ const priceFormatter = new Intl.NumberFormat("es-MX", {
 const PAGE_SIZE_STORAGE_KEY = "products_page_size";
 const CURRENT_PAGE_STORAGE_KEY = "products_current_page";
 const ADVANCED_FILTERS_STORAGE_KEY = "products_advanced_filters";
+const VIEW_MODE_STORAGE_KEY = "products_view_mode";
+const VISIBLE_COLUMNS_STORAGE_KEY = "products_visible_columns";
+
+type ViewMode = "table" | "grid";
+
+const ALL_OPTIONAL_COLUMNS = ["imagen", "linea_sku", "descripcion", "precio", "tipo", "disponibilidad", "sucursales"] as const;
+type OptionalColumn = (typeof ALL_OPTIONAL_COLUMNS)[number];
+
+const DEFAULT_VISIBLE_COLUMNS: OptionalColumn[] = ["imagen", "linea_sku", "descripcion", "precio", "tipo", "disponibilidad"];
 
 function parseStoredAdvancedFilters(raw: string | null): FilterRow[] {
   if (!raw) return [];
@@ -228,6 +240,47 @@ export default function ProductsPage() {
   >(new Map()); // productId -> Set of branchIds
   const [loadingBranchMap, setLoadingBranchMap] = useState(false);
 
+  // Selección múltiple (bulk actions)
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+
+  // Disponibilidad en toggle optimista (ids en proceso)
+  const [togglingAvailabilityIds, setTogglingAvailabilityIds] = useState<Set<string>>(new Set());
+
+  // Fila con acciones visibles (hover)
+  const [hoveredProductId, setHoveredProductId] = useState<string | null>(null);
+
+  // Vista: tabla o grid
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (stored === "grid" || stored === "table") return stored;
+    }
+    return "table";
+  });
+
+  // Columnas visibles en tabla
+  const [visibleColumns, setVisibleColumns] = useState<Set<OptionalColumn>>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed)) {
+            const cols = parsed.filter((c): c is OptionalColumn =>
+              (ALL_OPTIONAL_COLUMNS as readonly string[]).includes(c as string)
+            );
+            if (cols.length > 0) return new Set(cols);
+          }
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return new Set(DEFAULT_VISIBLE_COLUMNS);
+  });
+
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
+
   // Estados para compatibilidad de vehículos
   const [productCompatibilities, setProductCompatibilities] = useState<
     ProductCompatibility[]
@@ -274,6 +327,24 @@ export default function ProductsPage() {
       localStorage.setItem(PAGE_SIZE_STORAGE_KEY, pageSize.toString());
     }
   }, [pageSize]);
+
+  // Persist view mode
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    }
+  }, [viewMode]);
+
+  // Persist visible columns
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(Array.from(visibleColumns)));
+      } catch {
+        // quota / privado
+      }
+    }
+  }, [visibleColumns]);
 
   // Limpiar preferencias si se navega fuera de productos
   useEffect(() => {
@@ -1055,25 +1126,158 @@ export default function ProductsPage() {
   };
 
   const handleToggleAvailability = async (product: Product) => {
-    const action = product.is_available ? "desactivar" : "activar";
-    if (!confirm(`¿Estás seguro de que deseas ${action} este producto?`)) {
-      return;
-    }
+    if (togglingAvailabilityIds.has(product.id)) return;
+
+    // Actualización optimista: cambiar el estado en UI antes de la llamada API
+    setTogglingAvailabilityIds((prev) => new Set(prev).add(product.id));
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === product.id ? { ...p, is_available: !p.is_available } : p,
+      ),
+    );
 
     try {
       await productsService.updateProduct({
         id: product.id,
         is_available: !product.is_available,
       });
-      if (hasActiveAdvancedFilters) {
-        await loadEntireCatalogForSearch(searchTerm);
-      } else {
-        await loadData();
-      }
     } catch (err: any) {
+      // Revertir en caso de error
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id ? { ...p, is_available: product.is_available } : p,
+        ),
+      );
+      const action = product.is_available ? "desactivar" : "activar";
       console.error(`Error ${action} producto:`, err);
       setError(`Error al ${action} el producto`);
+    } finally {
+      setTogglingAvailabilityIds((prev) => {
+        const next = new Set(prev);
+        next.delete(product.id);
+        return next;
+      });
     }
+  };
+
+  const handleDuplicateProduct = async (product: Product) => {
+    try {
+      const { id, created_at, updated_at, primary_image_url, ...rest } = product as any;
+      const duplicateData: CreateProductData = {
+        ...rest,
+        name: `${product.name} (copia)`,
+        sku: product.sku ? `${product.sku}-COPY` : undefined,
+        is_available: false,
+      };
+      const newProduct = await productsService.createProduct(duplicateData);
+      if (newProduct?.id) {
+        router.push(`/products/${newProduct.id}`);
+      }
+    } catch (err: any) {
+      console.error("Error duplicando producto:", err);
+      setError("Error al duplicar el producto");
+    }
+  };
+
+  const handleBulkActivate = async () => {
+    const ids = Array.from(selectedProductIds);
+    // Optimistic update
+    setProducts((prev) =>
+      prev.map((p) => (ids.includes(p.id) ? { ...p, is_available: true } : p)),
+    );
+    try {
+      await Promise.all(
+        ids.map((id) => productsService.updateProduct({ id, is_available: true })),
+      );
+    } catch (err: any) {
+      console.error("Error activando productos:", err);
+      setError("Error al activar los productos seleccionados");
+      if (hasActiveAdvancedFilters) await loadEntireCatalogForSearch(searchTerm);
+      else await loadData();
+    }
+    setSelectedProductIds(new Set());
+  };
+
+  const handleBulkDeactivate = async () => {
+    const ids = Array.from(selectedProductIds);
+    setProducts((prev) =>
+      prev.map((p) => (ids.includes(p.id) ? { ...p, is_available: false } : p)),
+    );
+    try {
+      await Promise.all(
+        ids.map((id) => productsService.updateProduct({ id, is_available: false })),
+      );
+    } catch (err: any) {
+      console.error("Error desactivando productos:", err);
+      setError("Error al desactivar los productos seleccionados");
+      if (hasActiveAdvancedFilters) await loadEntireCatalogForSearch(searchTerm);
+      else await loadData();
+    }
+    setSelectedProductIds(new Set());
+  };
+
+  const handleBulkDuplicate = async () => {
+    const ids = Array.from(selectedProductIds);
+    const productsToDuplicate = products.filter((p) => ids.includes(p.id));
+    try {
+      await Promise.all(
+        productsToDuplicate.map(async (product) => {
+          const { id, created_at, updated_at, primary_image_url, ...rest } = product as any;
+          await productsService.createProduct({
+            ...rest,
+            name: `${product.name} (copia)`,
+            sku: product.sku ? `${product.sku}-COPY` : undefined,
+            is_available: false,
+          });
+        }),
+      );
+      if (hasActiveAdvancedFilters) await loadEntireCatalogForSearch(searchTerm);
+      else await loadData();
+    } catch (err: any) {
+      console.error("Error duplicando productos:", err);
+      setError("Error al duplicar los productos seleccionados");
+    }
+    setSelectedProductIds(new Set());
+  };
+
+  const handleBulkAssignBranch = async (branchId: string) => {
+    const ids = Array.from(selectedProductIds);
+    try {
+      await Promise.all(
+        ids.map((productId) =>
+          productsService.updateProductBranchAvailability(productId, [
+            { branch_id: branchId, is_enabled: true, price: null, stock: null, collection_ids: [] },
+          ]),
+        ),
+      );
+      if (availableBusinesses.length > 0) {
+        loadProductBranchMap(products).catch(() => {});
+      }
+    } catch (err: any) {
+      console.error("Error asignando sucursal:", err);
+      setError("Error al asignar la sucursal a los productos seleccionados");
+    }
+    setSelectedProductIds(new Set());
+  };
+
+  const handleExportCsv = () => {
+    const productsToExport = hasActiveAdvancedFilters
+      ? filteredAndSortedProducts
+      : displayedProducts;
+    const timestamp = new Date().toISOString().slice(0, 10);
+    exportProductsToCsv(productsToExport, `productos_${timestamp}.csv`);
+  };
+
+  const toggleColumnVisibility = (col: OptionalColumn) => {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(col)) {
+        next.delete(col);
+      } else {
+        next.add(col);
+      }
+      return next;
+    });
   };
 
   // Obtener categorías filtradas por tipo de producto
@@ -1352,6 +1556,51 @@ export default function ProductsPage() {
           <h1 className="text-lg font-medium text-gray-900 dark:text-gray-100">Productos</h1>
           {!showForm && (
             <div className="flex items-center gap-3">
+              {/* Botón Exportar CSV */}
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-normal border border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-neutral-800 rounded hover:bg-gray-50 dark:hover:bg-neutral-700 transition-colors"
+                title="Exportar productos a CSV"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Exportar
+              </button>
+
+              {/* Toggle de vista tabla / grid */}
+              <div className="flex rounded border border-gray-300 dark:border-neutral-600 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={`px-2.5 py-1.5 transition-colors ${
+                    viewMode === "table"
+                      ? "bg-gray-900 text-white"
+                      : "bg-white dark:bg-neutral-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                  }`}
+                  title="Vista tabla"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M14 3v18M3 6a3 3 0 013-3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  className={`px-2.5 py-1.5 transition-colors ${
+                    viewMode === "grid"
+                      ? "bg-gray-900 text-white"
+                      : "bg-white dark:bg-neutral-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                  }`}
+                  title="Vista cuadrícula"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </button>
+              </div>
+
               {/* Botón de Filtros */}
               <div className="relative">
                 <button
@@ -1681,9 +1930,9 @@ export default function ProductsPage() {
               </div>
             </form>
 
-            {/* Tabla de productos */}
+            {/* Tabla / Grid de productos */}
             <div className="bg-white dark:bg-neutral-800 rounded border border-gray-200 dark:border-neutral-700 overflow-hidden flex-1 flex flex-col min-h-0">
-              {/* Esquina superior: botón Filtros (panel flotante, igual que pedidos) */}
+              {/* Barra de herramientas */}
               <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-neutral-700 px-4 py-2 flex-shrink-0 relative">
                 <button
                   type="button"
@@ -1711,6 +1960,54 @@ export default function ProductsPage() {
                   valueSuggestions={filterValueSuggestions}
                 />
 
+                {/* Selector de columnas (solo en tabla) */}
+                {viewMode === "table" && (
+                  <div className="relative ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setShowColumnPicker(!showColumnPicker)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-normal rounded-md border transition-colors ${
+                        showColumnPicker
+                          ? "bg-gray-900 dark:bg-white text-white dark:text-black border-gray-900 dark:border-white"
+                          : "bg-white dark:bg-neutral-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-neutral-600 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                      }`}
+                      title="Columnas visibles"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                      </svg>
+                      Columnas
+                    </button>
+                    {showColumnPicker && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowColumnPicker(false)} />
+                        <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-lg shadow-xl p-3 min-w-[180px]">
+                          <p className="text-[10px] font-medium uppercase text-gray-400 dark:text-gray-500 mb-2 tracking-wider">Columnas visibles</p>
+                          {([
+                            { id: "imagen" as OptionalColumn, label: "Imagen" },
+                            { id: "linea_sku" as OptionalColumn, label: "Línea SKU" },
+                            { id: "disponibilidad" as OptionalColumn, label: "Disponibilidad" },
+                            { id: "descripcion" as OptionalColumn, label: "Descripción" },
+                            { id: "precio" as OptionalColumn, label: "Precio" },
+                            { id: "tipo" as OptionalColumn, label: "Tipo" },
+                            { id: "sucursales" as OptionalColumn, label: "Sucursales" },
+                          ]).map(({ id, label }) => (
+                            <label key={id} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-gray-50 dark:hover:bg-neutral-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={visibleColumns.has(id)}
+                                onChange={() => toggleColumnVisibility(id)}
+                                className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* Panel flotante de filtros (igual que en pedidos) */}
                 {showAdvancedFilters && (
                   <>
@@ -1731,6 +2028,25 @@ export default function ProductsPage() {
                   </>
                 )}
               </div>
+              {viewMode === "grid" ? (
+                <div className="overflow-y-auto flex-1 min-h-0">
+                  <ProductGrid
+                    products={displayedProducts}
+                    selectedIds={selectedProductIds}
+                    onToggleSelect={(id) => {
+                      setSelectedProductIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(id)) next.delete(id); else next.add(id);
+                        return next;
+                      });
+                    }}
+                    onEdit={handleEdit}
+                    onToggleAvailability={handleToggleAvailability}
+                    onDuplicate={handleDuplicateProduct}
+                    togglingIds={togglingAvailabilityIds}
+                  />
+                </div>
+              ) : (
               <div className="overflow-x-auto flex-1 min-h-0">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-neutral-700">
                   <thead className="bg-gray-50 dark:bg-neutral-700/50">
@@ -1741,6 +2057,22 @@ export default function ProductsPage() {
                       >
                         <input
                           type="checkbox"
+                          checked={displayedProducts.length > 0 && displayedProducts.every((p) => selectedProductIds.has(p.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProductIds((prev) => {
+                                const next = new Set(prev);
+                                displayedProducts.forEach((p) => next.add(p.id));
+                                return next;
+                              });
+                            } else {
+                              setSelectedProductIds((prev) => {
+                                const next = new Set(prev);
+                                displayedProducts.forEach((p) => next.delete(p.id));
+                                return next;
+                              });
+                            }
+                          }}
                           className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
                         />
                       </th>
@@ -1765,78 +2097,89 @@ export default function ProductsPage() {
                               stroke="currentColor"
                               viewBox="0 0 24 24"
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 15l7-7 7 7"
-                              />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                             </svg>
                           )}
                         </div>
                       </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider max-w-[100px]"
-                        title="Prefijo de familia: PT, PK, PU o PW según el inicio del SKU"
-                      >
-                        Línea SKU
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                      >
-                        Imagen
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                      >
-                        Disponibilidad
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                      >
-                        Descripción
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
-                        onClick={() => {
-                          if (sortBy === "price") {
-                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-                          } else {
-                            setSortBy("price");
-                            setSortOrder("asc");
-                          }
-                        }}
-                      >
-                        <div className="flex items-center gap-1">
-                          Precio
-                          {sortBy === "price" && (
-                            <svg
-                              className={`h-4 w-4 ${sortOrder === "asc" ? "transform rotate-180" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 15l7-7 7 7"
-                              />
-                            </svg>
-                          )}
-                        </div>
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
-                      >
-                        Tipo
-                      </th>
+                      {visibleColumns.has("linea_sku") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider max-w-[100px]"
+                          title="Prefijo de familia: PT, PK, PU o PW según el inicio del SKU"
+                        >
+                          Línea SKU
+                        </th>
+                      )}
+                      {visibleColumns.has("imagen") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Imagen
+                        </th>
+                      )}
+                      {visibleColumns.has("disponibilidad") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Disponibilidad
+                        </th>
+                      )}
+                      {visibleColumns.has("descripcion") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Descripción
+                        </th>
+                      )}
+                      {visibleColumns.has("precio") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600"
+                          onClick={() => {
+                            if (sortBy === "price") {
+                              setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                            } else {
+                              setSortBy("price");
+                              setSortOrder("asc");
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            Precio
+                            {sortBy === "price" && (
+                              <svg
+                                className={`h-4 w-4 ${sortOrder === "asc" ? "transform rotate-180" : ""}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </th>
+                      )}
+                      {visibleColumns.has("tipo") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Tipo
+                        </th>
+                      )}
+                      {visibleColumns.has("sucursales") && (
+                        <th
+                          scope="col"
+                          className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                        >
+                          Sucursales
+                        </th>
+                      )}
+                      <th scope="col" className="px-3 py-2 w-16" />
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-neutral-800 divide-y divide-gray-200 dark:divide-neutral-700">
@@ -1845,48 +2188,44 @@ export default function ProductsPage() {
                         ProductType,
                         { label: string; color: string }
                       > = {
-                        food: {
-                          label: "Alimento",
-                          color: "bg-blue-100 text-blue-800",
-                        },
-                        beverage: {
-                          label: "Bebida",
-                          color: "bg-cyan-100 text-cyan-800",
-                        },
-                        medicine: {
-                          label: "Medicamento",
-                          color: "bg-red-100 text-red-800",
-                        },
-                        grocery: {
-                          label: "Abarrotes",
-                          color: "bg-yellow-100 text-yellow-800",
-                        },
-                        non_food: {
-                          label: "No Alimenticio",
-                          color: "bg-gray-100 text-gray-800",
-                        },
+                        food: { label: "Alimento", color: "bg-blue-100 text-blue-800" },
+                        beverage: { label: "Bebida", color: "bg-cyan-100 text-cyan-800" },
+                        medicine: { label: "Medicamento", color: "bg-red-100 text-red-800" },
+                        grocery: { label: "Abarrotes", color: "bg-yellow-100 text-yellow-800" },
+                        non_food: { label: "No Alimenticio", color: "bg-gray-100 text-gray-800" },
                       };
-                      const typeInfo = productTypeLabels[
-                        product.product_type
-                      ] || {
+                      const typeInfo = productTypeLabels[product.product_type] || {
                         label: product.product_type,
                         color: "bg-gray-100 text-gray-800",
                       };
+                      const isSelected = selectedProductIds.has(product.id);
+                      const isHovered = hoveredProductId === product.id;
+                      const isToggling = togglingAvailabilityIds.has(product.id);
+                      const imageUrl = product.image_url || product.primary_image_url;
+
+                      // Datos de sucursales
+                      const productBranches = productBranchMap.get(product.id) || new Set<string>();
+                      const enabledBranchCount = productBranches.size;
+                      const enabledBranchNames = availableBusinesses
+                        .filter((b) => productBranches.has(b.business_id))
+                        .map((b) => b.business_name);
 
                       return (
                         <tr
                           key={product.id}
-                          className="hover:bg-gray-50 dark:hover:bg-neutral-700 cursor-pointer"
+                          className={`cursor-pointer transition-colors ${
+                            isSelected
+                              ? "bg-gray-50 dark:bg-neutral-700/60"
+                              : "hover:bg-gray-50 dark:hover:bg-neutral-700"
+                          }`}
+                          onMouseEnter={() => setHoveredProductId(product.id)}
+                          onMouseLeave={() => setHoveredProductId(null)}
                           onClick={(e) => {
-                            // Evitar que el click en checkbox o botones active la navegación
                             const target = e.target as HTMLElement;
                             if (
                               target.closest('input[type="checkbox"]') ||
-                              target.closest("button") ||
-                              target.closest("svg")
-                            ) {
-                              return;
-                            }
+                              target.closest("button")
+                            ) return;
                             handleEdit(product);
                           }}
                         >
@@ -1896,6 +2235,15 @@ export default function ProductsPage() {
                           >
                             <input
                               type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedProductIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(product.id)) next.delete(product.id);
+                                  else next.add(product.id);
+                                  return next;
+                                });
+                              }}
                               className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
                             />
                           </td>
@@ -1909,83 +2257,146 @@ export default function ProductsPage() {
                               </div>
                             )}
                           </td>
-                          <td className="px-3 py-2 align-top whitespace-nowrap max-w-[100px]">
-                            {(() => {
-                              const line = getSkuLineFromSku(product.sku);
-                              if (!product.sku?.trim()) {
-                                return (
-                                  <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                                    —
-                                  </span>
-                                );
-                              }
-                              if (!line) {
-                                return (
-                                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                                    Otro
-                                  </span>
-                                );
-                              }
-                              return (
-                                <span className="font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">
-                                  {line}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {product.image_url || product.primary_image_url ? (
-                              <img
-                                src={product.image_url || product.primary_image_url}
-                                alt={product.name}
-                                className="h-8 w-8 rounded object-cover border border-gray-200"
-                              />
-                            ) : (
-                              <div className="h-8 w-8 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400">
-                                <svg
-                                  className="h-4 w-4"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  />
-                                </svg>
+                          {visibleColumns.has("linea_sku") && (
+                            <td className="px-3 py-2 align-top whitespace-nowrap max-w-[100px]">
+                              {(() => {
+                                const line = getSkuLineFromSku(product.sku);
+                                if (!product.sku?.trim()) {
+                                  return <span className="text-[11px] text-gray-400 dark:text-gray-500">—</span>;
+                                }
+                                if (!line) {
+                                  return <span className="text-[11px] text-gray-500 dark:text-gray-400">Otro</span>;
+                                }
+                                return <span className="font-mono text-xs font-semibold text-gray-900 dark:text-gray-100">{line}</span>;
+                              })()}
+                            </td>
+                          )}
+                          {visibleColumns.has("imagen") && (
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <div className="relative group/img">
+                                {imageUrl ? (
+                                  <>
+                                    <img
+                                      src={imageUrl}
+                                      alt={product.name}
+                                      className="h-8 w-8 rounded object-cover border border-gray-200"
+                                    />
+                                    {/* Preview en hover */}
+                                    <div className="pointer-events-none absolute left-10 top-1/2 -translate-y-1/2 z-50 hidden group-hover/img:block">
+                                      <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 rounded-lg shadow-xl p-1">
+                                        <img
+                                          src={imageUrl}
+                                          alt={product.name}
+                                          className="w-40 h-40 object-contain rounded"
+                                        />
+                                      </div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="h-8 w-8 rounded border border-gray-200 bg-gray-100 dark:bg-neutral-700 flex items-center justify-center text-gray-400">
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div
-                                className={`h-2 w-2 rounded-full mr-1.5 ${product.is_available ? "bg-green-500" : "bg-gray-400"}`}
-                              ></div>
-                              <span className="text-xs font-light text-gray-600 dark:text-gray-300">
-                                {product.is_available
-                                  ? "Disponible"
-                                  : "No disponible"}
+                            </td>
+                          )}
+                          {visibleColumns.has("disponibilidad") && (
+                            <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-2">
+                                {/* Toggle switch */}
+                                <button
+                                  type="button"
+                                  disabled={isToggling}
+                                  onClick={() => handleToggleAvailability(product)}
+                                  className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+                                    product.is_available ? "bg-green-500" : "bg-gray-300 dark:bg-neutral-600"
+                                  }`}
+                                  title={product.is_available ? "Desactivar disponibilidad" : "Activar disponibilidad"}
+                                >
+                                  {isToggling ? (
+                                    <span className="absolute inset-0 flex items-center justify-center">
+                                      <span className="h-3 w-3 border border-white/50 border-t-white rounded-full animate-spin" />
+                                    </span>
+                                  ) : (
+                                  <span
+                                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                                      product.is_available ? "translate-x-5" : "translate-x-0.5"
+                                    }`}
+                                  />
+                                  )}
+                                </button>
+                                <span className="text-xs font-light text-gray-600 dark:text-gray-300">
+                                  {product.is_available ? "Disponible" : "No disponible"}
+                                </span>
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.has("descripcion") && (
+                            <td className="px-3 py-2">
+                              <div className="text-xs font-light text-gray-500 dark:text-gray-400 max-w-xs truncate">
+                                {product.description || "-"}
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.has("precio") && (
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <div className="text-xs font-medium text-gray-900 dark:text-gray-100">
+                                ${priceFormatter.format(product.price || 0)}
+                              </div>
+                            </td>
+                          )}
+                          {visibleColumns.has("tipo") && (
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${typeInfo.color}`}>
+                                {typeInfo.label}
                               </span>
+                            </td>
+                          )}
+                          {visibleColumns.has("sucursales") && (
+                            <td className="px-3 py-2 whitespace-nowrap">
+                              {loadingBranchMap ? (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500">…</span>
+                              ) : enabledBranchCount === 0 ? (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500">Sin asignar</span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-neutral-700 px-1.5 py-0.5 rounded-full cursor-help"
+                                  title={enabledBranchNames.join(", ")}
+                                >
+                                  <svg className="h-3 w-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" />
+                                  </svg>
+                                  {enabledBranchCount} / {availableBusinesses.length}
+                                </span>
+                              )}
+                            </td>
+                          )}
+                          {/* Acciones rápidas por fila */}
+                          <td className="px-2 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className={`flex items-center gap-1 transition-opacity ${isHovered ? "opacity-100" : "opacity-0"}`}>
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(product)}
+                                className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
+                                title="Editar"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicateProduct(product)}
+                                className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
+                                title="Duplicar"
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
                             </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="text-xs font-light text-gray-500 dark:text-gray-400 max-w-xs truncate">
-                              {product.description || "-"}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <div className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                              ${priceFormatter.format(product.price || 0)}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <span
-                              className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${typeInfo.color}`}
-                            >
-                              {typeInfo.label}
-                            </span>
                           </td>
                         </tr>
                       );
@@ -1993,6 +2404,8 @@ export default function ProductsPage() {
                   </tbody>
                 </table>
               </div>
+              )}
+
 
               {filteredProductCount === 0 && (
                 <div className="text-center py-6">
@@ -2087,6 +2500,26 @@ export default function ProductsPage() {
           </div>
         )}
       </div>
+
+      {/* Barra de acciones masivas */}
+      <BulkActionsBar
+        selectedCount={selectedProductIds.size}
+        onActivate={handleBulkActivate}
+        onDeactivate={handleBulkDeactivate}
+        onDuplicate={handleBulkDuplicate}
+        onAssignBranch={handleBulkAssignBranch}
+        onClearSelection={() => setSelectedProductIds(new Set())}
+        onSelectAll={() => {
+          setSelectedProductIds(
+            new Set(filteredAndSortedProducts.map((p) => p.id))
+          );
+        }}
+        totalCount={filteredProductCount}
+        availableBusinesses={availableBusinesses.map((b) => ({
+          business_id: b.business_id,
+          business_name: b.business_name,
+        }))}
+      />
     </LocalLayout>
   );
 }
