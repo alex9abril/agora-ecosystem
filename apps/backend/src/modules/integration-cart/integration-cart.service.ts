@@ -28,7 +28,15 @@ const WEBHOOK_PROVIDER_INTEGRATION_CART = 'integration_cart';
 
 @Injectable()
 export class IntegrationCartService {
-  private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+  private normalizeBucketName(bucketName: string): string {
+    if (!bucketName) return 'products';
+    if (bucketName.startsWith('http') || bucketName.includes('://') || bucketName.includes('/storage/')) {
+      return 'products';
+    }
+    return bucketName.trim();
+  }
+
+  private readonly BUCKET_NAME = this.normalizeBucketName(process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products');
 
   constructor(
     private readonly storesService: StoresService,

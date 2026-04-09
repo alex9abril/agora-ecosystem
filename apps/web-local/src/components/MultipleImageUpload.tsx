@@ -163,19 +163,19 @@ export default function MultipleImageUpload({
     setIsDragging(false);
   };
 
-  const handleRemove = async (image: ProductImage) => {
-    if (image.id && onDeleteImage && !image.id.startsWith('temp-')) {
-      // Si tiene ID y no es temporal, eliminar del servidor
+  const handleRemove = async (image: ProductImage, index: number) => {
+    const isServerImage = !!image.id && !image.id.startsWith('temp-');
+    if (isServerImage && onDeleteImage) {
       try {
-        await onDeleteImage(image.id);
-        onImagesChange(images.filter(img => img.id !== image.id));
+        await onDeleteImage(image.id!);
+        onImagesChange(images.filter((_, i) => i !== index));
       } catch (err: any) {
         console.error('Error eliminando imagen:', err);
         setError(`Error al eliminar imagen: ${err.message || 'Error desconocido'}`);
       }
     } else {
-      // Si es temporal o no tiene ID, solo remover de la lista
-      onImagesChange(images.filter(img => img.id !== image.id));
+      // Imagen local (pendiente de subir) o temporal — solo quitar del estado
+      onImagesChange(images.filter((_, i) => i !== index));
     }
   };
 
@@ -226,66 +226,75 @@ export default function MultipleImageUpload({
       {/* Grid de imágenes existentes */}
       {images.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {images.map((image, index) => (
-            <div
-              key={image.id || `preview-${index}`}
-              className="relative group border border-gray-200 rounded-lg overflow-hidden bg-white"
-            >
-              <div className="aspect-square relative">
-                <img
-                  src={image.public_url}
-                  alt={image.alt_text || `Imagen ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-                
-                {/* Overlay con acciones */}
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <div className="flex gap-2">
-                    {image.id && !image.id.startsWith('temp-') && (
-                      <>
-                        {!image.is_primary && (
-                          <button
-                            type="button"
-                            onClick={() => handleSetPrimary(image)}
-                            className="bg-blue-600 text-white rounded-full p-2 hover:bg-blue-700 transition-colors"
-                            title="Marcar como principal"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </button>
-                        )}
+          {images.map((image, index) => {
+            const isServerImage = !!image.id && !image.id.startsWith('temp-');
+            const isPending = !isServerImage && !!image.file;
+            return (
+              <div
+                key={image.id || `preview-${index}`}
+                className="relative group border border-gray-200 rounded-lg overflow-hidden bg-white"
+              >
+                <div className="aspect-square relative">
+                  <img
+                    src={image.public_url}
+                    alt={image.alt_text || `Imagen ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+
+                  {/* Overlay con acciones — visible en hover */}
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <div className="flex gap-2">
+                      {/* "Marcar como principal" solo para imágenes ya guardadas */}
+                      {isServerImage && !image.is_primary && (
                         <button
                           type="button"
-                          onClick={() => handleRemove(image)}
-                          className="bg-red-600 text-white rounded-full p-2 hover:bg-red-700 transition-colors"
-                          title="Eliminar imagen"
+                          onClick={() => handleSetPrimary(image)}
+                          className="bg-blue-600 text-white rounded-full p-2 hover:bg-blue-700 transition-colors"
+                          title="Marcar como principal"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         </button>
-                      </>
-                    )}
+                      )}
+                      {/* Eliminar — disponible para todas las imágenes */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(image, index)}
+                        className="bg-red-600 text-white rounded-full p-2 hover:bg-red-700 transition-colors"
+                        title="Eliminar imagen"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Indicador de imagen principal */}
+                  {image.is_primary && (
+                    <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
+                      Principal
+                    </div>
+                  )}
+
+                  {/* Badge "Pendiente" para imágenes aún no subidas */}
+                  {isPending && (
+                    <div className="absolute top-2 right-2 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded font-medium">
+                      Pendiente
+                    </div>
+                  )}
+
+                  {/* Indicador de carga */}
+                  {uploading === image.id && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Indicador de imagen principal */}
-                {image.is_primary && (
-                  <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
-                    Principal
-                  </div>
-                )}
-
-                {/* Indicador de carga */}
-                {uploading === image.id && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                  </div>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

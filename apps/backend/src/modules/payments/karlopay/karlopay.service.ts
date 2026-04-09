@@ -1372,7 +1372,8 @@ export class KarlopayService {
         image_url: string | null;
       }>;
       // Misma lógica que GET /products/:id y GET /products/:id/images (resolveProductImagePublicUrl)
-      const bucketProducts = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const rawBucketProducts = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const bucketProducts = (rawBucketProducts.startsWith('http') || rawBucketProducts.includes('://') || rawBucketProducts.includes('/storage/')) ? 'products' : rawBucketProducts.trim();
       const items = rawItems.map((row) => {
         const rawImageUrl = row.image_url || '';
         const resolvedImageUrl = resolveProductImagePublicUrl(

@@ -273,12 +273,6 @@ export class ProductsService {
     let branchJoin = '';
     let collectionJoin = '';
 
-    // Regla de negocio: no mostrar productos con precio 0 en storefront (evitar compras inválidas).
-    // Web-local/admin puede pasar includeZeroPrice=true para ver todos los productos.
-    if (!includeZeroPrice) {
-      whereConditions.push('(p.price IS NOT NULL AND (p.price)::numeric > 0)');
-    }
-
     // Si se filtra por grupo, buscar productos disponibles en sucursales del grupo
     // IMPORTANTE: No filtrar por business_id del producto, sino por disponibilidad en sucursales del grupo
     if (groupId) {
@@ -304,6 +298,22 @@ export class ProductsService {
       whereConditions.push(`pba.is_active = TRUE`);
       queryParams.push(branchId);
       paramIndex++;
+    }
+
+    // Regla de negocio: no mostrar productos con precio 0 en storefront (evitar compras inválidas).
+    // El precio a validar es el precio efectivo: distribuidor > base.
+    // Web-local/admin puede pasar includeZeroPrice=true para ver todos los productos.
+    if (!includeZeroPrice) {
+      if (branchId && !groupId) {
+        // Contexto sucursal: validar precio del distribuidor; si no tiene, usar el precio base
+        whereConditions.push('(COALESCE(pba.price, p.price) IS NOT NULL AND COALESCE(pba.price, p.price)::numeric > 0)');
+      } else if (groupId) {
+        // Contexto grupo: validar precio del distribuidor en la sucursal del grupo
+        whereConditions.push('(COALESCE(pba_group.price, p.price) IS NOT NULL AND COALESCE(pba_group.price, p.price)::numeric > 0)');
+      } else {
+        // Sin contexto de sucursal: validar precio base del producto
+        whereConditions.push('(p.price IS NOT NULL AND (p.price)::numeric > 0)');
+      }
     }
 
     if (collectionId) {
@@ -1488,18 +1498,25 @@ export class ProductsService {
     );
     const orderCount = parseInt(ordersCheck.rows[0].count, 10);
 
-    // Eliminación lógica: marcar como no disponible
-    const sqlQuery = `
-      UPDATE catalog.products
-      SET is_available = FALSE, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
-      RETURNING *
-    `;
-
+    // Eliminación lógica: marcar como no disponible + deshabilitar disponibilidad en todas las sucursales
     try {
-      await pool.query(sqlQuery, [id]);
+      await pool.query(
+        `UPDATE catalog.products
+         SET is_available = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [id]
+      );
+
+      // Deshabilitar disponibilidad en todas las sucursales (quitar del catálogo distribuidor)
+      await pool.query(
+        `UPDATE catalog.product_branch_availability
+         SET is_enabled = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE product_id = $1`,
+        [id]
+      );
+
       return { 
-        message: 'Producto desactivado exitosamente',
+        message: 'Producto eliminado del catálogo y de la distribución por sucursal',
         warning: orderCount > 0 ? `Este producto tiene ${orderCount} pedido(s) en los últimos 30 días` : undefined
       };
     } catch (error: any) {

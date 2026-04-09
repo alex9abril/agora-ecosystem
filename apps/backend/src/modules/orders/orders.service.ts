@@ -1105,7 +1105,8 @@ export class OrdersService {
 
       // Parsear tax_breakdown si viene como string (JSONB de PostgreSQL)
       // Y generar URLs públicas de las imágenes
-      const BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const rawBucketName = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const BUCKET_NAME = (rawBucketName.startsWith('http') || rawBucketName.includes('://') || rawBucketName.includes('/storage/')) ? 'products' : rawBucketName.trim();
       const items = itemsResult.rows.map(item => {
         let product_image_url = null;
         if (item.product_image_path && supabaseAdmin) {
@@ -2961,7 +2962,8 @@ export class OrdersService {
       }>;
       // Misma lógica que GET /products/:id (primary_image_url) y GET /products/:id/images (public_url):
       // path relativo o unwrap de URL doble → path uuid/filename → getPublicUrl(bucket, path).
-      const bucketProducts = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const rawBucketProducts = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+      const bucketProducts = (rawBucketProducts.startsWith('http') || rawBucketProducts.includes('://') || rawBucketProducts.includes('/storage/')) ? 'products' : rawBucketProducts.trim();
       const items = rawItems.map((row) => {
         const rawImageUrl = row.image_url || '';
         const resolvedImageUrl = resolveProductImagePublicUrl(

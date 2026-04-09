@@ -14,7 +14,15 @@ import { IntegrationCartService } from '../integration-cart/integration-cart.ser
 
 @Injectable()
 export class CartService {
-  private readonly BUCKET_NAME = process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products';
+  private normalizeBucketName(bucketName: string): string {
+    if (!bucketName) return 'products';
+    if (bucketName.startsWith('http') || bucketName.includes('://') || bucketName.includes('/storage/')) {
+      return 'products';
+    }
+    return bucketName.trim();
+  }
+
+  private readonly BUCKET_NAME = this.normalizeBucketName(process.env.SUPABASE_STORAGE_BUCKET_PRODUCTS || 'products');
 
   constructor(private readonly integrationCartService: IntegrationCartService) {}
   /**

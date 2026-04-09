@@ -907,6 +907,7 @@ export default function ProductsPage() {
     });
     setImageFile(null);
     setImagePreview(null);
+    setProductImages([]);
     setVariantGroups([]);
     setAllergens([]);
     setNutritionalInfo({});
@@ -1042,6 +1043,23 @@ export default function ProductsPage() {
         } catch (taxErr: any) {
           console.error("Error guardando impuestos:", taxErr);
           // No fallar el guardado del producto si hay error en impuestos
+        }
+      }
+
+      // Subir imágenes pendientes (en creación: imágenes en cola local con .file)
+      if (savedProduct?.id && !editingProduct) {
+        const pendingImages = productImages.filter((img) => !!img.file);
+        if (pendingImages.length > 0) {
+          try {
+            for (const img of pendingImages) {
+              if (img.file) {
+                await productsService.uploadProductImage(savedProduct.id, img.file);
+              }
+            }
+          } catch (imgErr) {
+            console.error("Error subiendo imágenes:", imgErr);
+            // No bloquear la creación si falla la subida de imágenes
+          }
         }
       }
 
@@ -1236,6 +1254,19 @@ export default function ProductsPage() {
     } catch (err: any) {
       console.error("Error duplicando productos:", err);
       setError("Error al duplicar los productos seleccionados");
+    }
+    setSelectedProductIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedProductIds);
+    try {
+      await Promise.all(ids.map((id) => productsService.deleteProduct(id)));
+      if (hasActiveAdvancedFilters) await loadEntireCatalogForSearch(searchTerm);
+      else await loadData();
+    } catch (err: any) {
+      console.error("Error eliminando productos:", err);
+      setError("Error al eliminar los productos seleccionados");
     }
     setSelectedProductIds(new Set());
   };
@@ -1878,6 +1909,8 @@ export default function ProductsPage() {
             onLoadBranchAvailabilities={loadBranchAvailabilities}
             collectionsByBranch={collectionsByBranch}
             loadingCollections={loadingCollections}
+            productImages={productImages}
+            setProductImages={setProductImages}
             onSubmit={handleSubmit}
             onCancel={() => {
               setShowForm(false);
@@ -2508,6 +2541,7 @@ export default function ProductsPage() {
         onDeactivate={handleBulkDeactivate}
         onDuplicate={handleBulkDuplicate}
         onAssignBranch={handleBulkAssignBranch}
+        onDelete={handleBulkDelete}
         onClearSelection={() => setSelectedProductIds(new Set())}
         onSelectAll={() => {
           setSelectedProductIds(
@@ -3206,6 +3240,76 @@ export function ProductForm({
     return match?.name || "Sin categoría";
   }, [categories, formData.category_id]);
 
+  // Placeholders contextuales según tipo de producto
+  const formPlaceholders = useMemo(() => {
+    const type = formData.product_type;
+    const automotive = ['refaccion', 'accesorio', 'servicio_instalacion', 'servicio_mantenimiento', 'fluido'];
+    if (type === 'refaccion') return {
+      name:        'Ej: Filtro de aceite Bosch F026407006',
+      sku:         'Ej: REF-FILT-0324',
+      description: 'Especificaciones técnicas, número OEM, aplicación y condiciones de uso...',
+      variantGroup: 'Ej: Marca, Calidad, Aplicación',
+      variantValue: 'Ej: Original, Genérico, Premium',
+    };
+    if (type === 'accesorio') return {
+      name:        'Ej: Tapetes de hule universales negro',
+      sku:         'Ej: ACC-TAP-UN-001',
+      description: 'Describe el accesorio, materiales, dimensiones y compatibilidad...',
+      variantGroup: 'Ej: Color, Talla, Material',
+      variantValue: 'Ej: Negro, Gris, Beige',
+    };
+    if (type === 'servicio_instalacion') return {
+      name:        'Ej: Instalación de kit de embrague',
+      sku:         'Ej: SVC-INST-EMB-01',
+      description: 'Describe el servicio, tiempo estimado, herramientas requeridas y condiciones...',
+      variantGroup: 'Ej: Tipo de vehículo, Urgencia',
+      variantValue: 'Ej: Compacto, Sedán, SUV',
+    };
+    if (type === 'servicio_mantenimiento') return {
+      name:        'Ej: Afinación completa 4 cilindros',
+      sku:         'Ej: SVC-AFIN-4CIL-01',
+      description: 'Describe el servicio, kilometraje recomendado, piezas incluidas y duración...',
+      variantGroup: 'Ej: Tipo de motor, Kilometraje',
+      variantValue: 'Ej: 5,000 km, 10,000 km, 20,000 km',
+    };
+    if (type === 'fluido') return {
+      name:        'Ej: Aceite motor sintético 5W-30 1L',
+      sku:         'Ej: FLUI-ACE-5W30-1L',
+      description: 'Viscosidad, normas de homologación, aplicaciones recomendadas y capacidad...',
+      variantGroup: 'Ej: Viscosidad, Presentación',
+      variantValue: 'Ej: 1L, 4L, 19L',
+    };
+    if (automotive.includes(type)) return {
+      name:        'Ej: Refacción o accesorio automotriz',
+      sku:         'Ej: AUTO-PROD-001',
+      description: 'Especificaciones técnicas y compatibilidad...',
+      variantGroup: 'Ej: Marca, Aplicación',
+      variantValue: 'Ej: Original, Genérico',
+    };
+    // Alimentos y bebidas (default)
+    if (type === 'beverage') return {
+      name:        'Ej: Jugo de naranja natural 500ml',
+      sku:         'Ej: BEV-JGO-500-001',
+      description: 'Describe la bebida, ingredientes, presentación y temperatura de servicio...',
+      variantGroup: 'Ej: Tamaño, Temperatura, Sabor',
+      variantValue: 'Ej: Chico, Mediano, Grande',
+    };
+    if (type === 'medicine') return {
+      name:        'Ej: Paracetamol 500mg tabletas',
+      sku:         'Ej: MED-PARA-500-001',
+      description: 'Principio activo, presentación, dosis recomendada y contraindicaciones...',
+      variantGroup: 'Ej: Presentación, Dosis',
+      variantValue: 'Ej: 20 tabletas, 40 tabletas',
+    };
+    return {
+      name:        'Ej: Hamburguesa Clásica',
+      sku:         'Ej: HAMB-CLAS-001',
+      description: 'Describe el producto, ingredientes y presentación...',
+      variantGroup: 'Ej: Tamaño, Extras, Sabor',
+      variantValue: 'Ej: Chica, Mediana, Grande',
+    };
+  }, [formData.product_type]);
+
   return (
     <div className="space-y-6">
       <form onSubmit={onSubmit} className="space-y-8">
@@ -3332,7 +3436,7 @@ export function ProductForm({
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
                     }
-                    placeholder="Ej: Hamburguesa Clásica"
+                    placeholder={formPlaceholders.name}
                   />
                 </div>
               )}
@@ -3350,7 +3454,7 @@ export function ProductForm({
                   onChange={(e) =>
                     setFormData({ ...formData, sku: e.target.value })
                   }
-                  placeholder="Ej: HAMB-CLAS-001"
+                  placeholder={formPlaceholders.sku}
                 />
                 <p className="mt-1 text-xs text-gray-400">
                   Código único de identificación del producto (opcional)
@@ -3379,7 +3483,7 @@ export function ProductForm({
                     onChange={(e) =>
                       setFormData({ ...formData, sku: e.target.value })
                     }
-                    placeholder="Ej: HAMB-CLAS-001"
+                    placeholder={formPlaceholders.sku}
                   />
                   <p className="mt-1 text-xs text-gray-500">
                     Código único de identificación del producto (opcional)
@@ -3404,7 +3508,7 @@ export function ProductForm({
                     onChange={(e) =>
                       setFormData({ ...formData, description: e.target.value })
                     }
-                    placeholder="Describe el producto..."
+                    placeholder={formPlaceholders.description}
                   />
                 </div>
               )}
@@ -3416,55 +3520,41 @@ export function ProductForm({
                 <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wide border-b border-gray-200 pb-2">
                   Media
                 </h3>
-                {editingProduct && setProductImages ? (
-                  <MultipleImageUpload
-                    productId={editingProduct.id}
-                    images={productImages || []}
-                    onImagesChange={setProductImages}
-                    label="Imágenes del Producto"
-                    maxImages={10}
-                    onUploadImage={async (file, productId) => {
-                      console.log(
-                        "📤 Subiendo imagen para producto:",
-                        productId,
-                      );
-                      const uploaded = await productsService.uploadProductImage(
-                        productId,
-                        file,
-                      );
-                      console.log("📥 Imagen subida, respuesta:", uploaded);
-                      return {
-                        id: uploaded.id,
-                        public_url: uploaded.public_url,
-                        alt_text: uploaded.alt_text || null,
-                        is_primary: uploaded.is_primary || false,
-                        display_order: uploaded.display_order || 0,
-                      };
-                    }}
-                    onDeleteImage={async (imageId) => {
-                      if (editingProduct?.id) {
-                        await productsService.deleteProductImage(
-                          editingProduct.id,
-                          imageId,
-                        );
-                      }
-                    }}
-                    onSetPrimary={async (imageId) => {
-                      if (editingProduct?.id) {
-                        await productsService.setPrimaryImage(
-                          editingProduct.id,
-                          imageId,
-                        );
-                      }
-                    }}
-                  />
-                ) : (
-                  <ImageUpload
-                    currentImageUrl={imagePreview || undefined}
-                    onImageChange={onImageChange}
-                    label="Imagen del Producto"
-                  />
-                )}
+                <MultipleImageUpload
+                  productId={editingProduct?.id}
+                  images={productImages || []}
+                  onImagesChange={setProductImages || (() => {})}
+                  label="Imágenes del Producto"
+                  maxImages={10}
+                  onUploadImage={
+                    editingProduct?.id
+                      ? async (file, productId) => {
+                          const uploaded = await productsService.uploadProductImage(productId, file);
+                          return {
+                            id: uploaded.id,
+                            public_url: uploaded.public_url,
+                            alt_text: uploaded.alt_text || null,
+                            is_primary: uploaded.is_primary || false,
+                            display_order: uploaded.display_order || 0,
+                          };
+                        }
+                      : undefined
+                  }
+                  onDeleteImage={
+                    editingProduct?.id
+                      ? async (imageId) => {
+                          await productsService.deleteProductImage(editingProduct.id, imageId);
+                        }
+                      : undefined
+                  }
+                  onSetPrimary={
+                    editingProduct?.id
+                      ? async (imageId) => {
+                          await productsService.setPrimaryImage(editingProduct.id, imageId);
+                        }
+                      : undefined
+                  }
+                />
               </div>
             )}
 
@@ -3523,7 +3613,7 @@ export function ProductForm({
                               name: e.target.value,
                             })
                           }
-                          placeholder="Ej: Tamaño, Extras, Sabor"
+                          placeholder={formPlaceholders.variantGroup}
                         />
                       </div>
                       <div>
@@ -3604,7 +3694,7 @@ export function ProductForm({
                                         name: e.target.value,
                                       })
                                     }
-                                    placeholder="Ej: Chica, Mediana, Grande"
+                                    placeholder={formPlaceholders.variantValue}
                                   />
                                 </div>
                                 <div>
@@ -5245,8 +5335,8 @@ function VehicleCompatibilitySection({
       </div>
 
       <div className="space-y-4">
-        {/* Formulario para agregar compatibilidad (oculto por ahora, reservado para más adelante) */}
-        <div className="p-4 border border-gray-200 dark:border-neutral-700 rounded bg-gray-50 dark:bg-neutral-800" style={{ display: 'none' }}>
+        {/* Formulario para agregar compatibilidad */}
+        <div className="p-4 border border-gray-200 dark:border-neutral-700 rounded bg-gray-50 dark:bg-neutral-800">
           <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-3">
             Agregar Compatibilidad
           </h4>
