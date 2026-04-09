@@ -415,13 +415,17 @@ export class EmailService {
   }
 
   /**
-   * Envía correo de cambio de estado de pedido
+   * Envía correo de cambio de estado de pedido.
+   * Las plantillas en BD usan previous_status, current_status y user_name; se mantienen old_status/new_status por compatibilidad.
    */
   async sendOrderStatusChangeEmail(
     userEmail: string,
     orderNumber: string,
     oldStatus: string,
     newStatus: string,
+    previousStatusLabel: string,
+    currentStatusLabel: string,
+    userName: string,
     statusMessage: string,
     orderUrl?: string,
     businessId?: string,
@@ -433,6 +437,9 @@ export class EmailService {
       EmailTriggerType.ORDER_STATUS_CHANGE,
       {
         order_number: orderNumber,
+        user_name: userName,
+        previous_status: previousStatusLabel,
+        current_status: currentStatusLabel,
         old_status: oldStatus,
         new_status: newStatus,
         status_message: statusMessage,

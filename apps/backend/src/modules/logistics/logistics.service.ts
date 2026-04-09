@@ -18,6 +18,7 @@ import {
   shouldAdvanceLabelStatus,
   type LabelLifecycleStatus,
 } from './skydropx/skydropx-logistics-state.mapper';
+import { OrdersService } from '../orders/orders.service';
 
 export type LogisticsSyncSource =
   | 'webhook'
@@ -74,7 +75,8 @@ export class LogisticsService {
   private statusUpdateIntervals: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(
-    private readonly skydropxService: SkydropxService
+    private readonly skydropxService: SkydropxService,
+    private readonly ordersService: OrdersService,
   ) {
     // Crear directorio de almacenamiento si no existe
     if (!fs.existsSync(this.PDF_STORAGE_DIR)) {
@@ -1183,6 +1185,7 @@ export class LogisticsService {
     }
 
     const client = await dbPool.connect();
+    let orderStatusNotify: { orderId: string; prev: string; next: string } | null = null;
     try {
       await client.query('BEGIN');
 
@@ -1317,6 +1320,11 @@ export class LogisticsService {
           );
 
           if (previousOrderStatus && previousOrderStatus !== orderNew) {
+            orderStatusNotify = {
+              orderId: options.orderId,
+              prev: previousOrderStatus,
+              next: orderNew,
+            };
             try {
               await client.query(
                 `INSERT INTO orders.order_status_history (
@@ -1339,6 +1347,13 @@ export class LogisticsService {
       }
 
       await client.query('COMMIT');
+      if (orderStatusNotify) {
+        this.ordersService.notifyOrderStatusChange(
+          orderStatusNotify.orderId,
+          orderStatusNotify.prev,
+          orderStatusNotify.next,
+        );
+      }
       this.logger.log(
         `✅ Logística: guía ${options.shippingLabelId} → ${nextLabelStatus} (${nextNorm}) [${options.eventSource}]`
       );

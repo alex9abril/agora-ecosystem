@@ -1426,6 +1426,7 @@ export class OrdersService {
       }
 
       await client.query('COMMIT');
+      this.notifyOrderStatusChange(orderId, currentStatus, 'cancelled');
       return cancelledOrder;
     } catch (error: any) {
       await client.query('ROLLBACK');
@@ -1485,6 +1486,9 @@ export class OrdersService {
           `No se puede cambiar el estado de entrega de "${currentStatus}" a "${newStatus}"`
         );
       }
+
+      const nextOrderStatus =
+        newStatus === 'picked_up' ? 'picked_up' : newStatus === 'in_transit' ? 'in_transit' : 'delivered';
 
       // Actualizar estado de entrega
       await client.query(
@@ -1558,6 +1562,9 @@ export class OrdersService {
       }
 
       await client.query('COMMIT');
+      if (nextOrderStatus !== currentStatus) {
+        this.notifyOrderStatusChange(orderId, currentStatus, nextOrderStatus);
+      }
       return updatedOrder;
     } catch (error: any) {
       await client.query('ROLLBACK');
@@ -2457,9 +2464,7 @@ export class OrdersService {
       }
       
       // Enviar correo de cambio de estado (no bloquea el flujo si falla)
-      this.sendOrderStatusChangeEmail(orderId, currentStatus, newStatus, businessId).catch((error) => {
-        console.error(`❌ Error enviando correo de cambio de estado para orden ${orderId} (no crítico):`, error);
-      });
+      this.notifyOrderStatusChange(orderId, currentStatus, newStatus);
       
       return updatedOrder;
     } catch (error: any) {
@@ -2793,6 +2798,59 @@ export class OrdersService {
     }
   }
 
+  /** Nombre para saludo en correos (cliente del pedido). */
+  private async getClientDisplayName(userId: string): Promise<string> {
+    if (!dbPool) {
+      return 'Cliente';
+    }
+    try {
+      const result = await dbPool.query(
+        `SELECT first_name, last_name FROM core.user_profiles WHERE id = $1`,
+        [userId],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        return 'Cliente';
+      }
+      const parts = [row.first_name, row.last_name].filter(Boolean);
+      const name = parts.join(' ').trim();
+      return name || 'Cliente';
+    } catch (error: any) {
+      console.error(`❌ Error obteniendo nombre del usuario ${userId}:`, error);
+      return 'Cliente';
+    }
+  }
+
+  /** Etiqueta en español para el enum/código de estado del pedido (plantillas de correo). */
+  private orderStatusLabelEs(code: string): string {
+    const labels: Record<string, string> = {
+      pending: 'Pendiente',
+      confirmed: 'Confirmado',
+      preparing: 'En preparación',
+      ready: 'Listo',
+      completed: 'Completado / surtido',
+      assigned: 'Asignado a reparto',
+      picked_up: 'Recolectado',
+      in_transit: 'En camino',
+      delivered: 'Entregado',
+      delivery_failed: 'Entrega fallida',
+      cancelled: 'Cancelado',
+      returned: 'Devuelto',
+      refunded: 'Reembolsado',
+    };
+    return labels[code] || code;
+  }
+
+  /**
+   * Notifica al cliente por los canales configurados (correo / WhatsApp) cuando cambia el estado del pedido.
+   * Fire-and-forget: no bloquea ni propaga errores.
+   */
+  notifyOrderStatusChange(orderId: string, previousStatus: string, newStatus: string): void {
+    void this.sendOrderStatusChangeEmail(orderId, previousStatus, newStatus).catch((error) => {
+      console.error(`❌ Error enviando correo de cambio de estado para orden ${orderId} (no crítico):`, error);
+    });
+  }
+
   /** Formato de moneda con separador de miles (es-MX): 1,234.56 */
   private formatCurrency(amount: number): string {
     return amount.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3100,7 +3158,6 @@ export class OrdersService {
     orderId: string,
     oldStatus: string,
     newStatus: string,
-    businessId: string
   ): Promise<void> {
     if (!dbPool) {
       return;
@@ -3168,7 +3225,11 @@ export class OrdersService {
       const statusMessages: Record<string, string> = {
         pending: 'Tu pedido está pendiente de confirmación',
         confirmed: 'Tu pedido ha sido confirmado',
-        completed: 'Tu pedido está siendo preparado',
+        preparing: 'Tu pedido está en preparación',
+        ready: 'Tu pedido está listo para el siguiente paso',
+        completed: 'Tu pedido fue surtido y está listo para envío o entrega',
+        assigned: 'Tu pedido fue asignado a un repartidor',
+        picked_up: 'Tu pedido fue recolectado para entrega',
         in_transit: 'Tu pedido está en camino',
         delivered: 'Tu pedido ha sido entregado',
         delivery_failed: 'No se pudo entregar tu pedido',
@@ -3178,6 +3239,9 @@ export class OrdersService {
       };
 
       const statusMessage = statusMessages[newStatus] || `Tu pedido cambió de estado: ${oldStatus} → ${newStatus}`;
+      const userName = await this.getClientDisplayName(order.client_id);
+      const previousStatusLabel = this.orderStatusLabelEs(oldStatus);
+      const currentStatusLabel = this.orderStatusLabelEs(newStatus);
       const orderNumber = order.id.substring(0, 8).toUpperCase();
       const orderUrl = this.buildOrderDetailUrl(
         process.env.FRONTEND_URL || 'https://agoramp.mx',
@@ -3192,6 +3256,9 @@ export class OrdersService {
           orderNumber,
           oldStatus,
           newStatus,
+          previousStatusLabel,
+          currentStatusLabel,
+          userName,
           statusMessage,
           orderUrl,
           businessId: order.business_id,
@@ -3205,6 +3272,9 @@ export class OrdersService {
           orderNumber,
           oldStatus,
           newStatus,
+          previousStatusLabel,
+          currentStatusLabel,
+          userName,
           statusMessage,
           orderUrl,
           order.business_id,
