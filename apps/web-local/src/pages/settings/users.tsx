@@ -11,10 +11,13 @@ import {
   EMPTY_OPERATOR_PERMISSIONS,
   MODULE_KEYS,
   SETTINGS_KEYS,
+  TIENDAS_KEYS,
   MODULE_LABELS,
   SETTINGS_LABELS,
+  TIENDAS_LABELS,
   MODULE_DESCRIPTIONS,
   SETTINGS_DESCRIPTIONS,
+  TIENDAS_DESCRIPTIONS,
   CAPABILITIES_KEYS,
   CAPABILITIES_LABELS,
   CAPABILITIES_DESCRIPTIONS,
@@ -22,6 +25,7 @@ import {
   type OperatorPermissions,
   type ModuleKey,
   type SettingsKey,
+  type TiendasKey,
   type CapabilityKey,
 } from '@/lib/operator-permissions';
 
@@ -338,9 +342,10 @@ export default function UsersSettingsPage() {
 
   const emptyM = EMPTY_OPERATOR_PERMISSIONS.modules!;
   const emptyS = EMPTY_OPERATOR_PERMISSIONS.settings!;
+  const emptyT = EMPTY_OPERATOR_PERMISSIONS.tiendas!;
   const emptyC = EMPTY_OPERATOR_PERMISSIONS.capabilities!;
 
-  const setEditPermission = (kind: 'modules' | 'settings' | 'capabilities', key: ModuleKey | SettingsKey | CapabilityKey, value: boolean) => {
+  const setEditPermission = (kind: 'modules' | 'settings' | 'tiendas' | 'capabilities', key: ModuleKey | SettingsKey | TiendasKey | CapabilityKey, value: boolean) => {
     setEditPermissionsValue((prev) => ({
       ...prev,
       [kind]: { ...(prev[kind] ?? {}), [key]: value },
@@ -888,6 +893,27 @@ export default function UsersSettingsPage() {
                             <label htmlFor={`edit-settings-${key}`} className="cursor-pointer flex-1">
                               <span className="block text-sm font-medium text-gray-900">{SETTINGS_LABELS[key]}</span>
                               <span className="block text-xs text-gray-500 mt-0.5">{SETTINGS_DESCRIPTIONS[key]}</span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Tiendas</p>
+                      <p className="text-xs text-gray-400 mb-2">Pestañas visibles dentro del módulo Tiendas (requiere el módulo &quot;Tiendas&quot; activo en Módulos).</p>
+                      <ul className="space-y-2.5 list-none">
+                        {TIENDAS_KEYS.map((key) => (
+                          <li key={key} className="flex gap-3">
+                            <input
+                              id={`edit-tiendas-${key}`}
+                              type="checkbox"
+                              checked={editPermissionsValue.tiendas?.[key] === true}
+                              onChange={(e) => setEditPermission('tiendas', key, e.target.checked)}
+                              className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                            />
+                            <label htmlFor={`edit-tiendas-${key}`} className="cursor-pointer flex-1">
+                              <span className="block text-sm font-medium text-gray-900">{TIENDAS_LABELS[key]}</span>
+                              <span className="block text-xs text-gray-500 mt-0.5">{TIENDAS_DESCRIPTIONS[key]}</span>
                             </label>
                           </li>
                         ))}

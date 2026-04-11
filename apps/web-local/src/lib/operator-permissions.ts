@@ -8,6 +8,7 @@ export const MODULE_KEYS = [
   'products',
   'clients',
   'orders',
+  'tiendas',
   'sliders',
   'collections',
   'reports',
@@ -32,12 +33,25 @@ export const SETTINGS_KEYS = [
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
+export const TIENDAS_KEYS = [
+  'tiendas_resumen',
+  'tiendas_configuracion',
+  'tiendas_correos',
+  'tiendas_personalizar',
+  'tiendas_sliders',
+  'tiendas_integraciones',
+  'tiendas_colecciones',
+] as const;
+
+export type TiendasKey = (typeof TIENDAS_KEYS)[number];
+
 export const CAPABILITIES_KEYS = ['can_fulfill', 'can_assign_fulfillment'] as const;
 export type CapabilityKey = (typeof CAPABILITIES_KEYS)[number];
 
 export interface OperatorPermissions {
   modules?: Partial<Record<ModuleKey, boolean>>;
   settings?: Partial<Record<SettingsKey, boolean>>;
+  tiendas?: Partial<Record<TiendasKey, boolean>>;
   capabilities?: Partial<Record<CapabilityKey, boolean>>;
 }
 
@@ -46,6 +60,7 @@ const emptyModules: Record<ModuleKey, boolean> = {
   products: false,
   clients: false,
   orders: false,
+  tiendas: false,
   sliders: false,
   collections: false,
   reports: false,
@@ -66,6 +81,16 @@ const emptySettings: Record<SettingsKey, boolean> = {
   channel_stores: false,
 };
 
+const emptyTiendas: Record<TiendasKey, boolean> = {
+  tiendas_resumen: false,
+  tiendas_configuracion: false,
+  tiendas_correos: false,
+  tiendas_personalizar: false,
+  tiendas_sliders: false,
+  tiendas_integraciones: false,
+  tiendas_colecciones: false,
+};
+
 const emptyCapabilities: Record<CapabilityKey, boolean> = {
   can_fulfill: false,
   can_assign_fulfillment: false,
@@ -74,6 +99,7 @@ const emptyCapabilities: Record<CapabilityKey, boolean> = {
 export const EMPTY_OPERATOR_PERMISSIONS: OperatorPermissions = {
   modules: { ...emptyModules },
   settings: { ...emptySettings },
+  tiendas: { ...emptyTiendas },
   capabilities: { ...emptyCapabilities },
 };
 
@@ -83,6 +109,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   products: 'Productos',
   clients: 'Clientes',
   orders: 'Pedidos',
+  tiendas: 'Tiendas',
   sliders: 'Sliders',
   collections: 'Colecciones',
   reports: 'Estadísticas / Reportes',
@@ -95,6 +122,7 @@ export const MODULE_DESCRIPTIONS: Record<ModuleKey, string> = {
   products: 'Ver, crear y editar productos; precios y disponibilidad por sucursal.',
   clients: 'Consultar y gestionar clientes del negocio.',
   orders: 'Ver y gestionar pedidos (confirmar, surtir, cancelar según rol).',
+  tiendas: 'Acceso al módulo de tiendas para ver y gestionar la tienda asignada.',
   sliders: 'Gestionar banners y sliders de la tienda.',
   collections: 'Gestionar colecciones y catálogo.',
   reports: 'Ver estadísticas y reportes (aparte del dashboard operativo).',
@@ -132,6 +160,28 @@ export const SETTINGS_DESCRIPTIONS: Record<SettingsKey, string> = {
   channel_stores: 'Gestionar tiendas por grupo o por marca.',
 };
 
+/** Labels para UI (tiendas - pestañas dentro del módulo Tiendas) */
+export const TIENDAS_LABELS: Record<TiendasKey, string> = {
+  tiendas_resumen: 'Resumen',
+  tiendas_configuracion: 'Configuración',
+  tiendas_correos: 'Correos',
+  tiendas_personalizar: 'Personalizar',
+  tiendas_sliders: 'Sliders',
+  tiendas_integraciones: 'Integraciones',
+  tiendas_colecciones: 'Colecciones',
+};
+
+/** Descripciones cortas para cada pestaña del módulo Tiendas */
+export const TIENDAS_DESCRIPTIONS: Record<TiendasKey, string> = {
+  tiendas_resumen: 'Vista general de la tienda y accesos rápidos.',
+  tiendas_configuracion: 'Configuración general, impuestos y notificaciones de la tienda.',
+  tiendas_correos: 'Plantillas de correos electrónicos de la tienda.',
+  tiendas_personalizar: 'Branding, logotipo e identidad visual de la tienda.',
+  tiendas_sliders: 'Banners y sliders del storefront de la tienda.',
+  tiendas_integraciones: 'Integraciones de pago y automatización (Karlopay, Karbot).',
+  tiendas_colecciones: 'Colecciones de productos de la tienda.',
+};
+
 /** Labels para UI (capabilities - surtir / asignar surtidores) */
 export const CAPABILITIES_LABELS: Record<CapabilityKey, string> = {
   can_fulfill: 'Puede surtir pedidos',
@@ -155,10 +205,12 @@ export function normalizeOperatorPermissions(
   }
   const modules = (raw.modules as Partial<Record<ModuleKey, boolean>>) || {};
   const settings = (raw.settings as Partial<Record<SettingsKey, boolean>>) || {};
+  const tiendas = (raw.tiendas as Partial<Record<TiendasKey, boolean>>) || {};
   const capabilities = (raw.capabilities as Partial<Record<CapabilityKey, boolean>>) || {};
   return {
     modules: { ...emptyModules, ...modules },
     settings: { ...emptySettings, ...settings },
+    tiendas: { ...emptyTiendas, ...tiendas },
     capabilities: { ...emptyCapabilities, ...capabilities },
   };
 }

@@ -20,6 +20,11 @@ export const triggerInfo: Record<EmailTriggerType, { name: string; description: 
     description: 'Se envía cuando cambia el estado de un pedido',
     variables: ['user_name', 'order_number', 'previous_status', 'current_status', 'status_message', 'order_url'],
   },
+  supervisor_notification: {
+    name: 'Notificación para Supervisores',
+    description: 'Se envía a los supervisores configurados cuando ocurre un evento (nueva venta, registro de cliente, cambio de estado)',
+    variables: ['business_name', 'event_title', 'event_description', 'detail_section', 'action_url', 'action_label'],
+  },
 };
 
 export const buildLogoHtml = (logoUrl: string) =>
@@ -219,6 +224,28 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
     </div>
     <p style="font-size: 14px; color: #6b7280; margin-top: 30px;">
       Gracias por confiar en AGORA.
+    </p>
+  </div>
+</body>
+</html>`,
+  supervisor_notification: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notificación para Supervisores</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #1d4ed8; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="margin: 0; font-size: 28px;">{{event_title}}</h1>
+    <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9;">{{business_name}}</p>
+  </div>
+  <div style="background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px;">
+    <p style="font-size: 16px; margin-bottom: 20px;">{{event_description}}</p>
+    {{detail_section}}
+    {{action_url}}
+    <p style="font-size: 12px; color: #6b7280; margin-top: 20px; text-align: center;">
+      Notificación automática para supervisores.
     </p>
   </div>
 </body>

@@ -1057,6 +1057,65 @@ export class KarlopayService {
         return { status: 'not_found', message: 'Orden no encontrada' };
       }
 
+      // --- Modo Desarrollo: auto-simular webhook para confirmar pago inmediatamente ---
+      const firstOrder = ordersResult.rows[0];
+      let isDevMode = false;
+
+      try {
+        const creds = await this.getCredentials(firstOrder.business_id);
+        isDevMode = creds.mode === 'dev';
+      } catch {
+        // Si no se pueden obtener credenciales, continuar con flujo normal
+      }
+
+      if (isDevMode) {
+        let devSimulatedCount = 0;
+
+        for (const order of ordersResult.rows) {
+          const pendingTxs = await client.query(
+            `SELECT 1 FROM orders.payment_transactions
+             WHERE order_id = $1 AND payment_method = 'karlopay' AND status = 'pending'
+             LIMIT 1`,
+            [order.id],
+          );
+
+          if (pendingTxs.rows.length > 0) {
+            const fullOrderResult = await client.query(
+              `SELECT o.id, o.total_amount, o.order_group_id,
+                (SELECT json_agg(json_build_object(
+                  'payment_method', pt.payment_method,
+                  'external_reference', pt.external_reference,
+                  'status', pt.status
+                )) FROM orders.payment_transactions pt WHERE pt.order_id = o.id) as payment_transactions
+               FROM orders.orders o WHERE o.id = $1`,
+              [order.id],
+            );
+
+            if (fullOrderResult.rows.length > 0) {
+              try {
+                const simulatedPayload = this.buildSimulatedPaymentWebhookPayload(fullOrderResult.rows[0]);
+                await this.processPaymentWebhook(simulatedPayload, simulatedPayload as unknown as Record<string, any>);
+                devSimulatedCount += 1;
+              } catch (simErr: any) {
+                this.logger.warn(`[Dev Auto-Confirm] Error simulando webhook para orden ${order.id}: ${simErr?.message}`);
+              }
+            }
+          }
+        }
+
+        if (devSimulatedCount > 0) {
+          await this.integrationLogs.log({
+            integration: 'karlopay',
+            eventType: 'redirect_dev_auto_confirm',
+            channel: 'api',
+            status: 'success',
+            message: `Auto-simulacion de webhook en modo desarrollo para session ${sessionId} (${devSimulatedCount} ordenes)`,
+            requestPayload: { sessionId, isDevMode: true, simulatedCount: devSimulatedCount },
+          });
+        }
+      }
+      // --- Fin modo Desarrollo ---
+
       let confirmedCount = 0;
       let skippedCount = 0;
 

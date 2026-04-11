@@ -68,7 +68,7 @@ const menuItems: MenuItem[] = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
       </svg>
     ),
-    requiresSuperadmin: true,
+    requiredPermission: 'canManageTiendas',
   },
   {
     name: 'Catalogo',
@@ -137,6 +137,7 @@ export default function Sidebar() {
   const canViewReports = usePermission('canViewReports');
   const canManageSliders = usePermission('canManageSliders');
   const canManageCollections = usePermission('canManageCollections');
+  const canManageTiendas = usePermission('canManageTiendas');
   const canViewDashboard = usePermission('canViewDashboard');
 
   const shouldShowItem = (item: MenuItem): boolean => {
@@ -149,6 +150,7 @@ export default function Sidebar() {
     if (item.requiredPermission === 'canViewReports' && !canViewReports) return false;
     if (item.requiredPermission === 'canManageSliders' && !canManageSliders) return false;
     if (item.requiredPermission === 'canManageCollections' && !canManageCollections) return false;
+    if (item.requiredPermission === 'canManageTiendas' && !canManageTiendas) return false;
     if (!canAccessRoute(userRole, item.href, operatorPermissions)) return false;
     return true;
   };

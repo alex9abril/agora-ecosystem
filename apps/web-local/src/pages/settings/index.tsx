@@ -39,9 +39,8 @@ export default function SettingsPage() {
   const [isSuperadmin, setIsSuperadmin] = useState(false);
 
   useEffect(() => {
-    const checkPermissions = async () => {
+    const checkSuperadmin = async () => {
       try {
-        // Si hay tienda seleccionada, verificar desde ahí
         if (selectedBusiness) {
           const businessId = selectedBusiness.business_id;
           const business = await businessService.getMyBusiness(businessId);
@@ -52,10 +51,7 @@ export default function SettingsPage() {
           }
         }
 
-        // Si no hay tienda seleccionada o no es superadmin en esa tienda,
-        // verificar si es superadmin en alguna de las tiendas disponibles
         if (availableBusinesses.length > 0) {
-          // Verificar si alguna de las tiendas disponibles tiene rol superadmin
           const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
           if (hasSuperadminRole) {
             setIsSuperadmin(true);
@@ -64,8 +60,6 @@ export default function SettingsPage() {
           }
         }
 
-        // Si no hay tiendas disponibles pero el usuario existe, intentar verificar directamente
-        // (para superadmins sin tiendas asignadas aún)
         if (user) {
           try {
             const business = await businessService.getMyBusiness();
@@ -75,38 +69,29 @@ export default function SettingsPage() {
               return;
             }
           } catch (err: any) {
-            // Si falla, continuar con la verificación normal
             console.log('[Settings] No se pudo verificar negocio directo:', err);
           }
         }
 
-        // Si llegamos aquí, no es superadmin
-        console.log('[Settings] Usuario no es superadmin, redirigiendo...');
-        router.push('/');
         setIsSuperadmin(false);
       } catch (error: any) {
         console.error('Error verificando permisos:', error);
-        // Si hay error (404, etc.), verificar si es superadmin desde availableBusinesses
         if (error?.statusCode === 404) {
-          // Verificar si tiene rol superadmin en alguna tienda disponible
           const hasSuperadminRole = availableBusinesses.some(b => b.role === 'superadmin');
           if (hasSuperadminRole) {
             setIsSuperadmin(true);
             setLoading(false);
             return;
           }
-          console.log('[Settings] Usuario no tiene negocio asignado y no es superadmin, redirigiendo...');
-          router.push('/');
-        } else {
-          setIsSuperadmin(false);
         }
+        setIsSuperadmin(false);
       } finally {
         setLoading(false);
       }
     };
 
     if (user) {
-      checkPermissions();
+      checkSuperadmin();
     } else {
       setLoading(false);
     }

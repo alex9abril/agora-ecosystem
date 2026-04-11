@@ -4,7 +4,7 @@
 
 import { apiRequest } from './api';
 
-export type EmailTriggerType = 'user_registration' | 'order_confirmation' | 'order_status_change';
+export type EmailTriggerType = 'user_registration' | 'order_confirmation' | 'order_status_change' | 'supervisor_notification';
 
 export type EmailTemplateLevel = 'global' | 'group' | 'business';
 

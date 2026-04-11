@@ -2,6 +2,8 @@ import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { apiRequest } from '@/lib/api';
 import { businessService, BusinessGroup } from '@/lib/business';
+import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
+import { isOperatorRole } from '@/lib/operator-permissions';
 
 export type TiendasSection = 'home' | 'group' | 'branch' | 'group_brand';
 
@@ -32,13 +34,21 @@ interface TiendasSidebarProps {
 
 export default function TiendasSidebar({ currentSection = 'home', currentStoreId, storeStatusOverrides, refreshTrigger }: TiendasSidebarProps) {
   const router = useRouter();
+  const { selectedBusiness } = useSelectedBusiness();
   const [businessGroup, setBusinessGroup] = useState<BusinessGroup | null>(null);
   const [storesByGroup, setStoresByGroup] = useState<Store[]>([]);
   const [storesByBranch, setStoresByBranch] = useState<Store[]>([]);
   const [storesByGroupBrand, setStoresByGroupBrand] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const role = selectedBusiness?.role ?? 'operations_staff';
+  const isOperator = isOperatorRole(role);
+
   useEffect(() => {
+    if (isOperator) {
+      setLoading(false);
+      return;
+    }
     const loadGroup = async () => {
       try {
         const group = await businessService.getMyBusinessGroup();
@@ -48,9 +58,10 @@ export default function TiendasSidebar({ currentSection = 'home', currentStoreId
       }
     };
     loadGroup();
-  }, []);
+  }, [isOperator]);
 
   useEffect(() => {
+    if (isOperator) return;
     const loadStores = async () => {
       if (!businessGroup?.id) {
         setLoading(false);
@@ -75,7 +86,7 @@ export default function TiendasSidebar({ currentSection = 'home', currentStoreId
       }
     };
     loadStores();
-  }, [businessGroup?.id, refreshTrigger]);
+  }, [businessGroup?.id, refreshTrigger, isOperator]);
 
   const setSection = (section: TiendasSection, storeId?: string) => {
     const query: Record<string, string> = { section };
@@ -133,6 +144,34 @@ export default function TiendasSidebar({ currentSection = 'home', currentStoreId
       </div>
     );
   };
+
+  if (isOperator && selectedBusiness) {
+    const operatorStore: Store = {
+      id: selectedBusiness.business_id,
+      type: 'branch',
+      business_group_id: null,
+      business_id: selectedBusiness.business_id,
+      vehicle_brand_id: null,
+      slug: null,
+      name: selectedBusiness.business_name,
+      is_active: selectedBusiness.is_active,
+    };
+
+    return (
+      <div className="w-48 flex-shrink-0 bg-gray-50 dark:bg-neutral-800">
+        <div className="sticky top-0 p-2.5">
+          <nav className="space-y-5">
+            <div>
+              <h3 className="text-[10px] font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5 px-2">
+                Tu tienda
+              </h3>
+              {renderStoreList([operatorStore], 'branch')}
+            </div>
+          </nav>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-48 flex-shrink-0 bg-gray-50 dark:bg-neutral-800">

@@ -6,6 +6,7 @@ export const BRANCH_NOTIFICATION_TYPES = [
   'user_registration',
   'order_confirmation',
   'order_status_change',
+  'supervisor_notification',
 ] as const;
 
 export type BranchNotificationType = typeof BRANCH_NOTIFICATION_TYPES[number];

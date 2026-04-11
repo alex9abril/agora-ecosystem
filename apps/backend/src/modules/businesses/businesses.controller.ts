@@ -45,6 +45,7 @@ import { UpdateBusinessTaxSettingsDto } from './dto/update-business-tax-settings
 import { UpdateBusinessKarbotSettingsDto } from './dto/update-business-karbot-settings.dto';
 import { UpdateBusinessKarlopaySettingsDto } from './dto/update-business-karlopay-settings.dto';
 import { UpdateBusinessNotificationSettingsDto } from './dto/update-business-notification-settings.dto';
+import { CreateNotificationRecipientDto } from './dto/notification-recipients.dto';
 import { ArchiveBranchDto } from './dto/archive-branch.dto';
 import { BrandingImagesService } from './branding-images.service';
 
@@ -412,6 +413,39 @@ export class BusinessesController {
     return this.businessesService.updateGroupNotificationSettings(id, user.id, updateDto);
   }
 
+  @Get('business-groups/:id/notification-recipients')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener destinatarios de notificaciones de un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async getGroupNotificationRecipients(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getGroupNotificationRecipientsForUser(id, user.id);
+  }
+
+  @Post('business-groups/:id/notification-recipients')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Agregar destinatario de notificaciones a un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  async addGroupNotificationRecipient(
+    @Param('id') id: string,
+    @Body() dto: CreateNotificationRecipientDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.addGroupNotificationRecipient(id, user.id, dto);
+  }
+
+  @Delete('business-groups/:id/notification-recipients/:recipientId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Eliminar destinatario de notificaciones de un grupo empresarial' })
+  @ApiParam({ name: 'id', description: 'ID del grupo empresarial', type: String })
+  @ApiParam({ name: 'recipientId', description: 'ID del destinatario', type: String })
+  async removeGroupNotificationRecipient(
+    @Param('id') id: string,
+    @Param('recipientId') recipientId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.removeGroupNotificationRecipient(id, recipientId, user.id);
+  }
+
   /** Karbot / Karlopay por grupo (tienda por grupo). Debe ir ANTES de :id/... */
   @Get('business-groups/:id/karbot-settings')
   @ApiBearerAuth('JWT-auth')
@@ -537,6 +571,39 @@ export class BusinessesController {
     @CurrentUser() user: User,
   ) {
     return this.businessesService.updateBusinessNotificationSettings(id, user.id, updateDto);
+  }
+
+  @Get(':id/notification-recipients')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Obtener destinatarios de notificaciones de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async getNotificationRecipients(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.businessesService.getNotificationRecipientsForUser(id, user.id);
+  }
+
+  @Post(':id/notification-recipients')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Agregar destinatario de notificaciones a una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  async addNotificationRecipient(
+    @Param('id') id: string,
+    @Body() dto: CreateNotificationRecipientDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.addNotificationRecipient(id, user.id, dto);
+  }
+
+  @Delete(':id/notification-recipients/:recipientId')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Eliminar destinatario de notificaciones de una sucursal' })
+  @ApiParam({ name: 'id', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'recipientId', description: 'ID del destinatario', type: String })
+  async removeNotificationRecipient(
+    @Param('id') id: string,
+    @Param('recipientId') recipientId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.businessesService.removeNotificationRecipient(id, recipientId, user.id);
   }
 
   @Get(':id')

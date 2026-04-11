@@ -4,7 +4,7 @@
  */
 
 import { BusinessRole } from './users';
-import type { OperatorPermissions } from './operator-permissions';
+import type { OperatorPermissions, TiendasKey } from './operator-permissions';
 import { isOperatorRole, normalizeOperatorPermissions } from './operator-permissions';
 
 // Re-exportar BusinessRole para que esté disponible desde este módulo
@@ -24,6 +24,8 @@ export interface RolePermissions {
   canViewReports: boolean;
   canManageSettings: boolean;
   canManageUsers: boolean;
+  /** Acceso al módulo Tiendas */
+  canManageTiendas: boolean;
   /** Acceso a sliders (personalizaciones) */
   canManageSliders: boolean;
   /** Acceso a colecciones (catálogo) */
@@ -43,6 +45,7 @@ const fullPermissions: RolePermissions = {
   canViewReports: true,
   canManageSettings: true,
   canManageUsers: true,
+  canManageTiendas: true,
   canManageSliders: true,
   canManageCollections: true,
 };
@@ -67,6 +70,7 @@ export const ROLE_PERMISSIONS: Record<BusinessRole, RolePermissions> = {
     canViewReports: false,
     canManageSettings: false,
     canManageUsers: false,
+    canManageTiendas: false,
     canManageSliders: false,
     canManageCollections: false,
   },
@@ -83,6 +87,7 @@ export const ROLE_PERMISSIONS: Record<BusinessRole, RolePermissions> = {
     canViewReports: false,
     canManageSettings: false,
     canManageUsers: false,
+    canManageTiendas: false,
     canManageSliders: false,
     canManageCollections: false,
   },
@@ -98,7 +103,7 @@ function isEmptyOperatorPermissions(op: OperatorPermissions | Record<string, unk
   const hasSettings = p.settings && Object.keys(p.settings).length > 0;
   const anyTrue = (obj: Record<string, boolean> | undefined) =>
     obj && Object.values(obj).some((v) => v === true);
-  if (!anyTrue(p.modules) && !anyTrue(p.settings)) return true;
+  if (!anyTrue(p.modules) && !anyTrue(p.settings) && !anyTrue(p.tiendas)) return true;
   return false;
 }
 
@@ -123,6 +128,7 @@ function rolePermissionsFromOperator(op: OperatorPermissions): RolePermissions {
     canManageOrders: p.modules?.orders === undefined ? base.canManageOrders : p.modules.orders === true,
     canViewReports: p.modules?.reports === undefined ? base.canViewReports : p.modules.reports === true,
     canManageSliders: p.modules?.sliders === undefined ? base.canManageSliders : p.modules.sliders === true,
+    canManageTiendas: p.modules?.tiendas === undefined ? base.canManageTiendas : p.modules.tiendas === true,
     canManageCollections: p.modules?.collections === undefined ? base.canManageCollections : p.modules.collections === true,
     canManageSettings:
       p.settings && Object.keys(p.settings).length > 0
@@ -196,6 +202,7 @@ export function canAccessRoute(
   if (route.startsWith('/clients')) return permissions.canManageClients;
   if (route.startsWith('/orders')) return permissions.canManageOrders;
   if (route.startsWith('/statistics')) return permissions.canViewReports;
+  if (route.startsWith('/tiendas')) return permissions.canManageTiendas;
   if (route.startsWith('/sliders')) return permissions.canManageSliders;
   if (route.startsWith('/catalog')) return permissions.canManageCollections;
   if (route.startsWith('/settings') || route.startsWith('/config')) {
@@ -206,6 +213,22 @@ export function canAccessRoute(
   }
 
   return true;
+}
+
+/**
+ * Verificar si puede acceder a una pestaña del módulo Tiendas.
+ * tabId es el id del tab (resumen, configuracion, etc.); se mapea a tiendas_[tabId].
+ */
+export function canAccessTiendasTab(
+  role: BusinessRole,
+  tabId: string,
+  operatorPermissions?: OperatorPermissions | Record<string, unknown> | null
+): boolean {
+  if (!isOperatorRole(role)) return true;
+  if (!operatorPermissions) return false;
+  const p = normalizeOperatorPermissions(operatorPermissions as Record<string, unknown>);
+  const key = `tiendas_${tabId}` as TiendasKey;
+  return p.tiendas?.[key] === true;
 }
 
 /**

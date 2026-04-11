@@ -15,6 +15,7 @@ import { UpdateBusinessAddressDto } from './dto/update-business-address.dto';
 import { UpdateBusinessDto } from './dto/update-business.dto';
 import { CreateBusinessGroupDto } from './dto/create-business-group.dto';
 import { UpdateBusinessGroupDto } from './dto/update-business-group.dto';
+import { CreateNotificationRecipientDto } from './dto/notification-recipients.dto';
 
 type BusinessTaxSettings = {
   included_in_price: boolean;
@@ -23,7 +24,7 @@ type BusinessTaxSettings = {
 };
 
 type BranchNotificationSetting = {
-  notification_type: 'user_registration' | 'order_confirmation' | 'order_status_change';
+  notification_type: 'user_registration' | 'order_confirmation' | 'order_status_change' | 'supervisor_notification';
   email_enabled: boolean;
   whatsapp_enabled: boolean;
 };
@@ -455,14 +456,8 @@ export class BusinessesService {
         throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
       }
 
-      // Verificar que el usuario tiene permisos (es superadmin del negocio)
-      const businessUserCheck = await pool.query(
-        `SELECT role FROM core.business_users 
-         WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE`,
-        [id, ownerId]
-      );
-
-      if (businessUserCheck.rows.length === 0 || businessUserCheck.rows[0].role !== 'superadmin') {
+      const hasPermission = await this.checkBusinessPermissions(id, ownerId);
+      if (!hasPermission) {
         throw new BadRequestException('No tienes permisos para actualizar este negocio');
       }
 
@@ -688,14 +683,8 @@ export class BusinessesService {
       throw new NotFoundException(`Negocio con ID ${id} no encontrado`);
     }
 
-    // Verificar que el usuario tiene permisos (es superadmin del negocio)
-    const businessUserCheck = await pool.query(
-      `SELECT role FROM core.business_users 
-       WHERE business_id = $1 AND user_id = $2 AND is_active = TRUE`,
-      [id, ownerId]
-    );
-
-    if (businessUserCheck.rows.length === 0 || businessUserCheck.rows[0].role !== 'superadmin') {
+    const hasPermission = await this.checkBusinessPermissions(id, ownerId);
+    if (!hasPermission) {
       throw new BadRequestException('No tienes permisos para actualizar la dirección de este negocio');
     }
 
@@ -1890,14 +1879,8 @@ export class BusinessesService {
 
     try {
       // Verificar que el negocio existe y el usuario tiene permisos
-      const businessCheck = await pool.query(
-        `SELECT b.id FROM core.businesses b
-         INNER JOIN core.business_users bu ON b.id = bu.business_id
-         WHERE b.id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
-        [businessId, userId]
-      );
-
-      if (businessCheck.rows.length === 0) {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
         throw new BadRequestException('No tienes permisos para gestionar esta sucursal');
       }
 
@@ -1961,15 +1944,8 @@ export class BusinessesService {
     const pool = dbPool;
 
     try {
-      // Verificar que el negocio existe y el usuario tiene permisos
-      const businessCheck = await pool.query(
-        `SELECT b.id FROM core.businesses b
-         INNER JOIN core.business_users bu ON b.id = bu.business_id
-         WHERE b.id = $1 AND bu.user_id = $2 AND bu.role = 'superadmin' AND bu.is_active = TRUE`,
-        [businessId, userId]
-      );
-
-      if (businessCheck.rows.length === 0) {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
         throw new BadRequestException('No tienes permisos para gestionar esta sucursal');
       }
 
@@ -2713,6 +2689,7 @@ export class BusinessesService {
     { notification_type: 'user_registration', email_enabled: false, whatsapp_enabled: false },
     { notification_type: 'order_confirmation', email_enabled: false, whatsapp_enabled: false },
     { notification_type: 'order_status_change', email_enabled: false, whatsapp_enabled: false },
+    { notification_type: 'supervisor_notification', email_enabled: false, whatsapp_enabled: false },
   ];
 
   async getBusinessNotificationSettings(businessId: string) {
@@ -3646,35 +3623,26 @@ export class BusinessesService {
         return true;
       }
 
-      // Verificar si tiene permisos a través de business_users (superadmin o admin del grupo)
+      // Verificar si tiene permisos a través de business_users (superadmin, admin, u operador con permiso tiendas)
       const userCheck = await pool.query(
-        `SELECT bu.role, bu.business_id, b.name as business_name
+        `SELECT bu.role, bu.business_id, bu.permissions, b.name as business_name
          FROM core.business_users bu
          INNER JOIN core.businesses b ON bu.business_id = b.id
          WHERE b.business_group_id = $1 
            AND bu.user_id = $2
-           AND bu.role IN ('superadmin', 'admin')
            AND bu.is_active = TRUE`,
         [groupId, userId]
       );
 
       if (userCheck.rows.length > 0) {
-        return true;
-      }
-
-      
-      // Debug: verificar qué roles tiene el usuario en las sucursales del grupo
-      const debugCheck = await pool.query(
-        `SELECT bu.role, bu.business_id, bu.is_active, b.name as business_name
-         FROM core.business_users bu
-         INNER JOIN core.businesses b ON bu.business_id = b.id
-         WHERE b.business_group_id = $1 
-           AND bu.user_id = $2`,
-        [groupId, userId]
-      );
-      
-      if (debugCheck.rows.length > 0) {
-      } else {
+        const row = userCheck.rows[0];
+        if (row.role === 'superadmin' || row.role === 'admin') {
+          return true;
+        }
+        const perms = row.permissions;
+        if (perms?.modules?.tiendas === true) {
+          return true;
+        }
       }
 
       return false;
@@ -3873,17 +3841,23 @@ export class BusinessesService {
 
       // Verificar si tiene permisos a través de business_users (superadmin o admin)
       const userCheck = await pool.query(
-        `SELECT role, business_id, is_active
+        `SELECT role, business_id, is_active, permissions
          FROM core.business_users 
          WHERE business_id = $1 
            AND user_id = $2
-           AND role IN ('superadmin', 'admin')
            AND is_active = TRUE`,
         [businessId, userId]
       );
 
       if (userCheck.rows.length > 0) {
-        return true;
+        const row = userCheck.rows[0];
+        if (row.role === 'superadmin' || row.role === 'admin') {
+          return true;
+        }
+        const perms = row.permissions;
+        if (perms?.modules?.tiendas === true) {
+          return true;
+        }
       }
 
       // Verificar si tiene permisos a través del grupo empresarial
@@ -3910,32 +3884,23 @@ export class BusinessesService {
 
         // Verificar si tiene permisos a través de business_users en cualquier sucursal del grupo
         const groupUserCheck = await pool.query(
-          `SELECT bu.role, bu.business_id, b.name as business_name
+          `SELECT bu.role, bu.business_id, bu.permissions, b.name as business_name
            FROM core.business_users bu
            INNER JOIN core.businesses b ON bu.business_id = b.id
            WHERE b.business_group_id = $1 
              AND bu.user_id = $2
-             AND bu.role IN ('superadmin', 'admin')
              AND bu.is_active = TRUE`,
           [groupId, userId]
         );
 
         if (groupUserCheck.rows.length > 0) {
-          return true;
-        } else {
-          
-          // Debug: verificar qué roles tiene el usuario en las sucursales del grupo
-          const debugGroupCheck = await pool.query(
-            `SELECT bu.role, bu.business_id, bu.is_active, b.name as business_name
-             FROM core.business_users bu
-             INNER JOIN core.businesses b ON bu.business_id = b.id
-             WHERE b.business_group_id = $1 
-               AND bu.user_id = $2`,
-            [groupId, userId]
-          );
-          
-          if (debugGroupCheck.rows.length > 0) {
-          } else {
+          const row = groupUserCheck.rows[0];
+          if (row.role === 'superadmin' || row.role === 'admin') {
+            return true;
+          }
+          const perms = row.permissions;
+          if (perms?.modules?.tiendas === true) {
+            return true;
           }
         }
       } else {
@@ -4038,6 +4003,208 @@ export class BusinessesService {
       }
       console.error('❌ Error actualizando branding de la sucursal:', error);
       throw new ServiceUnavailableException(`Error al actualizar branding: ${error.message}`);
+    }
+  }
+
+  // ===========================================================================
+  // NOTIFICATION RECIPIENTS (CRUD)
+  // ===========================================================================
+
+  async getNotificationRecipients(businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const businessResult = await dbPool.query(
+        `SELECT id FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+      const result = await dbPool.query(
+        `SELECT id, email, name, is_active, created_at
+         FROM communication.notification_recipients
+         WHERE business_id = $1 AND is_active = TRUE
+         ORDER BY created_at ASC`,
+        [businessId],
+      );
+      return { recipients: result.rows };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Error obteniendo destinatarios de notificaciones:', error);
+      throw new ServiceUnavailableException(`Error al obtener destinatarios: ${error.message}`);
+    }
+  }
+
+  async getNotificationRecipientsForUser(businessId: string, userId: string) {
+    const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getNotificationRecipients(businessId);
+  }
+
+  async addNotificationRecipient(businessId: string, userId: string, dto: CreateNotificationRecipientDto) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+      const businessResult = await dbPool.query(
+        `SELECT id FROM core.businesses WHERE id = $1`,
+        [businessId],
+      );
+      if (businessResult.rows.length === 0) {
+        throw new NotFoundException('Sucursal no encontrada');
+      }
+      const existing = await dbPool.query(
+        `SELECT id FROM communication.notification_recipients
+         WHERE business_id = $1 AND email = $2`,
+        [businessId, dto.email.toLowerCase().trim()],
+      );
+      if (existing.rows.length > 0) {
+        throw new BadRequestException('Este correo ya está registrado para esta sucursal');
+      }
+      const result = await dbPool.query(
+        `INSERT INTO communication.notification_recipients (business_id, email, name)
+         VALUES ($1, $2, $3)
+         RETURNING id, email, name, is_active, created_at`,
+        [businessId, dto.email.toLowerCase().trim(), dto.name?.trim() || null],
+      );
+      return { recipient: result.rows[0] };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      console.error('Error agregando destinatario de notificaciones:', error);
+      throw new ServiceUnavailableException(`Error al agregar destinatario: ${error.message}`);
+    }
+  }
+
+  async removeNotificationRecipient(businessId: string, recipientId: string, userId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const hasPermission = await this.checkBusinessPermissions(businessId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar esta sucursal');
+      }
+      const result = await dbPool.query(
+        `DELETE FROM communication.notification_recipients
+         WHERE id = $1 AND business_id = $2
+         RETURNING id`,
+        [recipientId, businessId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Destinatario no encontrado');
+      }
+      return { deleted: true };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) throw error;
+      console.error('Error eliminando destinatario de notificaciones:', error);
+      throw new ServiceUnavailableException(`Error al eliminar destinatario: ${error.message}`);
+    }
+  }
+
+  async getGroupNotificationRecipients(groupId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const groupResult = await dbPool.query(
+        `SELECT id FROM core.business_groups WHERE id = $1`,
+        [groupId],
+      );
+      if (groupResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const result = await dbPool.query(
+        `SELECT id, email, name, is_active, created_at
+         FROM communication.notification_recipients
+         WHERE business_group_id = $1 AND is_active = TRUE
+         ORDER BY created_at ASC`,
+        [groupId],
+      );
+      return { recipients: result.rows };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Error obteniendo destinatarios de notificaciones del grupo:', error);
+      throw new ServiceUnavailableException(`Error al obtener destinatarios: ${error.message}`);
+    }
+  }
+
+  async getGroupNotificationRecipientsForUser(groupId: string, userId: string) {
+    const hasPermission = await this.checkGroupPermissions(groupId, userId);
+    if (!hasPermission) {
+      throw new ForbiddenException('No tienes permisos para ver esta configuracion');
+    }
+    return this.getGroupNotificationRecipients(groupId);
+  }
+
+  async addGroupNotificationRecipient(groupId: string, userId: string, dto: CreateNotificationRecipientDto) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const hasPermission = await this.checkGroupPermissions(groupId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+      const groupResult = await dbPool.query(
+        `SELECT id FROM core.business_groups WHERE id = $1`,
+        [groupId],
+      );
+      if (groupResult.rows.length === 0) {
+        throw new NotFoundException('Grupo empresarial no encontrado');
+      }
+      const existing = await dbPool.query(
+        `SELECT id FROM communication.notification_recipients
+         WHERE business_group_id = $1 AND email = $2`,
+        [groupId, dto.email.toLowerCase().trim()],
+      );
+      if (existing.rows.length > 0) {
+        throw new BadRequestException('Este correo ya está registrado para este grupo');
+      }
+      const result = await dbPool.query(
+        `INSERT INTO communication.notification_recipients (business_group_id, email, name)
+         VALUES ($1, $2, $3)
+         RETURNING id, email, name, is_active, created_at`,
+        [groupId, dto.email.toLowerCase().trim(), dto.name?.trim() || null],
+      );
+      return { recipient: result.rows[0] };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      console.error('Error agregando destinatario de notificaciones del grupo:', error);
+      throw new ServiceUnavailableException(`Error al agregar destinatario: ${error.message}`);
+    }
+  }
+
+  async removeGroupNotificationRecipient(groupId: string, recipientId: string, userId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexion a base de datos no configurada');
+    }
+    try {
+      const hasPermission = await this.checkGroupPermissions(groupId, userId);
+      if (!hasPermission) {
+        throw new ForbiddenException('No tienes permisos para actualizar este grupo');
+      }
+      const result = await dbPool.query(
+        `DELETE FROM communication.notification_recipients
+         WHERE id = $1 AND business_group_id = $2
+         RETURNING id`,
+        [recipientId, groupId],
+      );
+      if (result.rows.length === 0) {
+        throw new NotFoundException('Destinatario no encontrado');
+      }
+      return { deleted: true };
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof ForbiddenException) throw error;
+      console.error('Error eliminando destinatario de notificaciones del grupo:', error);
+      throw new ServiceUnavailableException(`Error al eliminar destinatario: ${error.message}`);
     }
   }
 }

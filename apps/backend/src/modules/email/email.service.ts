@@ -450,5 +450,36 @@ export class EmailService {
       context
     );
   }
+
+  /**
+   * Envía notificación genérica a un supervisor/destinatario configurado.
+   * Las variables genéricas permiten adaptar el template a cualquier evento.
+   */
+  async sendSupervisorNotificationEmail(
+    recipientEmail: string,
+    businessName: string,
+    eventTitle: string,
+    eventDescription: string,
+    detailSectionHtml: string,
+    actionUrl: string,
+    businessId?: string,
+    businessGroupId?: string,
+    context?: { userId?: string; orderId?: string }
+  ): Promise<IntegrationLogStatus> {
+    return this.sendEmail(
+      recipientEmail,
+      EmailTriggerType.SUPERVISOR_NOTIFICATION,
+      {
+        business_name: businessName,
+        event_title: eventTitle,
+        event_description: eventDescription,
+        detail_section: detailSectionHtml,
+        action_url: actionUrl,
+      },
+      businessId,
+      businessGroupId,
+      context
+    );
+  }
 }
 

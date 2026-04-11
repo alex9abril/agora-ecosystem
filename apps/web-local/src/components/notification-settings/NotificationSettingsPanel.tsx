@@ -8,16 +8,19 @@ const DEFAULT_NOTIFICATION_SETTINGS: BranchNotificationSetting[] = [
   { notification_type: 'user_registration', email_enabled: false, whatsapp_enabled: false },
   { notification_type: 'order_confirmation', email_enabled: false, whatsapp_enabled: false },
   { notification_type: 'order_status_change', email_enabled: false, whatsapp_enabled: false },
+  { notification_type: 'supervisor_notification', email_enabled: false, whatsapp_enabled: false },
 ];
 
 const NOTIFICATION_OPTIONS: Array<{
   type: BranchNotificationType;
   title: string;
   description: string;
+  emailOnly?: boolean;
 }> = [
   { type: 'user_registration', title: 'Bienvenida', description: 'Se envía cuando un usuario se registra.' },
   { type: 'order_confirmation', title: 'Confirmación de pedido', description: 'Se envía cuando el pedido queda confirmado.' },
   { type: 'order_status_change', title: 'Cambio de estatus del pedido', description: 'Se envía cada vez que cambia el estatus del pedido.' },
+  { type: 'supervisor_notification', title: 'Notificaciones a supervisores', description: 'Envía correos a los supervisores configurados cuando hay ventas, registros o cambios de estado.', emailOnly: true },
 ];
 
 export interface NotificationSettingsPanelProps {
@@ -28,9 +31,11 @@ export interface NotificationSettingsPanelProps {
   /** Nombre del contexto para mostrar en la UI */
   contextName: string;
   onUpdated?: () => void;
+  /** Callback que informa si la notificación a supervisores por email está habilitada */
+  onSupervisorEmailChange?: (enabled: boolean) => void;
 }
 
-export default function NotificationSettingsPanel({ mode, id, contextName, onUpdated }: NotificationSettingsPanelProps) {
+export default function NotificationSettingsPanel({ mode, id, contextName, onUpdated, onSupervisorEmailChange }: NotificationSettingsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +58,8 @@ export default function NotificationSettingsPanel({ mode, id, contextName, onUpd
         ...(byType.get(item.notification_type) || {}),
       }));
       setSettings(merged);
+      const supervisorSetting = merged.find((s) => s.notification_type === 'supervisor_notification');
+      onSupervisorEmailChange?.(supervisorSetting?.email_enabled ?? false);
     } catch (err: unknown) {
       const message = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : 'No se pudo cargar la configuración de notificaciones.';
       setError(message);
@@ -95,6 +102,9 @@ export default function NotificationSettingsPanel({ mode, id, contextName, onUpd
     );
     setSettings(nextSettings);
     saveSettings(nextSettings);
+    if (type === 'supervisor_notification' && channel === 'email_enabled') {
+      onSupervisorEmailChange?.(value);
+    }
   };
 
   if (loading) {
@@ -150,16 +160,18 @@ export default function NotificationSettingsPanel({ mode, id, contextName, onUpd
                   />
                   Correo
                 </label>
-                <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-neutral-300">
-                  <input
-                    type="checkbox"
-                    checked={whatsappEnabled}
-                    disabled={saving}
-                    onChange={(e) => updateChannel(option.type, 'whatsapp_enabled', e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-neutral-600 text-black focus:ring-black dark:focus:ring-neutral-300 disabled:opacity-50"
-                  />
-                  WhatsApp
-                </label>
+                {!option.emailOnly && (
+                  <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={whatsappEnabled}
+                      disabled={saving}
+                      onChange={(e) => updateChannel(option.type, 'whatsapp_enabled', e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 dark:border-neutral-600 text-black focus:ring-black dark:focus:ring-neutral-300 disabled:opacity-50"
+                    />
+                    WhatsApp
+                  </label>
+                )}
               </div>
             </div>
           );

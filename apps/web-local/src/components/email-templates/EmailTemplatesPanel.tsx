@@ -25,7 +25,7 @@ export interface EmailTemplatesPanelProps {
   contextName: string;
 }
 
-const allTriggers: EmailTriggerType[] = ['user_registration', 'order_confirmation', 'order_status_change'];
+const allTriggers: EmailTriggerType[] = ['user_registration', 'order_confirmation', 'order_status_change', 'supervisor_notification'];
 
 export default function EmailTemplatesPanel({ level, businessGroupId, businessId, contextName }: EmailTemplatesPanelProps) {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -42,6 +42,7 @@ export default function EmailTemplatesPanel({ level, businessGroupId, businessId
     user_registration: null,
     order_confirmation: null,
     order_status_change: null,
+    supervisor_notification: null,
   });
   const editorRef = useRef<HTMLDivElement>(null);
   const isInitializingEditor = useRef(false);
@@ -58,6 +59,7 @@ export default function EmailTemplatesPanel({ level, businessGroupId, businessId
           user_registration: null,
           order_confirmation: null,
           order_status_change: null,
+          supervisor_notification: null,
         };
         list.forEach((t) => {
           if (t.trigger_type in map) map[t.trigger_type as EmailTriggerType] = t;

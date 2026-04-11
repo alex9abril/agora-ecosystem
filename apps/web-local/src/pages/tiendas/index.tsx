@@ -12,8 +12,11 @@ import BrandingManager from '@/components/branding/BrandingManager';
 import LandingSlidersPanel from '@/components/landing-sliders/LandingSlidersPanel';
 import TaxSettingsPanel from '@/components/tax-settings/TaxSettingsPanel';
 import NotificationSettingsPanel from '@/components/notification-settings/NotificationSettingsPanel';
+import NotificationRecipientsManager from '@/components/notification-settings/NotificationRecipientsManager';
 import IntegracionesPanel from '@/components/integrations/IntegracionesPanel';
 import CollectionsPanel from '@/components/collections/CollectionsPanel';
+import { isOperatorRole, normalizeOperatorPermissions } from '@/lib/operator-permissions';
+import { canAccessTiendasTab } from '@/lib/permissions';
 
 const iconClass = 'w-4 h-4 shrink-0';
 
@@ -88,9 +91,15 @@ interface StoreDisableReason {
 export default function TiendasPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { availableBusinesses } = useSelectedBusiness();
+  const { selectedBusiness, availableBusinesses } = useSelectedBusiness();
   const section = (router.query.section as TiendasSection) || 'home';
   const selectedStoreId = router.query.id as string | undefined;
+
+  const userRole = selectedBusiness?.role ?? 'operations_staff';
+  const isOperator = isOperatorRole(userRole);
+  const operatorPerms = selectedBusiness?.permissions
+    ? normalizeOperatorPermissions(selectedBusiness.permissions as Record<string, unknown>)
+    : null;
 
   const [businessGroup, setBusinessGroup] = useState<BusinessGroup | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
@@ -120,6 +129,9 @@ export default function TiendasPage() {
   const [archiving, setArchiving] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [storesRefreshTrigger, setStoresRefreshTrigger] = useState(0);
+  const [supervisorEmailEnabled, setSupervisorEmailEnabled] = useState(false);
+
+  const hasTiendasAccess = isSuperadmin || (isOperator && operatorPerms?.modules?.tiendas === true);
 
   const selectedStore = (section === 'group' || section === 'branch' || section === 'group_brand') && selectedStoreId
     ? stores.find((s) => s.id === selectedStoreId) ?? null
@@ -129,6 +141,16 @@ export default function TiendasPage() {
     setStoreTab('resumen');
   }, [selectedStoreId]);
 
+  useEffect(() => {
+    if (isOperator && selectedBusiness && section === 'home') {
+      router.replace(
+        { pathname: '/tiendas', query: { section: 'branch', id: selectedBusiness.business_id } },
+        undefined,
+        { shallow: true },
+      );
+    }
+  }, [isOperator, selectedBusiness?.business_id, section, router]);
+
   // Si la tienda está inactiva y la pestaña actual no está disponible, volver a Resumen
   useEffect(() => {
     if (selectedStore && !selectedStore.is_active && storeTab !== 'resumen' && storeTab !== 'configuracion') {
@@ -137,20 +159,41 @@ export default function TiendasPage() {
   }, [selectedStore?.id, selectedStore?.is_active, storeTab]);
 
   useEffect(() => {
-    const checkSuperadmin = () => {
+    const checkAccess = () => {
       const hasSuperadminRole = availableBusinesses.some((b) => b.role === 'superadmin');
       if (hasSuperadminRole) {
         setIsSuperadmin(true);
-      } else {
-        router.push('/dashboard');
+        return;
       }
+      if (isOperator && operatorPerms?.modules?.tiendas === true) {
+        return;
+      }
+      router.push('/dashboard');
     };
     if (availableBusinesses.length > 0) {
-      checkSuperadmin();
+      checkAccess();
     }
-  }, [availableBusinesses, router]);
+  }, [availableBusinesses, router, isOperator, operatorPerms?.modules?.tiendas]);
 
   useEffect(() => {
+    if (isOperator && selectedBusiness) {
+      const operatorStore: Store = {
+        id: selectedBusiness.business_id,
+        type: 'branch',
+        business_group_id: null,
+        business_id: selectedBusiness.business_id,
+        vehicle_brand_id: null,
+        slug: null,
+        name: selectedBusiness.business_name,
+        is_active: selectedBusiness.is_active,
+        settings: {},
+        created_at: selectedBusiness.assigned_at,
+        updated_at: selectedBusiness.assigned_at,
+      };
+      setStores([operatorStore]);
+      setLoading(false);
+      return;
+    }
     const loadGroup = async () => {
       if (!isSuperadmin) return;
       try {
@@ -166,9 +209,10 @@ export default function TiendasPage() {
       }
     };
     loadGroup();
-  }, [isSuperadmin]);
+  }, [isSuperadmin, isOperator, selectedBusiness?.business_id]);
 
   useEffect(() => {
+    if (isOperator) return;
     const loadStores = async () => {
       if (!businessGroup?.id) return;
       const type = section === 'group_brand' ? 'group_brand' : section === 'group' ? 'group' : section === 'branch' ? 'branch' : null;
@@ -191,7 +235,7 @@ export default function TiendasPage() {
       }
     };
     loadStores();
-  }, [businessGroup?.id, section, storesRefreshTrigger]);
+  }, [businessGroup?.id, section, storesRefreshTrigger, isOperator]);
 
   useEffect(() => {
     const loadGroupStore = async () => {
@@ -455,9 +499,9 @@ export default function TiendasPage() {
                 </>
               )}
 
-              {!isSuperadmin && (
+              {!hasTiendasAccess && (
                 <p className="text-sm text-amber-600 dark:text-amber-400">
-                  Solo usuarios con rol de superadmin pueden gestionar tiendas.
+                  No tienes permisos para gestionar tiendas.
                 </p>
               )}
 
@@ -473,11 +517,13 @@ export default function TiendasPage() {
                 </p>
               )}
 
-              {(section === 'group' || section === 'branch' || section === 'group_brand') && businessGroup && (
+              {(section === 'group' || section === 'branch' || section === 'group_brand') && (businessGroup || isOperator) && (
                 <>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                    Grupo: <strong>{businessGroup.name}</strong>
-                  </p>
+                  {businessGroup && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                      Grupo: <strong>{businessGroup.name}</strong>
+                    </p>
+                  )}
                   {loading ? (
                     <div className="flex justify-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100" />
@@ -563,7 +609,7 @@ export default function TiendasPage() {
                                   { id: 'resumen' as const, label: 'Resumen' },
                                   { id: 'configuracion' as const, label: 'Configuración' },
                                 ]
-                          ).map((tab) => (
+                          ).filter((tab) => canAccessTiendasTab(userRole, tab.id, operatorPerms)).map((tab) => (
                             <button
                               key={tab.id}
                               type="button"
@@ -701,7 +747,7 @@ export default function TiendasPage() {
                             {selectedStore.is_active &&
                               ((selectedStore.type === 'group' && selectedStore.business_group_id) ||
                                 (selectedStore.type === 'branch' && selectedStore.business_id)) && (
-                              <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-6">
+                              <div className="bg-white dark:bg-neutral-800 rounded-lg border border-gray-200 dark:border-neutral-700 p-6 space-y-6">
                                 <NotificationSettingsPanel
                                   mode={selectedStore.type === 'group' ? 'group' : 'branch'}
                                   id={
@@ -710,7 +756,22 @@ export default function TiendasPage() {
                                       : selectedStore.business_id!
                                   }
                                   contextName={selectedStore.name}
+                                  onSupervisorEmailChange={setSupervisorEmailEnabled}
                                 />
+                                {supervisorEmailEnabled && (
+                                  <>
+                                    <hr className="border-gray-200 dark:border-neutral-700" />
+                                    <NotificationRecipientsManager
+                                      mode={selectedStore.type === 'group' ? 'group' : 'branch'}
+                                      id={
+                                        selectedStore.type === 'group'
+                                          ? selectedStore.business_group_id!
+                                          : selectedStore.business_id!
+                                      }
+                                      contextName={selectedStore.name}
+                                    />
+                                  </>
+                                )}
                               </div>
                             )}
                             {isSuperadmin && (

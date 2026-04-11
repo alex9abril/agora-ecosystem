@@ -2974,9 +2974,12 @@ export class OrdersService {
           o.business_id,
           ${storeContextField}
           b.business_group_id,
-          b.slug AS business_slug
+          b.slug AS business_slug,
+          b.name AS business_name,
+          COALESCE(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), 'Cliente') AS client_name
         FROM orders.orders o
         LEFT JOIN core.businesses b ON o.business_id = b.id
+        LEFT JOIN core.user_profiles up ON o.client_id = up.id
         WHERE o.id = $1`,
         [orderId]
       );
@@ -3048,7 +3051,37 @@ export class OrdersService {
         'order_confirmation',
       );
 
+      // Formatear datos necesarios tanto para cliente como para supervisores
+      const orderNumber = formatOrderFolioFromUuid(order.id);
+      const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const orderTotal = `$${this.formatCurrency(parseFloat(order.total_amount))}`;
+      const paymentMethod = order.payment_method || 'No especificado';
+      const orderUrl = this.buildOrderDetailUrl(
+        process.env.FRONTEND_URL || 'https://agoramp.mx',
+        order.id,
+        order.store_context ?? null,
+        order.business_slug ?? null,
+      );
+
       if (!channels.emailEnabled && !channels.whatsappEnabled) {
+        this.sendSupervisorNotification(
+          order.business_id,
+          order.business_group_id,
+          order.business_name || 'Sin nombre',
+          'Nueva Venta Registrada',
+          `Se registró un nuevo pedido de ${order.client_name || 'un cliente'}.`,
+          this.buildSupervisorOrderDetailHtml(orderNumber, order.client_name || 'Cliente', orderDate, orderTotal, paymentMethod, orderItemsDetailHtml),
+          this.buildSupervisorActionButton('Ver Pedido Completo', orderUrl),
+          { orderId: order.id },
+        ).catch((err) => {
+          console.error(`❌ Error enviando notificación a supervisores para orden ${orderId} (no crítico):`, err);
+        });
         return;
       }
 
@@ -3067,24 +3100,6 @@ export class OrdersService {
           message: 'Email no disponible para notificación',
         });
       }
-
-      // Formatear datos
-      const orderNumber = formatOrderFolioFromUuid(order.id);
-      const orderDate = new Date(order.created_at).toLocaleDateString('es-MX', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      const orderTotal = `$${this.formatCurrency(parseFloat(order.total_amount))}`;
-      const paymentMethod = order.payment_method || 'No especificado';
-      const orderUrl = this.buildOrderDetailUrl(
-        process.env.FRONTEND_URL || 'https://agoramp.mx',
-        order.id,
-        order.store_context ?? null,
-        order.business_slug ?? null,
-      );
 
       if (process.env.NODE_ENV !== 'production') {
         console.debug('[OrdersService.sendOrderConfirmationEmail] Payload:', {
@@ -3146,10 +3161,185 @@ export class OrdersService {
           });
         }
       }
+
+      // Enviar notificación a supervisores configurados (notification_recipients)
+      this.sendSupervisorNotification(
+        order.business_id,
+        order.business_group_id,
+        order.business_name || 'Sin nombre',
+        'Nueva Venta Registrada',
+        `Se registró un nuevo pedido de ${order.client_name || 'un cliente'}.`,
+        this.buildSupervisorOrderDetailHtml(orderNumber, order.client_name || 'Cliente', orderDate, orderTotal, paymentMethod, orderItemsDetailHtml),
+        this.buildSupervisorActionButton('Ver Pedido Completo', orderUrl),
+        { orderId: order.id },
+      ).catch((err) => {
+        console.error(`❌ Error enviando notificación a supervisores para orden ${orderId} (no crítico):`, err);
+      });
     } catch (error: any) {
       console.error(`❌ Error en sendOrderConfirmationEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo
     }
+  }
+
+  /**
+   * Envía notificación genérica a los supervisores (notification_recipients) de la sucursal/grupo.
+   * Verifica primero si el canal supervisor_notification está habilitado.
+   * Reutilizable para cualquier evento: nueva venta, cambio de estado, etc.
+   */
+  private async sendSupervisorNotification(
+    businessId: string,
+    businessGroupId: string | null,
+    businessName: string,
+    eventTitle: string,
+    eventDescription: string,
+    detailSectionHtml: string,
+    actionUrlHtml: string,
+    context?: { userId?: string; orderId?: string },
+  ): Promise<void> {
+    try {
+      const supervisorChannels = await this.businessesService.getNotificationChannels(
+        businessId,
+        'supervisor_notification',
+      );
+
+      if (!supervisorChannels.emailEnabled) {
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'supervisor_notification',
+          channel: 'email',
+          status: 'skipped',
+          businessId,
+          userId: context?.userId,
+          orderId: context?.orderId,
+          message: 'Canal supervisor_notification deshabilitado para esta sucursal',
+          metadata: { eventTitle },
+        });
+        return;
+      }
+
+      const { recipients } = await this.businessesService.getNotificationRecipients(businessId);
+
+      let groupRecipients: Array<{ email: string; name?: string }> = [];
+      if (businessGroupId) {
+        try {
+          const groupResult = await this.businessesService.getGroupNotificationRecipients(businessGroupId);
+          groupRecipients = groupResult.recipients || [];
+        } catch {
+          // Group recipients are optional; silently skip if unavailable
+        }
+      }
+
+      const allRecipients = [...recipients, ...groupRecipients];
+      const seen = new Set<string>();
+      const uniqueRecipients = allRecipients.filter((r) => {
+        const key = r.email.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (uniqueRecipients.length === 0) {
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'supervisor_notification',
+          channel: 'email',
+          status: 'skipped',
+          businessId,
+          userId: context?.userId,
+          orderId: context?.orderId,
+          message: 'Sin destinatarios (notification_recipients) configurados',
+          metadata: { eventTitle },
+        });
+        return;
+      }
+
+      for (const recipient of uniqueRecipients) {
+        await this.emailService.sendSupervisorNotificationEmail(
+          recipient.email,
+          businessName,
+          eventTitle,
+          eventDescription,
+          detailSectionHtml,
+          actionUrlHtml,
+          businessId,
+          businessGroupId || undefined,
+          context,
+        );
+      }
+    } catch (error: any) {
+      console.error(`❌ Error enviando notificación a supervisores:`, error);
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'supervisor_notification',
+        channel: 'email',
+        status: 'failed',
+        businessId,
+        userId: context?.userId,
+        orderId: context?.orderId,
+        message: 'Error general enviando notificación a supervisores',
+        errorMessage: error?.message || String(error),
+      });
+    }
+  }
+
+  /**
+   * Construye el HTML de la sección de detalle de un pedido para la notificación de supervisores.
+   */
+  private buildSupervisorOrderDetailHtml(
+    orderNumber: string,
+    clientName: string,
+    orderDate: string,
+    orderTotal: string,
+    paymentMethod: string,
+    orderItemsDetailHtml?: string,
+  ): string {
+    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Número de Orden</p>
+        <p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">{{order_number}}</p>
+      </div>
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
+        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Cliente:</strong> ${clientName}</p>
+        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Fecha:</strong> ${orderDate}</p>
+        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Total:</strong> <span style="font-weight: 700;">${orderTotal}</span></p>
+        <p style="font-size: 14px; margin: 0;"><strong>Método de Pago:</strong> ${paymentMethod}</p>
+      </div>
+    </div>${orderItemsDetailHtml ? `<div style="margin-bottom: 20px;">${orderItemsDetailHtml}</div>` : ''}`.replace('{{order_number}}', orderNumber);
+  }
+
+  /**
+   * Construye el HTML del botón de acción para la notificación de supervisores.
+   * Retorna string vacío si no hay URL.
+   */
+  private buildSupervisorActionButton(label: string, url?: string): string {
+    if (!url) return '';
+    return `<div style="text-align: center; margin: 30px 0;">
+      <a href="${url}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); font-family: Arial, sans-serif;">
+        ${label}
+      </a>
+    </div>`;
+  }
+
+  /**
+   * Construye el HTML de detalle para cambio de estado de pedido.
+   */
+  private buildSupervisorStatusChangeDetailHtml(
+    orderNumber: string,
+    clientName: string,
+    previousStatus: string,
+    currentStatus: string,
+  ): string {
+    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb;">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Pedido</p>
+        <p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">${orderNumber}</p>
+      </div>
+      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
+        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Cliente:</strong> ${clientName}</p>
+        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Estado anterior:</strong> ${previousStatus}</p>
+        <p style="font-size: 14px; margin: 0;"><strong>Estado actual:</strong> <span style="color: #3b82f6; font-weight: 700;">${currentStatus}</span></p>
+      </div>
+    </div>`;
   }
 
   /**
@@ -3184,9 +3374,12 @@ export class OrdersService {
           o.business_id,
           ${storeContextField}
           b.business_group_id,
-          b.slug AS business_slug
+          b.slug AS business_slug,
+          b.name AS business_name,
+          COALESCE(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), 'Cliente') AS client_name
         FROM orders.orders o
         LEFT JOIN core.businesses b ON o.business_id = b.id
+        LEFT JOIN core.user_profiles up ON o.client_id = up.id
         WHERE o.id = $1`,
         [orderId]
       );
@@ -3203,6 +3396,27 @@ export class OrdersService {
       );
 
       if (!channels.emailEnabled && !channels.whatsappEnabled) {
+        // Still check if supervisor notification should be sent even if client channels are off
+        this.sendSupervisorNotification(
+          order.business_id,
+          order.business_group_id,
+          order.business_name || 'Sin nombre',
+          'Cambio de Estado de Pedido',
+          `El pedido de ${order.client_name || 'un cliente'} cambió de estado.`,
+          this.buildSupervisorStatusChangeDetailHtml(
+            formatOrderFolioFromUuid(order.id),
+            order.client_name || 'Cliente',
+            this.orderStatusLabelEs(oldStatus),
+            this.orderStatusLabelEs(newStatus),
+          ),
+          this.buildSupervisorActionButton(
+            'Ver Pedido',
+            this.buildOrderDetailUrl(process.env.FRONTEND_URL || 'https://agoramp.mx', order.id, order.store_context ?? null, order.business_slug ?? null),
+          ),
+          { orderId: order.id },
+        ).catch((err) => {
+          console.error(`❌ Error enviando notificación de cambio de estado a supervisores (no crítico):`, err);
+        });
         return;
       }
 
@@ -3316,6 +3530,25 @@ export class OrdersService {
           });
         }
       }
+
+      // Notificar supervisores del cambio de estado
+      this.sendSupervisorNotification(
+        order.business_id,
+        order.business_group_id,
+        order.business_name || 'Sin nombre',
+        'Cambio de Estado de Pedido',
+        `El pedido de ${order.client_name || 'un cliente'} cambió de estado.`,
+        this.buildSupervisorStatusChangeDetailHtml(
+          orderNumber,
+          order.client_name || 'Cliente',
+          previousStatusLabel,
+          currentStatusLabel,
+        ),
+        this.buildSupervisorActionButton('Ver Pedido', orderUrl),
+        { orderId: order.id },
+      ).catch((err) => {
+        console.error(`❌ Error enviando notificación de cambio de estado a supervisores (no crítico):`, err);
+      });
     } catch (error: any) {
       console.error(`❌ Error en sendOrderStatusChangeEmail para orden ${orderId}:`, error);
       // No lanzar error para no interrumpir el flujo

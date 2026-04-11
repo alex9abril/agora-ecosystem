@@ -806,6 +806,20 @@ export class AuthService {
       }
     }
 
+    // Notificar supervisores del nuevo registro (si hay negocio asociado)
+    if (resolvedBusinessId && authData.user) {
+      this.sendSupervisorRegistrationNotification(
+        resolvedBusinessId,
+        resolvedBusinessGroupId ?? null,
+        `${signUpDto.firstName || ''} ${signUpDto.lastName || ''}`.trim() || signUpDto.email,
+        authData.user.email || signUpDto.email,
+        signUpDto.phone,
+        authData.user.id,
+      ).catch((err) => {
+        console.error('❌ Error enviando notificación de registro a supervisores (no crítico):', err);
+      });
+    }
+
     return {
       user: authData.user,
       session: session || null,
@@ -1381,6 +1395,120 @@ export class AuthService {
       accessToken: data.session.access_token,
       refreshToken: data.session.refresh_token,
     };
+  }
+
+  /**
+   * Envía notificación de nuevo registro de cliente a los supervisores configurados.
+   */
+  private async sendSupervisorRegistrationNotification(
+    businessId: string,
+    businessGroupId: string | null,
+    userName: string,
+    userEmail: string,
+    userPhone?: string,
+    userId?: string,
+  ): Promise<void> {
+    try {
+      const supervisorChannels = await this.businessesService.getNotificationChannels(
+        businessId,
+        'supervisor_notification',
+      );
+
+      if (!supervisorChannels.emailEnabled) {
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'supervisor_notification',
+          channel: 'email',
+          status: 'skipped',
+          businessId,
+          userId,
+          message: 'Canal supervisor_notification deshabilitado para esta sucursal',
+          metadata: { eventTitle: 'Nuevo Cliente Registrado' },
+        });
+        return;
+      }
+
+      let businessName = 'Sin nombre';
+      if (dbPool) {
+        const bizResult = await dbPool.query(
+          `SELECT b.name, b.business_group_id
+           FROM core.businesses b WHERE b.id = $1`,
+          [businessId],
+        );
+        if (bizResult.rows.length > 0) {
+          businessName = bizResult.rows[0].name || businessName;
+        }
+      }
+
+      const { recipients } = await this.businessesService.getNotificationRecipients(businessId);
+
+      let groupRecipients: Array<{ email: string; name?: string }> = [];
+      if (businessGroupId) {
+        try {
+          const groupResult = await this.businessesService.getGroupNotificationRecipients(businessGroupId);
+          groupRecipients = groupResult.recipients || [];
+        } catch {
+          // optional
+        }
+      }
+
+      const allRecipients = [...recipients, ...groupRecipients];
+      const seen = new Set<string>();
+      const uniqueRecipients = allRecipients.filter((r) => {
+        const key = r.email.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (uniqueRecipients.length === 0) {
+        await this.integrationLogs.log({
+          integration: 'email',
+          eventType: 'supervisor_notification',
+          channel: 'email',
+          status: 'skipped',
+          businessId,
+          userId,
+          message: 'Sin destinatarios (notification_recipients) configurados',
+          metadata: { eventTitle: 'Nuevo Cliente Registrado' },
+        });
+        return;
+      }
+
+      const detailHtml = `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb;">
+        <div style="border-bottom: 0; padding-top: 0;">
+          <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Nombre:</strong> ${userName}</p>
+          <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Correo:</strong> ${userEmail}</p>
+          ${userPhone ? `<p style="font-size: 14px; margin: 0;"><strong>Teléfono:</strong> ${userPhone}</p>` : ''}
+        </div>
+      </div>`;
+
+      for (const recipient of uniqueRecipients) {
+        await this.emailService.sendSupervisorNotificationEmail(
+          recipient.email,
+          businessName,
+          'Nuevo Cliente Registrado',
+          `Se registró un nuevo cliente en la plataforma.`,
+          detailHtml,
+          '',
+          businessId,
+          businessGroupId || undefined,
+          { userId },
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ Error enviando notificación de registro a supervisores:', error);
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'supervisor_notification',
+        channel: 'email',
+        status: 'failed',
+        businessId,
+        userId,
+        message: 'Error general enviando notificación de registro a supervisores',
+        errorMessage: error?.message || String(error),
+      });
+    }
   }
 }
 

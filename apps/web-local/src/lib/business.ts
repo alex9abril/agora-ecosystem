@@ -203,12 +203,20 @@ export interface BranchKarlopaySettings {
   };
 }
 
-export type BranchNotificationType = 'user_registration' | 'order_confirmation' | 'order_status_change';
+export type BranchNotificationType = 'user_registration' | 'order_confirmation' | 'order_status_change' | 'supervisor_notification';
 
 export interface BranchNotificationSetting {
   notification_type: BranchNotificationType;
   email_enabled: boolean;
   whatsapp_enabled: boolean;
+}
+
+export interface NotificationRecipient {
+  id: string;
+  email: string;
+  name: string | null;
+  is_active: boolean;
+  created_at: string;
 }
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
@@ -654,6 +662,56 @@ export const businessService = {
       },
     );
     return response?.notifications || (response as any) || [];
+  },
+
+  async getNotificationRecipients(businessId: string): Promise<NotificationRecipient[]> {
+    const response = await apiRequest<{ recipients?: NotificationRecipient[] }>(
+      `/businesses/${businessId}/notification-recipients`,
+      { method: 'GET' },
+    );
+    return response?.recipients || [];
+  },
+
+  async addNotificationRecipient(
+    businessId: string,
+    data: { email: string; name?: string },
+  ): Promise<NotificationRecipient> {
+    const response = await apiRequest<{ recipient?: NotificationRecipient }>(
+      `/businesses/${businessId}/notification-recipients`,
+      { method: 'POST', body: JSON.stringify(data) },
+    );
+    return response?.recipient || (response as any);
+  },
+
+  async removeNotificationRecipient(businessId: string, recipientId: string): Promise<void> {
+    await apiRequest(`/businesses/${businessId}/notification-recipients/${recipientId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getGroupNotificationRecipients(groupId: string): Promise<NotificationRecipient[]> {
+    const response = await apiRequest<{ recipients?: NotificationRecipient[] }>(
+      `/businesses/business-groups/${groupId}/notification-recipients`,
+      { method: 'GET' },
+    );
+    return response?.recipients || [];
+  },
+
+  async addGroupNotificationRecipient(
+    groupId: string,
+    data: { email: string; name?: string },
+  ): Promise<NotificationRecipient> {
+    const response = await apiRequest<{ recipient?: NotificationRecipient }>(
+      `/businesses/business-groups/${groupId}/notification-recipients`,
+      { method: 'POST', body: JSON.stringify(data) },
+    );
+    return response?.recipient || (response as any);
+  },
+
+  async removeGroupNotificationRecipient(groupId: string, recipientId: string): Promise<void> {
+    await apiRequest(`/businesses/business-groups/${groupId}/notification-recipients/${recipientId}`, {
+      method: 'DELETE',
+    });
   },
 
   /**
