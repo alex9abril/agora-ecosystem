@@ -2888,6 +2888,15 @@ export class OrdersService {
   }
 
   /**
+   * Construye la URL de admin (web-local) para supervisores.
+   * Siempre apunta a branch.agoramp.mx (o BRANCH_URL del env).
+   */
+  private buildAdminOrderUrl(orderId: string): string {
+    const base = (process.env.BRANCH_URL || 'https://branch.agoramp.mx').replace(/\/$/, '');
+    return `${base}/pedidos?orderId=${orderId}`;
+  }
+
+  /**
    * Construye el HTML del detalle de items del pedido para el correo de confirmación
    * Estilo tipo ecommerce (imagen + nombre + qty x precio, subtotal a la derecha)
    */
@@ -2914,41 +2923,37 @@ export class OrdersService {
           : `<div style="width: 56px; height: 56px; border-radius: 8px; background-color: #f3f4f6; border: 1px solid #e5e7eb; margin-right: 16px;"></div>`;
 
         return `
-        <tr>
-          <td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb;">
-            <div style="display: flex; align-items: center; gap: 12px;">
-              ${imageHtml}
-              <div style="padding-left: 4px;">
-                <div style="font-size: 14px; color: #111827; font-family: Arial, sans-serif; font-weight: 500;">
-                  ${escapeHtml(item.item_name)}
-                </div>
-                <div style="font-size: 12px; color: #6b7280; font-family: Arial, sans-serif; margin-top: 2px;">
-                  ${item.quantity} x $${this.formatCurrency(unitPrice)}
-                </div>
-              </div>
-            </div>
-          </td>
-          <td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-family: Arial, sans-serif;">
-            ${item.quantity}
-          </td>
-          <td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-family: Arial, sans-serif; font-weight: 600;">
-            $${this.formatCurrency(subtotal)}
-          </td>
-        </tr>`;
+<tr>
+<td style="padding: 10px 12px; border-bottom: 1px solid #e5e7eb; vertical-align: middle;">
+<table cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse;"><tr>
+<td style="vertical-align: middle; padding: 0;">${imageHtml}</td>
+<td style="vertical-align: middle; padding: 0 0 0 12px;">
+<div style="font-size: 14px; color: #111827; font-family: Arial, sans-serif; font-weight: 500;">${escapeHtml(item.item_name)}</div>
+<div style="font-size: 12px; color: #6b7280; font-family: Arial, sans-serif; margin-top: 2px;">${item.quantity} x $${this.formatCurrency(unitPrice)}</div>
+</td>
+</tr></table>
+</td>
+<td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-family: Arial, sans-serif; vertical-align: middle;">
+${item.quantity}
+</td>
+<td style="font-size: 14px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-family: Arial, sans-serif; font-weight: 600; vertical-align: middle;">
+$${this.formatCurrency(subtotal)}
+</td>
+</tr>`;
       })
       .join('');
 
     return `
-    <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">
-      <thead>
-        <tr>
-          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb;">Producto</th>
-          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb;">Cant.</th>
-          <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">Subtotal</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+<table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; table-layout: fixed;">
+<thead>
+<tr>
+<th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid #e5e7eb;">Producto</th>
+<th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb; width: 60px;">Cant.</th>
+<th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 10px 12px; text-align: right; border-bottom: 1px solid #e5e7eb; width: 100px;">Subtotal</th>
+</tr>
+</thead>
+<tbody>${rows}</tbody>
+</table>`;
   }
 
   /**
@@ -2969,36 +2974,53 @@ export class OrdersService {
         .replace(/"/g, '&quot;');
 
     if (isPickup) {
+      // Si no tenemos dirección del negocio del JOIN, intentar obtenerla directamente
+      let addr = businessAddress;
+      if (!addr && dbPool) {
+        try {
+          const addrResult = await dbPool.query(
+            `SELECT a.street AS biz_street, a.street_number AS biz_street_number,
+                    a.neighborhood AS biz_neighborhood, a.city AS biz_city,
+                    a.state AS biz_state, a.postal_code AS biz_postal_code
+             FROM orders.orders o
+             JOIN core.businesses b ON o.business_id = b.id
+             JOIN core.addresses a ON b.address_id = a.id
+             WHERE o.id = $1`,
+            [orderId],
+          );
+          if (addrResult.rows.length > 0) {
+            const r = addrResult.rows[0];
+            if (r.biz_street || r.biz_city) {
+              addr = r;
+            }
+          }
+        } catch {
+          // silently ignore
+        }
+      }
+
       let addressHtml = '';
-      if (businessAddress && (businessAddress.biz_street || businessAddress.biz_city)) {
+      if (addr && (addr.biz_street || addr.biz_city)) {
         const parts = [
-          businessAddress.biz_street,
-          businessAddress.biz_street_number ? `#${businessAddress.biz_street_number}` : '',
-          businessAddress.biz_neighborhood ? `Col. ${businessAddress.biz_neighborhood}` : '',
-          businessAddress.biz_postal_code ? `C.P. ${businessAddress.biz_postal_code}` : '',
-          businessAddress.biz_city,
-          businessAddress.biz_state,
+          addr.biz_street,
+          addr.biz_street_number ? `#${addr.biz_street_number}` : '',
+          addr.biz_neighborhood ? `Col. ${addr.biz_neighborhood}` : '',
+          addr.biz_postal_code ? `C.P. ${addr.biz_postal_code}` : '',
+          addr.biz_city,
+          addr.biz_state,
         ].filter(Boolean);
         addressHtml = `
-        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-top: 12px;">
-          <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0 0 8px 0; font-family: Arial, sans-serif;">
-            📍 Dirección de recolección
-          </p>
-          <p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif; line-height: 1.5;">
-            ${escapeHtml(parts.join(', '))}
-          </p>
-        </div>`;
+<div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-top: 12px;">
+<p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0 0 8px 0; font-family: Arial, sans-serif;">📍 Dirección de recolección</p>
+<p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif; line-height: 1.5;">${escapeHtml(parts.join(', '))}</p>
+</div>`;
       }
 
       return `
-      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; border-radius: 4px; margin: 16px 0;">
-        <p style="font-size: 16px; font-weight: 600; color: #166534; margin: 0 0 4px 0; font-family: Arial, sans-serif;">
-          🛍️ Tu pedido está listo para recoger
-        </p>
-        <p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif;">
-          Puedes pasar a recogerlo en la sucursal en el horario habitual de atención.
-        </p>
-      </div>${addressHtml}`;
+<div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; border-radius: 4px; margin: 16px 0;">
+<p style="font-size: 16px; font-weight: 600; color: #166534; margin: 0 0 4px 0; font-family: Arial, sans-serif;">🛍️ Tu pedido está listo para recoger</p>
+<p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif;">Puedes pasar a recogerlo en la sucursal en el horario habitual de atención.</p>
+</div>${addressHtml}`;
     }
 
     // Shipping: obtener items y shipping label
@@ -3241,7 +3263,7 @@ export class OrdersService {
           'Nueva Venta Registrada',
           `Se registró un nuevo pedido de ${order.client_name || 'un cliente'}.`,
           this.buildSupervisorOrderDetailHtml(orderNumber, order.client_name || 'Cliente', orderDate, orderTotal, paymentMethod, orderItemsDetailHtml),
-          this.buildSupervisorActionButton('Ver Pedido Completo', orderUrl),
+          this.buildSupervisorActionButton('Ver Pedido Completo', this.buildAdminOrderUrl(order.id)),
           { orderId: order.id },
         ).catch((err) => {
           console.error(`❌ Error enviando notificación a supervisores para orden ${orderId} (no crítico):`, err);
@@ -3334,7 +3356,7 @@ export class OrdersService {
         'Nueva Venta Registrada',
         `Se registró un nuevo pedido de ${order.client_name || 'un cliente'}.`,
         this.buildSupervisorOrderDetailHtml(orderNumber, order.client_name || 'Cliente', orderDate, orderTotal, paymentMethod, orderItemsDetailHtml),
-        this.buildSupervisorActionButton('Ver Pedido Completo', orderUrl),
+        this.buildSupervisorActionButton('Ver Pedido Completo', this.buildAdminOrderUrl(order.id)),
         { orderId: order.id },
       ).catch((err) => {
         console.error(`❌ Error enviando notificación a supervisores para orden ${orderId} (no crítico):`, err);
@@ -3457,18 +3479,18 @@ export class OrdersService {
     paymentMethod: string,
     orderItemsDetailHtml?: string,
   ): string {
-    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb;">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Número de Orden</p>
-        <p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">{{order_number}}</p>
-      </div>
-      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
-        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Cliente:</strong> ${clientName}</p>
-        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Fecha:</strong> ${orderDate}</p>
-        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Total:</strong> <span style="font-weight: 700;">${orderTotal}</span></p>
-        <p style="font-size: 14px; margin: 0;"><strong>Método de Pago:</strong> ${paymentMethod}</p>
-      </div>
-    </div>${orderItemsDetailHtml ? `<div style="margin-bottom: 20px;">${orderItemsDetailHtml}</div>` : ''}`.replace('{{order_number}}', orderNumber);
+    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb; max-width: 100%; box-sizing: border-box;">
+<div style="text-align: center; margin-bottom: 20px;">
+<p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Número de Orden</p>
+<p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">{{order_number}}</p>
+</div>
+<div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
+<p style="font-size: 14px; margin: 0 0 8px 0; font-family: Arial, sans-serif;"><strong>Cliente:</strong> ${clientName}</p>
+<p style="font-size: 14px; margin: 0 0 8px 0; font-family: Arial, sans-serif;"><strong>Fecha:</strong> ${orderDate}</p>
+<p style="font-size: 14px; margin: 0 0 8px 0; font-family: Arial, sans-serif;"><strong>Total:</strong> <span style="font-weight: 700;">${orderTotal}</span></p>
+<p style="font-size: 14px; margin: 0; font-family: Arial, sans-serif;"><strong>Método de Pago:</strong> ${paymentMethod}</p>
+</div>
+</div>${orderItemsDetailHtml ? `<div style="margin-bottom: 20px; max-width: 100%; overflow: hidden;">${orderItemsDetailHtml}</div>` : ''}`.replace('{{order_number}}', orderNumber);
   }
 
   /**
@@ -3493,17 +3515,17 @@ export class OrdersService {
     previousStatus: string,
     currentStatus: string,
   ): string {
-    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb;">
-      <div style="text-align: center; margin-bottom: 20px;">
-        <p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Pedido</p>
-        <p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">${orderNumber}</p>
-      </div>
-      <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
-        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Cliente:</strong> ${clientName}</p>
-        <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>Estado anterior:</strong> ${previousStatus}</p>
-        <p style="font-size: 14px; margin: 0;"><strong>Estado actual:</strong> <span style="color: #3b82f6; font-weight: 700;">${currentStatus}</span></p>
-      </div>
-    </div>`;
+    return `<div style="background-color: #f9fafb; border-radius: 12px; padding: 30px; margin-bottom: 20px; border: 1px solid #e5e7eb; max-width: 100%; box-sizing: border-box;">
+<div style="text-align: center; margin-bottom: 20px;">
+<p style="font-size: 14px; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;">Pedido</p>
+<p style="font-size: 24px; font-weight: 700; color: #111827; margin: 0;">${orderNumber}</p>
+</div>
+<div style="border-top: 1px solid #e5e7eb; padding-top: 20px; margin-top: 20px;">
+<p style="font-size: 14px; margin: 0 0 8px 0; font-family: Arial, sans-serif;"><strong>Cliente:</strong> ${clientName}</p>
+<p style="font-size: 14px; margin: 0 0 8px 0; font-family: Arial, sans-serif;"><strong>Estado anterior:</strong> ${previousStatus}</p>
+<p style="font-size: 14px; margin: 0; font-family: Arial, sans-serif;"><strong>Estado actual:</strong> <span style="color: #3b82f6; font-weight: 700;">${currentStatus}</span></p>
+</div>
+</div>`;
   }
 
   /**
@@ -3587,10 +3609,7 @@ export class OrdersService {
             this.orderStatusLabelEs(oldStatus),
             this.orderStatusLabelEs(newStatus),
           ),
-          this.buildSupervisorActionButton(
-            'Ver Pedido',
-            this.buildOrderDetailUrl(order.frontend_origin || process.env.FRONTEND_URL || 'https://agoramp.mx', order.id, order.store_context ?? null, order.business_slug ?? null),
-          ),
+          this.buildSupervisorActionButton('Ver Pedido', this.buildAdminOrderUrl(order.id)),
           { orderId: order.id },
         ).catch((err) => {
           console.error(`❌ Error enviando notificación de cambio de estado a supervisores (no crítico):`, err);
@@ -3737,7 +3756,7 @@ export class OrdersService {
           previousStatusLabel,
           currentStatusLabel,
         ),
-        this.buildSupervisorActionButton('Ver Pedido', orderUrl),
+        this.buildSupervisorActionButton('Ver Pedido', this.buildAdminOrderUrl(order.id)),
         { orderId: order.id },
       ).catch((err) => {
         console.error(`❌ Error enviando notificación de cambio de estado a supervisores (no crítico):`, err);

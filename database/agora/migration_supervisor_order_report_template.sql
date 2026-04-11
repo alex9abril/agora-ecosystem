@@ -57,69 +57,52 @@ INSERT INTO communication.email_templates (
     '<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Notificación para Supervisores - AGORA</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notificación para Supervisores - AGORA</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #333; min-height: 100vh;">
-  <!-- Fondo gris oscuro con logo y tagline -->
-  <div style="background-color: #333; padding: 40px 20px 60px 20px; text-align: center; position: relative; overflow: hidden;">
-    <div style="position: absolute; top: 20px; left: 10%; width: 60px; height: 60px; background-color: rgba(255, 255, 255, 0.1); border-radius: 50%; opacity: 0.3;"></div>
-    <div style="position: absolute; top: 40px; right: 15%; width: 40px; height: 40px; background-color: rgba(255, 255, 255, 0.1); border-radius: 50%; opacity: 0.3;"></div>
-    <div style="position: absolute; bottom: 30px; left: 20%; width: 30px; height: 30px; background-color: rgba(255, 255, 255, 0.1); border-radius: 50%; opacity: 0.3;"></div>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #333333;">
+<!-- Wrapper table para centrado en todos los clientes de correo -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333333;">
+<tr><td align="center" style="padding: 0;">
 
-    <!-- Logo AGORA -->
-    <div style="margin-bottom: 20px;">
-      <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
-    </div>
+<!-- Header con logo -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333333;">
+<tr><td align="center" style="padding: 40px 20px 60px 20px;">
+<img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto; display: block; margin: 0 auto 20px auto;" />
+<p style="color: white; font-size: 14px; margin: 0; opacity: 0.9; font-weight: 300; font-family: Arial, sans-serif;">La mejor solución de comercio en línea para la industria automotriz</p>
+</td></tr>
+</table>
 
-    <!-- Tagline -->
-    <p style="color: white; font-size: 14px; margin: 0; opacity: 0.9; font-weight: 300; font-family: Arial, sans-serif;">
-      La mejor solución de comercio en línea para la industria automotriz
-    </p>
-  </div>
+<!-- Tarjeta blanca principal -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 16px 16px 0 0; margin-top: -40px;">
+<tr><td style="padding: 50px 40px 40px 40px;">
 
-  <!-- Tarjeta blanca principal -->
-  <div style="max-width: 600px; margin: -40px auto 0 auto; background-color: #ffffff; border-radius: 16px 16px 0 0; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1); position: relative; padding: 50px 40px 40px 40px;">
+<h1 style="text-align: center; font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 10px 0; line-height: 1.2; font-family: Arial, sans-serif;">{{event_title}}</h1>
+<p style="text-align: center; font-size: 16px; color: #6b7280; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">{{business_name}}</p>
+<p style="text-align: center; font-size: 16px; color: #4b5563; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">{{event_description}}</p>
 
-    <!-- Titulo del evento -->
-    <h1 style="text-align: center; font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 10px 0; line-height: 1.2; font-family: Arial, sans-serif;">
-      {{event_title}}
-    </h1>
+{{detail_section}}
 
-    <!-- Nombre del negocio -->
-    <p style="text-align: center; font-size: 16px; color: #6b7280; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">
-      {{business_name}}
-    </p>
+{{action_url}}
 
-    <!-- Descripcion del evento -->
-    <p style="text-align: center; font-size: 16px; color: #4b5563; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">
-      {{event_description}}
-    </p>
+<div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 16px; margin: 30px 0 0 0;">
+<p style="font-size: 14px; color: #1e40af; margin: 0; line-height: 1.5; font-family: Arial, sans-serif;">Este correo se envía automáticamente a los supervisores configurados para esta sucursal.</p>
+</div>
 
-    <!-- Seccion de detalle (se llena dinámicamente o queda vacío) -->
-    {{detail_section}}
+</td></tr>
+</table>
 
-    <!-- Boton de accion (se llena dinámicamente o queda vacío) -->
-    {{action_url}}
+<!-- Footer -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #f9fafb; border-radius: 0 0 16px 16px;">
+<tr><td style="padding: 30px 40px; text-align: center;">
+<p style="font-size: 12px; color: #9ca3af; margin: 0 0 10px 0; font-family: Arial, sans-serif;">Notificación automática para supervisores — no responder a este mensaje.</p>
+<p style="font-size: 12px; color: #9ca3af; margin: 0; font-family: Arial, sans-serif;">© 2025 AGORA. Todos los derechos reservados.</p>
+</td></tr>
+</table>
 
-    <!-- Nota informativa -->
-    <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 16px; margin: 30px 0 0 0;">
-      <p style="font-size: 14px; color: #1e40af; margin: 0; line-height: 1.5; font-family: Arial, sans-serif;">
-        Este correo se envía automáticamente a los supervisores configurados para esta sucursal.
-      </p>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <div style="max-width: 600px; margin: 0 auto; padding: 30px 40px; background-color: #f9fafb; text-align: center; border-radius: 0 0 16px 16px;">
-    <p style="font-size: 12px; color: #9ca3af; margin: 0 0 10px 0; font-family: Arial, sans-serif;">
-      Notificación automática para supervisores — no responder a este mensaje.
-    </p>
-    <p style="font-size: 12px; color: #9ca3af; margin: 0; font-family: Arial, sans-serif;">
-      © 2025 AGORA. Todos los derechos reservados.
-    </p>
-  </div>
+</td></tr>
+</table>
 </body>
 </html>',
     ARRAY['business_name', 'event_title', 'event_description', 'detail_section', 'action_url'],

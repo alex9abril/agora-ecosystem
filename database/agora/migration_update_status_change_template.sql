@@ -119,9 +119,7 @@ SET
 </html>',
   available_variables = ARRAY['user_name', 'order_number', 'previous_status', 'current_status', 'status_message', 'order_url', 'delivery_detail_section'],
   updated_at = CURRENT_TIMESTAMP
-WHERE trigger_type = 'order_status_change'
-  AND business_id IS NULL
-  AND business_group_id IS NULL;
+WHERE trigger_type = 'order_status_change';
 
 -- Verificar
 DO $$
@@ -129,8 +127,6 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM communication.email_templates
         WHERE trigger_type = 'order_status_change'
-          AND business_id IS NULL
-          AND business_group_id IS NULL
           AND template_html LIKE '%delivery_detail_section%'
     ) THEN
         RAISE WARNING 'No se encontró o actualizó el template global de order_status_change';
@@ -147,6 +143,7 @@ END $$;
 -- - El backend genera el HTML de esta sección dinámicamente según el tipo de
 --   entrega (shipping vs pickup).
 -- - Si la variable queda vacía, simplemente no se muestra nada adicional.
--- - Solo se actualiza el template global (business_id IS NULL); templates de
---   grupo o sucursal se mantienen sin cambios (pueden personalizar manualmente).
+-- - Solo se actualiza el template global en communication.email_templates
+--   (trigger_type es UNIQUE). Templates de grupo o sucursal viven en tablas
+--   separadas y no se modifican.
 -- ============================================================================
