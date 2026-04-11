@@ -138,12 +138,10 @@ END $$;
 -- ============================================================================
 -- NOTAS
 -- ============================================================================
--- - Se agrega la variable {{delivery_detail_section}} justo después del bloque
---   de cambio de estado y antes del botón "Ver Detalles del Pedido".
--- - El backend genera el HTML de esta sección dinámicamente según el tipo de
---   entrega (shipping vs pickup).
+-- - Se agrega {{delivery_detail_section}} al template global (reemplazo completo
+--   del HTML).
+-- - Para templates de grupo y sucursal: el backend inyecta automáticamente
+--   el delivery_detail_section antes del botón de acción si el template no
+--   contiene la variable {{delivery_detail_section}}.
 -- - Si la variable queda vacía, simplemente no se muestra nada adicional.
--- - Solo se actualiza el template global en communication.email_templates
---   (trigger_type es UNIQUE). Templates de grupo o sucursal viven en tablas
---   separadas y no se modifican.
 -- ============================================================================

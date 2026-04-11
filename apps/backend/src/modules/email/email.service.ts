@@ -285,8 +285,26 @@ export class EmailService {
       }
 
       // Reemplazar variables en el template
-      const html = this.replaceVariables(template.template_html, variables);
+      let html = this.replaceVariables(template.template_html, variables);
       const subject = this.replaceVariables(template.subject, variables);
+
+      // Fallback: si el template no tenía {{delivery_detail_section}} pero se proporcionó contenido,
+      // inyectarlo antes del botón de acción (primer <a href= que contenga el order_url ya resuelto)
+      const deliveryContent = variables.delivery_detail_section;
+      if (
+        deliveryContent &&
+        !template.template_html.includes('{{delivery_detail_section}}')
+      ) {
+        const btnMatch = html.match(/<div[^>]*text-align:\s*center[^>]*>\s*<a\s+href=/i);
+        if (btnMatch && btnMatch.index !== undefined) {
+          html = html.slice(0, btnMatch.index) + deliveryContent + html.slice(btnMatch.index);
+        } else {
+          const closingBody = html.lastIndexOf('</body>');
+          if (closingBody !== -1) {
+            html = html.slice(0, closingBody) + deliveryContent + html.slice(closingBody);
+          }
+        }
+      }
 
       if (process.env.NODE_ENV !== 'production') {
         this.logger.debug(

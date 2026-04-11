@@ -2893,7 +2893,7 @@ export class OrdersService {
    */
   private buildAdminOrderUrl(orderId: string): string {
     const base = (process.env.BRANCH_URL || 'https://branch.agoramp.mx').replace(/\/$/, '');
-    return `${base}/pedidos?orderId=${orderId}`;
+    return `${base}/orders/${orderId}`;
   }
 
   /**
@@ -3674,23 +3674,23 @@ $${this.formatCurrency(subtotal)}
         console.warn(`⚠️ No se pudo construir detalle de entrega para orden ${orderId}:`, err?.message || err);
       }
 
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {
-          to: userEmail,
-          orderNumber,
-          oldStatus,
-          newStatus,
-          previousStatusLabel,
-          currentStatusLabel,
-          userName,
-          statusMessage,
-          orderUrl,
-          isPickup,
-          hasDeliveryDetail: deliveryDetailHtml.length > 0,
-          businessId: order.business_id,
-          businessGroupId: order.business_group_id,
-        });
-      }
+      console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {
+        to: userEmail,
+        orderNumber,
+        oldStatus,
+        newStatus,
+        previousStatusLabel,
+        currentStatusLabel,
+        userName,
+        statusMessage,
+        orderUrl,
+        isPickup,
+        deliveryAddressText: order.delivery_address_text,
+        hasDeliveryDetail: deliveryDetailHtml.length > 0,
+        deliveryDetailHtmlPreview: deliveryDetailHtml.substring(0, 200),
+        businessId: order.business_id,
+        businessGroupId: order.business_group_id,
+      });
 
       if (channels.emailEnabled && userEmail) {
         await this.emailService.sendOrderStatusChangeEmail(
