@@ -62,46 +62,45 @@ INSERT INTO communication.email_templates (
 <title>Notificación para Supervisores - AGORA</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #333333;">
-<!-- Wrapper table para centrado en todos los clientes de correo -->
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333333;">
-<tr><td align="center" style="padding: 0;">
-
-<!-- Header con logo -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333333;">
-<tr><td align="center" style="padding: 40px 20px 60px 20px;">
-<img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto; display: block; margin: 0 auto 20px auto;" />
-<p style="color: white; font-size: 14px; margin: 0; opacity: 0.9; font-weight: 300; font-family: Arial, sans-serif;">La mejor solución de comercio en línea para la industria automotriz</p>
-</td></tr>
-</table>
-
-<!-- Tarjeta blanca principal -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 16px 16px 0 0; margin-top: -40px;">
-<tr><td style="padding: 50px 40px 40px 40px;">
-
+<tr>
+<td align="center" style="padding: 40px 20px 60px 20px;">
+<img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto;" />
+<p style="color: white; font-size: 14px; margin: 20px 0 0 0; opacity: 0.9; font-weight: 300; font-family: Arial, sans-serif;">La mejor solución de comercio en línea para la industria automotriz</p>
+</td>
+</tr>
+<tr>
+<td align="center" style="padding: 0 20px;">
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 16px 16px 0 0;">
+<tr>
+<td style="padding: 50px 40px 40px 40px;">
 <h1 style="text-align: center; font-size: 28px; font-weight: 700; color: #111827; margin: 0 0 10px 0; line-height: 1.2; font-family: Arial, sans-serif;">{{event_title}}</h1>
 <p style="text-align: center; font-size: 16px; color: #6b7280; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">{{business_name}}</p>
 <p style="text-align: center; font-size: 16px; color: #4b5563; margin: 0 0 30px 0; line-height: 1.6; font-family: Arial, sans-serif;">{{event_description}}</p>
-
 {{detail_section}}
-
 {{action_url}}
-
-<div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 16px; margin: 30px 0 0 0;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr><td style="background-color: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 16px; margin: 0;">
 <p style="font-size: 14px; color: #1e40af; margin: 0; line-height: 1.5; font-family: Arial, sans-serif;">Este correo se envía automáticamente a los supervisores configurados para esta sucursal.</p>
-</div>
-
 </td></tr>
 </table>
-
-<!-- Footer -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #f9fafb; border-radius: 0 0 16px 16px;">
-<tr><td style="padding: 30px 40px; text-align: center;">
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td align="center" style="padding: 0 20px;">
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #f9fafb; border-radius: 0 0 16px 16px;">
+<tr>
+<td style="padding: 30px 40px; text-align: center;">
 <p style="font-size: 12px; color: #9ca3af; margin: 0 0 10px 0; font-family: Arial, sans-serif;">Notificación automática para supervisores — no responder a este mensaje.</p>
 <p style="font-size: 12px; color: #9ca3af; margin: 0; font-family: Arial, sans-serif;">© 2025 AGORA. Todos los derechos reservados.</p>
-</td></tr>
+</td>
+</tr>
 </table>
-
-</td></tr>
+</td>
+</tr>
 </table>
 </body>
 </html>',
