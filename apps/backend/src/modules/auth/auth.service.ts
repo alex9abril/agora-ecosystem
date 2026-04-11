@@ -444,11 +444,12 @@ export class AuthService {
             console.warn('⚠️  No se pudo verificar usuarios existentes:', checkError.message);
           }
 
-          // Crear usuario con signUp normal
+          // Crear usuario con signUp normal (Supabase dispara correo de confirmación si está habilitado)
           const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: signUpDto.email,
             password: signUpDto.password,
             options: {
+              emailRedirectTo: emailConfirmationRedirectTo,
               data: {
                 first_name: signUpDto.firstName,
                 last_name: signUpDto.lastName,
@@ -492,6 +493,24 @@ export class AuthService {
                 }
               } catch (linkErr: any) {
                 console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
+              }
+
+              // Disparar correo de confirmación de Supabase (resend como respaldo)
+              try {
+                const { error: resendError } = await supabase.auth.resend({
+                  type: 'signup',
+                  email: signUpDto.email,
+                  options: {
+                    emailRedirectTo: emailConfirmationRedirectTo,
+                  },
+                });
+                if (resendError) {
+                  console.warn('⚠️  No se pudo enviar correo de confirmación via Supabase resend (fallback):', resendError.message);
+                } else {
+                  console.log('[AuthService.signUp] Correo de confirmación de Supabase disparado (fallback) para:', signUpDto.email);
+                }
+              } catch (resendErr: any) {
+                console.warn('⚠️  Error disparando correo de confirmación (fallback):', resendErr?.message);
               }
             }
 
@@ -601,6 +620,24 @@ export class AuthService {
           } catch (linkErr: any) {
             console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
           }
+
+          // Disparar correo de confirmación de Supabase (admin.createUser no lo envía)
+          try {
+            const { error: resendError } = await supabase.auth.resend({
+              type: 'signup',
+              email: signUpDto.email,
+              options: {
+                emailRedirectTo: emailConfirmationRedirectTo,
+              },
+            });
+            if (resendError) {
+              console.warn('⚠️  No se pudo enviar correo de confirmación via Supabase resend:', resendError.message);
+            } else {
+              console.log('[AuthService.signUp] Correo de confirmación de Supabase disparado para:', signUpDto.email);
+            }
+          } catch (resendErr: any) {
+            console.warn('⚠️  Error disparando correo de confirmación via Supabase:', resendErr?.message);
+          }
         }
 
         if (!requiresEmailConfirmation) {
@@ -655,11 +692,12 @@ export class AuthService {
         }
       }
     } else {
-      // Para otros roles, usar signUp normal
+      // Para otros roles, usar signUp normal (Supabase envía correo de confirmación automáticamente)
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: signUpDto.email,
         password: signUpDto.password,
         options: {
+          emailRedirectTo: emailConfirmationRedirectTo,
           data: {
             first_name: signUpDto.firstName,
             last_name: signUpDto.lastName,
