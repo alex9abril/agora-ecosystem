@@ -11,6 +11,7 @@ interface BranchPriceDisplayProps {
   branchPrice?: number;
   className?: string;
   overridePrice?: number;
+  compareAtPrice?: number;
 }
 
 export default function BranchPriceDisplay({ 
@@ -18,13 +19,15 @@ export default function BranchPriceDisplay({
   branchPrice, 
   className = '',
   overridePrice,
+  compareAtPrice,
 }: BranchPriceDisplayProps) {
   const displayPrice = overridePrice !== undefined
     ? overridePrice
     : branchPrice !== undefined
       ? branchPrice
       : product.price;
-  const hasDiscount = branchPrice !== undefined && branchPrice < product.price;
+  const referencePrice = compareAtPrice !== undefined ? compareAtPrice : product.price;
+  const hasDiscount = branchPrice !== undefined && referencePrice > 0 && displayPrice < referencePrice;
 
   return (
     <div className={className}>
@@ -35,10 +38,10 @@ export default function BranchPriceDisplay({
         {hasDiscount && (
           <>
             <span className="text-lg text-gray-500 line-through">
-              {formatPrice(product.price)}
+              {formatPrice(referencePrice)}
             </span>
             <span className="text-sm text-green-600 font-medium">
-              -{((1 - displayPrice / product.price) * 100).toFixed(0)}%
+              -{((1 - displayPrice / referencePrice) * 100).toFixed(0)}%
             </span>
           </>
         )}

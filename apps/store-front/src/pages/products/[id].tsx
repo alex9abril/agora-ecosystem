@@ -12,7 +12,7 @@ import BranchPriceDisplay from '@/components/BranchPriceDisplay';
 import BranchAvailabilityGrid from '@/components/BranchAvailabilityGrid';
 import { productsService, Product, ProductBranchAvailability, ProductImage } from '@/lib/products';
 import ProductImageGallery from '@/components/ProductImageGallery';
-import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import { BranchTaxSettings } from '@/lib/branches';
 import { categoriesService, ProductCategory } from '@/lib/categories';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,7 +22,12 @@ import { useStoreRouting } from '@/hooks/useStoreRouting';
 import ContextualLink from '@/components/ContextualLink';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { formatPrice } from '@/lib/format';
-import { taxesService } from '@/lib/taxes';
+import {
+  DEFAULT_BRANCH_TAX_SETTINGS,
+  getBranchTaxSettingsCached,
+  resolveDisplayPrice,
+  toSafePrice,
+} from '@/lib/price-display';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
@@ -30,12 +35,6 @@ import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
 import { checkProductCompatibility, getProductCompatibilities, ProductCompatibilityItem } from '@/lib/product-compatibility';
 import SimilarProductsCarousel from '@/components/SimilarProductsCarousel';
-
-const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
-  included_in_price: false,
-  display_tax_breakdown: true,
-  show_tax_included_label: true,
-};
 
 export default function ProductDetailPage() {
   const router = useRouter();
@@ -68,6 +67,8 @@ export default function ProductDetailPage() {
   const [categoryTrail, setCategoryTrail] = useState<ProductCategory[]>([]);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
   const [taxedUnitPrice, setTaxedUnitPrice] = useState<number | null>(null);
+  const [baseUnitDisplayPrice, setBaseUnitDisplayPrice] = useState<number | null>(null);
+  const [referenceUnitPrice, setReferenceUnitPrice] = useState<number | null>(null);
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const shouldCheckCompatibility =
     !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
@@ -174,6 +175,7 @@ export default function ProductDetailPage() {
       const list = Array.isArray(parsed) ? parsed : [];
       const nextItem = {
         id: product.id,
+        business_id: product.business_id,
         name: product.name,
         sku: product.sku || null,
         price: product.price ?? null,
@@ -326,7 +328,7 @@ export default function ProductDetailPage() {
       }
 
       try {
-        const settings = await branchesService.getBranchTaxSettings(branchToUse);
+        const settings = await getBranchTaxSettingsCached(branchToUse);
         setBranchTaxSettings(settings || DEFAULT_BRANCH_TAX_SETTINGS);
       } catch (err) {
         console.warn('[ProductDetail] No se pudo obtener configuracion de impuestos de la sucursal:', err);
@@ -397,10 +399,8 @@ export default function ProductDetailPage() {
     return product?.price;
   };
 
-  // Calcular precio unitario base (con variantes) sin impuestos
-  const getUnitBasePrice = () => {
-    const basePrice = getSelectedBranchPrice() ?? 0;
-    let price = basePrice;
+  const applySelectedVariantsToPrice = (startingPrice: number) => {
+    let price = startingPrice;
 
     if (product?.variant_groups) {
       product.variant_groups.forEach((group) => {
@@ -423,35 +423,55 @@ export default function ProductDetailPage() {
     return price;
   };
 
+  // Calcular precio unitario base (con variantes) sin impuestos
+  const getUnitBasePrice = () => {
+    const basePrice = getSelectedBranchPrice() ?? 0;
+    return applySelectedVariantsToPrice(basePrice);
+  };
+
   // Calcular precio unitario con impuestos (para mostrar)
   useEffect(() => {
     const computeTaxedPrice = async () => {
       if (!product) return;
       const availability = getSelectedAvailability();
-      const basePrice = getUnitBasePrice();
-
-      // Solo omitir el cÃ¡lculo cuando la sucursal indica que el precio YA incluye impuestos
-      if (branchTaxSettings?.included_in_price) {
-        setTaxedUnitPrice(basePrice);
-        return;
-      }
-
-      // Si la disponibilidad ya trae precio con impuestos, usarlo para alinear con la lista
-      const taxedPriceFromAvailability = availability && (availability as any).taxed_price;
-      if (taxedPriceFromAvailability !== null && taxedPriceFromAvailability !== undefined) {
-        const asNumber = Number(taxedPriceFromAvailability);
-        if (!Number.isNaN(asNumber) && asNumber > 0) {
-          setTaxedUnitPrice(asNumber);
-          return;
-        }
-      }
+      const branchBasePrice = getSelectedBranchPrice() ?? 0;
+      const selectedBasePrice = getUnitBasePrice();
+      const referenceBasePrice = applySelectedVariantsToPrice(product.price ?? branchBasePrice);
+      const taxSettings = branchTaxSettings || DEFAULT_BRANCH_TAX_SETTINGS;
+      const taxedPriceFromAvailability = availability ? toSafePrice(availability.taxed_price) : null;
+      const compareAtFromAvailability = availability ? toSafePrice(availability.compare_at_price) : null;
 
       try {
-        const taxBreakdown = await taxesService.calculateProductTaxes(product.id, basePrice);
-        setTaxedUnitPrice(basePrice + (taxBreakdown?.total_tax || 0));
+        const [resolvedBaseDisplayPrice, resolvedDisplayPrice, resolvedReferencePrice] = await Promise.all([
+          resolveDisplayPrice({
+            productId: product.id,
+            basePrice: branchBasePrice,
+            taxSettings,
+          }),
+          selectedVariants && Object.keys(selectedVariants).length === 0 && taxedPriceFromAvailability !== null
+            ? Promise.resolve(taxedPriceFromAvailability)
+            : resolveDisplayPrice({
+                productId: product.id,
+                basePrice: selectedBasePrice,
+                taxSettings,
+              }),
+          selectedVariants && Object.keys(selectedVariants).length === 0 && compareAtFromAvailability !== null
+            ? Promise.resolve(compareAtFromAvailability)
+            : resolveDisplayPrice({
+                productId: product.id,
+                basePrice: referenceBasePrice,
+                taxSettings,
+              }),
+        ]);
+
+        setBaseUnitDisplayPrice(resolvedBaseDisplayPrice);
+        setTaxedUnitPrice(resolvedDisplayPrice);
+        setReferenceUnitPrice(resolvedReferencePrice);
       } catch (err) {
-        console.warn('[ProductDetail] No se pudo calcular impuestos para el producto:', err);
-        setTaxedUnitPrice(basePrice);
+        console.warn('[ProductDetail] No se pudo calcular precios visibles para el producto:', err);
+        setBaseUnitDisplayPrice(branchBasePrice);
+        setTaxedUnitPrice(selectedBasePrice);
+        setReferenceUnitPrice(referenceBasePrice);
       }
     };
 
@@ -664,19 +684,36 @@ export default function ProductDetailPage() {
             normalized.price !== null && normalized.price !== undefined
               ? normalized.price
               : product?.price || 0;
+          const referenceBasePrice = product?.price ?? basePrice;
 
           try {
-            const settings = await branchesService.getBranchTaxSettings(normalized.branch_id);
-            if (settings?.included_in_price) {
-              return { ...normalized, taxed_price: basePrice };
-            }
+            const settings = await getBranchTaxSettingsCached(normalized.branch_id);
+            const resolvedSettings = settings || DEFAULT_BRANCH_TAX_SETTINGS;
+            const [taxedPrice, compareAtPrice] = await Promise.all([
+              resolveDisplayPrice({
+                productId: id,
+                basePrice,
+                taxSettings: resolvedSettings,
+              }),
+              resolveDisplayPrice({
+                productId: id,
+                basePrice: referenceBasePrice,
+                taxSettings: resolvedSettings,
+              }),
+            ]);
 
-            const taxBreakdown = await taxesService.calculateProductTaxes(id, basePrice);
-            const finalPrice = basePrice + (taxBreakdown?.total_tax || 0);
-            return { ...normalized, taxed_price: finalPrice };
+            return {
+              ...normalized,
+              taxed_price: taxedPrice,
+              compare_at_price: compareAtPrice,
+            };
           } catch (err) {
             console.warn('[ProductDetail] No se pudo calcular impuestos para la sucursal', normalized.branch_id, err);
-            return { ...normalized, taxed_price: basePrice };
+            return {
+              ...normalized,
+              taxed_price: basePrice,
+              compare_at_price: referenceBasePrice,
+            };
           }
         })
       );
@@ -922,6 +959,10 @@ export default function ProductDetailPage() {
 
   // Precio final a mostrar (prioriza precio con impuestos enviado por disponibilidad)
   const getSelectedDisplayPrice = () => {
+    if (taxedUnitPrice !== null && taxedUnitPrice !== undefined) {
+      return taxedUnitPrice;
+    }
+
     const availability = getSelectedAvailability();
     if (availability) {
       const taxedRaw = (availability as any).taxed_price;
@@ -1089,6 +1130,7 @@ export default function ProductDetailPage() {
                     product={product} 
                     branchPrice={product.branch_price}
                     overridePrice={displayPrice}
+                    compareAtPrice={referenceUnitPrice ?? undefined}
                   />
                 )}
               </div>
@@ -1196,7 +1238,7 @@ export default function ProductDetailPage() {
                       <BranchAvailabilityGrid
                         availabilities={branchAvailabilities}
                         // Usar el precio base del producto como fallback estÃ¡tico para evitar que otras tarjetas cambien cuando se selecciona una sucursal
-                        globalPrice={product?.price ?? 0}
+                        globalPrice={baseUnitDisplayPrice ?? product?.price ?? 0}
                         selectedBranchId={selectedBranchId}
                         onBranchSelect={setSelectedBranchId}
                         storedBranchId={storedBranch?.id}
@@ -1213,6 +1255,9 @@ export default function ProductDetailPage() {
                     product={product}
                     selectedVariants={selectedVariants}
                     onVariantChange={setSelectedVariants}
+                    baseProductPrice={getSelectedBranchPrice() ?? product.price}
+                    baseDisplayPrice={baseUnitDisplayPrice}
+                    taxSettings={branchTaxSettings}
                   />
                 </div>
               )}

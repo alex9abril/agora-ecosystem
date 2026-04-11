@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ContextualLink from './ContextualLink';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { formatPrice } from '@/lib/format';
+import { useResolvedProductPrices } from '@/hooks/useResolvedProductPrices';
+import { getProductBasePrice } from '@/lib/price-display';
 
 type RecentlyViewedProduct = {
   id: string;
+  business_id?: string | null;
   name: string;
   sku?: string | null;
   price?: number | null;
@@ -16,7 +19,7 @@ type RecentlyViewedProduct = {
 const STORAGE_KEY = 'recently_viewed_products';
 
 export default function RecentlyViewedProducts() {
-  const { contextType } = useStoreContext();
+  const { contextType, branchId } = useStoreContext();
   const [items, setItems] = useState<RecentlyViewedProduct[]>([]);
   const [itemsPerView, setItemsPerView] = useState(5);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -63,7 +66,29 @@ export default function RecentlyViewedProducts() {
   }, [items.length, itemsPerView]);
 
   const startIndex = currentIndex * itemsPerView;
-  const visibleItems = items.slice(startIndex, startIndex + itemsPerView);
+  const visibleItems = useMemo(
+    () => items.slice(startIndex, startIndex + itemsPerView),
+    [items, startIndex, itemsPerView],
+  );
+  const getBasePrice = useCallback(
+    (product: RecentlyViewedProduct, currentContextType: typeof contextType) =>
+      getProductBasePrice(
+        {
+          price: product.price ?? undefined,
+          branch_price: product.branch_price ?? undefined,
+        },
+        currentContextType,
+      ),
+    [],
+  );
+  const getBusinessId = useCallback((product: RecentlyViewedProduct) => product.business_id, []);
+  const { resolvedPrices, isPricePending } = useResolvedProductPrices({
+    items: visibleItems,
+    contextType,
+    branchId,
+    getBasePrice,
+    getBusinessId,
+  });
 
   const goToNext = () => {
     setCurrentIndex((prev) => (prev + 1) % pages);
@@ -84,10 +109,17 @@ export default function RecentlyViewedProducts() {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {visibleItems.map((product) => {
-          const displayPrice =
+          const legacyDisplayPrice =
             contextType === 'sucursal' && product.branch_price !== undefined && product.branch_price !== null
               ? product.branch_price
               : product.price;
+          const hasPricingContext = Boolean((contextType === 'sucursal' ? branchId : product.business_id) && product.id);
+          const displayPrice =
+            resolvedPrices[product.id] !== undefined
+              ? resolvedPrices[product.id]
+              : hasPricingContext
+                ? null
+                : legacyDisplayPrice;
           const displayImage = product.primary_image_url || product.image_url;
 
           return (
@@ -116,7 +148,11 @@ export default function RecentlyViewedProducts() {
                 <div className="p-3 flex flex-col flex-1">
                   {product.sku && <div className="text-[10px] text-gray-400 mb-1">#{product.sku}</div>}
                   <div className="text-sm font-semibold text-gray-900 mb-1">
-                    {displayPrice !== undefined && displayPrice !== null ? formatPrice(displayPrice) : '—'}
+                    {displayPrice !== undefined && displayPrice !== null
+                      ? formatPrice(displayPrice)
+                      : isPricePending(product.id)
+                        ? '--.--'
+                        : '—'}
                   </div>
                   <div className="text-sm text-gray-700 line-clamp-2">{product.name}</div>
                 </div>

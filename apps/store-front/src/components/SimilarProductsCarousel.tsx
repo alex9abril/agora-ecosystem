@@ -3,10 +3,13 @@
  * Muestra 4 productos por vista en desktop, con navegación anterior/siguiente y puntos.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { Product } from '@/lib/products';
+import { useStoreContext } from '@/contexts/StoreContext';
+import { useResolvedProductPrices } from '@/hooks/useResolvedProductPrices';
+import { getProductBasePrice } from '@/lib/price-display';
 import ProductCard from './ProductCard';
 
 interface SimilarProductsCarouselProps {
@@ -22,6 +25,7 @@ export default function SimilarProductsCarousel({
   title = 'Productos de la misma categoría',
   subtitle = 'Otros productos que podrían interesarte.',
 }: SimilarProductsCarouselProps) {
+  const { contextType, branchId } = useStoreContext();
   const [itemsPerView, setItemsPerView] = useState(ITEMS_PER_VIEW_DESKTOP);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -50,6 +54,25 @@ export default function SimilarProductsCarousel({
     return Math.max(1, Math.ceil(products.length / itemsPerView));
   }, [products.length, itemsPerView]);
 
+  const startIndex = currentIndex * itemsPerView;
+  const visible = useMemo(
+    () => products.slice(startIndex, startIndex + itemsPerView),
+    [products, startIndex, itemsPerView],
+  );
+  const getBasePrice = useCallback(
+    (product: Product, currentContextType: typeof contextType) =>
+      getProductBasePrice(product, currentContextType),
+    [],
+  );
+  const getBusinessId = useCallback((product: Product) => product.business_id, []);
+  const { resolvedPrices, isPricePending } = useResolvedProductPrices({
+    items: visible,
+    contextType,
+    branchId,
+    getBasePrice,
+    getBusinessId,
+  });
+
   if (products.length === 0) {
     return null;
   }
@@ -61,9 +84,6 @@ export default function SimilarProductsCarousel({
   const goToPrevious = () => {
     setCurrentIndex((prev) => (prev - 1 + pages) % pages);
   };
-
-  const startIndex = currentIndex * itemsPerView;
-  const visible = products.slice(startIndex, startIndex + itemsPerView);
 
   return (
     <div className="pt-14 pb-10">
@@ -80,7 +100,12 @@ export default function SimilarProductsCarousel({
           }}
         >
           {visible.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard
+              key={p.id}
+              product={p}
+              overridePrice={resolvedPrices[p.id]}
+              pricePending={isPricePending(p.id)}
+            />
           ))}
         </div>
 

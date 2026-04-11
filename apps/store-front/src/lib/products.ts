@@ -100,6 +100,7 @@ export interface ProductBranchAvailability {
   backorder_notes?: string | null;
   is_active: boolean;
   taxed_price?: number; // Precio final con impuestos (cálculo en frontend)
+  compare_at_price?: number; // Precio de referencia para descuentos en la misma base fiscal
 }
 
 export interface ProductImage {

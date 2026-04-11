@@ -65,8 +65,12 @@ export default function BranchAvailabilityGrid({
       <div className="space-y-2">
         {availableBranches.map((availability, index) => {
           const displayPrice = availability.displayPrice;
+          const compareAtPrice =
+            availability.compare_at_price !== null && availability.compare_at_price !== undefined
+              ? availability.compare_at_price
+              : globalPrice;
           const hasCustomPrice = availability.price !== null && availability.price !== undefined;
-          const hasDiscount = hasCustomPrice && displayPrice < globalPrice;
+          const hasDiscount = hasCustomPrice && compareAtPrice > 0 && displayPrice < compareAtPrice;
           const stockText = availability.stock !== null && availability.stock !== undefined
             ? availability.stock === 0 && availability.allow_backorder
               ? 'backorder'
@@ -120,10 +124,10 @@ export default function BranchAvailabilityGrid({
                   {hasDiscount && (
                     <div className="mt-1">
                       <span className="text-xs text-gray-500 line-through">
-                        {formatPrice(globalPrice)}
+                        {formatPrice(compareAtPrice)}
                       </span>
                       <span className="text-xs text-green-600 font-medium ml-2">
-                        -{((1 - displayPrice / globalPrice) * 100).toFixed(0)}%
+                        -{((1 - displayPrice / compareAtPrice) * 100).toFixed(0)}%
                       </span>
                     </div>
                   )}
