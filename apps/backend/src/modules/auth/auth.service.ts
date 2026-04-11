@@ -495,22 +495,17 @@ export class AuthService {
                 console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
               }
 
-              // Disparar correo de confirmación de Supabase (resend como respaldo)
-              try {
-                const { error: resendError } = await supabase.auth.resend({
-                  type: 'signup',
-                  email: signUpDto.email,
-                  options: {
-                    emailRedirectTo: emailConfirmationRedirectTo,
-                  },
+              // Enviar correo de confirmación con el link generado
+              if (confirmationLink) {
+                const userName = `${signUpDto.firstName || ''} ${signUpDto.lastName || ''}`.trim() || signUpDto.email;
+                this.emailService.sendEmailConfirmation(
+                  signUpDto.email,
+                  userName,
+                  confirmationLink,
+                  { userId: signUpData.user.id },
+                ).catch((err) => {
+                  console.error('❌ Error enviando correo de confirmación fallback (no crítico):', err);
                 });
-                if (resendError) {
-                  console.warn('⚠️  No se pudo enviar correo de confirmación via Supabase resend (fallback):', resendError.message);
-                } else {
-                  console.log('[AuthService.signUp] Correo de confirmación de Supabase disparado (fallback) para:', signUpDto.email);
-                }
-              } catch (resendErr: any) {
-                console.warn('⚠️  Error disparando correo de confirmación (fallback):', resendErr?.message);
               }
             }
 
@@ -621,22 +616,17 @@ export class AuthService {
             console.warn('⚠️  Error generando link de confirmación:', linkErr.message);
           }
 
-          // Disparar correo de confirmación de Supabase (admin.createUser no lo envía)
-          try {
-            const { error: resendError } = await supabase.auth.resend({
-              type: 'signup',
-              email: signUpDto.email,
-              options: {
-                emailRedirectTo: emailConfirmationRedirectTo,
-              },
+          // Enviar correo de confirmación con el link generado
+          if (confirmationLink) {
+            const userName = `${signUpDto.firstName || ''} ${signUpDto.lastName || ''}`.trim() || signUpDto.email;
+            this.emailService.sendEmailConfirmation(
+              signUpDto.email,
+              userName,
+              confirmationLink,
+              { userId: adminData.user.id },
+            ).catch((err) => {
+              console.error('❌ Error enviando correo de confirmación (no crítico):', err);
             });
-            if (resendError) {
-              console.warn('⚠️  No se pudo enviar correo de confirmación via Supabase resend:', resendError.message);
-            } else {
-              console.log('[AuthService.signUp] Correo de confirmación de Supabase disparado para:', signUpDto.email);
-            }
-          } catch (resendErr: any) {
-            console.warn('⚠️  Error disparando correo de confirmación via Supabase:', resendErr?.message);
           }
         }
 

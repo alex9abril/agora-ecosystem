@@ -501,5 +501,106 @@ export class EmailService {
       context
     );
   }
+
+  /**
+   * Envía correo de confirmación de email con el link generado por Supabase.
+   * Se usa como alternativa confiable cuando admin.createUser no dispara el correo de Supabase.
+   */
+  async sendEmailConfirmation(
+    userEmail: string,
+    userName: string,
+    confirmationLink: string,
+    context?: { userId?: string },
+  ): Promise<IntegrationLogStatus> {
+    if (!this.transporter) {
+      console.warn('[EmailService.sendEmailConfirmation] Transporter no inicializado. No se envía correo de confirmación.');
+      return 'skipped';
+    }
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #333333;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333333;">
+<tr>
+<td align="center" style="padding: 40px 20px 60px 20px;">
+  <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" style="max-width: 180px; height: auto;" />
+</td>
+</tr>
+<tr>
+<td align="center" style="padding: 0 20px;">
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 16px;">
+<tr>
+<td style="padding: 50px 40px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <div style="display: inline-block; width: 80px; height: 80px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 50%; line-height: 80px; font-size: 36px;">✉️</div>
+  </div>
+  <h1 style="text-align: center; font-size: 26px; font-weight: 700; color: #111827; margin: 0 0 16px 0;">Confirma tu correo electrónico</h1>
+  <p style="text-align: center; font-size: 16px; color: #4b5563; margin: 0 0 10px 0; line-height: 1.6;">Hola ${userName},</p>
+  <p style="text-align: center; font-size: 16px; color: #4b5563; margin: 0 0 30px 0; line-height: 1.6;">Gracias por registrarte en AGORA. Para activar tu cuenta, confirma tu dirección de correo electrónico haciendo clic en el botón.</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+  <tr>
+  <td align="center" style="padding: 10px 0 30px 0;">
+    <a href="${confirmationLink}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; font-family: Arial, sans-serif;">Confirmar mi correo</a>
+  </td>
+  </tr>
+  </table>
+  <p style="text-align: center; font-size: 13px; color: #9ca3af; margin: 0 0 10px 0;">Si no creaste esta cuenta, puedes ignorar este mensaje.</p>
+  <p style="text-align: center; font-size: 13px; color: #9ca3af; margin: 0;">Este enlace expira en 24 horas.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>
+<tr>
+<td align="center" style="padding: 20px;">
+  <p style="font-size: 12px; color: #9ca3af; margin: 0;">© ${new Date().getFullYear()} AGORA. Todos los derechos reservados.</p>
+</td>
+</tr>
+</table>
+</body>
+</html>`;
+
+    try {
+      const mailOptions = {
+        from: `"AGORA" <${process.env.SMTP_USER || 'contacto@agoramp.mx'}>`,
+        to: userEmail,
+        subject: 'Confirma tu correo electrónico — AGORA',
+        html,
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('[EmailService.sendEmailConfirmation] Correo de confirmación enviado:', { to: userEmail, messageId: info.messageId });
+
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'email_confirmation',
+        channel: 'email',
+        status: 'success',
+        userId: context?.userId,
+        message: 'Correo de confirmación enviado',
+        requestPayload: { to: userEmail },
+      });
+
+      return 'success';
+    } catch (error: any) {
+      console.error('[EmailService.sendEmailConfirmation] Error enviando correo de confirmación:', error?.message);
+
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'email_confirmation',
+        channel: 'email',
+        status: 'failed',
+        userId: context?.userId,
+        message: error?.message || 'Error desconocido',
+        requestPayload: { to: userEmail },
+      });
+
+      return 'failed';
+    }
+  }
 }
 
