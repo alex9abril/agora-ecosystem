@@ -287,12 +287,13 @@ export class OrdersService {
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name IN ('store_context', 'order_group_id', 'store_id')`
+           AND column_name IN ('store_context', 'order_group_id', 'store_id', 'frontend_origin')`
       );
       const existingColumns = new Set(columnsCheck.rows.map(row => row.column_name));
       const hasStoreContext = existingColumns.has('store_context');
       const hasOrderGroupId = existingColumns.has('order_group_id');
       const hasStoreId = existingColumns.has('store_id');
+      const hasFrontendOrigin = existingColumns.has('frontend_origin');
 
       // 13. Crear una orden por cada sucursal
       const createdOrders: any[] = [];
@@ -306,6 +307,7 @@ export class OrdersService {
 
       // Ruta de contexto de tienda (sucursal, grupo, marca o global) para URL en correo
       const storeContext = (checkoutDto.storeContext || '').trim() || null;
+      const frontendOrigin = (checkoutDto.appUrl || '').trim() || null;
       // Resolver store_id: del DTO o desde storeContext
       let storeIdToSave: string | null = checkoutDto.storeId?.trim() || null;
       if (!storeIdToSave && storeContext && hasStoreId) {
@@ -397,6 +399,12 @@ export class OrdersService {
         if (hasStoreId && storeIdToSave) {
           insertColumns.push('store_id');
           insertValues.push(storeIdToSave);
+          paramIndex++;
+        }
+
+        if (hasFrontendOrigin && frontendOrigin) {
+          insertColumns.push('frontend_origin');
+          insertValues.push(frontendOrigin);
           paramIndex++;
         }
 
@@ -2944,6 +2952,160 @@ export class OrdersService {
   }
 
   /**
+   * Construye el HTML de detalle de entrega para el correo de cambio de estado.
+   * - Shipping: tabla de productos + info del proveedor/tracking.
+   * - Pickup: mensaje de "listo para recoger" + dirección de la sucursal.
+   */
+  private async buildDeliveryDetailHtml(
+    orderId: string,
+    isPickup: boolean,
+    businessAddress: { biz_street: string; biz_street_number: string; biz_neighborhood: string; biz_city: string; biz_state: string; biz_postal_code: string } | null,
+  ): Promise<string> {
+    const escapeHtml = (s: string) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    if (isPickup) {
+      let addressHtml = '';
+      if (businessAddress && (businessAddress.biz_street || businessAddress.biz_city)) {
+        const parts = [
+          businessAddress.biz_street,
+          businessAddress.biz_street_number ? `#${businessAddress.biz_street_number}` : '',
+          businessAddress.biz_neighborhood ? `Col. ${businessAddress.biz_neighborhood}` : '',
+          businessAddress.biz_postal_code ? `C.P. ${businessAddress.biz_postal_code}` : '',
+          businessAddress.biz_city,
+          businessAddress.biz_state,
+        ].filter(Boolean);
+        addressHtml = `
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-top: 12px;">
+          <p style="font-size: 14px; font-weight: 600; color: #166534; margin: 0 0 8px 0; font-family: Arial, sans-serif;">
+            📍 Dirección de recolección
+          </p>
+          <p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif; line-height: 1.5;">
+            ${escapeHtml(parts.join(', '))}
+          </p>
+        </div>`;
+      }
+
+      return `
+      <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; border-radius: 4px; margin: 16px 0;">
+        <p style="font-size: 16px; font-weight: 600; color: #166534; margin: 0 0 4px 0; font-family: Arial, sans-serif;">
+          🛍️ Tu pedido está listo para recoger
+        </p>
+        <p style="font-size: 14px; color: #374151; margin: 0; font-family: Arial, sans-serif;">
+          Puedes pasar a recogerlo en la sucursal en el horario habitual de atención.
+        </p>
+      </div>${addressHtml}`;
+    }
+
+    // Shipping: obtener items y shipping label
+    if (!dbPool) return '';
+
+    const itemsResult = await dbPool.query(
+      `SELECT 
+        oi.item_name,
+        oi.quantity,
+        oi.item_subtotal,
+        oi.item_price,
+        oi.shipping_carrier,
+        oi.shipping_service
+       FROM orders.order_items oi
+       WHERE oi.order_id = $1
+       ORDER BY oi.created_at, oi.id`,
+      [orderId],
+    );
+
+    const labelResult = await dbPool.query(
+      `SELECT 
+        sl.tracking_number,
+        sl.carrier_name,
+        sl.tracking_url,
+        sl.status
+       FROM orders.shipping_labels sl
+       WHERE sl.order_id = $1
+       ORDER BY sl.created_at DESC
+       LIMIT 1`,
+      [orderId],
+    );
+
+    let html = '';
+
+    // Productos
+    if (itemsResult.rows.length > 0) {
+      const rows = itemsResult.rows.map((item: any) => {
+        const subtotal = parseFloat(item.item_subtotal || '0');
+        return `
+        <tr>
+          <td style="font-size: 14px; color: #111827; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; font-family: Arial, sans-serif;">
+            ${escapeHtml(item.item_name)}
+          </td>
+          <td style="font-size: 14px; color: #111827; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: center; font-family: Arial, sans-serif;">
+            ${item.quantity}
+          </td>
+          <td style="font-size: 14px; color: #111827; padding: 8px 12px; border-bottom: 1px solid #e5e7eb; text-align: right; font-family: Arial, sans-serif; font-weight: 600;">
+            $${this.formatCurrency(subtotal)}
+          </td>
+        </tr>`;
+      }).join('');
+
+      html += `
+      <div style="margin: 16px 0;">
+        <p style="font-size: 14px; font-weight: 600; color: #374151; margin: 0 0 8px 0; font-family: Arial, sans-serif;">
+          📦 Productos en este envío
+        </p>
+        <table style="width: 100%; border-collapse: collapse; font-family: Arial, sans-serif;">
+          <thead>
+            <tr>
+              <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 8px 12px; text-align: left; border-bottom: 1px solid #e5e7eb;">Producto</th>
+              <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 8px 12px; text-align: center; border-bottom: 1px solid #e5e7eb;">Cant.</th>
+              <th style="font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; padding: 8px 12px; text-align: right; border-bottom: 1px solid #e5e7eb;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    // Shipping label info
+    const label = labelResult.rows[0];
+    if (label) {
+      const carrierName = label.carrier_name || itemsResult.rows[0]?.shipping_carrier || 'Sin paquetería';
+      const serviceName = itemsResult.rows[0]?.shipping_service || '';
+      const trackingNumber = label.tracking_number || '';
+      const trackingUrl = label.tracking_url || '';
+
+      let trackingHtml = '';
+      if (trackingNumber) {
+        trackingHtml = trackingUrl
+          ? `<a href="${escapeHtml(trackingUrl)}" style="color: #2563eb; text-decoration: underline; font-weight: 600;">${escapeHtml(trackingNumber)}</a>`
+          : `<span style="font-weight: 600; color: #111827;">${escapeHtml(trackingNumber)}</span>`;
+      }
+
+      html += `
+      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <p style="font-size: 14px; font-weight: 600; color: #1e40af; margin: 0 0 12px 0; font-family: Arial, sans-serif;">
+          🚚 Información de envío
+        </p>
+        <table style="font-size: 14px; color: #374151; font-family: Arial, sans-serif; line-height: 1.6;">
+          <tr>
+            <td style="padding: 2px 12px 2px 0; font-weight: 500; color: #6b7280;">Paquetería:</td>
+            <td style="padding: 2px 0; font-weight: 600;">${escapeHtml(carrierName)}${serviceName ? ` — ${escapeHtml(serviceName)}` : ''}</td>
+          </tr>
+          ${trackingNumber ? `<tr>
+            <td style="padding: 2px 12px 2px 0; font-weight: 500; color: #6b7280;">No. de rastreo:</td>
+            <td style="padding: 2px 0;">${trackingHtml}</td>
+          </tr>` : ''}
+        </table>
+      </div>`;
+    }
+
+    return html;
+  }
+
+  /**
    * Enviar correo de confirmación de pedido
    */
   private async sendOrderConfirmationEmail(orderId: string, businessId: string): Promise<void> {
@@ -2952,17 +3114,17 @@ export class OrdersService {
     }
 
     try {
-      // Obtener datos del pedido (store_context y slug para URL de "Ver detalle")
-      // Verificar si store_context existe antes de seleccionarlo
+      // Obtener datos del pedido (store_context, frontend_origin y slug para URL de "Ver detalle")
       const columnCheck = await dbPool.query(
         `SELECT column_name 
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name = 'store_context'`
+           AND column_name IN ('store_context', 'frontend_origin')`
       );
-      const hasStoreContext = columnCheck.rows.length > 0;
-      const storeContextField = hasStoreContext ? 'o.store_context,' : 'NULL as store_context,';
+      const existingCols = new Set(columnCheck.rows.map(r => r.column_name));
+      const storeContextField = existingCols.has('store_context') ? 'o.store_context,' : 'NULL as store_context,';
+      const frontendOriginField = existingCols.has('frontend_origin') ? 'o.frontend_origin,' : 'NULL as frontend_origin,';
 
       const orderResult = await dbPool.query(
         `SELECT 
@@ -2973,6 +3135,7 @@ export class OrdersService {
           o.created_at,
           o.business_id,
           ${storeContextField}
+          ${frontendOriginField}
           b.business_group_id,
           b.slug AS business_slug,
           b.name AS business_name,
@@ -3062,8 +3225,9 @@ export class OrdersService {
       });
       const orderTotal = `$${this.formatCurrency(parseFloat(order.total_amount))}`;
       const paymentMethod = order.payment_method || 'No especificado';
+      const frontendBase = order.frontend_origin || process.env.FRONTEND_URL || 'https://agoramp.mx';
       const orderUrl = this.buildOrderDetailUrl(
-        process.env.FRONTEND_URL || 'https://agoramp.mx',
+        frontendBase,
         order.id,
         order.store_context ?? null,
         order.business_slug ?? null,
@@ -3355,30 +3519,44 @@ export class OrdersService {
     }
 
     try {
-      // Verificar si store_context existe antes de seleccionarlo
+      // Verificar columnas opcionales
       const columnCheck = await dbPool.query(
         `SELECT column_name 
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name = 'store_context'`
+           AND column_name IN ('store_context', 'frontend_origin')`
       );
-      const hasStoreContext = columnCheck.rows.length > 0;
-      const storeContextField = hasStoreContext ? 'o.store_context,' : 'NULL as store_context,';
+      const existingCols = new Set(columnCheck.rows.map(r => r.column_name));
+      const storeContextField = existingCols.has('store_context') ? 'o.store_context,' : 'NULL as store_context,';
+      const frontendOriginField = existingCols.has('frontend_origin') ? 'o.frontend_origin,' : 'NULL as frontend_origin,';
 
-      // Obtener datos del pedido (store_context y slug para URL)
+      // Obtener datos del pedido enriquecidos para email
       const orderResult = await dbPool.query(
         `SELECT 
           o.id,
           o.client_id,
           o.business_id,
+          o.delivery_address_text,
+          o.delivery_fee,
+          o.total_amount,
+          o.payment_method,
+          o.delivery_notes,
           ${storeContextField}
+          ${frontendOriginField}
           b.business_group_id,
           b.slug AS business_slug,
           b.name AS business_name,
+          a.street AS biz_street,
+          a.street_number AS biz_street_number,
+          a.neighborhood AS biz_neighborhood,
+          a.city AS biz_city,
+          a.state AS biz_state,
+          a.postal_code AS biz_postal_code,
           COALESCE(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), 'Cliente') AS client_name
         FROM orders.orders o
         LEFT JOIN core.businesses b ON o.business_id = b.id
+        LEFT JOIN core.addresses a ON b.address_id = a.id
         LEFT JOIN core.user_profiles up ON o.client_id = up.id
         WHERE o.id = $1`,
         [orderId]
@@ -3411,7 +3589,7 @@ export class OrdersService {
           ),
           this.buildSupervisorActionButton(
             'Ver Pedido',
-            this.buildOrderDetailUrl(process.env.FRONTEND_URL || 'https://agoramp.mx', order.id, order.store_context ?? null, order.business_slug ?? null),
+            this.buildOrderDetailUrl(order.frontend_origin || process.env.FRONTEND_URL || 'https://agoramp.mx', order.id, order.store_context ?? null, order.business_slug ?? null),
           ),
           { orderId: order.id },
         ).catch((err) => {
@@ -3458,12 +3636,24 @@ export class OrdersService {
       const previousStatusLabel = this.orderStatusLabelEs(oldStatus);
       const currentStatusLabel = this.orderStatusLabelEs(newStatus);
       const orderNumber = formatOrderFolioFromUuid(order.id);
+      const frontendBase = order.frontend_origin || process.env.FRONTEND_URL || 'https://agoramp.mx';
       const orderUrl = this.buildOrderDetailUrl(
-        process.env.FRONTEND_URL || 'https://agoramp.mx',
+        frontendBase,
         order.id,
         order.store_context ?? null,
         order.business_slug ?? null,
       );
+
+      const isPickup = !order.delivery_address_text || order.delivery_address_text === 'Recoger en tienda';
+      const businessAddress = (order.biz_street || order.biz_city)
+        ? { biz_street: order.biz_street, biz_street_number: order.biz_street_number, biz_neighborhood: order.biz_neighborhood, biz_city: order.biz_city, biz_state: order.biz_state, biz_postal_code: order.biz_postal_code }
+        : null;
+      let deliveryDetailHtml = '';
+      try {
+        deliveryDetailHtml = await this.buildDeliveryDetailHtml(orderId, isPickup, businessAddress);
+      } catch (err: any) {
+        console.warn(`⚠️ No se pudo construir detalle de entrega para orden ${orderId}:`, err?.message || err);
+      }
 
       if (process.env.NODE_ENV !== 'production') {
         console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {
@@ -3476,6 +3666,8 @@ export class OrdersService {
           userName,
           statusMessage,
           orderUrl,
+          isPickup,
+          hasDeliveryDetail: deliveryDetailHtml.length > 0,
           businessId: order.business_id,
           businessGroupId: order.business_group_id,
         });
@@ -3494,7 +3686,8 @@ export class OrdersService {
           orderUrl,
           order.business_id,
           order.business_group_id,
-          { userId: order.client_id, orderId: order.id }
+          { userId: order.client_id, orderId: order.id },
+          deliveryDetailHtml,
         );
       }
 

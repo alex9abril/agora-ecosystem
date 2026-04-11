@@ -188,6 +188,7 @@ export default function CheckoutPage() {
         addressId: selectedAddress.id,
         deliveryNotes: deliveryNotes || undefined,
         tipAmount: tipAmount || 0,
+        appUrl: window.location.origin,
       };
 
       const order = await ordersService.checkout(checkoutDto);

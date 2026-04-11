@@ -430,7 +430,8 @@ export class EmailService {
     orderUrl?: string,
     businessId?: string,
     businessGroupId?: string,
-    context?: { userId?: string; orderId?: string }
+    context?: { userId?: string; orderId?: string },
+    deliveryDetailHtml?: string,
   ): Promise<IntegrationLogStatus> {
     return this.sendEmail(
       userEmail,
@@ -444,6 +445,7 @@ export class EmailService {
         new_status: newStatus,
         status_message: statusMessage,
         order_url: orderUrl || `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${orderNumber}`,
+        delivery_detail_section: deliveryDetailHtml || '',
       },
       businessId,
       businessGroupId,

@@ -29,7 +29,7 @@ const triggerInfo: Record<EmailTriggerType, { name: string; description: string;
   order_status_change: {
     name: 'Cambio de Estado de Pedido',
     description: 'Se envía cuando cambia el estado de un pedido',
-    variables: ['user_name', 'order_number', 'previous_status', 'current_status', 'status_message', 'order_url'],
+    variables: ['user_name', 'order_number', 'previous_status', 'current_status', 'status_message', 'order_url', 'delivery_detail_section'],
   },
   supervisor_notification: {
     name: 'Notificación para Supervisores',
@@ -233,6 +233,7 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
     <p style="font-size: 16px; margin-bottom: 20px;">
       {{status_message}}
     </p>
+    {{delivery_detail_section}}
     <div style="text-align: center; margin: 30px 0;">
       <a href="{{order_url}}" style="background-color: #4F46E5; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 500;">
         Ver Detalles del Pedido

@@ -64,6 +64,7 @@ export interface CheckoutDto {
   addressId: string;
   deliveryNotes?: string;
   tipAmount?: number;
+  appUrl?: string;
 }
 
 class OrdersService {

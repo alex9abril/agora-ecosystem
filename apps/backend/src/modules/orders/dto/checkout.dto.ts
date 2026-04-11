@@ -124,6 +124,11 @@ export class CheckoutDto {
   @IsString()
   storeContext?: string;
 
+  @ApiPropertyOptional({ description: 'URL base del frontend desde donde se realiza el pedido (ej: https://agoramp.mx). Se usa para generar links correctos en correos.', example: 'https://agoramp.mx' })
+  @IsOptional()
+  @IsString()
+  appUrl?: string;
+
   @ApiPropertyOptional({ description: 'ID del canal de venta (core.stores). Si se envía, se guarda en orders.store_id; si no, se resuelve desde storeContext.', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
   @IsUUID('4', { message: 'storeId debe ser un UUID válido' })

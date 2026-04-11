@@ -1683,8 +1683,9 @@ export default function CheckoutPage() {
           deliveryNotes: deliveryNotes.trim(),
           payment: paymentInfo,
           deliveryFee: shippingTotal, // Enviar el costo de envío calculado al backend
-          storeContext: storePath, // Ruta de la tienda para la URL de redirección
-          quotationIds: Object.keys(quotationIds).length > 0 ? quotationIds : undefined, // Enviar quotation_ids si existen
+          storeContext: storePath,
+          appUrl: window.location.origin,
+          quotationIds: Object.keys(quotationIds).length > 0 ? quotationIds : undefined,
           rateIds: Object.keys(rateIds).length > 0 ? rateIds : undefined, // Enviar rate_ids si existen (necesario para crear shipment)
           shippingInfo: Object.keys(shippingInfo).length > 0 ? shippingInfo : undefined, // Enviar información de envío si existe
         }),
