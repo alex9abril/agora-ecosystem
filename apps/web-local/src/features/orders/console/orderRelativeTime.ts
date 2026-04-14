@@ -10,24 +10,17 @@ function calendarDayKey(isoOrMs: string | number, timeZone: string): string {
   }).format(new Date(isoOrMs));
 }
 
-/** Día calendario anterior al "hoy" en la zona horaria del negocio. */
-function yesterdayCalendarDayKey(timeZone: string): string {
-  const today = calendarDayKey(Date.now(), timeZone);
-  let t = Date.now();
-  for (let i = 0; i < 72; i++) {
-    t -= 3600000;
-    if (calendarDayKey(t, timeZone) !== today) {
-      return calendarDayKey(t, timeZone);
-    }
-  }
-  return calendarDayKey(Date.now() - 48 * 3600000, timeZone);
+function calendarYear(isoOrMs: string | number, timeZone: string): number {
+  return parseInt(
+    new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric' }).format(new Date(isoOrMs)),
+    10,
+  );
 }
 
 /**
  * Texto único para la columna "Creado" en la tabla de pedidos:
  * - Hoy (en TZ del negocio): solo hora
- * - Ayer: fecha de ese día (sin "hace unas horas")
- * - Antes de ayer: fecha corta
+ * - Otro día: día y mes; si el año del pedido ≠ año actual en esa TZ, incluye año completo
  */
 export function formatOrderCreatedCell(isoDate: string, locale = 'es-MX', timeZone = 'America/Mexico_City'): string {
   const date = new Date(isoDate);
@@ -37,7 +30,6 @@ export function formatOrderCreatedCell(isoDate: string, locale = 'es-MX', timeZo
 
   const orderDay = calendarDayKey(isoDate, timeZone);
   const todayDay = calendarDayKey(Date.now(), timeZone);
-  const yesterdayDay = yesterdayCalendarDayKey(timeZone);
 
   if (orderDay === todayDay) {
     return new Intl.DateTimeFormat(locale, {
@@ -47,21 +39,18 @@ export function formatOrderCreatedCell(isoDate: string, locale = 'es-MX', timeZo
     }).format(date);
   }
 
-  if (orderDay === yesterdayDay) {
-    return new Intl.DateTimeFormat(locale, {
-      timeZone,
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
+  const nowYear = calendarYear(Date.now(), timeZone);
+  const orderYear = calendarYear(isoDate, timeZone);
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+  };
+  if (orderYear !== nowYear) {
+    opts.year = 'numeric';
   }
 
-  return new Intl.DateTimeFormat(locale, {
-    timeZone,
-    day: '2-digit',
-    month: 'short',
-    year: '2-digit',
-  }).format(date);
+  return new Intl.DateTimeFormat(locale, opts).format(date);
 }
 
 /** Fecha y hora completas para tooltip (title) al pasar el cursor. */

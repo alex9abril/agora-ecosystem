@@ -25,6 +25,11 @@ export const triggerInfo: Record<EmailTriggerType, { name: string; description: 
     description: 'Se envía a los supervisores configurados cuando ocurre un evento (nueva venta, registro de cliente, cambio de estado)',
     variables: ['business_name', 'event_title', 'event_description', 'detail_section', 'action_url', 'action_label'],
   },
+  password_recovery: {
+    name: 'Recuperación de contraseña',
+    description: 'Se envía cuando un usuario solicita restablecer su contraseña (enlace con token de Supabase)',
+    variables: ['user_name', 'recovery_link', 'business_name', 'business_logo'],
+  },
 };
 
 export const buildLogoHtml = (logoUrl: string) =>
@@ -277,6 +282,29 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
 </td>
 </tr>
 </table>
+</body>
+</html>`,
+  password_recovery: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recuperar contraseña</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #111827; color: white; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+    <p style="margin: 0; font-size: 14px; opacity: 0.95;">{{business_name}}</p>
+  </div>
+  <div style="background-color: #f9fafb; padding: 28px; border-radius: 0 0 8px 8px;">
+    <p style="font-size: 16px;">Hola {{user_name}},</p>
+    <p style="font-size: 16px;">Recibimos una solicitud para restablecer tu contraseña.</p>
+    <div style="text-align: center; margin: 28px 0;">
+      <a href="{{recovery_link}}" style="background-color: #111827; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+        Restablecer contraseña
+      </a>
+    </div>
+    <p style="font-size: 13px; color: #6b7280; word-break: break-all;">{{recovery_link}}</p>
+  </div>
 </body>
 </html>`,
 };
