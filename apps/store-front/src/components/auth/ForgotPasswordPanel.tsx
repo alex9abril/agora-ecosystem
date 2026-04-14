@@ -2,17 +2,29 @@ import { useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { authService } from '@/lib/auth';
-import { getSupabaseBrowser } from '@/lib/supabase-browser';
-import { passwordResetViaApiOnly, rememberRecoveryLoginHref } from '@/lib/password-recovery';
+import { rememberRecoveryLoginHref } from '@/lib/password-recovery';
 
 export interface ForgotPasswordPanelProps {
   /** URL absoluta del callback (debe estar en Redirect URLs de Supabase). */
   redirectTo: string;
   /** Ruta para volver al login (ej. /sucursal/foo/auth/login). */
   loginHref: string;
+  /** Slug de sucursal (desde /sucursal/{slug}/...) para plantilla de correo jerárquica. */
+  branchSlug?: string;
+  /** Slug de grupo (desde /grupo/{slug}/...) para plantilla a nivel grupo. */
+  groupSlug?: string;
 }
 
-export default function ForgotPasswordPanel({ redirectTo, loginHref }: ForgotPasswordPanelProps) {
+/**
+ * Recuperación siempre vía backend: Supabase genera el enlace (generateLink) y el correo
+ * sale con plantilla AGORA (global / grupo / sucursal), no el correo nativo de Supabase.
+ */
+export default function ForgotPasswordPanel({
+  redirectTo,
+  loginHref,
+  branchSlug,
+  groupSlug,
+}: ForgotPasswordPanelProps) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,22 +38,12 @@ export default function ForgotPasswordPanel({ redirectTo, loginHref }: ForgotPas
 
     try {
       rememberRecoveryLoginHref(loginHref);
-
-      if (!passwordResetViaApiOnly()) {
-        const supabase = getSupabaseBrowser();
-        if (supabase) {
-          const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo,
-          });
-          if (sbError) {
-            throw new Error(sbError.message);
-          }
-          setSuccess(true);
-          return;
-        }
-      }
-
-      await authService.requestPasswordReset({ email, redirectTo });
+      await authService.requestPasswordReset({
+        email,
+        redirectTo,
+        ...(branchSlug ? { branchSlug } : {}),
+        ...(groupSlug ? { groupSlug } : {}),
+      });
       setSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Error al solicitar recuperación de contraseña');

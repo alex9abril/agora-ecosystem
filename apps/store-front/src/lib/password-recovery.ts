@@ -17,10 +17,6 @@ export function getAbsoluteResetUrl(origen: string, slug: string): string {
   return `${window.location.origin}${buildStorefrontResetPath(origen, slug)}`;
 }
 
-export function passwordResetViaApiOnly(): boolean {
-  return process.env.NEXT_PUBLIC_PASSWORD_RESET_USE_API === 'true';
-}
-
 /** Guarda a dónde volver tras restablecer (login contextual). */
 export function rememberRecoveryLoginHref(href: string): void {
   try {

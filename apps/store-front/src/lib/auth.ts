@@ -39,6 +39,8 @@ export interface AuthResponse {
 export interface PasswordResetRequest {
   email: string;
   redirectTo?: string;
+  branchSlug?: string;
+  groupSlug?: string;
 }
 
 export interface PasswordUpdate {

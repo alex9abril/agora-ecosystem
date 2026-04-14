@@ -1235,10 +1235,17 @@ export class AuthService {
 
   /**
    * Solicita un email de recuperación de contraseña.
-   * Genera el link via Supabase Admin y envía el correo con nuestro
-   * sistema de templates (jerarquía global > grupo > sucursal).
+   * Genera el link via Supabase Admin (sin correo de Supabase) y envía con
+   * nuestro sistema de templates (jerarquía sucursal > grupo > global).
    */
-  async requestPasswordReset(email: string, redirectTo?: string) {
+  async requestPasswordReset(payload: {
+    email: string;
+    redirectTo?: string;
+    branchSlug?: string;
+    groupSlug?: string;
+  }) {
+    const { email, redirectTo, branchSlug, groupSlug } = payload;
+
     if (!supabaseAdmin) {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
@@ -1321,14 +1328,59 @@ export class AuthService {
     // Construir la URL de recovery: el action_link de Supabase redirige al usuario
     const recoveryLink = linkData?.properties?.action_link || '';
 
-    // 4. Resolver business_id del usuario para branding del email
-    let businessId: string | undefined;
+    // 4. Resolver sucursal/grupo (slug desde storefront) o fallback staff/owner
+    let templateBusinessId: string | undefined;
+    let templateBusinessGroupId: string | undefined;
     let businessName = 'AGORA';
     let businessLogo = 'https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png';
 
-    if (dbPool) {
+    const branchSlugTrim = branchSlug?.trim();
+    const groupSlugTrim = groupSlug?.trim();
+
+    if (branchSlugTrim) {
       try {
-        // Buscar en business_users (staff)
+        const branch = await this.businessesService.getBranchBySlug(branchSlugTrim);
+        templateBusinessId = branch.id;
+        templateBusinessGroupId = branch.business_group_id || undefined;
+        businessName = branch.name || businessName;
+        if (branch.logo_url) {
+          businessLogo = branch.logo_url;
+        } else if (branch.business_group_id && dbPool) {
+          try {
+            const gLogo = await dbPool.query(
+              `SELECT logo_url FROM core.business_groups WHERE id = $1`,
+              [branch.business_group_id],
+            );
+            if (gLogo.rows[0]?.logo_url) {
+              businessLogo = gLogo.rows[0].logo_url;
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (err: any) {
+        if (!(err instanceof NotFoundException)) {
+          console.warn('Error resolviendo sucursal por slug para recovery email:', err?.message);
+        }
+      }
+    } else if (groupSlugTrim) {
+      try {
+        const group = await this.businessesService.getBusinessGroupBySlug(groupSlugTrim);
+        templateBusinessGroupId = group.id;
+        templateBusinessId = undefined;
+        businessName = group.name || businessName;
+        if (group.logo_url) {
+          businessLogo = group.logo_url;
+        }
+      } catch (err: any) {
+        if (!(err instanceof NotFoundException)) {
+          console.warn('Error resolviendo grupo por slug para recovery email:', err?.message);
+        }
+      }
+    }
+
+    if (!templateBusinessId && !templateBusinessGroupId && dbPool) {
+      try {
         const buResult = await dbPool.query(
           `SELECT bu.business_id, b.name as business_name
            FROM core.business_users bu
@@ -1339,10 +1391,9 @@ export class AuthService {
         );
 
         if (buResult.rows.length > 0) {
-          businessId = buResult.rows[0].business_id;
+          templateBusinessId = buResult.rows[0].business_id;
           businessName = buResult.rows[0].business_name || businessName;
         } else {
-          // Buscar como owner de negocio
           const ownerResult = await dbPool.query(
             `SELECT id as business_id, name as business_name
              FROM core.businesses
@@ -1351,23 +1402,25 @@ export class AuthService {
             [foundUser.id],
           );
           if (ownerResult.rows.length > 0) {
-            businessId = ownerResult.rows[0].business_id;
+            templateBusinessId = ownerResult.rows[0].business_id;
             businessName = ownerResult.rows[0].business_name || businessName;
           }
         }
 
-        // Obtener logo del negocio si existe
-        if (businessId) {
+        if (templateBusinessId) {
           const logoResult = await dbPool.query(
-            `SELECT logo_url FROM core.businesses WHERE id = $1`,
-            [businessId],
+            `SELECT logo_url, business_group_id FROM core.businesses WHERE id = $1`,
+            [templateBusinessId],
           );
-          if (logoResult.rows.length > 0 && logoResult.rows[0].logo_url) {
-            businessLogo = logoResult.rows[0].logo_url;
+          if (logoResult.rows.length > 0) {
+            if (logoResult.rows[0].logo_url) {
+              businessLogo = logoResult.rows[0].logo_url;
+            }
+            templateBusinessGroupId = templateBusinessGroupId || logoResult.rows[0].business_group_id || undefined;
           }
         }
       } catch (err) {
-        console.warn('⚠️  Error resolviendo business del usuario para recovery email:', err);
+        console.warn('Error resolviendo business del usuario para recovery email:', err);
       }
     }
 
@@ -1400,8 +1453,8 @@ export class AuthService {
           business_name: businessName,
           business_logo: businessLogo,
         },
-        businessId,
-        undefined,
+        templateBusinessId,
+        templateBusinessGroupId,
         { userId: foundUser.id },
       );
     } catch (emailError) {

@@ -4,12 +4,6 @@ import Link from 'next/link';
 import MobileLayout from '@/components/layout/MobileLayout';
 import { useI18n } from '@/contexts/I18nContext';
 import { authService } from '@/lib/auth';
-import { getBrowserSupabase } from '@/lib/supabase-browser';
-
-/** Si es "true", siempre se usa el backend (email con plantillas propias). */
-function useApiOnlyPasswordReset(): boolean {
-  return process.env.NEXT_PUBLIC_PASSWORD_RESET_USE_API === 'true';
-}
 
 export default function ForgotPasswordPage() {
   const { t } = useI18n();
@@ -27,21 +21,6 @@ export default function ForgotPasswordPage() {
     try {
       const redirectTo =
         typeof window !== 'undefined' ? `${window.location.origin}/auth/reset-password` : undefined;
-
-      if (!useApiOnlyPasswordReset()) {
-        const supabase = getBrowserSupabase();
-        if (supabase && redirectTo) {
-          const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo,
-          });
-          if (sbError) {
-            throw new Error(sbError.message);
-          }
-          setSuccess(true);
-          return;
-        }
-      }
-
       await authService.requestPasswordReset({ email, redirectTo });
       setSuccess(true);
     } catch (err: any) {

@@ -22,10 +22,15 @@ export default function ContextualForgotPasswordPage() {
     return null;
   }
 
+  const branchSlug = origen === 'sucursal' ? slug : undefined;
+  const groupSlug = origen === 'grupo' ? slug : undefined;
+
   return (
     <ForgotPasswordPanel
       redirectTo={getAbsoluteResetUrl(origen, slug)}
       loginHref={`/${origen}/${slug}/auth/login`}
+      branchSlug={branchSlug}
+      groupSlug={groupSlug}
     />
   );
 }

@@ -20,6 +20,25 @@ export class RequestPasswordResetDto {
     { message: 'redirectTo debe ser una URL válida' }
   )
   redirectTo?: string;
+
+  @ApiProperty({
+    description:
+      'Slug de sucursal (ej. desde /sucursal/mi-tienda/...). Prioriza plantilla de correo y branding de esa tienda.',
+    required: false,
+    example: 'toyota-satelite',
+  })
+  @IsOptional()
+  @IsString()
+  branchSlug?: string;
+
+  @ApiProperty({
+    description:
+      'Slug de grupo empresarial (ej. desde /grupo/mi-grupo/...). Usa plantillas a nivel grupo cuando no hay sucursal.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  groupSlug?: string;
 }
 
 export class UpdatePasswordDto {
