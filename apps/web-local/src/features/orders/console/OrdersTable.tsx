@@ -1,5 +1,5 @@
 import { Order } from '@/lib/orders';
-import { formatOrderRelativeTime } from './orderRelativeTime';
+import { formatOrderCreatedCell, formatOrderCreatedTooltip } from './orderRelativeTime';
 import {
   customerName,
   formatOrderNumber,
@@ -10,6 +10,7 @@ import { getOrderSeverity, severityClasses } from './orderSeverity';
 import { getNextAction } from './orderNextAction';
 import { canShowPrepareSurtido } from './orderOperational';
 import { OrdersRowMenu } from './OrdersRowMenu';
+import type { OrdersTableSortDir, OrdersTableSortKey } from './ordersTableSort';
 
 interface OrdersTableProps {
   orders: Order[];
@@ -17,9 +18,63 @@ interface OrdersTableProps {
   density: 'comfortable' | 'compact';
   onOpen: (orderId: string) => void;
   onPrepare: (orderId: string) => void;
+  sortKey: OrdersTableSortKey | null;
+  sortDir: OrdersTableSortDir;
+  onSortColumn: (key: OrdersTableSortKey) => void;
 }
 
-export function OrdersTable({ orders, timezone, density, onOpen, onPrepare }: OrdersTableProps) {
+function SortHeader({
+  label,
+  sortKey,
+  activeKey,
+  sortDir,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  sortKey: OrdersTableSortKey;
+  activeKey: OrdersTableSortKey | null;
+  sortDir: OrdersTableSortDir;
+  onSort: (key: OrdersTableSortKey) => void;
+  align?: 'left' | 'right';
+}) {
+  const active = activeKey === sortKey;
+  const justify = align === 'right' ? 'justify-end' : 'justify-start';
+  return (
+    <th
+      className={`px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex w-full min-w-0 items-center gap-1 ${justify} rounded px-0.5 py-0.5 ${
+          align === 'right' ? 'text-right' : 'text-left'
+        } hover:bg-gray-100 dark:hover:bg-neutral-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 dark:focus-visible:ring-neutral-500`}
+        aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      >
+        <span>{label}</span>
+        {active ? (
+          <span className="tabular-nums text-[10px] font-normal normal-case text-gray-500 dark:text-gray-400">
+            {sortDir === 'asc' ? '↑' : '↓'}
+          </span>
+        ) : null}
+      </button>
+    </th>
+  );
+}
+
+export function OrdersTable({
+  orders,
+  timezone,
+  density,
+  onOpen,
+  onPrepare,
+  sortKey,
+  sortDir,
+  onSortColumn,
+}: OrdersTableProps) {
   const rowHeight = density === 'compact' ? 'py-1.5' : 'py-2.5';
 
   return (
@@ -28,13 +83,59 @@ export function OrdersTable({ orders, timezone, density, onOpen, onPrepare }: Or
         <table className="min-w-full border-separate border-spacing-0">
           <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-neutral-900">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Pedido</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Cliente</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Estado</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Pago</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Total</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Siguiente accion</th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">Acciones</th>
+              <SortHeader
+                label="Pedido"
+                sortKey="pedido"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <SortHeader
+                label="Cliente"
+                sortKey="cliente"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <SortHeader
+                label="Estado"
+                sortKey="estado"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <SortHeader
+                label="Pago"
+                sortKey="pago"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <SortHeader
+                label="Total"
+                sortKey="total"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+                align="right"
+              />
+              <SortHeader
+                label="Siguiente accion"
+                sortKey="next_action"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <SortHeader
+                label="Creado"
+                sortKey="creado"
+                activeKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSortColumn}
+              />
+              <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase">
+                Acciones
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -43,25 +144,28 @@ export function OrdersTable({ orders, timezone, density, onOpen, onPrepare }: Or
               const severityUi = severityClasses(severity);
               const nextAction = getNextAction(order);
               const showPrepare = canShowPrepareSurtido(order);
+              const unread = !order.viewed_at;
               return (
                 <tr
                   key={order.id}
-                  className={`${severityUi.border} border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-900/70`}
+                  className={`${severityUi.border} border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-900/70 ${unread ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}`}
                 >
                   <td className={`px-3 ${rowHeight} align-top`}>
-                    <button
-                      type="button"
-                      onClick={() => onOpen(order.id)}
-                      className="font-mono text-xs text-gray-900 dark:text-gray-100 hover:underline"
-                    >
-                      #{formatOrderNumber(order)}
-                    </button>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      {formatOrderRelativeTime(order.created_at, 'es-MX', timezone)}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      {unread && (
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onOpen(order.id)}
+                        className={`font-mono text-xs text-gray-900 dark:text-gray-100 hover:underline ${unread ? 'font-semibold' : ''}`}
+                      >
+                        #{formatOrderNumber(order)}
+                      </button>
+                    </div>
                   </td>
                   <td className={`px-3 ${rowHeight} align-top`}>
-                    <p className="text-sm text-gray-900 dark:text-gray-100">{customerName(order)}</p>
+                    <p className={`text-sm text-gray-900 dark:text-gray-100 ${unread ? 'font-semibold' : ''}`}>{customerName(order)}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[240px]">
                       {order.client_phone || order.client_email || 'Sin contacto'}
                     </p>
@@ -88,6 +192,14 @@ export function OrdersTable({ orders, timezone, density, onOpen, onPrepare }: Or
                     ['ready', 'in_transit', 'assigned', 'picked_up'].includes(order.status) ? (
                       <p className="text-[11px] mt-0.5 text-red-600 dark:text-red-400">Sin guia</p>
                     ) : null}
+                  </td>
+                  <td
+                    className={`px-3 ${rowHeight} align-top cursor-help`}
+                    title={formatOrderCreatedTooltip(order.created_at, 'es-MX', timezone)}
+                  >
+                    <p className="text-sm text-gray-900 dark:text-gray-100 tabular-nums">
+                      {formatOrderCreatedCell(order.created_at, 'es-MX', timezone)}
+                    </p>
                   </td>
                   <td className={`px-3 ${rowHeight} align-top text-right`}>
                     <div className="inline-flex items-center justify-end gap-1">

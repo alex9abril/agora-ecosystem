@@ -6,6 +6,7 @@ export enum EmailTriggerType {
   ORDER_CONFIRMATION = 'order_confirmation',
   ORDER_STATUS_CHANGE = 'order_status_change',
   SUPERVISOR_NOTIFICATION = 'supervisor_notification',
+  PASSWORD_RECOVERY = 'password_recovery',
 }
 
 export enum EmailTemplateLevel {

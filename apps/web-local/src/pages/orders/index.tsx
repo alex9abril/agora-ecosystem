@@ -7,11 +7,17 @@ import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { Order, OrderFilters, ordersService } from '@/lib/orders';
 import { OrdersConsoleHeader } from '@/features/orders/console/OrdersConsoleHeader';
 import { OrdersOpsBar } from '@/features/orders/console/OrdersOpsBar';
-import { ORDER_TABS, OrderTabId, isValidOrderTabId, orderMatchesTab } from '@/features/orders/console/orderPresentation';
-import { isMissingShippingGuide, isPickupOrder, isStaleActiveOrder } from '@/features/orders/console/orderOperational';
+import { ORDER_TABS, OrderTabId, normalizeLegacyOrderTabId, orderMatchesTab } from '@/features/orders/console/orderPresentation';
+import { isPickupOrder, isStaleActiveOrder } from '@/features/orders/console/orderOperational';
 import { OrdersOperationalTabs } from '@/features/orders/console/OrdersOperationalTabs';
 import { OrdersTable } from '@/features/orders/console/OrdersTable';
-import { getOrderSeverity } from '@/features/orders/console/orderSeverity';
+import {
+  compareOrdersForSort,
+  defaultSortDirForColumn,
+  isValidOrdersTableSort,
+  type OrdersTableSortDir,
+  type OrdersTableSortKey,
+} from '@/features/orders/console/ordersTableSort';
 
 const DEFAULT_PAGE_SIZE = 50;
 const ORDERS_CONSOLE_STORAGE_VERSION = 2;
@@ -149,15 +155,18 @@ export default function OrdersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [activeTab, setActiveTab] = useState<OrderTabId>('requires_action');
+  const [activeTab, setActiveTab] = useState<OrderTabId>('all');
   const [columnFilters, setColumnFilters] = useState<FilterRow[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [density, setDensity] = useState<'comfortable' | 'compact'>('comfortable');
   const [currentPage, setCurrentPage] = useState(1);
   const [deliveryMode, setDeliveryMode] = useState<'all' | 'pickup' | 'delivery'>('all');
-  const [onlyNoGuide, setOnlyNoGuide] = useState(false);
   const [onlyStale, setOnlyStale] = useState(false);
+  const [tableSort, setTableSort] = useState<{
+    key: OrdersTableSortKey;
+    dir: OrdersTableSortDir;
+  } | null>(null);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const persistSkipOnce = useRef(true);
   /** Evita que el reset de pagina pise valores restaurados desde localStorage justo despues de hidratar. */
@@ -240,7 +249,10 @@ export default function OrdersPage() {
         if (typeof d.searchInput === 'string') setSearchInput(d.searchInput);
         if (typeof d.startDate === 'string') setStartDate(d.startDate);
         if (typeof d.endDate === 'string') setEndDate(d.endDate);
-        if (typeof d.activeTab === 'string' && isValidOrderTabId(d.activeTab)) setActiveTab(d.activeTab);
+        if (typeof d.activeTab === 'string') {
+          const tab = normalizeLegacyOrderTabId(d.activeTab);
+          if (tab) setActiveTab(tab);
+        }
         if (Array.isArray(d.columnFilters)) setColumnFilters(d.columnFilters.filter(isValidFilterRow));
         if (typeof d.showAdvancedFilters === 'boolean') setShowAdvancedFilters(d.showAdvancedFilters);
         if (typeof d.showSummary === 'boolean') setShowSummary(d.showSummary);
@@ -248,8 +260,8 @@ export default function OrdersPage() {
         if (d.deliveryMode === 'all' || d.deliveryMode === 'pickup' || d.deliveryMode === 'delivery') {
           setDeliveryMode(d.deliveryMode);
         }
-        if (typeof d.onlyNoGuide === 'boolean') setOnlyNoGuide(d.onlyNoGuide);
         if (typeof d.onlyStale === 'boolean') setOnlyStale(d.onlyStale);
+        if (isValidOrdersTableSort(d.tableSort)) setTableSort(d.tableSort);
         const cp = d.currentPage;
         if (typeof cp === 'number' && Number.isFinite(cp) && cp >= 1) {
           setCurrentPage(Math.floor(cp));
@@ -267,11 +279,9 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!router.isReady || !filtersHydrated) return;
     const q = router.query;
-    if (typeof q.tab === 'string' && isValidOrderTabId(q.tab)) {
-      setActiveTab(q.tab);
-    }
-    if (q.onlyNoGuide === '1' || q.onlyNoGuide === 'true') {
-      setOnlyNoGuide(true);
+    if (typeof q.tab === 'string') {
+      const tab = normalizeLegacyOrderTabId(q.tab);
+      if (tab) setActiveTab(tab);
     }
     if (q.onlyStale === '1' || q.onlyStale === 'true') {
       setOnlyStale(true);
@@ -305,9 +315,9 @@ export default function OrdersPage() {
           showSummary,
           density,
           deliveryMode,
-          onlyNoGuide,
           onlyStale,
           currentPage,
+          tableSort,
         }),
       );
     } catch {
@@ -326,10 +336,19 @@ export default function OrdersPage() {
     showSummary,
     density,
     deliveryMode,
-    onlyNoGuide,
     onlyStale,
     currentPage,
+    tableSort,
   ]);
+
+  const handleSortColumn = useCallback((key: OrdersTableSortKey) => {
+    setTableSort((prev) => {
+      if (prev?.key === key) {
+        return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, dir: defaultSortDirForColumn(key) };
+    });
+  }, []);
 
   useEffect(() => {
     fetchOrders();
@@ -343,17 +362,16 @@ export default function OrdersPage() {
       },
       {
         all: 0,
-        requires_action: 0,
         pending_payment: 0,
         to_fulfill: 0,
+        ready_for_shipping: 0,
+        ready_for_pickup: 0,
         in_transit: 0,
-        incidents: 0,
-        completed: 0,
+        delivered: 0,
       } as Record<OrderTabId, number>,
     );
   }, [baseOrders]);
 
-  const noGuideCount = useMemo(() => baseOrders.filter(isMissingShippingGuide).length, [baseOrders]);
   const staleCount = useMemo(() => baseOrders.filter(isStaleActiveOrder).length, [baseOrders]);
 
   const filteredByTab = useMemo(
@@ -365,10 +383,9 @@ export default function OrdersPage() {
     let list = filteredByTab;
     if (deliveryMode === 'pickup') list = list.filter(isPickupOrder);
     if (deliveryMode === 'delivery') list = list.filter((o) => !isPickupOrder(o));
-    if (onlyNoGuide) list = list.filter(isMissingShippingGuide);
     if (onlyStale) list = list.filter(isStaleActiveOrder);
     return list;
-  }, [deliveryMode, filteredByTab, onlyNoGuide, onlyStale]);
+  }, [deliveryMode, filteredByTab, onlyStale]);
 
   const filteredOrders = useMemo(() => {
     let list = quickFilteredOrders;
@@ -381,18 +398,13 @@ export default function OrdersPage() {
 
   const sortedOrders = useMemo(() => {
     const list = [...filteredOrders];
-    if (activeTab === 'requires_action' || activeTab === 'incidents') {
-      list.sort((a, b) => {
-        const aScore = getOrderSeverity(a) === 'critical' ? 3 : getOrderSeverity(a) === 'warning' ? 2 : 1;
-        const bScore = getOrderSeverity(b) === 'critical' ? 3 : getOrderSeverity(b) === 'warning' ? 2 : 1;
-        if (aScore !== bScore) return bScore - aScore;
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      });
+    if (tableSort) {
+      list.sort((a, b) => compareOrdersForSort(a, b, tableSort.key, tableSort.dir));
       return list;
     }
     list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     return list;
-  }, [activeTab, filteredOrders]);
+  }, [activeTab, filteredOrders, tableSort]);
 
   const totalPages = Math.max(1, Math.ceil(sortedOrders.length / DEFAULT_PAGE_SIZE));
   const paginatedOrders = useMemo(() => {
@@ -406,7 +418,7 @@ export default function OrdersPage() {
       return;
     }
     setCurrentPage(1);
-  }, [columnFilters, deliveryMode, onlyNoGuide, onlyStale, searchTerm, startDate, endDate]);
+  }, [columnFilters, deliveryMode, onlyStale, searchTerm, startDate, endDate]);
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -500,19 +512,6 @@ export default function OrdersPage() {
           <button
             type="button"
             onClick={() => {
-              setOnlyNoGuide((v) => !v);
-            }}
-            className={`h-7 px-2.5 rounded-full text-xs ${
-              onlyNoGuide
-                ? 'bg-rose-600 text-white'
-                : 'bg-rose-50 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300'
-            }`}
-          >
-            Sin guía: {noGuideCount}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
               setOnlyStale((v) => !v);
             }}
             className={`h-7 px-2.5 rounded-full text-xs ${
@@ -522,30 +521,6 @@ export default function OrdersPage() {
             }`}
           >
             Atrasados (+48h): {staleCount}
-          </button>
-        </div>
-
-        <div className="mb-3 flex items-center gap-2 overflow-x-auto">
-          <button
-            type="button"
-            onClick={() => setActiveTab('pending_payment')}
-            className="h-7 px-2.5 rounded-full text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-          >
-            Requieren pago: {tabCounts.pending_payment}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('to_fulfill')}
-            className="h-7 px-2.5 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-          >
-            Por surtir: {tabCounts.to_fulfill}
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('incidents')}
-            className="h-7 px-2.5 rounded-full text-xs bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
-          >
-            Incidencias: {tabCounts.incidents}
           </button>
         </div>
 
@@ -590,6 +565,9 @@ export default function OrdersPage() {
               density={density}
               onOpen={(orderId) => router.push(`/orders/${orderId}`)}
               onPrepare={(orderId) => router.push(`/orders/${orderId}/prepare`)}
+              sortKey={tableSort?.key ?? null}
+              sortDir={tableSort?.dir ?? 'desc'}
+              onSortColumn={handleSortColumn}
             />
 
             <div className="mt-3 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">

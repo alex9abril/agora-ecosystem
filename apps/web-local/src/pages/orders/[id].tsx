@@ -224,7 +224,13 @@ export default function OrderDetailPage() {
       });
       
       setOrder(orderData);
-      
+
+      if (!orderData.is_read) {
+        ordersService.markAsRead(businessId, orderData.id).catch(() => {});
+      }
+
+      ordersService.markAsViewed(orderData.id).catch(() => {});
+
       // Debug: Verificar payment_transactions
       console.log('💰 [LOAD ORDER] payment_transactions recibidas:', orderData.payment_transactions);
       console.log('💰 [LOAD ORDER] Cantidad de transacciones:', orderData.payment_transactions?.length || 0);

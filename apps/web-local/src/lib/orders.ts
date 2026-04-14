@@ -50,6 +50,9 @@ export interface Order {
     is_automatic: boolean;
   };
   payment_transactions?: PaymentTransaction[];
+  is_read?: boolean;
+  read_at?: string;
+  viewed_at?: string | null;
 }
 
 export interface PaymentTransaction {
@@ -373,6 +376,23 @@ export const ordersService = {
     });
 
     return response;
+  },
+
+  /**
+   * Marcar un pedido como leído/abierto por el negocio
+   */
+  async markAsRead(businessId: string, orderId: string): Promise<{ success: boolean }> {
+    return apiRequest<{ success: boolean }>(
+      `/orders/business/${businessId}/${orderId}/read`,
+      { method: 'POST' },
+    );
+  },
+
+  async markAsViewed(orderId: string): Promise<{ success: boolean }> {
+    return apiRequest<{ success: boolean }>(
+      `/orders/${orderId}/view`,
+      { method: 'POST' },
+    );
   },
 
   /**

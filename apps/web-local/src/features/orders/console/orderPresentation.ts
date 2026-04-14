@@ -1,15 +1,14 @@
 import { Order } from '@/lib/orders';
-import { isStaleActiveOrder } from './orderOperational';
-import { getOrderSeverity } from './orderSeverity';
+import { isPickupOrder } from './orderOperational';
 
 export type OrderTabId =
   | 'all'
-  | 'requires_action'
   | 'pending_payment'
   | 'to_fulfill'
+  | 'ready_for_shipping'
+  | 'ready_for_pickup'
   | 'in_transit'
-  | 'incidents'
-  | 'completed';
+  | 'delivered';
 
 export interface OrderTab {
   id: OrderTabId;
@@ -18,18 +17,33 @@ export interface OrderTab {
 
 export const ORDER_TABS: OrderTab[] = [
   { id: 'all', label: 'Todos' },
-  { id: 'requires_action', label: 'Requieren accion' },
   { id: 'pending_payment', label: 'Pendientes de pago' },
   { id: 'to_fulfill', label: 'Por surtir' },
+  { id: 'ready_for_shipping', label: 'Listos para envío' },
+  { id: 'ready_for_pickup', label: 'Listos para entrega' },
   { id: 'in_transit', label: 'En transito' },
-  { id: 'incidents', label: 'Incidencias' },
-  { id: 'completed', label: 'Listos para envío' },
+  { id: 'delivered', label: 'Entregados' },
 ];
 
 const ORDER_TAB_IDS = new Set<OrderTabId>(ORDER_TABS.map((t) => t.id));
 
 export function isValidOrderTabId(x: string): x is OrderTabId {
   return ORDER_TAB_IDS.has(x as OrderTabId);
+}
+
+/** Surtido / listo para operación (envío o entrega en tienda): pago OK y estado post-preparación. */
+export function isSurtidoListoParaOperacion(order: Order): boolean {
+  const paidOk = order.payment_status === 'paid' || order.payment_status === 'overcharged';
+  if (!paidOk) return false;
+  return order.status === 'completed' || order.status === 'ready';
+}
+
+/** Enlaces y localStorage antiguos. */
+export function normalizeLegacyOrderTabId(x: string): OrderTabId | null {
+  if (x === 'completed') return 'ready_for_shipping';
+  if (x === 'requires_action' || x === 'incidents') return 'all';
+  if (ORDER_TAB_IDS.has(x as OrderTabId)) return x as OrderTabId;
+  return null;
 }
 
 export function orderMatchesTab(order: Order, tab: OrderTabId): boolean {
@@ -40,15 +54,12 @@ export function orderMatchesTab(order: Order, tab: OrderTabId): boolean {
       return (order.payment_status === 'paid' || order.payment_status === 'overcharged') && order.status === 'confirmed';
     case 'in_transit':
       return ['assigned', 'picked_up', 'in_transit'].includes(order.status);
-    case 'incidents':
-      return getOrderSeverity(order) === 'critical';
-    case 'completed':
-      return ['delivered', 'completed'].includes(order.status);
-    case 'requires_action':
-      return (
-        ['warning', 'critical'].includes(getOrderSeverity(order)) ||
-        (getOrderSeverity(order) === 'info' && isStaleActiveOrder(order))
-      );
+    case 'ready_for_shipping':
+      return isSurtidoListoParaOperacion(order) && !isPickupOrder(order);
+    case 'ready_for_pickup':
+      return isSurtidoListoParaOperacion(order) && isPickupOrder(order);
+    case 'delivered':
+      return order.status === 'delivered';
     default:
       return true;
   }

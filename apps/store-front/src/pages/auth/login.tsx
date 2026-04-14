@@ -210,6 +210,15 @@ export default function LoginPage() {
                     </div>
                   </div>
 
+                  <div className="text-right">
+                    <ContextualLink
+                      href="/auth/forgot-password"
+                      className="text-xs text-gray-700 hover:text-gray-900 underline"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </ContextualLink>
+                  </div>
+
                   <div className="flex gap-3">
                     <ContextualLink
                       href="/auth/register"

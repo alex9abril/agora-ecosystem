@@ -13,7 +13,7 @@ export function OperationalOrdersTable(props: { rows: OperationsDashboardRespons
       <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
         <h2 className="text-sm font-medium text-neutral-900">Cola operativa</h2>
         <p className="mt-3 text-sm text-neutral-600">No hay pedidos en la cola de atención con los criterios actuales.</p>
-        <Link href="/orders?tab=requires_action" className="mt-2 inline-block text-xs text-neutral-700 hover:underline">
+        <Link href="/orders?tab=all" className="mt-2 inline-block text-xs text-neutral-700 hover:underline">
           Abrir consola de pedidos
         </Link>
       </section>
@@ -24,7 +24,7 @@ export function OperationalOrdersTable(props: { rows: OperationsDashboardRespons
     <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-neutral-900">Pedidos que requieren atención</h2>
-        <Link href="/orders?tab=requires_action" className="text-xs text-neutral-700 hover:underline">
+        <Link href="/orders?tab=all" className="text-xs text-neutral-700 hover:underline">
           Ver todos
         </Link>
       </div>

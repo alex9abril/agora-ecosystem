@@ -12,21 +12,21 @@ const items: {
     key: 'requiresAction',
     title: 'Requieren acción',
     hint: 'Cola prioritaria',
-    href: '/orders?tab=requires_action',
+    href: '/orders?tab=all',
     urgent: true,
   },
   {
     key: 'incidents',
     title: 'Incidencias',
     hint: 'Críticos por tiempo o guía',
-    href: '/orders?tab=incidents',
+    href: '/orders?tab=all',
     urgent: true,
   },
   {
     key: 'missingGuide',
     title: 'Sin guía',
     hint: 'Envío, pagado, sin etiqueta',
-    href: '/orders?tab=requires_action&onlyNoGuide=1',
+    href: '/orders?tab=all',
   },
   {
     key: 'pendingPayment',
@@ -44,7 +44,7 @@ const items: {
     key: 'staleOpen48h',
     title: 'Abiertos +48h',
     hint: 'Revisar estancamiento',
-    href: '/orders?tab=requires_action&onlyStale=1',
+    href: '/orders?tab=all&onlyStale=1',
   },
 ];
 
@@ -53,7 +53,7 @@ export function AttentionPanel(props: { attention: OperationsDashboardResponse['
     <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-neutral-900">Atención inmediata</h2>
-        <Link href="/orders?tab=requires_action" className="text-xs text-neutral-700 hover:underline">
+        <Link href="/orders?tab=all" className="text-xs text-neutral-700 hover:underline">
           Abrir consola
         </Link>
       </div>

@@ -11,7 +11,7 @@ export function OperationalPulseBar(props: {
         Operación hoy
       </span>
       <Link
-        href="/orders?tab=requires_action"
+        href="/orders?tab=all"
         className="font-semibold tabular-nums text-neutral-900 underline-offset-2 hover:underline"
       >
         Requieren acción: {props.requiresAction.toLocaleString('es-MX')}

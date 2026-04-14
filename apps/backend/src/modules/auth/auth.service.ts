@@ -14,6 +14,7 @@ import { SignUpDto } from './dto/signup.dto';
 import { SignInDto } from './dto/signin.dto';
 import { AdminSignUpDto } from './dto/admin-signup.dto';
 import { EmailService } from '../email/email.service';
+import { EmailTriggerType } from '../email-templates/dto/create-email-template.dto';
 import { BusinessesService } from '../businesses/businesses.service';
 import { KarbotService } from '../businesses/karbot.service';
 import { IntegrationLogsService } from '../settings/integration-logs.service';
@@ -1233,47 +1234,49 @@ export class AuthService {
   }
 
   /**
-   * Solicita un email de recuperación de contraseña
+   * Solicita un email de recuperación de contraseña.
+   * Genera el link via Supabase Admin y envía el correo con nuestro
+   * sistema de templates (jerarquía global > grupo > sucursal).
    */
   async requestPasswordReset(email: string, redirectTo?: string) {
-    if (!supabase) {
+    if (!supabaseAdmin) {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
-    if (supabaseAdmin) {
-      const perPage = 1000;
-      let page = 1;
-      let userExists = false;
-      let canValidate = true;
+    // 1. Validar que el usuario exista
+    const perPage = 1000;
+    let page = 1;
+    let foundUser: { id: string; email: string } | null = null;
 
-      while (page <= 10 && !userExists) {
-        const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.listUsers({
-          page,
-          perPage,
-        });
+    while (page <= 10 && !foundUser) {
+      const { data: userLookup, error: lookupError } = await supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage,
+      });
 
-        if (lookupError) {
-          console.warn('⚠️  No se pudo validar email en Supabase Admin:', lookupError.message);
-          canValidate = false;
-          break;
-        }
-
-        const users = userLookup?.users || [];
-        userExists = users.some((user) => user.email?.toLowerCase() === email.toLowerCase());
-
-        if (users.length < perPage) {
-          break;
-        }
-
-        page += 1;
+      if (lookupError) {
+        console.warn('⚠️  No se pudo validar email en Supabase Admin:', lookupError.message);
+        break;
       }
 
-      if (canValidate && !userExists) {
-        throw new BadRequestException('No existe una cuenta asociada a este email.');
+      const users = userLookup?.users || [];
+      const match = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+      if (match) {
+        foundUser = { id: match.id, email: match.email! };
       }
+
+      if (users.length < perPage) break;
+      page += 1;
     }
 
-    // Obtener la URL base desde las variables de entorno o usar una por defecto
+    if (!foundUser) {
+      return {
+        message: 'Si el email existe, recibirás un enlace para recuperar tu contraseña',
+        success: true,
+      };
+    }
+
+    // 2. Resolver redirect URL
     const defaultRedirect =
       process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/auth/reset-password';
 
@@ -1283,48 +1286,128 @@ export class AuthService {
       .filter(Boolean);
 
     const resolvedRedirect = (() => {
-      if (!redirectTo) {
-        return defaultRedirect;
-      }
-
+      if (!redirectTo) return defaultRedirect;
       try {
         const target = new URL(redirectTo);
-
-        if (!allowedRedirects.length) {
-          return defaultRedirect;
-        }
-
+        if (!allowedRedirects.length) return defaultRedirect;
         const isAllowed = allowedRedirects.some((allowed) => {
           try {
             const allowedUrl = new URL(allowed);
-            return (
-              target.origin === allowedUrl.origin &&
-              target.pathname.startsWith(allowedUrl.pathname || '/')
-            );
+            return target.origin === allowedUrl.origin && target.pathname.startsWith(allowedUrl.pathname || '/');
           } catch {
             return redirectTo.startsWith(allowed);
           }
         });
-
         return isAllowed ? redirectTo : defaultRedirect;
       } catch {
         return defaultRedirect;
       }
     })();
 
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: resolvedRedirect,
+    // 3. Generar link de recuperación via Supabase Admin (sin enviar email de Supabase)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: foundUser.email,
+      options: { redirectTo: resolvedRedirect },
     });
 
-    if (error) {
-      if (error.message.includes('rate_limit') || error.message.includes('Too many requests')) {
+    if (linkError) {
+      if (linkError.message.includes('rate_limit') || linkError.message.includes('Too many requests')) {
         throw new BadRequestException('Demasiadas solicitudes de recuperación. Por favor, espera unos minutos antes de intentar nuevamente.');
       }
-      
-      throw new BadRequestException('No se pudo enviar el email de recuperación. Por favor, verifica el email proporcionado e intenta nuevamente.');
+      throw new BadRequestException('No se pudo generar el enlace de recuperación. Por favor, intenta nuevamente.');
     }
 
-    // Supabase siempre retorna éxito por seguridad (no revela si el email existe)
+    // Construir la URL de recovery: el action_link de Supabase redirige al usuario
+    const recoveryLink = linkData?.properties?.action_link || '';
+
+    // 4. Resolver business_id del usuario para branding del email
+    let businessId: string | undefined;
+    let businessName = 'AGORA';
+    let businessLogo = 'https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png';
+
+    if (dbPool) {
+      try {
+        // Buscar en business_users (staff)
+        const buResult = await dbPool.query(
+          `SELECT bu.business_id, b.name as business_name
+           FROM core.business_users bu
+           JOIN core.businesses b ON b.id = bu.business_id
+           WHERE bu.user_id = $1 AND b.is_active = true
+           LIMIT 1`,
+          [foundUser.id],
+        );
+
+        if (buResult.rows.length > 0) {
+          businessId = buResult.rows[0].business_id;
+          businessName = buResult.rows[0].business_name || businessName;
+        } else {
+          // Buscar como owner de negocio
+          const ownerResult = await dbPool.query(
+            `SELECT id as business_id, name as business_name
+             FROM core.businesses
+             WHERE owner_id = $1 AND is_active = true
+             LIMIT 1`,
+            [foundUser.id],
+          );
+          if (ownerResult.rows.length > 0) {
+            businessId = ownerResult.rows[0].business_id;
+            businessName = ownerResult.rows[0].business_name || businessName;
+          }
+        }
+
+        // Obtener logo del negocio si existe
+        if (businessId) {
+          const logoResult = await dbPool.query(
+            `SELECT logo_url FROM core.businesses WHERE id = $1`,
+            [businessId],
+          );
+          if (logoResult.rows.length > 0 && logoResult.rows[0].logo_url) {
+            businessLogo = logoResult.rows[0].logo_url;
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️  Error resolviendo business del usuario para recovery email:', err);
+      }
+    }
+
+    // 5. Obtener nombre del usuario
+    let userName = '';
+    if (dbPool) {
+      try {
+        const profileResult = await dbPool.query(
+          `SELECT first_name, last_name FROM core.user_profiles WHERE id = $1`,
+          [foundUser.id],
+        );
+        if (profileResult.rows.length > 0) {
+          const { first_name, last_name } = profileResult.rows[0];
+          userName = [first_name, last_name].filter(Boolean).join(' ');
+        }
+      } catch (err) {
+        console.warn('⚠️  Error obteniendo perfil de usuario para recovery email:', err);
+      }
+    }
+    if (!userName) userName = email.split('@')[0];
+
+    // 6. Enviar email con nuestro sistema de templates
+    try {
+      await this.emailService.sendEmail(
+        email,
+        EmailTriggerType.PASSWORD_RECOVERY,
+        {
+          user_name: userName,
+          recovery_link: recoveryLink,
+          business_name: businessName,
+          business_logo: businessLogo,
+        },
+        businessId,
+        undefined,
+        { userId: foundUser.id },
+      );
+    } catch (emailError) {
+      console.error('❌ Error enviando email de recovery:', emailError);
+    }
+
     return {
       message: 'Si el email existe, recibirás un enlace para recuperar tu contraseña',
       success: true,
@@ -1332,41 +1415,38 @@ export class AuthService {
   }
 
   /**
-   * Actualiza la contraseña usando el token de recuperación
-   * Nota: En Supabase, el token viene en el hash de la URL de recuperación
-   * El usuario debe hacer clic en el enlace del email, y luego Supabase
-   * maneja la sesión automáticamente. Este endpoint actualiza la contraseña
-   * para el usuario autenticado en la sesión actual.
+   * Actualiza la contraseña usando el access_token de recuperación.
+   * Valida el token contra Supabase para obtener el user_id y luego
+   * actualiza la contraseña via supabaseAdmin.
    */
   async updatePassword(token: string, newPassword: string) {
-    if (!supabase) {
+    if (!supabaseAdmin) {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
     }
 
-    // Nota: En Supabase, cuando el usuario hace clic en el enlace de recuperación,
-    // Supabase establece una sesión temporal. Aquí asumimos que el usuario
-    // ya está autenticado con esa sesión temporal.
-    // Alternativamente, podríamos usar supabaseAdmin para forzar el cambio,
-    // pero requiere el user_id.
-    
-    const { data, error } = await supabase.auth.updateUser({
+    // Validar el token de recovery para obtener el user_id
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+
+    if (userError || !user) {
+      throw new UnauthorizedException(
+        'El enlace de recuperación ha expirado o es inválido. Por favor, solicita un nuevo enlace de recuperación de contraseña.',
+      );
+    }
+
+    // Actualizar la contraseña via admin (no depende de sesión del servidor)
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
       password: newPassword,
     });
 
     if (error) {
-      if (error.message.includes('token') || error.message.includes('expired') || error.message.includes('session')) {
-        throw new UnauthorizedException('El enlace de recuperación ha expirado o es inválido. Por favor, solicita un nuevo enlace de recuperación de contraseña.');
-      }
-      
       if (error.message.includes('Password') && error.message.includes('weak')) {
-        throw new BadRequestException('La nueva contraseña es demasiado débil. Por favor, usa una contraseña más segura con al menos 6 caracteres.');
+        throw new BadRequestException(
+          'La nueva contraseña es demasiado débil. Por favor, usa una contraseña más segura con al menos 6 caracteres.',
+        );
       }
-      
-      throw new BadRequestException('No se pudo actualizar la contraseña. Por favor, verifica que el enlace sea válido e intenta nuevamente.');
-    }
-
-    if (!data.user) {
-      throw new BadRequestException('No se pudo actualizar la contraseña');
+      throw new BadRequestException(
+        'No se pudo actualizar la contraseña. Por favor, verifica que el enlace sea válido e intenta nuevamente.',
+      );
     }
 
     return {

@@ -6,11 +6,6 @@ import Image from 'next/image';
 import { authService } from '@/lib/auth';
 import agoraLogoBlack from '@/images/agora_logo_black.png';
 
-/**
- * Página para actualizar contraseña después de hacer clic en el enlace del email
- * 
- * Supabase redirige aquí con el token en la URL
- */
 export default function ResetPasswordPage() {
   const router = useRouter();
   const [token, setToken] = useState('');
@@ -21,14 +16,12 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    // Extraer token del hash de la URL
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const accessToken = params.get('access_token');
-    
+
     if (accessToken) {
       setToken(accessToken);
-      // Guardar token temporalmente para la sesión
       localStorage.setItem('reset_token', accessToken);
     }
   }, []);
@@ -54,11 +47,10 @@ export default function ResetPasswordPage() {
         token: token || localStorage.getItem('reset_token') || '',
         newPassword,
       });
-      
+
       setSuccess(true);
       localStorage.removeItem('reset_token');
-      
-      // Redirigir al login después de 2 segundos
+
       setTimeout(() => {
         router.push('/auth/login');
       }, 2000);
@@ -103,6 +95,14 @@ export default function ResetPasswordPage() {
                 </div>
               )}
 
+              {!token && (
+                <div className="rounded-md bg-amber-50 p-4">
+                  <div className="text-sm text-amber-800">
+                    No se detectó un token de recuperación válido. Verifica que hayas usado el enlace correcto del email.
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
@@ -115,7 +115,8 @@ export default function ResetPasswordPage() {
                     autoComplete="new-password"
                     required
                     minLength={6}
-                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
+                    placeholder="Mínimo 6 caracteres"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />
@@ -132,7 +133,8 @@ export default function ResetPasswordPage() {
                     autoComplete="new-password"
                     required
                     minLength={6}
-                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm"
+                    placeholder="Repite tu contraseña"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
@@ -164,4 +166,3 @@ export default function ResetPasswordPage() {
     </>
   );
 }
-

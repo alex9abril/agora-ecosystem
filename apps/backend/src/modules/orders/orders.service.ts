@@ -1645,6 +1645,22 @@ export class OrdersService {
   }
 
   /**
+   * Marcar un pedido como leído/abierto por el negocio
+   */
+  async markAsRead(orderId: string, businessId: string) {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+    await dbPool.query(
+      `UPDATE orders.orders
+       SET is_read = true, read_at = NOW()
+       WHERE id = $1 AND business_id = $2 AND is_read = false`,
+      [orderId, businessId]
+    );
+    return { success: true };
+  }
+
+  /**
    * Listar pedidos de un negocio
    */
   async findAllByBusiness(businessId: string, filters?: {
@@ -1657,6 +1673,8 @@ export class OrdersService {
     attention?: string;
     /** Máximo de filas (solo con attention); tope 100 */
     limit?: number;
+    /** ID del usuario autenticado para resolver viewed_at */
+    viewerUserId?: string;
   }) {
     if (!dbPool) {
       throw new ServiceUnavailableException('Conexión a base de datos no configurada');
@@ -1745,6 +1763,13 @@ export class OrdersService {
         paramIndex++;
       }
 
+      let orderViewsJoin = 'LEFT JOIN orders.order_views ov ON false';
+      if (filters?.viewerUserId) {
+        orderViewsJoin = `LEFT JOIN orders.order_views ov ON ov.order_id = o.id AND ov.user_id = $${paramIndex}`;
+        queryParams.push(filters.viewerUserId);
+        paramIndex++;
+      }
+
       const result = await dbPool.query(
         `SELECT 
           o.id,
@@ -1769,6 +1794,8 @@ export class OrdersService {
           o.delivered_at,
           o.cancelled_at,
           o.cancellation_reason,
+          o.is_read,
+          o.read_at,
           up.first_name as client_first_name,
           up.last_name as client_last_name,
           up.phone as client_phone,
@@ -1792,7 +1819,8 @@ export class OrdersService {
             SELECT SUM(quantity)::integer
             FROM orders.order_items
             WHERE order_id = o.id
-          ) as total_quantity
+          ) as total_quantity,
+          ov.viewed_at as viewed_at
         FROM orders.orders o
         LEFT JOIN core.user_profiles up ON o.client_id = up.id
         LEFT JOIN auth.users au ON o.client_id = au.id
@@ -1814,6 +1842,7 @@ export class OrdersService {
           ORDER BY sl.created_at DESC
           LIMIT 1
         ) sl_latest ON true
+        ${orderViewsJoin}
         ${whereClause}
         ${orderBy}
         ${limitClause}`,
@@ -4391,6 +4420,19 @@ $${this.formatCurrency(subtotal)}
       attentionOrders,
       logisticsDegraded,
     };
+  }
+
+  async markOrderAsViewed(orderId: string, userId: string): Promise<void> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    await dbPool.query(
+      `INSERT INTO orders.order_views (order_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT (order_id, user_id) DO NOTHING`,
+      [orderId, userId],
+    );
   }
 }
 

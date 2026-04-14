@@ -117,6 +117,20 @@ export class OrdersController {
     return this.ordersService.cancel(id, user.id, body?.reason);
   }
 
+  @Post(':orderId/view')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Marcar pedido como visto por el usuario autenticado' })
+  @ApiParam({ name: 'orderId', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido marcado como visto' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async markAsViewed(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.ordersService.markOrderAsViewed(orderId, user.id);
+    return { success: true };
+  }
+
   // ============================================================================
   // ENDPOINTS PARA NEGOCIOS
   // ============================================================================
@@ -145,6 +159,7 @@ export class OrdersController {
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async findAllByBusiness(
     @Param('businessId') businessId: string,
+    @CurrentUser() user: User,
     @Query('status') status?: string,
     @Query('payment_status') payment_status?: string,
     @Query('startDate') startDate?: string,
@@ -162,6 +177,7 @@ export class OrdersController {
       search,
       attention,
       limit: Number.isFinite(lim) ? lim : undefined,
+      viewerUserId: user.id,
     });
   }
 
@@ -259,6 +275,20 @@ export class OrdersController {
     @Param('businessId') businessId: string,
   ) {
     return this.ordersService.findOneByBusiness(id, businessId);
+  }
+
+  @Post('business/:businessId/:id/read')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Marcar pedido como leído/abierto por el negocio' })
+  @ApiParam({ name: 'businessId', description: 'ID del negocio', type: String })
+  @ApiParam({ name: 'id', description: 'ID del pedido', type: String })
+  @ApiResponse({ status: 200, description: 'Pedido marcado como leído' })
+  @ApiResponse({ status: 401, description: 'No autenticado' })
+  async markAsRead(
+    @Param('id') id: string,
+    @Param('businessId') businessId: string,
+  ) {
+    return this.ordersService.markAsRead(id, businessId);
   }
 
   @Post('business/:businessId/:id/karlopay/simulate-webhook')

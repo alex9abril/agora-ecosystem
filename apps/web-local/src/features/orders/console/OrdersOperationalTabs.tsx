@@ -1,4 +1,5 @@
 import { OrderTab, OrderTabId } from './orderPresentation';
+import { OrderTabIcon } from './orderTabIcons';
 
 interface OrdersOperationalTabsProps {
   tabs: OrderTab[];
@@ -18,13 +19,15 @@ export function OrdersOperationalTabs({ tabs, activeTab, counts, onChange }: Ord
               key={tab.id}
               type="button"
               onClick={() => onChange(tab.id)}
-              className={`h-8 whitespace-nowrap rounded-md px-3 text-sm transition-colors ${
+              className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors sm:px-3 ${
                 active
                   ? 'bg-gray-900 dark:bg-white text-white dark:text-black'
                   : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-neutral-700'
               }`}
             >
-              {tab.label} <span className="ml-1 text-xs opacity-80">{counts[tab.id] ?? 0}</span>
+              <OrderTabIcon id={tab.id} />
+              <span>{tab.label}</span>
+              <span className="tabular-nums text-xs opacity-80">{counts[tab.id] ?? 0}</span>
             </button>
           );
         })}
