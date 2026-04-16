@@ -769,18 +769,32 @@ export default function OrderDetailPage() {
   const getStatusTimeline = (orderData: Order) => {
     if (!orderData) return [];
 
-    // Definir todos los estados posibles en orden (flujo simplificado)
-    const allStates = [
-      { status: 'pending', label: 'Pedido creado', dateField: 'created_at' },
-      { status: 'confirmed', label: 'Pedido confirmado', dateField: 'confirmed_at' },
-      { status: 'completed', label: 'Pedido completado', dateField: 'completed_at' },
-      { status: 'in_transit', label: 'En tránsito', dateField: 'in_transit_at' },
-      { status: 'delivered', label: 'Entregado', dateField: 'delivered_at' },
-    ];
+    const isPickupTimeline = orderData.delivery_address_text === 'Recoger en tienda';
 
-    // Determinar qué estados están completados
-    const statusOrder = ['pending', 'confirmed', 'completed', 'in_transit', 'delivered'];
-    const currentIndex = statusOrder.indexOf(orderData.status);
+    // Envío a domicilio: incluye en tránsito. Pickup en tienda: de surtido (completed) a entregado sin tránsito.
+    const allStates = isPickupTimeline
+      ? [
+          { status: 'pending', label: 'Pedido creado', dateField: 'created_at' },
+          { status: 'confirmed', label: 'Pedido confirmado', dateField: 'confirmed_at' },
+          { status: 'completed', label: 'Listo para recoger', dateField: 'completed_at' },
+          { status: 'delivered', label: 'Entregado', dateField: 'delivered_at' },
+        ]
+      : [
+          { status: 'pending', label: 'Pedido creado', dateField: 'created_at' },
+          { status: 'confirmed', label: 'Pedido confirmado', dateField: 'confirmed_at' },
+          { status: 'completed', label: 'Pedido completado', dateField: 'completed_at' },
+          { status: 'in_transit', label: 'En tránsito', dateField: 'in_transit_at' },
+          { status: 'delivered', label: 'Entregado', dateField: 'delivered_at' },
+        ];
+
+    const statusOrder = isPickupTimeline
+      ? ['pending', 'confirmed', 'completed', 'delivered']
+      : ['pending', 'confirmed', 'completed', 'in_transit', 'delivered'];
+
+    let currentIndex = statusOrder.indexOf(orderData.status);
+    if (currentIndex < 0 && !isPickupTimeline && orderData.status === 'ready') {
+      currentIndex = statusOrder.indexOf('completed');
+    }
     
     // Si está cancelado o reembolsado, mostrar hasta donde llegó
     const isCancelled = orderData.status === 'cancelled';

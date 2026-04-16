@@ -23,6 +23,7 @@ import { BusinessUsersService } from '../business-users/business-users.service';
 import { normalizeStoragePath, resolveProductImagePublicUrl } from '../../utils/storage.utils';
 import { formatOrderFolioFromUuid } from '../../utils/order-folio.util';
 import type { OperationsDashboardResponse, OperationsDashboardActivityItem } from './dto/operations-dashboard.types';
+import * as QRCode from 'qrcode';
 
 const DEFAULT_TAX_SETTINGS = {
   included_in_price: false,
@@ -3558,6 +3559,41 @@ $${this.formatCurrency(subtotal)}
   }
 
   /**
+   * Bloque HTML con QR del UUID del pedido para recogida en tienda (correo al marcar surtido / completed).
+   */
+  private async buildPickupCollectionQrSectionHtml(orderUuid: string): Promise<string> {
+    const escapeHtml = (s: string) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    try {
+      const dataUrl = await QRCode.toDataURL(orderUuid, {
+        errorCorrectionLevel: 'M',
+        type: 'image/png',
+        margin: 2,
+        width: 220,
+      });
+      return `
+<div style="margin-top:16px;padding:20px;border:2px solid #22c55e;border-radius:12px;background:#ffffff;text-align:center;">
+<p style="font-size:15px;font-weight:600;color:#166534;margin:0 0 6px;font-family:Arial,sans-serif;">Tu código para recoger el pedido</p>
+<p style="font-size:13px;color:#4b5563;margin:0 0 16px;font-family:Arial,sans-serif;line-height:1.4;">Muestra este código QR en la sucursal. Contiene el identificador único de tu pedido.</p>
+<img src="${dataUrl}" alt="Código QR de recolección" width="220" height="220" style="display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;" />
+<p style="font-size:11px;color:#6b7280;margin:12px 0 0;font-family:Arial,sans-serif;word-break:break-all;">ID pedido: ${escapeHtml(orderUuid)}</p>
+</div>`;
+    } catch (e) {
+      console.warn('[OrdersService.buildPickupCollectionQrSectionHtml] Falló generación de QR:', e);
+      return `
+<div style="margin-top:16px;padding:16px;border:1px dashed #16a34a;border-radius:8px;background:#f0fdf4;">
+<p style="font-size:14px;color:#166534;margin:0 0 8px;font-family:Arial,sans-serif;font-weight:600;">Código de recolección</p>
+<p style="font-size:13px;color:#374151;margin:0;font-family:Arial,sans-serif;">Presenta este folio en tienda: <strong>${escapeHtml(orderUuid)}</strong></p>
+</div>`;
+    }
+  }
+
+  /**
    * Enviar correo de cambio de estado de pedido
    */
   private async sendOrderStatusChangeEmail(
@@ -3701,6 +3737,14 @@ $${this.formatCurrency(subtotal)}
         deliveryDetailHtml = await this.buildDeliveryDetailHtml(orderId, isPickup, businessAddress);
       } catch (err: any) {
         console.warn(`⚠️ No se pudo construir detalle de entrega para orden ${orderId}:`, err?.message || err);
+      }
+
+      if (newStatus === 'completed' && isPickup) {
+        try {
+          deliveryDetailHtml += await this.buildPickupCollectionQrSectionHtml(order.id);
+        } catch (err: any) {
+          console.warn(`⚠️ No se pudo añadir QR de recolección para orden ${orderId}:`, err?.message || err);
+        }
       }
 
       console.debug('[OrdersService.sendOrderStatusChangeEmail] Payload:', {

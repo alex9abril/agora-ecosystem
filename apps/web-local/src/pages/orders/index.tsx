@@ -177,6 +177,11 @@ export default function OrdersPage() {
     [availableBusinesses],
   );
 
+  const hasActiveFilters = useMemo(
+    () => Boolean(searchTerm.trim()) || Boolean(startDate) || Boolean(endDate),
+    [searchTerm, startDate, endDate],
+  );
+
   const fetchOrders = useCallback(async () => {
     if (isLoadingBusiness || !filtersHydrated) return;
     setIsLoading(true);
@@ -470,6 +475,14 @@ export default function OrdersPage() {
           onEndDateChange={setEndDate}
           showAdvancedFilters={showAdvancedFilters}
           onToggleAdvancedFilters={() => setShowAdvancedFilters((prev) => !prev)}
+          hasActiveFilters={hasActiveFilters}
+          appliedSearchTerm={searchTerm}
+          onClearFilters={() => {
+            setSearchTerm('');
+            setSearchInput('');
+            setStartDate('');
+            setEndDate('');
+          }}
         />
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
