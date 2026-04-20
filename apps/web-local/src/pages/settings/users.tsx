@@ -198,7 +198,7 @@ export default function UsersSettingsPage() {
         for (const s of [...(storesRes?.data ?? []), ...(storesBranchRes?.data ?? [])]) {
           if (s?.id && !byStoreId.has(s.id)) byStoreId.set(s.id, s);
         }
-        const stores = [...byStoreId.values()];
+        const stores = Array.from(byStoreId.values());
         const businessesWithGroup = bizList as Array<{ business_id: string; business_name: string; business_group_id?: string | null }>;
         const rows: InviteStoreRow[] = [];
         for (const s of stores) {

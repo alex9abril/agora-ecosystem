@@ -371,10 +371,11 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!filtersHydrated) return;
     let cancelled = false;
-    let t: ReturnType<typeof setTimeout> | undefined;
+    /* En navegador setTimeout devuelve number; con @types/node, ReturnType<typeof setTimeout> es NodeJS.Timeout */
+    let t: number | undefined;
     const schedule = () => {
       if (!allowSyncRefetchRef.current || document.visibilityState !== 'visible') return;
-      window.clearTimeout(t);
+      if (t !== undefined) window.clearTimeout(t);
       t = window.setTimeout(() => {
         if (!cancelled) fetchOrders();
       }, 320);
@@ -386,7 +387,7 @@ export default function OrdersPage() {
     window.addEventListener('focus', schedule);
     return () => {
       cancelled = true;
-      window.clearTimeout(t);
+      if (t !== undefined) window.clearTimeout(t);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('focus', schedule);
     };
