@@ -1234,6 +1234,93 @@ export class AuthService {
   }
 
   /**
+   * Pathnames permitidos para el redirect tras recovery en el mismo origen que PASSWORD_RESET_REDIRECT_URL.
+   * Incluye reset global y rutas del store-front por sucursal o grupo.
+   */
+  private isTrustedStorefrontResetPath(pathname: string): boolean {
+    const normalized =
+      pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    return (
+      /^\/auth\/reset-password$/.test(normalized) ||
+      /^\/sucursal\/[^/]+\/auth\/reset-password$/.test(normalized) ||
+      /^\/grupo\/[^/]+\/auth\/reset-password$/.test(normalized)
+    );
+  }
+
+  /**
+   * Resuelve redirect_to para generateLink(recovery): lista PASSWORD_RESET_ALLOWED_REDIRECTS,
+   * o mismo origen + ruta de reset conocida (corrige el caso allowlist vacía que ignoraba el storefront),
+   * o reconstrucción desde branchSlug/groupSlug cuando el cliente no envía URL válida.
+   */
+  private resolvePasswordResetRedirectUrl(payload: {
+    redirectTo?: string;
+    branchSlug?: string;
+    groupSlug?: string;
+  }): string {
+    const { redirectTo, branchSlug, groupSlug } = payload;
+
+    const defaultRedirect =
+      process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/auth/reset-password';
+
+    let defaultOrigin: string;
+    try {
+      defaultOrigin = new URL(defaultRedirect).origin;
+    } catch {
+      defaultOrigin = 'http://localhost:3000';
+    }
+
+    const allowedRedirects = (process.env.PASSWORD_RESET_ALLOWED_REDIRECTS || '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    const branchSlugTrim = branchSlug?.trim();
+    const groupSlugTrim = groupSlug?.trim();
+
+    const matchesAllowlist = (urlString: string): boolean => {
+      if (!allowedRedirects.length) return false;
+      let target: URL;
+      try {
+        target = new URL(urlString);
+      } catch {
+        return false;
+      }
+      return allowedRedirects.some((allowed) => {
+        try {
+          const allowedUrl = new URL(allowed);
+          const basePath = allowedUrl.pathname || '/';
+          return target.origin === allowedUrl.origin && target.pathname.startsWith(basePath);
+        } catch {
+          return urlString.startsWith(allowed);
+        }
+      });
+    };
+
+    if (redirectTo) {
+      try {
+        const target = new URL(redirectTo);
+        if (matchesAllowlist(redirectTo)) {
+          return redirectTo;
+        }
+        if (target.origin === defaultOrigin && this.isTrustedStorefrontResetPath(target.pathname)) {
+          return redirectTo;
+        }
+      } catch {
+        /* continuar a slugs / default */
+      }
+    }
+
+    if (branchSlugTrim) {
+      return `${defaultOrigin}/sucursal/${encodeURIComponent(branchSlugTrim)}/auth/reset-password`;
+    }
+    if (groupSlugTrim) {
+      return `${defaultOrigin}/grupo/${encodeURIComponent(groupSlugTrim)}/auth/reset-password`;
+    }
+
+    return defaultRedirect;
+  }
+
+  /**
    * Solicita un email de recuperación de contraseña.
    * Genera el link via Supabase Admin (sin correo de Supabase) y envía con
    * nuestro sistema de templates (jerarquía sucursal > grupo > global).
@@ -1283,33 +1370,8 @@ export class AuthService {
       };
     }
 
-    // 2. Resolver redirect URL
-    const defaultRedirect =
-      process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/auth/reset-password';
-
-    const allowedRedirects = (process.env.PASSWORD_RESET_ALLOWED_REDIRECTS || '')
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-
-    const resolvedRedirect = (() => {
-      if (!redirectTo) return defaultRedirect;
-      try {
-        const target = new URL(redirectTo);
-        if (!allowedRedirects.length) return defaultRedirect;
-        const isAllowed = allowedRedirects.some((allowed) => {
-          try {
-            const allowedUrl = new URL(allowed);
-            return target.origin === allowedUrl.origin && target.pathname.startsWith(allowedUrl.pathname || '/');
-          } catch {
-            return redirectTo.startsWith(allowed);
-          }
-        });
-        return isAllowed ? redirectTo : defaultRedirect;
-      } catch {
-        return defaultRedirect;
-      }
-    })();
+    // 2. Resolver redirect URL (tienda/sucursal vía redirectTo o branchSlug/groupSlug)
+    const resolvedRedirect = this.resolvePasswordResetRedirectUrl({ redirectTo, branchSlug, groupSlug });
 
     // 3. Generar link de recuperación via Supabase Admin (sin enviar email de Supabase)
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
