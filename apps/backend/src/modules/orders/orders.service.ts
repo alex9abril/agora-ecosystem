@@ -3576,6 +3576,52 @@ $${this.formatCurrency(subtotal)}
   }
 
   /**
+   * Genera PNG del QR y lo sube a Storage público (bucket SUPABASE_STORAGE_BUCKET, p. ej. personalizacion).
+   * Ruta bajo email-templates/pickup-qr/ para alinearse con las políticas RLS del bucket.
+   * Las URLs data: en &lt;img&gt; suelen bloquearse en clientes de correo; la URL HTTPS sí se muestra.
+   */
+  private async uploadPickupQrPngAndGetPublicUrl(orderUuid: string): Promise<string | null> {
+    if (!supabaseAdmin) {
+      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] supabaseAdmin no configurado');
+      return null;
+    }
+
+    const rawBucket = process.env.SUPABASE_STORAGE_BUCKET || 'personalizacion';
+    const bucketName =
+      rawBucket.startsWith('http') || rawBucket.includes('://') || rawBucket.includes('/storage/')
+        ? 'personalizacion'
+        : rawBucket.trim();
+
+    let pngBuffer: Buffer;
+    try {
+      pngBuffer = await QRCode.toBuffer(orderUuid, {
+        errorCorrectionLevel: 'M',
+        type: 'png',
+        margin: 2,
+        width: 220,
+      });
+    } catch (e) {
+      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] Falló generación de PNG:', e);
+      return null;
+    }
+
+    // Primer segmento debe ser `email-templates` para cumplir políticas RLS del bucket personalizacion (ver add_email_templates_policies_to_personalizacion.sql).
+    const filePath = `email-templates/pickup-qr/${orderUuid}.png`;
+    const { error: uploadError } = await supabaseAdmin.storage.from(bucketName).upload(filePath, pngBuffer, {
+      contentType: 'image/png',
+      upsert: true,
+    });
+
+    if (uploadError) {
+      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] Error subiendo QR:', uploadError);
+      return null;
+    }
+
+    const { data } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filePath);
+    return data.publicUrl;
+  }
+
+  /**
    * Bloque HTML con QR del UUID del pedido para recogida en tienda (correo al marcar surtido / completed).
    */
   private async buildPickupCollectionQrSectionHtml(orderUuid: string): Promise<string> {
@@ -3586,27 +3632,32 @@ $${this.formatCurrency(subtotal)}
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
-    try {
-      const dataUrl = await QRCode.toDataURL(orderUuid, {
-        errorCorrectionLevel: 'M',
-        type: 'image/png',
-        margin: 2,
-        width: 220,
-      });
-      return `
-<div style="margin-top:16px;padding:20px;border:2px solid #22c55e;border-radius:12px;background:#ffffff;text-align:center;">
-<p style="font-size:15px;font-weight:600;color:#166534;margin:0 0 6px;font-family:Arial,sans-serif;">Tu código para recoger el pedido</p>
-<p style="font-size:13px;color:#4b5563;margin:0 0 16px;font-family:Arial,sans-serif;line-height:1.4;">Muestra este código QR en la sucursal. Contiene el identificador único de tu pedido.</p>
-<img src="${dataUrl}" alt="Código QR de recolección" width="220" height="220" style="display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;" />
-<p style="font-size:11px;color:#6b7280;margin:12px 0 0;font-family:Arial,sans-serif;word-break:break-all;">ID pedido: ${escapeHtml(orderUuid)}</p>
-</div>`;
-    } catch (e) {
-      console.warn('[OrdersService.buildPickupCollectionQrSectionHtml] Falló generación de QR:', e);
-      return `
+    const fallbackHtml = `
 <div style="margin-top:16px;padding:16px;border:1px dashed #16a34a;border-radius:8px;background:#f0fdf4;">
 <p style="font-size:14px;color:#166534;margin:0 0 8px;font-family:Arial,sans-serif;font-weight:600;">Código de recolección</p>
 <p style="font-size:13px;color:#374151;margin:0;font-family:Arial,sans-serif;">Presenta este folio en tienda: <strong>${escapeHtml(orderUuid)}</strong></p>
 </div>`;
+
+    try {
+      const publicUrl = await this.uploadPickupQrPngAndGetPublicUrl(orderUuid);
+      if (!publicUrl) {
+        console.warn(
+          '[OrdersService.buildPickupCollectionQrSectionHtml] Sin URL pública del QR; usando fallback textual',
+        );
+        return fallbackHtml;
+      }
+
+      const safeSrc = escapeHtml(publicUrl);
+      return `
+<div style="margin-top:16px;padding:20px;border:2px solid #22c55e;border-radius:12px;background:#ffffff;text-align:center;">
+<p style="font-size:15px;font-weight:600;color:#166534;margin:0 0 6px;font-family:Arial,sans-serif;">Tu código para recoger el pedido</p>
+<p style="font-size:13px;color:#4b5563;margin:0 0 16px;font-family:Arial,sans-serif;line-height:1.4;">Muestra este código QR en la sucursal. Contiene el identificador único de tu pedido.</p>
+<img src="${safeSrc}" alt="Código QR de recolección" width="220" height="220" style="display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;" />
+<p style="font-size:11px;color:#6b7280;margin:12px 0 0;font-family:Arial,sans-serif;word-break:break-all;">ID pedido: ${escapeHtml(orderUuid)}</p>
+</div>`;
+    } catch (e) {
+      console.warn('[OrdersService.buildPickupCollectionQrSectionHtml] Falló generación de QR:', e);
+      return fallbackHtml;
     }
   }
 
