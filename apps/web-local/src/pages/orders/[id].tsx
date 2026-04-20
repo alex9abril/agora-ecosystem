@@ -511,14 +511,20 @@ export default function OrderDetailPage() {
     }
   };
 
-  const handleStatusUpdate = async (newStatus: string, requiresConfirmation: boolean = false) => {
+  const handleStatusUpdate = async (
+    newStatus: string,
+    requiresConfirmation: boolean = false,
+    confirmationMessage?: string,
+  ) => {
     if (!order) return;
     
     // Si requiere confirmación, preguntar al usuario
     if (requiresConfirmation) {
-      const confirmMessage = newStatus === 'cancelled' 
-        ? '¿Estás seguro de que deseas cancelar este pedido? Esta acción puede requerir un reembolso.'
-        : `¿Estás seguro de cambiar el estado a "${newStatus}"?`;
+      const confirmMessage =
+        confirmationMessage ||
+        (newStatus === 'cancelled'
+          ? '¿Estás seguro de que deseas cancelar este pedido? Esta acción puede requerir un reembolso.'
+          : `¿Estás seguro de cambiar el estado a "${newStatus}"?`);
       
       if (!confirm(confirmMessage)) {
         return;
@@ -870,6 +876,7 @@ export default function OrderDetailPage() {
       color: string; 
       isPrimary: boolean;
       requiresConfirmation?: boolean;
+      confirmMessage?: string;
       isPaymentAction?: boolean; // Indica si es una acción de pago
       isNavigationAction?: boolean; // Indica que debe navegar en lugar de cambiar estado
       disabled?: boolean; // Deshabilita el botón (ej. pedido no pagado)
@@ -931,20 +938,30 @@ export default function OrderDetailPage() {
         break;
       }
       
-      case 'completed':
-        // El pedido está surtido, listo para entregar al proveedor de logística
-        // El proveedor tomará control y cambiará a in_transit
-        // Cancelar (excepcional) solo visible en development
+      case 'completed': {
+        const pickup = orderData.delivery_address_text === 'Recoger en tienda';
+        if (pickup) {
+          actions.push({
+            status: 'delivered',
+            label: 'Marcar como entregado',
+            color: 'bg-black hover:bg-gray-800 text-white',
+            isPrimary: true,
+            requiresConfirmation: true,
+            confirmMessage:
+              '¿Confirmar que el cliente recogió el pedido en tienda? El pedido quedará como Entregado.',
+          });
+        }
         if (process.env.NEXT_PUBLIC_ENVIRONMENT === 'development') {
-          actions.push({ 
-            status: 'cancelled', 
-            label: 'Cancelar pedido (excepcional)', 
-            color: 'bg-red-600 hover:bg-red-700 text-white', 
+          actions.push({
+            status: 'cancelled',
+            label: 'Cancelar pedido (excepcional)',
+            color: 'bg-red-600 hover:bg-red-700 text-white',
             isPrimary: false,
-            requiresConfirmation: true
+            requiresConfirmation: true,
           });
         }
         break;
+      }
       
       case 'in_transit':
         // Estado controlado por proveedor de logística
@@ -1097,7 +1114,11 @@ export default function OrderDetailPage() {
                       } else if (action.isNavigationAction && !action.disabled) {
                         router.push(`/orders/${order.id}/prepare`);
                       } else if (!action.disabled) {
-                        handleStatusUpdate(action.status, action.requiresConfirmation);
+                        handleStatusUpdate(
+                          action.status,
+                          action.requiresConfirmation,
+                          action.confirmMessage,
+                        );
                       }
                     }}
                     className={`px-4 py-2 rounded-md text-sm font-medium ${action.color} disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}

@@ -2321,7 +2321,9 @@ export class OrdersService {
 
       // Verificar que el pedido existe y pertenece al negocio
       const orderResult = await client.query(
-        `SELECT id, status, payment_status FROM orders.orders WHERE id = $1 AND business_id = $2`,
+        `SELECT id, status, payment_status,
+                COALESCE(TRIM(delivery_address_text), '') AS delivery_address_text
+         FROM orders.orders WHERE id = $1 AND business_id = $2`,
         [orderId, businessId]
       );
 
@@ -2332,6 +2334,7 @@ export class OrdersService {
       const order = orderResult.rows[0];
       const currentStatus = order.status;
       const paymentStatus = order.payment_status;
+      const isPickupOrderRow = order.delivery_address_text === 'Recoger en tienda';
 
       // Permiso de surtir: quien cambia estado debe tener can_fulfill para el negocio
       const changedByUserId = metadata?.changed_by_user_id;
@@ -2375,7 +2378,21 @@ export class OrdersService {
       };
 
       const transitionRules = validTransitions[currentStatus];
-      if (!transitionRules || !transitionRules.allowed.includes(newStatus)) {
+      if (!transitionRules) {
+        throw new BadRequestException(
+          `No se puede cambiar el estado de "${currentStatus}" a "${newStatus}"`
+        );
+      }
+      const allowedTargets = [...transitionRules.allowed];
+      if (
+        currentStatus === 'completed' &&
+        newStatus === 'delivered' &&
+        isPickupOrderRow &&
+        !allowedTargets.includes('delivered')
+      ) {
+        allowedTargets.push('delivered');
+      }
+      if (!allowedTargets.includes(newStatus)) {
         throw new BadRequestException(
           `No se puede cambiar el estado de "${currentStatus}" a "${newStatus}"`
         );

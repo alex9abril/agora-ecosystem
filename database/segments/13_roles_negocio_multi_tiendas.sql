@@ -252,6 +252,7 @@ RETURNS TABLE (
     business_email VARCHAR(255),
     business_phone VARCHAR(20),
     business_address TEXT,
+    business_group_id UUID,
     is_active BOOLEAN,
     total_users INTEGER,
     created_at TIMESTAMP
@@ -277,6 +278,7 @@ BEGIN
             ),
             'Sin dirección'
         ) AS business_address,
+        b.business_group_id,
         b.is_active,
         COUNT(DISTINCT bu.id) FILTER (WHERE bu.is_active = TRUE)::INTEGER AS total_users,
         b.created_at
@@ -286,7 +288,7 @@ BEGIN
     WHERE bu.user_id = p_superadmin_id
     AND bu.role = 'superadmin'
     AND bu.is_active = TRUE
-    GROUP BY b.id, b.name, b.email, b.phone, b.is_active, b.created_at,
+    GROUP BY b.id, b.name, b.email, b.phone, b.business_group_id, b.is_active, b.created_at,
              a.street, a.street_number, a.neighborhood, a.city, a.state
     ORDER BY b.created_at DESC;
 END;

@@ -75,3 +75,17 @@ export function hoursSince(isoDate: string): number {
   if (Number.isNaN(ts)) return 0;
   return Math.floor((Date.now() - ts) / 3600000);
 }
+
+/** Ventana para el chip "Nuevo": no abiertos antiguos (p. ej. semana pasada) solo muestran el punto, no la etiqueta. */
+const NUEVO_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * ¿El pedido es lo bastante reciente para mostrar la etiqueta "Nuevo"?
+ * Criterio: `created_at` dentro de las últimas 48 h (reloj del cliente; el listado ya filtra por negocio).
+ */
+export function isOrderRecentForNuevoBadge(createdAt: string | undefined | null): boolean {
+  if (!createdAt) return false;
+  const ts = new Date(createdAt).getTime();
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts <= NUEVO_MAX_AGE_MS;
+}

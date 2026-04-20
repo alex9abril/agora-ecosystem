@@ -1,5 +1,9 @@
 import { Order } from '@/lib/orders';
-import { formatOrderCreatedCell, formatOrderCreatedTooltip } from './orderRelativeTime';
+import {
+  formatOrderCreatedCell,
+  formatOrderCreatedTooltip,
+  isOrderRecentForNuevoBadge,
+} from './orderRelativeTime';
 import {
   customerName,
   formatOrderNumber,
@@ -144,28 +148,43 @@ export function OrdersTable({
               const severityUi = severityClasses(severity);
               const nextAction = getNextAction(order);
               const showPrepare = canShowPrepareSurtido(order);
-              const unread = !order.viewed_at;
+              /** No abierto en consola (sin fila en order_views para este usuario). */
+              const unopened = !order.viewed_at;
+              /** Además reciente: etiqueta "Nuevo" (Gmail); antiguos sin abrir solo muestran el punto. */
+              const showNuevoChip = unopened && isOrderRecentForNuevoBadge(order.created_at);
               return (
                 <tr
                   key={order.id}
-                  className={`${severityUi.border} border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-900/70 ${unread ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}`}
+                  className={`${severityUi.border} border-b border-gray-100 dark:border-neutral-700 hover:bg-gray-50 dark:hover:bg-neutral-900/70 ${unopened ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''}`}
                 >
                   <td className={`px-3 ${rowHeight} align-top`}>
-                    <div className="flex items-center gap-1.5">
-                      {unread && (
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
-                      )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {unopened ? (
+                        <span
+                          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500"
+                          title="Pedido sin abrir en consola"
+                          aria-hidden
+                        />
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onOpen(order.id)}
-                        className={`font-mono text-xs text-gray-900 dark:text-gray-100 hover:underline ${unread ? 'font-semibold' : ''}`}
+                        className={`font-mono text-xs text-gray-900 dark:text-gray-100 hover:underline ${unopened ? 'font-semibold' : ''}`}
                       >
                         #{formatOrderNumber(order)}
                       </button>
+                      {showNuevoChip ? (
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-full bg-[#1a73e8] px-2 py-0.5 text-[11px] font-medium text-white dark:bg-[#1a73e8]"
+                          aria-label="Pedido reciente y sin abrir en consola"
+                        >
+                          Nuevo
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className={`px-3 ${rowHeight} align-top`}>
-                    <p className={`text-sm text-gray-900 dark:text-gray-100 ${unread ? 'font-semibold' : ''}`}>{customerName(order)}</p>
+                    <p className={`text-sm text-gray-900 dark:text-gray-100 ${unopened ? 'font-semibold' : ''}`}>{customerName(order)}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[240px]">
                       {order.client_phone || order.client_email || 'Sin contacto'}
                     </p>

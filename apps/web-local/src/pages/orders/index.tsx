@@ -359,6 +359,39 @@ export default function OrdersPage() {
     fetchOrders();
   }, [fetchOrders]);
 
+  /** Evita doble fetch al montar por focus/visibility; luego sincroniza al volver a la pestaña o al foco (p. ej. tras ver un pedido). */
+  const allowSyncRefetchRef = useRef(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      allowSyncRefetchRef.current = true;
+    }, 600);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    let cancelled = false;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!allowSyncRefetchRef.current || document.visibilityState !== 'visible') return;
+      window.clearTimeout(t);
+      t = window.setTimeout(() => {
+        if (!cancelled) fetchOrders();
+      }, 320);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') schedule();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', schedule);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', schedule);
+    };
+  }, [filtersHydrated, fetchOrders]);
+
   const tabCounts = useMemo(() => {
     return ORDER_TABS.reduce(
       (acc, tab) => {

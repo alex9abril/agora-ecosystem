@@ -186,24 +186,29 @@ export default function UsersSettingsPage() {
           setInviteStoreRows([]);
           return;
         }
-        const [storesRes, bizList] = await Promise.all([
-          apiRequest<{ data?: Array<{ id: string; type: string; name: string; business_group_id?: string; business_id?: string }> }>(
-            `/stores?businessGroupId=${group.id}&limit=100`
-          ),
+        type StoreRow = { id: string; type: string; name: string; business_group_id?: string | null; business_id?: string | null };
+        const [storesRes, storesBranchRes, bizList] = await Promise.all([
+          apiRequest<{ data?: StoreRow[] }>(`/stores?businessGroupId=${group.id}&limit=100`),
+          /* Incluye sucursales aunque stores.business_group_id esté NULL si la sucursal pertenece al grupo */
+          apiRequest<{ data?: StoreRow[] }>(`/stores?businessGroupId=${encodeURIComponent(group.id)}&type=branch&limit=100`),
           usersService.getSuperadminBusinesses(),
         ]);
         if (cancelled) return;
-        const stores = storesRes?.data ?? [];
+        const byStoreId = new Map<string, StoreRow>();
+        for (const s of [...(storesRes?.data ?? []), ...(storesBranchRes?.data ?? [])]) {
+          if (s?.id && !byStoreId.has(s.id)) byStoreId.set(s.id, s);
+        }
+        const stores = [...byStoreId.values()];
         const businessesWithGroup = bizList as Array<{ business_id: string; business_name: string; business_group_id?: string | null }>;
         const rows: InviteStoreRow[] = [];
         for (const s of stores) {
           let businessIds: string[] = [];
           if (s.type === 'branch' && s.business_id) {
             businessIds = [s.business_id];
-          } else if ((s.type === 'group' || s.type === 'group_brand') && (s.business_group_id || (s as any).business_group_id)) {
-            const gid = s.business_group_id ?? (s as any).business_group_id;
+          } else if ((s.type === 'group' || s.type === 'group_brand') && (s.business_group_id ?? (s as any).business_group_id)) {
+            const gid = String(s.business_group_id ?? (s as any).business_group_id);
             businessIds = businessesWithGroup
-              .filter((b) => b.business_group_id === gid)
+              .filter((b) => String(b.business_group_id ?? '') === gid)
               .map((b) => b.business_id);
           }
           if (businessIds.length > 0) {

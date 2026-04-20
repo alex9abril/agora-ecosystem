@@ -1396,6 +1396,8 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<BranchKarlopaySettings>(DEFAULT_KARLOPAY_SETTINGS);
+  const [showDevKarlopayPassword, setShowDevKarlopayPassword] = useState(false);
+  const [showProdKarlopayPassword, setShowProdKarlopayPassword] = useState(false);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -1664,19 +1666,39 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
                     <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
-                <input
-                  type="password"
-                  value={settings.dev.auth_password || ''}
-                  onChange={(e) => updateEnvField('dev', 'auth_password', e.target.value)}
-                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
-                    isActiveMode
-                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
-                      : isDevMode
-                      ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
-                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
-                  }`}
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showDevKarlopayPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={settings.dev.auth_password || ''}
+                    onChange={(e) => updateEnvField('dev', 'auth_password', e.target.value)}
+                    className={`w-full px-3 py-2 pr-10 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                      isActiveMode
+                        ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200 dark:bg-yellow-900/20 dark:ring-yellow-800'
+                        : isDevMode
+                        ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50 dark:bg-neutral-700 dark:border-neutral-600'
+                    }`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDevKarlopayPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-neutral-800"
+                    aria-label={showDevKarlopayPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showDevKarlopayPassword ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <div className="flex items-center justify-between">
@@ -1811,19 +1833,39 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
                     <span className="text-xs text-red-600 dark:text-red-400 font-medium">⚠ Requerido</span>
                   ) : null}
                 </div>
-                <input
-                  type="password"
-                  value={settings.prod.auth_password || ''}
-                  onChange={(e) => updateEnvField('prod', 'auth_password', e.target.value)}
-                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
-                    isProdMode
-                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
-                      : !isDevMode
-                      ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
-                      : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
-                  }`}
-                  placeholder="••••••••"
-                />
+                <div className="relative">
+                  <input
+                    type={showProdKarlopayPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={settings.prod.auth_password || ''}
+                    onChange={(e) => updateEnvField('prod', 'auth_password', e.target.value)}
+                    className={`w-full px-3 py-2 pr-10 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                      isProdMode
+                        ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200 dark:bg-green-900/20 dark:ring-green-800'
+                        : !isDevMode
+                        ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50 dark:bg-green-900/20'
+                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50 dark:bg-neutral-700 dark:border-neutral-600'
+                    }`}
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowProdKarlopayPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-neutral-800"
+                    aria-label={showProdKarlopayPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showProdKarlopayPassword ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <div className="flex items-center justify-between">
