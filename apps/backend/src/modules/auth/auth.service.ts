@@ -1234,8 +1234,29 @@ export class AuthService {
   }
 
   /**
-   * Pathnames permitidos para el redirect tras recovery en el mismo origen que PASSWORD_RESET_REDIRECT_URL.
-   * Incluye reset global y rutas del store-front por sucursal o grupo.
+   * Origen público del storefront (donde vive el formulario de nueva contraseña).
+   * FRONTEND_URL primero: en prod suele ser https://agoramp.mx aunque PASSWORD_RESET_REDIRECT_URL siga apuntando a localhost o a la raíz.
+   */
+  private resolveStorefrontOriginForPasswordReset(): string {
+    const tryOrigin = (raw?: string | null): string | null => {
+      const s = raw?.trim();
+      if (!s) return null;
+      try {
+        return new URL(s).origin;
+      } catch {
+        return null;
+      }
+    };
+    return (
+      tryOrigin(process.env.FRONTEND_URL) ||
+      tryOrigin(process.env.PASSWORD_RESET_REDIRECT_URL) ||
+      'http://localhost:3000'
+    );
+  }
+
+  /**
+   * Pathnames permitidos para el redirect tras recovery en el mismo origen que el storefront.
+   * Incluye reset global y rutas del store-front por sucursal o grupo (formulario nueva contraseña).
    */
   private isTrustedStorefrontResetPath(pathname: string): boolean {
     const normalized =
@@ -1248,9 +1269,30 @@ export class AuthService {
   }
 
   /**
-   * Resuelve redirect_to para generateLink(recovery): lista PASSWORD_RESET_ALLOWED_REDIRECTS,
-   * o mismo origen + ruta de reset conocida (corrige el caso allowlist vacía que ignoraba el storefront),
-   * o reconstrucción desde branchSlug/groupSlug cuando el cliente no envía URL válida.
+   * Nunca usar solo la raíz del sitio como redirect: el usuario debe aterrizar en el formulario de nueva contraseña.
+   */
+  private normalizeDefaultPasswordResetLanding(siteOrigin: string): string {
+    const explicit = process.env.PASSWORD_RESET_REDIRECT_URL?.trim();
+    if (explicit) {
+      try {
+        const u = new URL(explicit);
+        const p = u.pathname || '/';
+        if (p === '/' || p === '') {
+          return `${u.origin}/auth/reset-password`;
+        }
+        return explicit;
+      } catch {
+        /* seguir */
+      }
+    }
+    return `${siteOrigin}/auth/reset-password`;
+  }
+
+  /**
+   * Resuelve redirect_to para generateLink(recovery).
+   * - Con branchSlug/groupSlug: siempre URL del formulario en esa tienda (prioridad sobre redirectTo).
+   * - redirectTo: allowlist o mismo origen del storefront + ruta de reset conocida.
+   * - Fallback: formulario global /auth/reset-password en el origen público, no la home.
    */
   private resolvePasswordResetRedirectUrl(payload: {
     redirectTo?: string;
@@ -1259,15 +1301,7 @@ export class AuthService {
   }): string {
     const { redirectTo, branchSlug, groupSlug } = payload;
 
-    const defaultRedirect =
-      process.env.PASSWORD_RESET_REDIRECT_URL || 'http://localhost:3000/auth/reset-password';
-
-    let defaultOrigin: string;
-    try {
-      defaultOrigin = new URL(defaultRedirect).origin;
-    } catch {
-      defaultOrigin = 'http://localhost:3000';
-    }
+    const siteOrigin = this.resolveStorefrontOriginForPasswordReset();
 
     const allowedRedirects = (process.env.PASSWORD_RESET_ALLOWED_REDIRECTS || '')
       .split(',')
@@ -1296,28 +1330,56 @@ export class AuthService {
       });
     };
 
+    // 1) Contexto sucursal/grupo: URL explícita al formulario de nueva contraseña en esa tienda
+    if (branchSlugTrim) {
+      return `${siteOrigin}/sucursal/${encodeURIComponent(branchSlugTrim)}/auth/reset-password`;
+    }
+    if (groupSlugTrim) {
+      return `${siteOrigin}/grupo/${encodeURIComponent(groupSlugTrim)}/auth/reset-password`;
+    }
+
+    // 2) redirectTo del cliente (admin, web-cliente, etc.)
     if (redirectTo) {
       try {
         const target = new URL(redirectTo);
         if (matchesAllowlist(redirectTo)) {
           return redirectTo;
         }
-        if (target.origin === defaultOrigin && this.isTrustedStorefrontResetPath(target.pathname)) {
+        if (target.origin === siteOrigin && this.isTrustedStorefrontResetPath(target.pathname)) {
           return redirectTo;
         }
       } catch {
-        /* continuar a slugs / default */
+        /* default */
       }
     }
 
-    if (branchSlugTrim) {
-      return `${defaultOrigin}/sucursal/${encodeURIComponent(branchSlugTrim)}/auth/reset-password`;
-    }
-    if (groupSlugTrim) {
-      return `${defaultOrigin}/grupo/${encodeURIComponent(groupSlugTrim)}/auth/reset-password`;
-    }
+    return this.normalizeDefaultPasswordResetLanding(siteOrigin);
+  }
 
-    return defaultRedirect;
+  /**
+   * El `action_link` de `generateLink({ type: 'recovery' })` a menudo trae
+   * `redirect_to` = Site URL del proyecto (p. ej. https://agoramp.mx/) aunque
+   * se haya pasado `options.redirectTo`. Supabase valida redirects contra el dashboard;
+   * si no coinciden, fuerza la raíz. Para el correo usamos la URL resuelta por nosotros
+   * (formulario de nueva contraseña, p. ej. /sucursal/.../auth/reset-password).
+   */
+  private applyResolvedRedirectToSupabaseVerifyLink(
+    actionLink: string,
+    resolvedRedirect: string,
+  ): string {
+    if (!actionLink?.trim() || !resolvedRedirect?.trim()) {
+      return actionLink || '';
+    }
+    try {
+      const url = new URL(actionLink);
+      if (!url.pathname.includes('/verify')) {
+        return actionLink;
+      }
+      url.searchParams.set('redirect_to', resolvedRedirect);
+      return url.toString();
+    } catch {
+      return actionLink;
+    }
   }
 
   /**
@@ -1387,8 +1449,8 @@ export class AuthService {
       throw new BadRequestException('No se pudo generar el enlace de recuperación. Por favor, intenta nuevamente.');
     }
 
-    // Construir la URL de recovery: el action_link de Supabase redirige al usuario
-    const recoveryLink = linkData?.properties?.action_link || '';
+    const rawActionLink = linkData?.properties?.action_link || '';
+    const recoveryLink = this.applyResolvedRedirectToSupabaseVerifyLink(rawActionLink, resolvedRedirect);
 
     // 4. Resolver sucursal/grupo (slug desde storefront) o fallback staff/owner
     let templateBusinessId: string | undefined;
