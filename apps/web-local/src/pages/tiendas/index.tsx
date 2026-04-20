@@ -4,7 +4,7 @@ import LocalLayout from '@/components/layout/LocalLayout';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
-import { businessService, BusinessGroup } from '@/lib/business';
+import { businessService, BusinessGroup, Business } from '@/lib/business';
 import { apiRequest } from '@/lib/api';
 import TiendasSidebar, { TiendasSection } from '@/components/tiendas/TiendasSidebar';
 import EmailTemplatesPanel from '@/components/email-templates/EmailTemplatesPanel';
@@ -110,6 +110,10 @@ export default function TiendasPage() {
 
   const [homePanel, setHomePanel] = useState<HomePanel>(null);
   const [groupStore, setGroupStore] = useState<Store | null>(null);
+  const [branchStoresHome, setBranchStoresHome] = useState<Store[]>([]);
+  const [groupBrandStoresHome, setGroupBrandStoresHome] = useState<Store[]>([]);
+  const [groupBranchesHome, setGroupBranchesHome] = useState<Business[]>([]);
+  const [loadingBranchPicker, setLoadingBranchPicker] = useState(false);
   const [brands, setBrands] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [loadingHomePanel, setLoadingHomePanel] = useState(false);
   const [creatingStore, setCreatingStore] = useState(false);
@@ -254,6 +258,57 @@ export default function TiendasPage() {
   }, [section, businessGroup?.id]);
 
   useEffect(() => {
+    if (!isSuperadmin || !businessGroup?.id) {
+      setBranchStoresHome([]);
+      setGroupBrandStoresHome([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [branchRes, groupBrandRes] = await Promise.all([
+          apiRequest<StoresResponse>(`/stores?type=branch&businessGroupId=${businessGroup.id}&limit=100`),
+          apiRequest<StoresResponse>(`/stores?type=group_brand&businessGroupId=${businessGroup.id}&limit=100`),
+        ]);
+        if (!cancelled) {
+          setBranchStoresHome(branchRes.data ?? []);
+          setGroupBrandStoresHome(groupBrandRes.data ?? []);
+        }
+      } catch {
+        if (!cancelled) {
+          setBranchStoresHome([]);
+          setGroupBrandStoresHome([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperadmin, businessGroup?.id, storesRefreshTrigger]);
+
+  useEffect(() => {
+    if (homePanel !== 'branch' || !businessGroup?.id) return;
+    setLoadingBranchPicker(true);
+    businessService
+      .getBranches({ groupId: businessGroup.id, limit: 500 })
+      .then((res) => setGroupBranchesHome(res.data ?? []))
+      .catch(() => setGroupBranchesHome([]))
+      .finally(() => setLoadingBranchPicker(false));
+  }, [homePanel, businessGroup?.id]);
+
+  useEffect(() => {
+    if (router.query.branchPanel !== '1' || section !== 'home' || !isSuperadmin) return;
+    setHomePanel('branch');
+    router.replace({ pathname: '/tiendas', query: { section: 'home' } }, undefined, { shallow: true });
+  }, [router.query.branchPanel, section, isSuperadmin, router]);
+
+  useEffect(() => {
+    if (router.query.brandPanel !== '1' || section !== 'home' || !isSuperadmin) return;
+    setHomePanel('brand');
+    router.replace({ pathname: '/tiendas', query: { section: 'home' } }, undefined, { shallow: true });
+  }, [router.query.brandPanel, section, isSuperadmin, router]);
+
+  useEffect(() => {
     if (homePanel !== 'brand') return;
     setLoadingHomePanel(true);
     businessService
@@ -327,6 +382,32 @@ export default function TiendasPage() {
     }
   };
 
+  const handleCreateGroupStore = async () => {
+    if (!businessGroup?.id) return;
+    setCreatingStore(true);
+    setErrorCreate(null);
+    try {
+      const created = await apiRequest<Store>('/stores', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'group',
+          businessGroupId: businessGroup.id,
+        }),
+      });
+      setGroupStore(created);
+      setStoresRefreshTrigger((t) => t + 1);
+      await router.push({ pathname: '/tiendas', query: { section: 'group', id: created.id } });
+    } catch (err: unknown) {
+      setErrorCreate(
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : 'Error al crear la tienda por grupo',
+      );
+    } finally {
+      setCreatingStore(false);
+    }
+  };
+
   const handleCreateBrandStore = async (vehicleBrandId: string) => {
     if (!businessGroup?.id) return;
     setCreatingStore(true);
@@ -340,10 +421,40 @@ export default function TiendasPage() {
           vehicleBrandId,
         }),
       });
+      setGroupBrandStoresHome((prev) => [...prev, created]);
       setStores((prev) => [...prev, created]);
       setHomePanel(null);
+      setStoresRefreshTrigger((t) => t + 1);
+      await router.push({ pathname: '/tiendas', query: { section: 'group_brand', id: created.id } });
     } catch (err: unknown) {
       setErrorCreate(err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : 'Error al crear la tienda por marca');
+    } finally {
+      setCreatingStore(false);
+    }
+  };
+
+  const handleCreateBranchStore = async (businessId: string) => {
+    if (!businessGroup?.id) return;
+    setCreatingStore(true);
+    setErrorCreate(null);
+    try {
+      const created = await apiRequest<Store>('/stores', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'branch',
+          businessId,
+        }),
+      });
+      setBranchStoresHome((prev) => [...prev, created]);
+      setHomePanel(null);
+      setStoresRefreshTrigger((t) => t + 1);
+      await router.push({ pathname: '/tiendas', query: { section: 'branch', id: created.id } });
+    } catch (err: unknown) {
+      setErrorCreate(
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : 'Error al crear la tienda por distribuidor',
+      );
     } finally {
       setCreatingStore(false);
     }
@@ -403,39 +514,95 @@ export default function TiendasPage() {
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                             Solo existe <strong>una</strong> tienda de grupo (la de tu grupo). Puedes activarla o configurarla desde la sección Por grupo.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => router.push({ pathname: '/tiendas', query: { section: 'group', ...(groupStore ? { id: groupStore.id } : {}) } })}
-                            className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
-                          >
-                            Ir a tienda por grupo
-                          </button>
+                          {!groupStore ? (
+                            <>
+                              <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+                                Aún no existe la tienda de grupo. Créala para tener el canal corporativo del grupo.
+                              </p>
+                              <button
+                                type="button"
+                                disabled={creatingStore}
+                                onClick={() => handleCreateGroupStore()}
+                                className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
+                              >
+                                Crear tienda por grupo
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => router.push({ pathname: '/tiendas', query: { section: 'group', id: groupStore.id } })}
+                              className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
+                            >
+                              Ir a tienda por grupo
+                            </button>
+                          )}
                         </div>
                         <div className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
                           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Tiendas por distribuidor</h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                             Solo puede haber <strong>una</strong> tienda por cada sucursal (distribuidor). Ver y gestionar desde la sección Distribuidor.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => router.push({ pathname: '/tiendas', query: { section: 'branch' } })}
-                            className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
-                          >
-                            Ir a tiendas por distribuidor
-                          </button>
+                          {branchStoresHome.length === 0 ? (
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+                              Aún no hay ninguna tienda por sucursal. Crea una eligiendo la sucursal (distribuidor) correspondiente.
+                            </p>
+                          ) : null}
+                          <div className="flex flex-col gap-2">
+                            {branchStoresHome.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => router.push({ pathname: '/tiendas', query: { section: 'branch' } })}
+                                className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
+                              >
+                                Ir a tiendas por distribuidor
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setHomePanel(homePanel === 'branch' ? null : 'branch')}
+                              className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
+                            >
+                              {homePanel === 'branch'
+                                ? 'Ocultar creación'
+                                : branchStoresHome.length === 0
+                                  ? 'Crear tienda por distribuidor'
+                                  : 'Crear tienda para otra sucursal'}
+                            </button>
+                          </div>
                         </div>
                         <div className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4">
-                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Tiendas por marca</h3>
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">Tiendas por marca (grupo + marca)</h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                             Crea <strong>N tiendas</strong> por marca y asigna qué distribuidores (sucursales) cuelgan sus productos en cada una.
                           </p>
-                          <button
-                            type="button"
-                            onClick={() => setHomePanel(homePanel === 'brand' ? null : 'brand')}
-                            className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
-                          >
-                            Crear tienda por marca
-                          </button>
+                          {groupBrandStoresHome.length === 0 ? (
+                            <p className="text-xs text-amber-700 dark:text-amber-300 mb-3">
+                              Aún no hay tiendas grupo+marca. Crea la primera eligiendo una marca del catálogo.
+                            </p>
+                          ) : null}
+                          <div className="flex flex-col gap-2">
+                            {groupBrandStoresHome.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => router.push({ pathname: '/tiendas', query: { section: 'group_brand' } })}
+                                className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
+                              >
+                                Ir a tiendas por grupo+marca
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setHomePanel(homePanel === 'brand' ? null : 'brand')}
+                              className="w-full px-3 py-2 text-sm font-medium rounded bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 transition-colors"
+                            >
+                              {homePanel === 'brand'
+                                ? 'Ocultar creación'
+                                : groupBrandStoresHome.length === 0
+                                  ? 'Crear tienda por marca'
+                                  : 'Crear tienda para otra marca'}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -457,20 +624,69 @@ export default function TiendasPage() {
                             </div>
                           ) : (
                             <div className="flex flex-wrap gap-2">
-                              {brands.map((brand) => (
-                                <button
-                                  key={brand.id}
-                                  type="button"
-                                  disabled={creatingStore}
-                                  onClick={() => handleCreateBrandStore(brand.id)}
-                                  className="px-3 py-2 text-sm rounded border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50"
-                                >
-                                  {brand.name}
-                                </button>
-                              ))}
+                              {brands
+                                .filter((brand) => !groupBrandStoresHome.some((s) => s.vehicle_brand_id === brand.id))
+                                .map((brand) => (
+                                  <button
+                                    key={brand.id}
+                                    type="button"
+                                    disabled={creatingStore}
+                                    onClick={() => handleCreateBrandStore(brand.id)}
+                                    className="px-3 py-2 text-sm rounded border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50"
+                                  >
+                                    {brand.name}
+                                  </button>
+                                ))}
                               {brands.length === 0 && (
                                 <p className="text-sm text-gray-500 dark:text-gray-400">No hay marcas disponibles. Configura el catálogo de marcas en el backend.</p>
                               )}
+                              {brands.length > 0 &&
+                                brands.every((b) => groupBrandStoresHome.some((s) => s.vehicle_brand_id === b.id)) && (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Todas las marcas del catálogo ya tienen su tienda grupo+marca.
+                                  </p>
+                                )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {homePanel === 'branch' && businessGroup && (
+                        <div className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-4 mb-6">
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Crear tienda por distribuidor</h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                            Elige la sucursal. Solo puede existir una tienda por sucursal. La tienda se crea desactivada hasta que la publiques desde la sección Distribuidor.
+                          </p>
+                          {loadingBranchPicker ? (
+                            <div className="flex justify-center py-4">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 dark:border-gray-100" />
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {groupBranchesHome
+                                .filter((b) => !branchStoresHome.some((s) => s.business_id === b.id))
+                                .map((b) => (
+                                  <button
+                                    key={b.id}
+                                    type="button"
+                                    disabled={creatingStore}
+                                    onClick={() => handleCreateBranchStore(b.id)}
+                                    className="px-3 py-2 text-sm rounded border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-neutral-600 disabled:opacity-50"
+                                  >
+                                    {b.name}
+                                  </button>
+                                ))}
+                              {groupBranchesHome.length === 0 && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  No hay sucursales en este grupo empresarial. Crea sucursales en Configuración antes de abrir un canal por distribuidor.
+                                </p>
+                              )}
+                              {groupBranchesHome.length > 0 &&
+                                groupBranchesHome.every((b) => branchStoresHome.some((s) => s.business_id === b.id)) && (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                    Todas las sucursales del grupo ya tienen su tienda por distribuidor.
+                                  </p>
+                                )}
                             </div>
                           )}
                         </div>
@@ -864,13 +1080,30 @@ export default function TiendasPage() {
                             <p className="text-sm text-gray-600 dark:text-gray-400">
                               Las colecciones se gestionan <strong>por sucursal</strong>. Selecciona una tienda por distribuidor en el menú de la izquierda para ver y gestionar las colecciones de esa sucursal.
                             </p>
-                            <button
-                              type="button"
-                              onClick={() => router.push({ pathname: '/tiendas', query: { section: 'branch' } })}
-                              className="mt-4 inline-flex items-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
-                            >
-                              Ir a tiendas por distribuidor
-                            </button>
+                            {isSuperadmin && branchStoresHome.length === 0 ? (
+                              <div className="mt-4 space-y-3">
+                                <p className="text-sm text-amber-700 dark:text-amber-300">
+                                  Aún no existe ninguna tienda por distribuidor. Créala desde el inicio de Tiendas antes de gestionar colecciones por sucursal.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    router.push({ pathname: '/tiendas', query: { section: 'home', branchPanel: '1' } })
+                                  }
+                                  className="inline-flex items-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+                                >
+                                  Crear tienda por distribuidor
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => router.push({ pathname: '/tiendas', query: { section: 'branch' } })}
+                                className="mt-4 inline-flex items-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
+                              >
+                                Ir a tiendas por distribuidor
+                              </button>
+                            )}
                           </div>
                         )}
                       </>

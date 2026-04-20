@@ -92,9 +92,19 @@ export class StoresService {
       paramIndex++;
     }
     if (dto.businessGroupId) {
-      conditions.push(`s.business_group_id = $${paramIndex}`);
-      params.push(dto.businessGroupId);
-      paramIndex++;
+      if (dto.type === 'branch') {
+        // Tiendas branch: el grupo debe inferirse desde la sucursal (core.businesses).
+        // Filtrar solo por stores.business_group_id oculta filas si quedó NULL o desincronizada.
+        conditions.push(
+          `(EXISTS (SELECT 1 FROM core.businesses b WHERE b.id = s.business_id AND b.business_group_id = $${paramIndex}) OR s.business_group_id = $${paramIndex})`,
+        );
+        params.push(dto.businessGroupId);
+        paramIndex++;
+      } else {
+        conditions.push(`s.business_group_id = $${paramIndex}`);
+        params.push(dto.businessGroupId);
+        paramIndex++;
+      }
     }
     if (dto.businessId) {
       conditions.push(`s.business_id = $${paramIndex}`);
