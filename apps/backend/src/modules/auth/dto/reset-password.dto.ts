@@ -39,6 +39,14 @@ export class RequestPasswordResetDto {
   @IsOptional()
   @IsString()
   groupSlug?: string;
+
+  @ApiProperty({
+    description: 'Slug de marca / vitrina (ej. desde /brand/mi-marca/...).',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  brandSlug?: string;
 }
 
 export class UpdatePasswordDto {

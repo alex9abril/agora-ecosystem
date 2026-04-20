@@ -164,6 +164,7 @@ export class AuthController {
       redirectTo: dto.redirectTo,
       branchSlug: dto.branchSlug,
       groupSlug: dto.groupSlug,
+      brandSlug: dto.brandSlug,
     });
   }
 

@@ -13,6 +13,8 @@ export interface ForgotPasswordPanelProps {
   branchSlug?: string;
   /** Slug de grupo (desde /grupo/{slug}/...) para plantilla a nivel grupo. */
   groupSlug?: string;
+  /** Slug de marca / vitrina (desde /brand/{slug}/...). */
+  brandSlug?: string;
 }
 
 /**
@@ -24,6 +26,7 @@ export default function ForgotPasswordPanel({
   loginHref,
   branchSlug,
   groupSlug,
+  brandSlug,
 }: ForgotPasswordPanelProps) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,6 +46,7 @@ export default function ForgotPasswordPanel({
         redirectTo,
         ...(branchSlug ? { branchSlug } : {}),
         ...(groupSlug ? { groupSlug } : {}),
+        ...(brandSlug ? { brandSlug } : {}),
       });
       setSuccess(true);
     } catch (err: any) {

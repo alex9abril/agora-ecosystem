@@ -403,7 +403,7 @@ export default function RegisterPage() {
                     <button
                       type="submit"
                       disabled={loading}
-                      className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-500 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 hover:text-gray-700 text-sm"
+                      className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 text-sm"
                     >
                       {loading ? 'Registrando...' : 'Crear Cuenta'}
                     </button>

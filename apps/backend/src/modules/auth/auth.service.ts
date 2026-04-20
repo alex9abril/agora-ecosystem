@@ -1234,8 +1234,8 @@ export class AuthService {
   }
 
   /**
-   * Origen público del storefront (donde vive el formulario de nueva contraseña).
-   * FRONTEND_URL primero: en prod suele ser https://agoramp.mx aunque PASSWORD_RESET_REDIRECT_URL siga apuntando a localhost o a la raíz.
+   * Origen público del storefront (fallback cuando no hay redirectTo del navegador).
+   * FRONTEND_URL primero; si falta, PASSWORD_RESET (a veces solo localhost en .env del API).
    */
   private resolveStorefrontOriginForPasswordReset(): string {
     const tryOrigin = (raw?: string | null): string | null => {
@@ -1255,16 +1255,72 @@ export class AuthService {
   }
 
   /**
+   * Orígenes permitidos para recovery (evita open redirect; incluye CORS y localhost típicos).
+   */
+  private collectTrustedRecoveryOrigins(): Set<string> {
+    const out = new Set<string>();
+    const addUrl = (raw?: string | null) => {
+      const s = raw?.trim();
+      if (!s) return;
+      if (s.includes(',')) {
+        s.split(',').forEach((part) => addUrl(part.trim()));
+        return;
+      }
+      try {
+        out.add(new URL(s).origin);
+      } catch {
+        /* ignore */
+      }
+    };
+    addUrl(process.env.FRONTEND_URL);
+    addUrl(process.env.PASSWORD_RESET_REDIRECT_URL);
+    addUrl(process.env.CORS_ORIGIN);
+    addUrl(process.env.STOREFRONT_PUBLIC_URL);
+    [3000, 3008, 3001, 3002, 3005, 3006].forEach((port) => {
+      out.add(`http://localhost:${port}`);
+      out.add(`http://127.0.0.1:${port}`);
+    });
+    return out;
+  }
+
+  /**
+   * Origen del formulario de reset: el que envía el navegador en redirectTo (p. ej. https://agoramp.mx)
+   * si es de confianza; si no, fallback por env (evita localhost del API cuando el usuario está en producción).
+   */
+  private resolveTrustedOriginForRecovery(redirectTo?: string): string {
+    const fallback = this.resolveStorefrontOriginForPasswordReset();
+    const trusted = this.collectTrustedRecoveryOrigins();
+    if (redirectTo?.trim()) {
+      try {
+        const o = new URL(redirectTo).origin;
+        if (trusted.has(o)) {
+          return o;
+        }
+      } catch {
+        /* seguir */
+      }
+    }
+    return fallback;
+  }
+
+  private canonicalStorefrontPath(pathname: string): string {
+    if (pathname.length > 1 && pathname.endsWith('/')) {
+      return pathname.slice(0, -1);
+    }
+    return pathname;
+  }
+
+  /**
    * Pathnames permitidos para el redirect tras recovery en el mismo origen que el storefront.
-   * Incluye reset global y rutas del store-front por sucursal o grupo (formulario nueva contraseña).
+   * Incluye reset global y rutas contextualizadas: sucursal, grupo o marca (brand).
    */
   private isTrustedStorefrontResetPath(pathname: string): boolean {
-    const normalized =
-      pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    const normalized = this.canonicalStorefrontPath(pathname);
     return (
       /^\/auth\/reset-password$/.test(normalized) ||
       /^\/sucursal\/[^/]+\/auth\/reset-password$/.test(normalized) ||
-      /^\/grupo\/[^/]+\/auth\/reset-password$/.test(normalized)
+      /^\/grupo\/[^/]+\/auth\/reset-password$/.test(normalized) ||
+      /^\/brand\/[^/]+\/auth\/reset-password$/.test(normalized)
     );
   }
 
@@ -1290,18 +1346,20 @@ export class AuthService {
 
   /**
    * Resuelve redirect_to para generateLink(recovery).
-   * - Con branchSlug/groupSlug: siempre URL del formulario en esa tienda (prioridad sobre redirectTo).
-   * - redirectTo: allowlist o mismo origen del storefront + ruta de reset conocida.
-   * - Fallback: formulario global /auth/reset-password en el origen público, no la home.
+   * - Prioriza la URL completa del navegador cuando apunta a un formulario contextual (sucursal/grupo/marca).
+   * - Si hay slugs de contexto pero redirectTo es solo /auth/reset-password, ignora ese redirectTo y construye la ruta dinámica.
+   * - Fallback: /auth/reset-password en el origen público.
    */
   private resolvePasswordResetRedirectUrl(payload: {
     redirectTo?: string;
     branchSlug?: string;
     groupSlug?: string;
+    brandSlug?: string;
   }): string {
-    const { redirectTo, branchSlug, groupSlug } = payload;
+    const { redirectTo, branchSlug, groupSlug, brandSlug } = payload;
 
     const siteOrigin = this.resolveStorefrontOriginForPasswordReset();
+    const trustedOrigins = this.collectTrustedRecoveryOrigins();
 
     const allowedRedirects = (process.env.PASSWORD_RESET_ALLOWED_REDIRECTS || '')
       .split(',')
@@ -1310,6 +1368,8 @@ export class AuthService {
 
     const branchSlugTrim = branchSlug?.trim();
     const groupSlugTrim = groupSlug?.trim();
+    const brandSlugTrim = brandSlug?.trim();
+    const hasStoreContextSlug = Boolean(branchSlugTrim || groupSlugTrim || brandSlugTrim);
 
     const matchesAllowlist = (urlString: string): boolean => {
       if (!allowedRedirects.length) return false;
@@ -1330,22 +1390,43 @@ export class AuthService {
       });
     };
 
-    // 1) Contexto sucursal/grupo: URL explícita al formulario de nueva contraseña en esa tienda
-    if (branchSlugTrim) {
-      return `${siteOrigin}/sucursal/${encodeURIComponent(branchSlugTrim)}/auth/reset-password`;
-    }
-    if (groupSlugTrim) {
-      return `${siteOrigin}/grupo/${encodeURIComponent(groupSlugTrim)}/auth/reset-password`;
+    // 1) URL completa del navegador (dinámica: /sucursal/.../auth/reset-password, /grupo/..., /brand/...)
+    if (redirectTo?.trim()) {
+      try {
+        const u = new URL(redirectTo);
+        const path = this.canonicalStorefrontPath(u.pathname);
+        if (trustedOrigins.has(u.origin) && this.isTrustedStorefrontResetPath(path)) {
+          const isGlobalResetOnly = path === '/auth/reset-password';
+          if (!hasStoreContextSlug || !isGlobalResetOnly) {
+            return `${u.origin}${path}`;
+          }
+        }
+      } catch {
+        /* seguir */
+      }
     }
 
-    // 2) redirectTo del cliente (admin, web-cliente, etc.)
+    // 2) Construir desde slugs (sucursal, grupo o marca)
+    const origin = this.resolveTrustedOriginForRecovery(redirectTo);
+    if (branchSlugTrim) {
+      return `${origin}/sucursal/${encodeURIComponent(branchSlugTrim)}/auth/reset-password`;
+    }
+    if (groupSlugTrim) {
+      return `${origin}/grupo/${encodeURIComponent(groupSlugTrim)}/auth/reset-password`;
+    }
+    if (brandSlugTrim) {
+      return `${origin}/brand/${encodeURIComponent(brandSlugTrim)}/auth/reset-password`;
+    }
+
+    // 3) Otros clientes (admin, web-cliente)
     if (redirectTo) {
       try {
         const target = new URL(redirectTo);
         if (matchesAllowlist(redirectTo)) {
           return redirectTo;
         }
-        if (target.origin === siteOrigin && this.isTrustedStorefrontResetPath(target.pathname)) {
+        const path = this.canonicalStorefrontPath(target.pathname);
+        if (trustedOrigins.has(target.origin) && this.isTrustedStorefrontResetPath(path)) {
           return redirectTo;
         }
       } catch {
@@ -1392,8 +1473,9 @@ export class AuthService {
     redirectTo?: string;
     branchSlug?: string;
     groupSlug?: string;
+    brandSlug?: string;
   }) {
-    const { email, redirectTo, branchSlug, groupSlug } = payload;
+    const { email, redirectTo, branchSlug, groupSlug, brandSlug } = payload;
 
     if (!supabaseAdmin) {
       throw new ServiceUnavailableException('Servicio de autenticación no configurado');
@@ -1432,8 +1514,13 @@ export class AuthService {
       };
     }
 
-    // 2. Resolver redirect URL (tienda/sucursal vía redirectTo o branchSlug/groupSlug)
-    const resolvedRedirect = this.resolvePasswordResetRedirectUrl({ redirectTo, branchSlug, groupSlug });
+    // 2. Resolver redirect URL (tienda: redirectTo contextual o branchSlug / groupSlug / brandSlug)
+    const resolvedRedirect = this.resolvePasswordResetRedirectUrl({
+      redirectTo,
+      branchSlug,
+      groupSlug,
+      brandSlug,
+    });
 
     // 3. Generar link de recuperación via Supabase Admin (sin enviar email de Supabase)
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
@@ -1460,6 +1547,7 @@ export class AuthService {
 
     const branchSlugTrim = branchSlug?.trim();
     const groupSlugTrim = groupSlug?.trim();
+    const brandSlugTrim = brandSlug?.trim();
 
     if (branchSlugTrim) {
       try {
@@ -1499,6 +1587,20 @@ export class AuthService {
       } catch (err: any) {
         if (!(err instanceof NotFoundException)) {
           console.warn('Error resolviendo grupo por slug para recovery email:', err?.message);
+        }
+      }
+    } else if (brandSlugTrim) {
+      try {
+        const group = await this.businessesService.getBusinessGroupBySlug(brandSlugTrim);
+        templateBusinessGroupId = group.id;
+        templateBusinessId = undefined;
+        businessName = group.name || businessName;
+        if (group.logo_url) {
+          businessLogo = group.logo_url;
+        }
+      } catch (err: any) {
+        if (!(err instanceof NotFoundException)) {
+          console.warn('Error resolviendo marca (brand) por slug para recovery email:', err?.message);
         }
       }
     }

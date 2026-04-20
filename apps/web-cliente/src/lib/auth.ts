@@ -38,6 +38,7 @@ export interface PasswordResetRequest {
   redirectTo?: string;
   branchSlug?: string;
   groupSlug?: string;
+  brandSlug?: string;
 }
 
 export interface PasswordUpdate {

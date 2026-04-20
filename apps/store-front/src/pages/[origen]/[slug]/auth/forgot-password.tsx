@@ -24,6 +24,7 @@ export default function ContextualForgotPasswordPage() {
 
   const branchSlug = origen === 'sucursal' ? slug : undefined;
   const groupSlug = origen === 'grupo' ? slug : undefined;
+  const brandSlug = origen === 'brand' ? slug : undefined;
 
   return (
     <ForgotPasswordPanel
@@ -31,6 +32,7 @@ export default function ContextualForgotPasswordPage() {
       loginHref={`/${origen}/${slug}/auth/login`}
       branchSlug={branchSlug}
       groupSlug={groupSlug}
+      brandSlug={brandSlug}
     />
   );
 }
