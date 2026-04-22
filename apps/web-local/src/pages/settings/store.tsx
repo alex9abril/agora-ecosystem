@@ -234,7 +234,7 @@ export default function StoreSettingsPage() {
   if (error && businessGroup === null) {
     return (
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full min-w-0">
           <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-4">
             <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
@@ -249,7 +249,7 @@ export default function StoreSettingsPage() {
         <title>Configuraciรณn de Grupo Empresarial - AGORA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full min-w-0">
           {/* Header */}
           <div className="mb-6">
             <button
@@ -269,7 +269,7 @@ export default function StoreSettingsPage() {
 
           {/* Contenido principal */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-8">
+            <div className="w-full min-w-0 px-6 py-8">
               {/* Header */}
               <div className="mb-8">
                 <h1 className="text-xl font-normal text-gray-900 dark:text-gray-100 mb-2">Configuraciรณn de Grupo Empresarial</h1>

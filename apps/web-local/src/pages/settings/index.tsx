@@ -25,6 +25,7 @@ const CARD_ID_TO_SETTINGS_KEY: Record<string, SettingsKey> = {
   branches: 'branches',
   wallet: 'wallet',
   vehicle: 'vehicle',
+  integrations_workflows: 'branches_integrations_workflows',
   users: 'users',
   permissions: 'permissions_groups',
   emails: 'emails',
@@ -184,6 +185,18 @@ export default function SettingsPage() {
       category: 'Configuración de Tienda',
     },
     {
+      id: 'integrations_workflows',
+      title: 'Automatización',
+      description: 'Flujos de integración, conectores MSSQL y ejecución manual para esta sucursal',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+        </svg>
+      ),
+      href: '/settings/integrations-workflows',
+      category: 'Configuración de Tienda',
+    },
+    {
       id: 'users',
       title: 'Usuarios y Permisos',
       description: 'Administra a tus empleados y sus permisos de acceso',
@@ -331,6 +344,21 @@ export default function SettingsPage() {
       ),
       href: '/settings/vehicle',
     },
+    ...(canShowCard('integrations_workflows')
+      ? [
+          {
+            id: 'integrations_workflows',
+            name: 'Automatización',
+            description: 'Flujos de integración y conectores para esta sucursal',
+            icon: (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+              </svg>
+            ),
+            href: '/settings/integrations-workflows',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -339,9 +367,9 @@ export default function SettingsPage() {
         <title>Configuración - AGORA Local</title>
       </Head>
       <LocalLayout>
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full min-w-0">
           {/* Header */}
-          <div className="mb-8">
+          <div className="px-6 mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Configuración</h1>
             <p className="mt-2 text-sm text-gray-600">
               Gestiona la configuración de tu tienda y personal
@@ -350,7 +378,7 @@ export default function SettingsPage() {
 
           {/* Contenido: Vista previa */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-8">
+            <div className="w-full min-w-0 px-6 py-8">
               <div className="text-center py-12">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Selecciona una categoría del menú lateral para comenzar

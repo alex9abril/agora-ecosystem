@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   getRememberedAccounts,
@@ -98,7 +97,13 @@ export default function LoginPage() {
           <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl shadow-black/5 p-8">
             <div className="text-center mb-6">
               <div className="flex justify-center mb-4">
-                <Image src={agoraLogoBlack} alt="AGORA" width={120} height={36} priority />
+                <img
+                  src={agoraLogoBlack.src}
+                  alt="AGORA"
+                  width={120}
+                  height={36}
+                  className="h-9 w-auto mx-auto"
+                />
               </div>
               <span className="inline-block px-3 py-1 rounded-full text-[13px] font-light tracking-wide text-red-600 bg-red-50">
                 AGORA Distribuidor

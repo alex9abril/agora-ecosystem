@@ -7,7 +7,15 @@ import { isOperatorRole } from '@/lib/operator-permissions';
 import { normalizeOperatorPermissions } from '@/lib/operator-permissions';
 import type { SettingsKey } from '@/lib/operator-permissions';
 
-type SettingsCategory = 'store' | 'branches' | 'wallet' | 'users' | 'permissions' | 'vehicle' | 'emails';
+type SettingsCategory =
+  | 'store'
+  | 'branches'
+  | 'wallet'
+  | 'users'
+  | 'permissions'
+  | 'vehicle'
+  | 'emails'
+  | 'integrations_workflows';
 
 const CATEGORY_TO_SETTINGS_KEY: Record<SettingsCategory, SettingsKey> = {
   store: 'store',
@@ -17,6 +25,7 @@ const CATEGORY_TO_SETTINGS_KEY: Record<SettingsCategory, SettingsKey> = {
   users: 'users',
   permissions: 'permissions_groups',
   emails: 'emails',
+  integrations_workflows: 'branches_integrations_workflows',
 };
 
 interface CategoryInfo {
@@ -159,6 +168,18 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
       href: '/settings/vehicle',
     },
     {
+      id: 'integrations_workflows',
+      name: 'Automatización',
+      description: 'Flujos de integración y conectores MSSQL para esta sucursal',
+      section: 'PROJECT SETTINGS',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+        </svg>
+      ),
+      href: '/settings/integrations-workflows',
+    },
+    {
       id: 'users',
       name: 'Usuarios y Permisos',
       description: 'Administra a tus empleados y sus permisos de acceso',
@@ -215,24 +236,24 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
 
   const settingsSections: CategorySection[] = [
     {
-      title: 'PROJECT SETTINGS',
+      title: 'Ajustes de la tienda',
       categories: allCategories.filter(c => c.section === 'PROJECT SETTINGS' && canShowCategory(c)),
     },
     {
-      title: 'CONFIGURATION',
+      title: 'Cuenta y permisos',
       categories: allCategories.filter(c => c.section === 'CONFIGURATION' && canShowCategory(c)),
     },
   ];
 
   if (loading) {
     return (
-      <div className="w-64 flex-shrink-0 bg-white dark:bg-neutral-800">
+      <div className="w-64 flex-shrink-0 border-r border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-800/80">
         <div className="p-4">
           <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-24 mb-4"></div>
+            <div className="mb-4 h-4 w-28 rounded bg-gray-200 dark:bg-gray-600" />
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-gray-200 dark:bg-gray-600 rounded"></div>
+                <div key={i} className="h-10 rounded-lg bg-gray-200 dark:bg-gray-600" />
               ))}
             </div>
           </div>
@@ -244,37 +265,49 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
   const activePath = currentPath || router.pathname;
 
   return (
-    <div className="w-64 flex-shrink-0 bg-white dark:bg-neutral-800">
-      <div className="sticky top-0 p-4">
-        <h2 className="text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Settings</h2>
-        <nav className="space-y-6">
+    <div className="w-64 flex-shrink-0 border-r border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-800/80">
+      <div className="sticky top-0 p-4 pt-1">
+        <h2 className="mb-5 border-b border-gray-100 pb-3 text-sm font-semibold text-gray-900 dark:border-neutral-700 dark:text-white">
+          Ajustes
+        </h2>
+        <nav className="space-y-7">
           {settingsSections.map((section) => (
             <div key={section.title}>
-              <h3 className="text-xs font-normal text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3">
+              <h3 className="mb-2.5 pl-0.5 text-[0.7rem] font-medium uppercase leading-none tracking-[0.12em] text-gray-400 dark:text-gray-500">
                 {section.title}
               </h3>
-              <div className="space-y-0.5">
+              <ul className="space-y-0.5">
                 {section.categories.map((category) => {
                   const isActive = activePath === category.href;
 
                   return (
-                    <button
-                      key={category.id}
-                      onClick={() => router.push(category.href)}
-                      className={`w-full text-left px-3 py-2 rounded-md text-sm flex items-center space-x-2 transition-colors ${
-                        isActive
-                          ? 'bg-gray-100 dark:bg-neutral-700 text-gray-900 dark:text-gray-100 font-normal'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-neutral-700 hover:text-gray-900 dark:hover:text-gray-100'
-                      }`}
-                    >
-                      <span className={isActive ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
-                        {category.icon}
-                      </span>
-                      <span className="flex-1">{category.name}</span>
-                    </button>
+                    <li key={category.id}>
+                      <button
+                        type="button"
+                        onClick={() => router.push(category.href)}
+                        className={[
+                          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13.5px] leading-snug transition-colors',
+                          isActive
+                            ? 'bg-gray-100 font-semibold text-gray-900 shadow-sm dark:bg-neutral-700/90 dark:text-white'
+                            : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-neutral-700/50 dark:hover:text-white',
+                        ].join(' ')}
+                      >
+                        <span
+                          className={[
+                            'flex h-4 w-4 flex-shrink-0 items-center justify-center',
+                            isActive
+                              ? 'text-gray-800 dark:text-gray-100'
+                              : 'text-gray-400 dark:text-gray-500',
+                          ].join(' ')}
+                        >
+                          {category.icon}
+                        </span>
+                        <span className="min-w-0 flex-1">{category.name}</span>
+                      </button>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </div>
           ))}
         </nav>

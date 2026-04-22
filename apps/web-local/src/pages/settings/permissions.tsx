@@ -11,7 +11,7 @@ export default function PermissionsSettingsPage() {
       <Head>
         <title>Grupos de Permisos - AGORA Local</title>
       </Head>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="w-full min-w-0 p-6">
         <div className="mb-6">
           <h1 className="text-xl font-normal text-gray-900 mb-2">Configuración</h1>
           <p className="text-sm text-gray-600">

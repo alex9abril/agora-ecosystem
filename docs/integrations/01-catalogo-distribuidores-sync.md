@@ -177,6 +177,7 @@ La función puede devolver un resumen (num insertados, actualizados, fallidos) p
 
 **Documentación relacionada:**  
  - [Sistema de catálogos avanzado](../features/05-sistema-catalogos-productos-avanzado.md)
+ - [Módulo de workflows de automatización (ingesta, motor propio)](./06-modulo-workflows-automatizacion-distribuidor.md)
  - `database/schema.sql` (esquema base de catálogos y negocios)  
  - `apps/backend/src/modules/catalog` (servicios de productos)  
  - `apps/backend/src/modules/businesses` (mapeos de sucursales)  

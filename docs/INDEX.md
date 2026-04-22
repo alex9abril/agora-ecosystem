@@ -113,6 +113,7 @@ Rutas relativas desde `docs/`.
 | [03-skydropx.md](./integrations/03-skydropx.md) | Integración Skydropx (envíos) |
 | [04-skydropx-metodos-utiles.md](./integrations/04-skydropx-metodos-utiles.md) | Métodos útiles Skydropx |
 | [05-verificar-shipment-response.md](./integrations/05-verificar-shipment-response.md) | Verificación respuesta envíos |
+| [06-modulo-workflows-automatizacion-distribuidor.md](./integrations/06-modulo-workflows-automatizacion-distribuidor.md) | Workflows de automatización propios (ingesta por distribuidor), UI en web-local |
 
 ---
 
@@ -185,7 +186,7 @@ Rutas relativas desde `docs/`.
 - **Catálogos, roles, pedidos, wallet, sliders, checkout:** features (01–14).
 - **Refacciones, compatibilidad vehículos, branding, checklist sucursal:** agora.
 - **Tienda por contexto (URL, filtros):** store-front.
-- **Skydropx, logística, envíos, catálogo distribuidores:** integrations.
+- **Skydropx, logística, envíos, catálogo distribuidores, workflows de ingesta:** integrations.
 - **Storage (Supabase), correo confirmación:** infrastructure.
 - **Políticas de seguridad:** security.
 - **Alcance MVP y planificación:** MVP.

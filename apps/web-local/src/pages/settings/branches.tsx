@@ -156,7 +156,7 @@ export default function BranchesPage() {
 
           {/* Contenido principal */}
           <div className="flex-1 min-w-0 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-8">
+            <div className="w-full min-w-0 px-6 py-8">
               {/* Header */}
               <div className="mb-8">
                 <h1 className="text-xl font-normal text-gray-900 dark:text-gray-100 mb-2">Sucursales</h1>

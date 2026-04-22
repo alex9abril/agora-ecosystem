@@ -500,7 +500,7 @@ export default function UsersSettingsPage() {
       <Head>
         <title>Usuarios y Permisos - AGORA Local</title>
       </Head>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="w-full min-w-0 p-6">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>

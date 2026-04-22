@@ -1025,7 +1025,7 @@ export default function EmailsPage() {
             <div className="flex h-full bg-gray-50">
               <SettingsSidebar />
               <div className="flex-1 min-w-0 overflow-y-auto">
-                <div className="max-w-7xl mx-auto px-6 py-8">{loadingContent}</div>
+                <div className="w-full min-w-0 px-6 py-8">{loadingContent}</div>
               </div>
             </div>
           </LocalLayout>
@@ -1536,14 +1536,14 @@ export default function EmailsPage() {
       </Head>
       {isEmbedded ? (
         <div className="min-h-[400px] p-4 bg-white dark:bg-neutral-800">
-          <div className="max-w-7xl mx-auto">{contentArea}</div>
+          <div className="w-full min-w-0">{contentArea}</div>
         </div>
       ) : (
         <LocalLayout>
           <div className="flex h-full bg-gray-50">
             <SettingsSidebar />
             <div className="flex-1 min-w-0 overflow-y-auto">
-              <div className="max-w-7xl mx-auto px-6 py-8">{contentArea}</div>
+              <div className="w-full min-w-0 px-6 py-8">{contentArea}</div>
             </div>
           </div>
         </LocalLayout>

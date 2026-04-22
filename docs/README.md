@@ -25,7 +25,7 @@ La documentación está organizada en carpetas por tema. Para localizar un docum
 | [features/](./features/) | Catálogos, roles, zonas, impuestos, pedidos, storage, wallet, sliders, checkout (16–26 y procesos). |
 | [agora/](./agora/) | Refacciones: transformación, categorías, compatibilidad vehículos, impuestos, branding, roles sucursales, checklist alta. |
 | [store-front/](./store-front/) | Contexto de tienda (global/grupo/sucursal/marca), navegación, filtrado. |
-| [integrations/](./integrations/) | Skydropx, catálogo distribuidores, logística, envíos. |
+| [integrations/](./integrations/) | Skydropx, catálogo distribuidores, workflows de ingesta por distribuidor, logística, envíos. |
 | [infrastructure/](./infrastructure/) | Storage (Supabase buckets), correo (confirmación pedido, imágenes). |
 | [security/](./security/) | Políticas de seguridad, cuestionario. |
 | [MVP/](./MVP/) | Alcance MVP, preguntas estratégicas. |
