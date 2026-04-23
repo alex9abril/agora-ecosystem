@@ -83,7 +83,7 @@ BEGIN
         'port', 1433,
         'database', 'DMS_Catalog',
         'user', 'agora_readonly',
-        'options', jsonb_build_object('encrypt', true, 'trustServerCertificate', false)
+        'options', jsonb_build_object('encrypt', true)
       ),
       NULL
     );

@@ -412,16 +412,17 @@ export class IntegrationWorkflowsService {
   }
 
   /**
-   * Opciones de tedious/mssql: servidores on‑prem suelen usar TLS con certificado autofirmado.
-   * - encrypt: true por defecto (cifrado, estándar con puerto 1433/otros)
-   * - trustServerCertificate: true por defecto; use `false` en config del conector si el servidor usa CA pública/validable
+   * Opciones de tedious/mssql. Por defecto se acepta cert. autofirmado (equivalente a "Confiar en certificado" en SSMS).
+   * Verificación estricta del certificado (falla con autofirmado): `strictServerCertificate: true` en config.options.
+   * El flag antiguo `trustServerCertificate: false` en JSON ya no se usa (era el valor por defecto erróneo del formulario).
    */
   private mssqlDriverOptions(
-    opt?: { encrypt?: boolean; trustServerCertificate?: boolean },
+    opt?: { encrypt?: boolean; strictServerCertificate?: boolean },
   ): NonNullable<MssqlConfig['options']> {
+    const strict = (opt as { strictServerCertificate?: boolean } | undefined)?.strictServerCertificate === true;
     return {
       encrypt: opt?.encrypt !== false,
-      trustServerCertificate: opt?.trustServerCertificate !== false,
+      trustServerCertificate: !strict,
       enableArithAbort: true,
       connectTimeout: MS_TIMEOUT_MS,
       requestTimeout: MS_TIMEOUT_MS,
@@ -448,7 +449,6 @@ export class IntegrationWorkflowsService {
 
   /**
    * Lo que realmente se pasa a tedious/mssql (sin contraseña), para cotejar con otra app.
-   * Alinea con `options.trustServerCertificate: true` por defecto (cert. autofirmado).
    */
   private mssqlConnectionPublicView(args: {
     connectorId?: string;
@@ -456,16 +456,21 @@ export class IntegrationWorkflowsService {
     port?: number;
     database: string;
     user: string;
-    options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+    options?: { encrypt?: boolean; strictServerCertificate?: boolean };
   }) {
     const o = this.mssqlDriverOptions(args.options) as { encrypt?: boolean; trustServerCertificate?: boolean };
+    const fullOpt = args.options as { strictServerCertificate?: boolean } | undefined;
     return {
       ...(args.connectorId ? { connectorId: args.connectorId } : {}),
       server: args.server,
       port: args.port ?? null,
       database: args.database,
       user: args.user,
-      options: { encrypt: o.encrypt, trustServerCertificate: o.trustServerCertificate },
+      options: {
+        encrypt: o.encrypt,
+        trustServerCertificate: o.trustServerCertificate,
+        ...(fullOpt?.strictServerCertificate === true ? { strictServerCertificate: true as const } : {}),
+      },
     };
   }
 
@@ -509,7 +514,7 @@ export class IntegrationWorkflowsService {
       port?: number;
       database?: string;
       user?: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     };
     if (!conf.server || !conf.database || !conf.user) {
       throw new Error('Config de MSSQL incompleta (server, database, user)');
@@ -585,7 +590,7 @@ export class IntegrationWorkflowsService {
       port?: number;
       database: string;
       user: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     },
     password: string,
   ): MssqlConfig {
@@ -606,7 +611,7 @@ export class IntegrationWorkflowsService {
       port?: number;
       database: string;
       user: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     },
     password: string,
     meta?: { connectorId?: string },
@@ -665,7 +670,7 @@ export class IntegrationWorkflowsService {
       database: string;
       user: string;
       password: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     },
   ) {
     await this.assertUserHasBusinessAccess(userId, businessId);
@@ -706,7 +711,7 @@ export class IntegrationWorkflowsService {
       database?: string;
       user?: string;
       password?: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     },
   ) {
     await this.assertUserHasBusinessAccess(userId, businessId);
@@ -717,7 +722,7 @@ export class IntegrationWorkflowsService {
       port?: number;
       database?: string;
       user?: string;
-      options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+      options?: { encrypt?: boolean; strictServerCertificate?: boolean };
     };
     if (c.connectorTypeId !== 'mssql') {
       return {

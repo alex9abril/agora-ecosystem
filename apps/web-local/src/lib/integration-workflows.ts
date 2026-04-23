@@ -95,7 +95,7 @@ export type MssqlConnectionPublic = {
   port: number | null;
   database: string;
   user: string;
-  options: { encrypt?: boolean; trustServerCertificate?: boolean };
+  options: { encrypt?: boolean; trustServerCertificate?: boolean; strictServerCertificate?: boolean };
 };
 
 export type MssqlTestResult =
@@ -117,7 +117,7 @@ export function testMssqlConnectionNew(
     database: string;
     user: string;
     password: string;
-    options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+    options?: { encrypt?: boolean; strictServerCertificate?: boolean };
   },
 ) {
   return apiRequest<MssqlTestResult>(`${base(businessId)}/connectors/mssql/test`, {
@@ -142,7 +142,7 @@ export function testMssqlConnectionForConnector(
     database?: string;
     user?: string;
     password?: string;
-    options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+    options?: { encrypt?: boolean; strictServerCertificate?: boolean };
   },
 ) {
   return apiRequest<MssqlTestResult>(`${base(businessId)}/connectors/${connectorId}/mssql/test`, {

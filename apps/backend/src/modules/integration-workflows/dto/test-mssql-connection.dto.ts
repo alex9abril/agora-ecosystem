@@ -29,10 +29,11 @@ export class TestMssqlPayloadDto {
   @IsString()
   password: string;
 
+  /** `strictServerCertificate: true` = validar cert. del servidor (TLS estricto; falla con autofirmado). */
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()
-  options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+  options?: { encrypt?: boolean; strictServerCertificate?: boolean };
 }
 
 /** Probar conexión de un conector existente; campos opcionales sustituyen los guardados. */
@@ -64,8 +65,9 @@ export class TestMssqlOverrideDto {
   @IsString()
   password?: string;
 
+  /** `strictServerCertificate: true` = validar cert. del servidor (TLS estricto; falla con autofirmado). */
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()
-  options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+  options?: { encrypt?: boolean; strictServerCertificate?: boolean };
 }

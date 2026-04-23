@@ -147,7 +147,7 @@ export default function ConnectorManageDialog({
           database,
           user,
           password,
-          options: { encrypt: true, trustServerCertificate: false },
+          options: { encrypt: true },
         });
         if (r.success) {
           setTestMsg({ kind: 'ok', text: 'Conexión correcta.' });
@@ -163,7 +163,7 @@ export default function ConnectorManageDialog({
         database: database || undefined,
         user: user || undefined,
         password: password || undefined,
-        options: { encrypt: true, trustServerCertificate: false },
+        options: { encrypt: true },
       });
       if (r.success) {
         setTestMsg({ kind: 'ok', text: 'Conexión correcta con estas credenciales.' });
@@ -197,7 +197,7 @@ export default function ConnectorManageDialog({
             port,
             database,
             user,
-            options: { encrypt: true, trustServerCertificate: false },
+            options: { encrypt: true },
           },
           password: password || undefined,
         });
@@ -213,7 +213,7 @@ export default function ConnectorManageDialog({
             port,
             database,
             user,
-            options: { encrypt: true, trustServerCertificate: false },
+            options: { encrypt: true },
           },
         };
         if (password) {

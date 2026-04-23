@@ -24,7 +24,7 @@ export class CreateConnectorDto {
       port: 1433,
       database: 'DMS',
       user: 'reader',
-      options: { encrypt: true, trustServerCertificate: true },
+      options: { encrypt: true },
     },
   })
   @IsObject()
