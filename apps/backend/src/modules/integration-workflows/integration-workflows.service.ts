@@ -382,7 +382,8 @@ export class IntegrationWorkflowsService {
       }
       try {
         const rows = await this.queryMssql(userId, businessId, connectorId, queryText);
-        return { nodeId: node.id, type: t, result: rows };
+        const { usedConnection: _u, ...result } = rows as { usedConnection?: unknown; rows: unknown; truncated?: boolean; total?: number };
+        return { nodeId: node.id, type: t, result };
       } catch (e: unknown) {
         return { nodeId: node.id, type: t, error: this.nodeErrorMessage(e) };
       }
@@ -430,6 +431,42 @@ export class IntegrationWorkflowsService {
   private mssqlErrorMessage(e: unknown): string {
     const ex = e as { message?: string; originalError?: { message?: string } };
     return (ex?.message || ex?.originalError?.message || (typeof e === 'string' ? e : 'Error al conectar o ejecutar en SQL Server')) as string;
+  }
+
+  /** Campos frecuentes de tedious/Node para inspección (no incluye pila). */
+  private mssqlErrorMeta(e: unknown): { errorCode?: string; errorNumber?: number; sqlState?: string } {
+    const ex = e as { code?: string; number?: number; state?: string | number; originalError?: { code?: string; number?: number; message?: string } };
+    const out: { errorCode?: string; errorNumber?: number; sqlState?: string } = {};
+    const code = ex?.code ?? ex?.originalError?.code;
+    const num = typeof ex?.number === 'number' ? ex.number : (ex?.originalError as { number?: number })?.number;
+    const state = ex?.state;
+    if (code != null && String(code) !== '') out.errorCode = String(code);
+    if (typeof num === 'number') out.errorNumber = num;
+    if (state != null) out.sqlState = String(state);
+    return out;
+  }
+
+  /**
+   * Lo que realmente se pasa a tedious/mssql (sin contraseña), para cotejar con otra app.
+   * Alinea con `options.trustServerCertificate: true` por defecto (cert. autofirmado).
+   */
+  private mssqlConnectionPublicView(args: {
+    connectorId?: string;
+    server: string;
+    port?: number;
+    database: string;
+    user: string;
+    options?: { encrypt?: boolean; trustServerCertificate?: boolean };
+  }) {
+    const o = this.mssqlDriverOptions(args.options) as { encrypt?: boolean; trustServerCertificate?: boolean };
+    return {
+      ...(args.connectorId ? { connectorId: args.connectorId } : {}),
+      server: args.server,
+      port: args.port ?? null,
+      database: args.database,
+      user: args.user,
+      options: { encrypt: o.encrypt, trustServerCertificate: o.trustServerCertificate },
+    };
   }
 
   private async queryMssql(
@@ -487,6 +524,15 @@ export class IntegrationWorkflowsService {
       options: this.mssqlDriverOptions(conf.options),
     };
 
+    const usedConnection = this.mssqlConnectionPublicView({
+      connectorId,
+      server: conf.server!,
+      port: conf.port,
+      database: conf.database!,
+      user: conf.user!,
+      options: conf.options,
+    });
+
     if (!mssql?.ConnectionPool) {
       throw new Error('El driver mssql no está disponible (instale la dependencia mssql en el servidor).');
     }
@@ -500,17 +546,30 @@ export class IntegrationWorkflowsService {
       } catch {
         /* ignore */
       }
-      throw new Error(this.mssqlErrorMessage(e));
+      throw new BadRequestException({
+        message: this.mssqlErrorMessage(e),
+        usedConnection,
+        ...this.mssqlErrorMeta(e),
+      });
     }
     try {
       const r = await pool.request().query(queryText);
       const data = (r.recordset as unknown[]) || [];
       if (data.length > MAX_RESULT_ROWS) {
-        return { rows: data.slice(0, MAX_RESULT_ROWS), truncated: true, total: data.length };
+        return {
+          rows: data.slice(0, MAX_RESULT_ROWS),
+          truncated: true,
+          total: data.length,
+          usedConnection,
+        };
       }
-      return { rows: data, truncated: false };
+      return { rows: data, truncated: false, usedConnection };
     } catch (e) {
-      throw new Error(this.mssqlErrorMessage(e));
+      throw new BadRequestException({
+        message: this.mssqlErrorMessage(e),
+        usedConnection,
+        ...this.mssqlErrorMeta(e),
+      });
     } finally {
       try {
         await pool.close();
@@ -550,11 +609,30 @@ export class IntegrationWorkflowsService {
       options?: { encrypt?: boolean; trustServerCertificate?: boolean };
     },
     password: string,
-  ): Promise<{ success: true } | { success: false; message: string }> {
+    meta?: { connectorId?: string },
+  ): Promise<
+    | { success: true; usedConnection: ReturnType<IntegrationWorkflowsService['mssqlConnectionPublicView']> }
+    | {
+        success: false;
+        message: string;
+        usedConnection: ReturnType<IntegrationWorkflowsService['mssqlConnectionPublicView']>;
+        errorCode?: string;
+        errorNumber?: number;
+        sqlState?: string;
+      }
+  > {
+    const usedConnection = this.mssqlConnectionPublicView({
+      connectorId: meta?.connectorId,
+      server: conf.server,
+      port: conf.port,
+      database: conf.database,
+      user: conf.user,
+      options: conf.options,
+    });
     try {
       const config = this.buildMssqlPoolConfig(conf, password);
       if (!mssql?.ConnectionPool) {
-        return { success: false, message: 'Driver mssql no disponible en el servidor' };
+        return { success: false, message: 'Driver mssql no disponible en el servidor', usedConnection };
       }
       const pool = new mssql.ConnectionPool(config);
       await pool.connect();
@@ -563,13 +641,18 @@ export class IntegrationWorkflowsService {
       } finally {
         await pool.close();
       }
-      return { success: true };
+      return { success: true, usedConnection };
     } catch (e: any) {
       const msg =
         e?.message ||
         e?.originalError?.message ||
         (typeof e === 'string' ? e : 'Error de conexión a SQL Server');
-      return { success: false, message: String(msg) };
+      return {
+        success: false,
+        message: String(msg),
+        usedConnection,
+        ...this.mssqlErrorMeta(e),
+      };
     }
   }
 
@@ -588,7 +671,17 @@ export class IntegrationWorkflowsService {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     if (!payload.password) {
-      return { success: false, message: 'Indica la contraseña para probar la conexión' };
+      return {
+        success: false as const,
+        message: 'Indica la contraseña para probar la conexión',
+        usedConnection: this.mssqlConnectionPublicView({
+          server: payload.server,
+          port: payload.port,
+          database: payload.database,
+          user: payload.user,
+          options: payload.options,
+        }),
+      };
     }
     return this.probeMssqlConnection(
       {
@@ -599,6 +692,7 @@ export class IntegrationWorkflowsService {
         options: payload.options,
       },
       payload.password,
+      undefined,
     );
   }
 
@@ -618,9 +712,6 @@ export class IntegrationWorkflowsService {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     const c = await this.getConnector(userId, businessId, connectorId);
-    if (c.connectorTypeId !== 'mssql') {
-      return { success: false, message: 'Solo se puede probar conexión MSSQL' };
-    }
     const base = (c.config || {}) as {
       server?: string;
       port?: number;
@@ -628,6 +719,20 @@ export class IntegrationWorkflowsService {
       user?: string;
       options?: { encrypt?: boolean; trustServerCertificate?: boolean };
     };
+    if (c.connectorTypeId !== 'mssql') {
+      return {
+        success: false as const,
+        message: 'Solo se puede probar conexión MSSQL',
+        usedConnection: this.mssqlConnectionPublicView({
+          connectorId,
+          server: base.server || '',
+          port: base.port,
+          database: base.database || '',
+          user: base.user || '',
+          options: base.options,
+        }),
+      };
+    }
     const merged = {
       server: (override?.server !== undefined && override?.server !== null ? override.server : base.server) || '',
       port: override?.port !== undefined && override?.port !== null ? override.port : base.port,
@@ -636,30 +741,43 @@ export class IntegrationWorkflowsService {
       user: (override?.user !== undefined && override?.user !== null ? override.user : base.user) || '',
       options: override?.options ?? base.options,
     };
+    const viewFromMerged = () =>
+      this.mssqlConnectionPublicView({
+        connectorId,
+        server: merged.server,
+        port: merged.port,
+        database: merged.database,
+        user: merged.user,
+        options: merged.options,
+      });
     if (!merged.server || !merged.database || !merged.user) {
-      return { success: false, message: 'Faltan campos: servidor, base de datos o usuario' };
+      return { success: false as const, message: 'Faltan campos: servidor, base de datos o usuario', usedConnection: viewFromMerged() };
     }
     let password: string;
     if (override?.password != null && override.password !== '') {
       password = override.password;
     } else {
       if (!c.hasPassword) {
-        return { success: false, message: 'No hay contraseña guardada. Indica una en el formulario y prueba otra vez.' };
+        return {
+          success: false as const,
+          message: 'No hay contraseña guardada. Indica una en el formulario y prueba otra vez.',
+          usedConnection: viewFromMerged(),
+        };
       }
       const { rows: crows } = await dbPool.query(
         `SELECT password_ciphertext FROM integration.connectors WHERE id = $1 AND business_id = $2`,
         [connectorId, businessId],
       );
       if (crows.length === 0) {
-        return { success: false, message: 'Conector no encontrado' };
+        return { success: false as const, message: 'Conector no encontrado', usedConnection: viewFromMerged() };
       }
       try {
         password = decryptSecret((crows[0] as { password_ciphertext: string }).password_ciphertext);
       } catch {
-        return { success: false, message: 'No se pudo descifrar el secreto del conector.' };
+        return { success: false as const, message: 'No se pudo descifrar el secreto del conector.', usedConnection: viewFromMerged() };
       }
     }
-    return this.probeMssqlConnection(merged, password);
+    return this.probeMssqlConnection(merged, password, { connectorId });
   }
 
   /**
@@ -677,8 +795,11 @@ export class IntegrationWorkflowsService {
       if (e instanceof NotFoundException || e instanceof ForbiddenException) {
         throw e;
       }
+      if (e instanceof BadRequestException) {
+        throw e;
+      }
       const msg = e instanceof Error ? e.message : String(e);
-      throw new BadRequestException(msg);
+      throw new BadRequestException({ message: msg });
     }
   }
 }

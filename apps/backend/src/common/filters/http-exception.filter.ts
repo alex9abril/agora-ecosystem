@@ -62,13 +62,30 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
     console.error('🔴 [EXCEPTION FILTER] ============================================');
 
+    let messageStr: string;
+    let details: Record<string, unknown> | undefined;
+    if (typeof message === 'string') {
+      messageStr = message;
+    } else if (message && typeof message === 'object' && 'message' in (message as object)) {
+      const obj = message as Record<string, unknown>;
+      const m = obj.message;
+      if (Array.isArray(m)) messageStr = String(m[0] ?? m);
+      else if (m !== undefined && m !== null) messageStr = String(m);
+      else messageStr = 'Solicitud inválida';
+      const { message: _m, error: _err, statusCode: _st, ...rest } = obj;
+      if (Object.keys(rest).length > 0) details = rest;
+    } else {
+      messageStr = typeof message === 'object' && message !== null ? JSON.stringify(message) : String(message);
+    }
+
     const errorResponse = {
       success: false,
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
       method: request.method,
-      message: typeof message === 'string' ? message : (message as any).message || message,
+      message: messageStr,
+      ...(details ? { details } : {}),
     };
 
     response.status(status).json(errorResponse);

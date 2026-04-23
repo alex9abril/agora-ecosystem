@@ -88,7 +88,26 @@ export function deleteConnector(businessId: string, connectorId: string) {
   return apiRequest<void>(`${base(businessId)}/connectors/${connectorId}`, { method: 'DELETE' });
 }
 
-export type MssqlTestResult = { success: true } | { success: false; message: string };
+/** Lo que usó el backend (sin password), para cotejar con otra app. */
+export type MssqlConnectionPublic = {
+  connectorId?: string;
+  server: string;
+  port: number | null;
+  database: string;
+  user: string;
+  options: { encrypt?: boolean; trustServerCertificate?: boolean };
+};
+
+export type MssqlTestResult =
+  | { success: true; usedConnection: MssqlConnectionPublic }
+  | {
+      success: false;
+      message: string;
+      usedConnection: MssqlConnectionPublic;
+      errorCode?: string;
+      errorNumber?: number;
+      sqlState?: string;
+    };
 
 export function testMssqlConnectionNew(
   businessId: string,
@@ -132,7 +151,13 @@ export function testMssqlConnectionForConnector(
   });
 }
 
-export type MssqlPreviewResult = { rows: unknown[]; truncated?: boolean; total?: number };
+export type MssqlPreviewResult = {
+  rows: unknown[];
+  truncated?: boolean;
+  total?: number;
+  /** Misma estructura que en test; útil para ver host/puerto/TLS cotejados. */
+  usedConnection?: MssqlConnectionPublic;
+};
 
 export function previewMssqlQuery(businessId: string, connectorId: string, query: string) {
   return apiRequest<MssqlPreviewResult>(`${base(businessId)}/connectors/${connectorId}/mssql/preview`, {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import type { ConnectorRow } from '@/lib/integration-workflows';
+import { ApiError } from '@/lib/api';
 import { previewMssqlQuery, testMssqlConnectionForConnector, type MssqlPreviewResult } from '@/lib/integration-workflows';
 
 type ViewTab = 'json' | 'table' | 'schema';
@@ -60,9 +61,33 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
     setTestStatus(null);
     try {
       const r = await testMssqlConnectionForConnector(businessId, connectorId, {});
-      setTestStatus(r.success ? 'Conexión correcta' : r.message || 'Error');
-    } catch (e: any) {
-      setTestStatus(e?.message || 'Error al probar');
+      if (r.success) {
+        setTestStatus(
+          'Conexión correcta. Parámetros usados (sin contraseña):\n' + JSON.stringify(r.usedConnection, null, 2),
+        );
+      } else {
+        setTestStatus(
+          (r.message || 'Error') +
+            '\n\n' +
+            JSON.stringify(
+              {
+                usedConnection: r.usedConnection,
+                errorCode: r.errorCode,
+                errorNumber: r.errorNumber,
+                sqlState: r.sqlState,
+              },
+              null,
+              2,
+            ),
+        );
+      }
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.data && typeof e.data === 'object' && (e.data as { details?: unknown }).details) {
+        const d = (e.data as { details: unknown }).details;
+        setTestStatus(`${e.message}\n\n${JSON.stringify(d, null, 2)}`);
+      } else {
+        setTestStatus(e instanceof Error ? e.message : 'Error al probar');
+      }
     } finally {
       setTestBusy(false);
     }
@@ -79,8 +104,13 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
     try {
       const r = await previewMssqlQuery(businessId, connectorId, query);
       setPreview(r);
-    } catch (e: any) {
-      setPreviewError(e?.message || 'Error al ejecutar la consulta');
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.data && typeof e.data === 'object' && (e.data as { details?: unknown }).details) {
+        const d = (e.data as { details: unknown }).details;
+        setPreviewError(`${e.message}\n\n${JSON.stringify(d, null, 2)}`);
+      } else {
+        setPreviewError(e instanceof Error ? e.message : 'Error al ejecutar la consulta');
+      }
     } finally {
       setQueryBusy(false);
     }
@@ -222,11 +252,13 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
               </button>
             </div>
             {testStatus && (
-              <p
-                className={`text-xs ${testStatus.includes('correcta') ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-200'}`}
+              <pre
+                className={`text-[10px] whitespace-pre-wrap break-words max-h-40 overflow-y-auto font-mono rounded border border-gray-200 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-900/50 p-2 ${
+                  testStatus.includes('correcta') ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-900 dark:text-amber-200'
+                }`}
               >
                 {testStatus}
-              </p>
+              </pre>
             )}
             <div>
               <label className="text-xs text-gray-500">Consulta SQL</label>
