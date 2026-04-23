@@ -22,6 +22,7 @@ import { MssqlPreviewQueryDto } from './dto/mssql-preview-query.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { RunWorkflowDto } from './dto/run-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
+import { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
 
 @ApiTags('integration-workflows')
 @Controller('businesses/:businessId/integration')
@@ -152,6 +153,17 @@ export class IntegrationWorkflowsController {
     @Body() dto: CreateWorkflowDto,
   ) {
     return this.integrationWorkflowsService.createWorkflow(user.id, businessId, dto);
+  }
+
+  @Post('workflows/preview-code')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Vista previa: ejecutar JavaScript del nodo Code (misma API $input que al correr el flujo)' })
+  previewWorkflowCode(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: PreviewWorkflowCodeDto,
+  ) {
+    return this.integrationWorkflowsService.previewWorkflowCode(user.id, businessId, dto);
   }
 
   @Patch('workflows/:workflowId')

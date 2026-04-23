@@ -24,7 +24,9 @@ import { WorkflowPlayOverlay } from './WorkflowPlayOverlay';
 import { WorkflowTriggerModal } from './WorkflowTriggerModal';
 import { workflowNodeTypes, toFlowElements, isTriggerNodeType } from './workflow-nodes';
 import { WorkflowMssqlNodePanel } from './WorkflowMssqlNodePanel';
+import { WorkflowCodeNodePanel } from './WorkflowCodeNodePanel';
 import { WorkflowCanvasEditContext } from './workflow-canvas-context';
+import { buildStepInput, type WorkflowRunStep } from './workflow-run-types';
 
 const EDGE_EDIT_TYPE = 'deletableStep';
 
@@ -124,6 +126,13 @@ type FlowInnerProps = {
   onPlayRequest?: () => void;
   playRequestDisabled?: boolean;
   playRequestLoading?: boolean;
+  /**
+   * Resaltado e I/O de la última ejecución: `highlightNodeId` anilla el nodo activo
+   * (animación o fila elegida en el inspector).
+   */
+  runExecution?: { steps: WorkflowRunStep[]; highlightNodeId: string | null } | null;
+  /** Clic en nodo o en el vacío: resaltar qué paso de la última ejecución se quiere enfatizar. */
+  onLastRunFocusNode?: (nodeId: string | null) => void;
 };
 
 function FlowSurface({
@@ -135,12 +144,15 @@ function FlowSurface({
   onPlayRequest,
   playRequestDisabled,
   playRequestLoading,
+  runExecution,
+  onLastRunFocusNode,
 }: FlowInnerProps) {
   const initial = toFlowElements(initialDefinition, { readOnly });
   const [nodes, setNodes, onNodesChange] = useNodesState(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [triggerModal, setTriggerModal] = useState<Node | null>(null);
   const [mssqlPanelId, setMssqlPanelId] = useState<string | null>(null);
+  const [codePanelId, setCodePanelId] = useState<string | null>(null);
   const [canvasMaximized, setCanvasMaximized] = useState(false);
 
   useEffect(() => {
@@ -162,6 +174,7 @@ function FlowSurface({
   }, [canvasMaximized]);
 
   const mssqlNode = mssqlPanelId ? nodes.find((n) => n.id === mssqlPanelId) : null;
+  const codeNode = codePanelId ? nodes.find((n) => n.id === codePanelId) : null;
 
   const mssqlPreviousNode = useMemo(() => {
     if (!mssqlPanelId) return null;
@@ -170,9 +183,57 @@ function FlowSurface({
     return nodes.find((n) => n.id === e.source) ?? null;
   }, [mssqlPanelId, edges, nodes]);
 
+  const codePreviousNode = useMemo(() => {
+    if (!codePanelId) return null;
+    const e = edges.find((ed) => ed.target === codePanelId);
+    if (!e) return null;
+    return nodes.find((n) => n.id === e.source) ?? null;
+  }, [codePanelId, edges, nodes]);
+
   useEffect(() => {
     if (mssqlPanelId && !mssqlNode) setMssqlPanelId(null);
   }, [mssqlPanelId, mssqlNode]);
+
+  useEffect(() => {
+    if (codePanelId && !codeNode) setCodePanelId(null);
+  }, [codePanelId, codeNode]);
+
+  useEffect(() => {
+    if (!runExecution) {
+      setNodes((ns) =>
+        ns.map((n) => {
+          const d = { ...((n.data || {}) as Record<string, unknown>) };
+          delete d.runExecution;
+          delete d.executionFocus;
+          return { ...n, data: d };
+        }),
+      );
+      return;
+    }
+    const { steps, highlightNodeId } = runExecution;
+    setNodes((ns) =>
+      ns.map((n) => {
+        const idx = steps.findIndex((s) => s.nodeId === n.id);
+        const step = idx >= 0 ? steps[idx] : null;
+        const d = { ...((n.data || {}) as Record<string, unknown>) };
+        if (step) {
+          d.runExecution = {
+            input: buildStepInput(steps, idx),
+            output: step.error ? null : step.result,
+            error: step.error,
+            logs: step.logs,
+            stepIndex: idx,
+            stepCount: steps.length,
+          };
+          d.executionFocus = highlightNodeId != null && n.id === highlightNodeId;
+        } else {
+          delete d.runExecution;
+          delete d.executionFocus;
+        }
+        return { ...n, data: d };
+      }),
+    );
+  }, [runExecution, setNodes]);
 
   const onConnect = useCallback(
     (c: Connection) => {
@@ -194,19 +255,39 @@ function FlowSurface({
     [setNodes],
   );
 
+  const onSaveCodeNode = useCallback(
+    (nodeId: string, data: Record<string, unknown>) => {
+      setNodes((ns) => ns.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n)));
+    },
+    [setNodes],
+  );
+
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      onLastRunFocusNode?.(node.id);
       if (readOnly) return;
       if (node.type === 'connectorMssql') {
         setMssqlPanelId(node.id);
+        setCodePanelId(null);
+        return;
+      }
+      if (node.type === 'code') {
+        setCodePanelId(node.id);
+        setMssqlPanelId(null);
         return;
       }
       if (isTriggerNodeType(node.type)) {
+        setMssqlPanelId(null);
+        setCodePanelId(null);
         setTriggerModal(node);
       }
     },
-    [readOnly],
+    [readOnly, onLastRunFocusNode],
   );
+
+  const onPaneClick = useCallback(() => {
+    onLastRunFocusNode?.(null);
+  }, [onLastRunFocusNode]);
 
   const onBeforeDelete: OnBeforeDelete<Node, Edge> = useCallback(
     async ({ nodes: toDel, edges: toDelE }) => {
@@ -254,6 +335,7 @@ function FlowSurface({
           onEdgesChange={readOnly ? undefined : onEdgesChange}
           onConnect={readOnly ? undefined : onConnect}
           onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
           onBeforeDelete={readOnly ? undefined : onBeforeDelete}
           nodeTypes={workflowNodeTypes}
           edgeTypes={readOnly ? undefined : { deletableStep: DeletableStepEdge }}
@@ -314,6 +396,15 @@ function FlowSurface({
           }}
         />
       )}
+      {businessId && codeNode && !readOnly && (
+        <WorkflowCodeNodePanel
+          businessId={businessId}
+          node={codeNode}
+          previousNode={codePreviousNode}
+          onClose={() => setCodePanelId(null)}
+          onSave={(id, d) => onSaveCodeNode(id, d)}
+        />
+      )}
     </WorkflowCanvasEditContext.Provider>
   );
 }
@@ -331,6 +422,8 @@ type Props = {
   onPlayRequest?: () => void;
   playRequestDisabled?: boolean;
   playRequestLoading?: boolean;
+  runExecution?: { steps: WorkflowRunStep[]; highlightNodeId: string | null } | null;
+  onLastRunFocusNode?: (nodeId: string | null) => void;
 };
 
 export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, Props>(function WorkflowCanvas(
@@ -343,6 +436,8 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, Props>(function W
     onPlayRequest,
     playRequestDisabled,
     playRequestLoading,
+    runExecution,
+    onLastRunFocusNode,
   },
   ref,
 ) {
@@ -357,6 +452,8 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, Props>(function W
         onPlayRequest={onPlayRequest}
         playRequestDisabled={playRequestDisabled}
         playRequestLoading={playRequestLoading}
+        runExecution={runExecution}
+        onLastRunFocusNode={onLastRunFocusNode}
       />
     </ReactFlowProvider>
   );

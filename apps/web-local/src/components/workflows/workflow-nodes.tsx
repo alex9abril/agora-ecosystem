@@ -2,11 +2,16 @@ import { useContext, type ReactNode } from 'react';
 import { Handle, Position, useReactFlow, type Node, type NodeProps } from '@xyflow/react';
 import { WorkflowCanvasEditContext } from './workflow-canvas-context';
 import { scheduleSummaryText } from './WorkflowTriggerModal';
+import { NodeRunSuccessMarker, runExecutionBoxClasses } from './NodeExecutionInline';
 
 const box =
-  'rounded-lg border-2 min-w-[160px] max-w-[220px] bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 shadow-sm relative';
+  'relative min-w-[160px] max-w-[220px] flex flex-col rounded-lg border-2 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 shadow-sm';
 const boxTrigger =
-  'rounded-lg border-2 min-w-[160px] max-w-[220px] bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 shadow-sm relative cursor-pointer';
+  'relative min-w-[160px] max-w-[220px] flex flex-col cursor-pointer rounded-lg border-2 bg-white dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 shadow-sm';
+
+function withRunExecClass(base: string, data: Record<string, unknown> | undefined) {
+  return [base, runExecutionBoxClasses(data)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
 
 const title = 'text-[10px] uppercase tracking-wide text-gray-500 dark:text-gray-400 leading-tight';
 const label = 'text-sm font-medium text-gray-900 dark:text-gray-100 break-words';
@@ -110,8 +115,14 @@ function NodeDeleteButton({ id, hidden }: { id: string; hidden?: boolean }) {
 
 export function TriggerManualNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={`${boxTrigger} border-sky-500/50 dark:border-sky-400/50 ring-1 ring-sky-200/60 dark:ring-sky-500/25`}>
+    <div
+      className={withRunExecClass(
+        `${boxTrigger} border-sky-500/50 dark:border-sky-400/50 ring-1 ring-sky-200/60 dark:ring-sky-500/25`,
+        pData,
+      )}
+    >
       <NodeDeleteButton id={props.id} hidden />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-sky-500 dark:!bg-sky-300" />
       <div className="p-2 pr-1 pl-2">
@@ -128,6 +139,7 @@ export function TriggerManualNode(props: NodeProps) {
             </div>
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );
@@ -135,8 +147,14 @@ export function TriggerManualNode(props: NodeProps) {
 
 export function TriggerScheduleNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string; cron?: string; scheduleKind?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={`${boxTrigger} border-amber-300/80 dark:border-amber-500/50 ring-1 ring-amber-200/50 dark:ring-amber-500/20`}>
+    <div
+      className={withRunExecClass(
+        `${boxTrigger} border-amber-300/80 dark:border-amber-500/50 ring-1 ring-amber-200/50 dark:ring-amber-500/20`,
+        pData,
+      )}
+    >
       <NodeDeleteButton id={props.id} hidden />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-amber-500" />
       <div className="p-2 pr-1 pl-2">
@@ -159,6 +177,7 @@ export function TriggerScheduleNode(props: NodeProps) {
             </div>
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );
@@ -176,9 +195,13 @@ function IconCodeBrackets() {
 export function ConnectorMssqlNode(props: NodeProps) {
   const { readOnly } = useContext(WorkflowCanvasEditContext);
   const d = (props.data || {}) as { label?: string; query?: string; connectorId?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
     <div
-      className={`${box} border-sky-200/90 dark:border-sky-600/50 ${!readOnly ? 'cursor-pointer' : ''}`}
+      className={withRunExecClass(
+        `${box} border-sky-200/90 dark:border-sky-600/50 ${!readOnly ? 'cursor-pointer' : ''}`,
+        pData,
+      )}
       title={readOnly ? undefined : 'Clic para configurar conector y consulta'}
     >
       <NodeDeleteButton id={props.id} />
@@ -206,6 +229,7 @@ export function ConnectorMssqlNode(props: NodeProps) {
             )}
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );
@@ -213,8 +237,9 @@ export function ConnectorMssqlNode(props: NodeProps) {
 
 export function SinkLogNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={`${box} border-emerald-200/90 dark:border-emerald-600/50`}>
+    <div className={withRunExecClass(`${box} border-emerald-200/90 dark:border-emerald-600/50`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-emerald-500" />
       <div className="p-2 pr-1 pl-2">
@@ -227,15 +252,24 @@ export function SinkLogNode(props: NodeProps) {
             <div className={label}>{d.label || 'Log / staging'}</div>
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );
 }
 
 export function CodeBlockNode(props: NodeProps) {
-  const d = (props.data || {}) as { label?: string; language?: string };
+  const d = (props.data || {}) as { label?: string; code?: string };
+  const codeLine =
+    typeof d.code === 'string' && d.code.trim()
+      ? d.code
+          .trim()
+          .split('\n')
+          .find((l) => l.trim() && !l.trim().startsWith('//')) || d.code.trim().split('\n')[0]
+      : 'Clic para editar';
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={`${box} border-amber-200/90 dark:border-amber-600/50`}>
+    <div className={withRunExecClass(`${box} border-amber-200/90 dark:border-amber-600/50`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-amber-500" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-amber-500" />
@@ -247,9 +281,12 @@ export function CodeBlockNode(props: NodeProps) {
           <div className="min-w-0 flex-1">
             <div className={title}>Code</div>
             <div className={label}>{d.label || 'Paso'}</div>
-            <div className="text-[10px] text-amber-700/90 dark:text-amber-300/90 mt-0.5">Configuración en siguientes versiones</div>
+            <div className="text-[10px] text-amber-800/85 dark:text-amber-300/85 mt-0.5 font-mono line-clamp-2 break-all" title={codeLine}>
+              {codeLine}
+            </div>
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );
@@ -257,8 +294,9 @@ export function CodeBlockNode(props: NodeProps) {
 
 export function HttpRequestNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={`${box} border-violet-200/80 dark:border-violet-600/45`}>
+    <div className={withRunExecClass(`${box} border-violet-200/80 dark:border-violet-600/45`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-violet-500" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-violet-500" />
@@ -273,6 +311,7 @@ export function HttpRequestNode(props: NodeProps) {
             <div className="text-[10px] text-violet-600/90 dark:text-violet-300/90 mt-0.5">Configuración en siguientes versiones</div>
           </div>
         </div>
+        <NodeRunSuccessMarker data={pData} />
       </div>
     </div>
   );

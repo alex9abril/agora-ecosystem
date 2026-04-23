@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LocalLayout from '@/components/layout/LocalLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
@@ -16,8 +16,71 @@ import {
   type ConnectorRow,
 } from '@/lib/integration-workflows';
 import { WorkflowCanvas, type WorkflowCanvasHandle } from '@/components/workflows/WorkflowCanvas';
+import { WorkflowRunInspector } from '@/components/workflows/WorkflowRunInspector';
+import type { WorkflowRunStep } from '@/components/workflows/workflow-run-types';
+import { parseLogSummarySteps } from '@/components/workflows/workflow-run-types';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
 import { isOperatorRole, normalizeOperatorPermissions } from '@/lib/operator-permissions';
+
+function ViewRunHistoryModal({
+  viewRun,
+  onClose,
+}: {
+  viewRun: WorkflowRunRow;
+  onClose: () => void;
+}) {
+  const steps = parseLogSummarySteps(viewRun.logSummary);
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 dark:bg-black/60"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">Detalle de ejecución</h3>
+          <button
+            type="button"
+            className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            onClick={onClose}
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          {viewRun.startedAt
+            ? new Date(viewRun.startedAt).toLocaleString('es', { dateStyle: 'full', timeStyle: 'long' })
+            : ''}{' '}
+          · {viewRun.status}
+        </p>
+        {viewRun.error && (
+          <p className="mb-2 text-sm text-red-700 dark:text-red-300">Error: {viewRun.error}</p>
+        )}
+        {steps && steps.length > 0 ? (
+          <div className="mb-3">
+            <WorkflowRunInspector
+              steps={steps}
+              status={viewRun.status}
+              runError={viewRun.error}
+              focusedNodeId={null}
+              onFocusNode={() => {}}
+              title="Entrada y salida por nodo (registro en servidor)"
+            />
+          </div>
+        ) : null}
+        <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">JSON completo (depuración):</p>
+        <pre className="max-h-[32vh] overflow-auto rounded bg-gray-100 p-2 text-[11px] dark:bg-neutral-800">
+          {JSON.stringify(viewRun.logSummary, null, 2)}
+        </pre>
+      </div>
+    </div>
+  );
+}
 
 function canAccessWorkflows(
   role: string,
@@ -50,6 +113,15 @@ export default function IntegrationsWorkflowEditorPage() {
   const [runBusy, setRunBusy] = useState(false);
   const [viewRun, setViewRun] = useState<WorkflowRunRow | null>(null);
   const canvasRef = useRef<WorkflowCanvasHandle | null>(null);
+  /** Última ejecución desde el editor (para resaltado + inspector) */
+  const [lastClientRun, setLastClientRun] = useState<{
+    runId: string;
+    status: string;
+    error?: string;
+    steps: WorkflowRunStep[];
+  } | null>(null);
+  const [runAnimHighlight, setRunAnimHighlight] = useState<string | null>(null);
+  const [userRunFocus, setUserRunFocus] = useState<string | null>(null);
 
   const businessId = selectedBusiness?.business_id;
   const role = selectedBusiness?.role ?? 'operations_staff';
@@ -98,6 +170,12 @@ export default function IntegrationsWorkflowEditorPage() {
     }
   }, [isLoading, user, canManage, businessId, workflowId, canSee, load]);
 
+  useEffect(() => {
+    setLastClientRun(null);
+    setUserRunFocus(null);
+    setRunAnimHighlight(null);
+  }, [workflowId]);
+
   const onSave = async () => {
     if (!businessId || !workflowId) return;
     setSaving(true);
@@ -138,6 +216,14 @@ export default function IntegrationsWorkflowEditorPage() {
       }
       const res = await runWorkflow(businessId, workflowId, { definition: def });
       setRunLog(JSON.stringify(res, null, 2));
+      const steps = (res.steps || []) as WorkflowRunStep[];
+      setLastClientRun({
+        runId: res.runId,
+        status: res.status,
+        error: res.error,
+        steps,
+      });
+      setUserRunFocus(null);
       const runs = await fetchWorkflowRuns(businessId, workflowId, 30);
       setRunHistory(runs);
     } catch (e: any) {
@@ -146,6 +232,38 @@ export default function IntegrationsWorkflowEditorPage() {
       setRunBusy(false);
     }
   }, [businessId, workflowId, wf]);
+
+  useEffect(() => {
+    if (!lastClientRun?.steps?.length) {
+      setRunAnimHighlight(null);
+      return;
+    }
+    setRunAnimHighlight(null);
+    const steps = lastClientRun.steps;
+    let i = 0;
+    setRunAnimHighlight(steps[0].nodeId);
+    const t = setInterval(() => {
+      i += 1;
+      if (i >= steps.length) {
+        setRunAnimHighlight(null);
+        clearInterval(t);
+        return;
+      }
+      setRunAnimHighlight(steps[i].nodeId);
+    }, 650);
+    return () => {
+      clearInterval(t);
+      setRunAnimHighlight(null);
+    };
+  }, [lastClientRun?.runId]);
+
+  const runExecutionForCanvas = useMemo(() => {
+    if (!lastClientRun?.steps?.length) return null;
+    return {
+      steps: lastClientRun.steps,
+      highlightNodeId: userRunFocus ?? runAnimHighlight,
+    };
+  }, [lastClientRun, userRunFocus, runAnimHighlight]);
 
   if (isLoading || !user) {
     return (
@@ -229,9 +347,9 @@ export default function IntegrationsWorkflowEditorPage() {
                       <button
                         type="button"
                         onClick={runFromCurrentDefinition}
-                        disabled={runBusy || !wf.isEnabled}
+                        disabled={runBusy}
                         className="px-4 py-2 rounded-md border border-gray-300 dark:border-neutral-600 text-sm"
-                        title={!wf.isEnabled ? 'Activa el flujo en el listado para poder ejecutar' : ''}
+                        title="Ejecuta con el grafo actual (guardado o no en memoria). El flujo puede estar desactivado en el listado; sigue pudiendo probarse desde el editor."
                       >
                         {runBusy ? 'Ejecutando…' : 'Ejecutar'}
                       </button>
@@ -268,9 +386,30 @@ export default function IntegrationsWorkflowEditorPage() {
                     definition={wf.definition as Record<string, unknown>}
                     connectors={connectors}
                     onPlayRequest={runFromCurrentDefinition}
-                    playRequestDisabled={!wf.isEnabled}
                     playRequestLoading={runBusy}
+                    runExecution={runExecutionForCanvas}
+                    onLastRunFocusNode={setUserRunFocus}
                   />
+
+                  {lastClientRun && lastClientRun.steps.length > 0 && (
+                    <p className="mb-3 flex flex-wrap items-center justify-end gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                      <span className="min-w-0 text-left sm:text-right">
+                        La entrada y la salida de cada paso están en el nodo (sección plegable). Clic en un nodo
+                        resalta ese paso; clic en el fondo del lienzo quita el foco.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLastClientRun(null);
+                          setUserRunFocus(null);
+                          setRunAnimHighlight(null);
+                        }}
+                        className="shrink-0 text-sky-600 dark:text-sky-400 hover:underline"
+                      >
+                        Quitar I/O y resaltado
+                      </button>
+                    </p>
+                  )}
 
                   <div className="mt-4">
                     <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Historial de ejecuciones</h2>
@@ -326,42 +465,10 @@ export default function IntegrationsWorkflowEditorPage() {
         </div>
       </LocalLayout>
       {viewRun && (
-        <div
-          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/50 dark:bg-black/60"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setViewRun(null)}
-        >
-          <div
-            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-900 shadow-xl p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h3 className="text-base font-medium text-gray-900 dark:text-gray-100">Detalle de ejecución</h3>
-              <button
-                type="button"
-                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
-                onClick={() => setViewRun(null)}
-                aria-label="Cerrar"
-              >
-                ×
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-              {viewRun.startedAt
-                ? new Date(viewRun.startedAt).toLocaleString('es', { dateStyle: 'full', timeStyle: 'long' })
-                : ''}{' '}
-              · {viewRun.status}
-            </p>
-            {viewRun.error && (
-              <p className="text-sm text-red-700 dark:text-red-300 mb-2">Error: {viewRun.error}</p>
-            )}
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Resumen (log en servidor):</p>
-            <pre className="p-2 rounded bg-gray-100 dark:bg-neutral-800 text-[11px] overflow-auto max-h-[60vh]">
-              {JSON.stringify(viewRun.logSummary, null, 2)}
-            </pre>
-          </div>
-        </div>
+        <ViewRunHistoryModal
+          viewRun={viewRun}
+          onClose={() => setViewRun(null)}
+        />
       )}
     </>
   );

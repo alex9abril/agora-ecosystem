@@ -14,6 +14,11 @@ import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { encryptSecret, decryptSecret } from './connector-crypto.util';
 import { getLinearExecutionOrder, FlowDefinition, FlowNode } from './workflow-executor.util';
+import {
+  executeWorkflowUserCode,
+  toJsonSafeForWorkflow,
+} from './workflow-code-executor.util';
+import type { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
@@ -302,9 +307,6 @@ export class IntegrationWorkflowsService {
   ) {
     const userId = user.id;
     const wf = await this.getWorkflow(userId, businessId, workflowId);
-    if (!wf.isEnabled) {
-      throw new BadRequestException('El flujo está desactivado');
-    }
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
 
     const { rows: runInsert } = await dbPool.query(
@@ -315,13 +317,15 @@ export class IntegrationWorkflowsService {
     );
     const runId = (runInsert[0] as { id: string }).id;
 
-    const steps: { nodeId: string; type: string; result?: unknown; error?: string }[] = [];
+    const steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[] = [];
     let finalError: string | null = null;
     const hasInlineDef =
       options?.definition &&
       typeof options.definition === 'object' &&
       options.definition !== null &&
       'nodes' in options.definition;
+    // is_enabled no bloquea runWorkflow: la ejecución manual (Play / API) siempre está permitida.
+    // El flag se reservará para futura ejecución automática (cron / cola).
     const def = (
       hasInlineDef ? (options?.definition as FlowDefinition) : (wf.definition || {})
     ) as FlowDefinition;
@@ -361,17 +365,22 @@ export class IntegrationWorkflowsService {
     businessId: string,
     userId: string,
     _previous: unknown,
-  ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string }> {
+  ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }> {
     const t = node.type;
     const data = (node.data || {}) as Record<string, unknown>;
     if (t === 'triggerManual' || t === 'triggerSchedule') {
       return { nodeId: node.id, type: t, result: { message: t === 'triggerSchedule' ? 'Disparo manual (programación interna aún no ejecuta cron)' : 'ok' } };
     }
     if (t === 'sinkLog') {
+      // Estilo n8n (paso intermedio): reenvía el Último payload al siguiente nodo sin anidarlo, para
+      // no obligar a $input.first().json.previous en el nodo Code tras MSSQL.
       return {
         nodeId: node.id,
         type: t,
-        result: { previous: _previous, note: 'Salida interna; futura ingesta a staging' },
+        result: _previous,
+        logs: [
+          'Salida interna: dato reenviado (passthrough) al siguiente paso. Futura: ingesta a staging.',
+        ],
       };
     }
     if (t === 'connectorMssql') {
@@ -389,7 +398,20 @@ export class IntegrationWorkflowsService {
       }
     }
     if (t === 'code') {
-      return { nodeId: node.id, type: t, result: { message: 'Code: implementación pendiente' } };
+      const code = String(data.code ?? '');
+      if (!code.trim()) {
+        return { nodeId: node.id, type: t, error: 'Nodo Code: añade código JavaScript' };
+      }
+      const exec = executeWorkflowUserCode(_previous, code);
+      if (exec.ok === false) {
+        return { nodeId: node.id, type: t, error: `Code: ${exec.error}`, logs: exec.logs };
+      }
+      return {
+        nodeId: node.id,
+        type: t,
+        result: toJsonSafeForWorkflow(exec.result),
+        logs: exec.logs,
+      };
     }
     if (t === 'httpRequest' || t === 'httpPlaceholder') {
       return { nodeId: node.id, type: t, result: { message: 'HTTP request: implementación pendiente' } };
@@ -806,5 +828,22 @@ export class IntegrationWorkflowsService {
       const msg = e instanceof Error ? e.message : String(e);
       throw new BadRequestException({ message: msg });
     }
+  }
+
+  /**
+   * Vista previa del nodo Code (misma sandbox y API $input que en runWorkflow).
+   */
+  async previewWorkflowCode(userId: string, businessId: string, dto: PreviewWorkflowCodeDto) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    const rawInput = dto.input !== undefined && dto.input !== null ? dto.input : { message: 'ok' };
+    const exec = executeWorkflowUserCode(rawInput, dto.code);
+    if (exec.ok === false) {
+      return { success: false as const, error: exec.error, logs: exec.logs };
+    }
+    return {
+      success: true as const,
+      result: toJsonSafeForWorkflow(exec.result),
+      logs: exec.logs,
+    };
   }
 }

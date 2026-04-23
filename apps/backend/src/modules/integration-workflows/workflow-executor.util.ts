@@ -44,7 +44,10 @@ export function getLinearExecutionOrder(definition: FlowDefinition): FlowNode[] 
     }
   }
 
-  const trigger = nodes.find((n) => n.type && TRIGGER_TYPES.has(n.type));
+  // Igual intención que n8n al pulsar "Execute workflow": un disparo manual tiene prioridad si existe
+  // (evita quedarse con el programado por orden al azar en el array de nodos).
+  const trigger =
+    nodes.find((n) => n.type === 'triggerManual') || nodes.find((n) => n.type && TRIGGER_TYPES.has(n.type));
   if (!trigger) {
     throw new BadRequestException('Añade un nodo de inicio: disparo manual o programado (interno)');
   }

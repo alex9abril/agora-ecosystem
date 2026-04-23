@@ -166,6 +166,20 @@ export function previewMssqlQuery(businessId: string, connectorId: string, query
   });
 }
 
+export type PreviewWorkflowCodeResult =
+  | { success: true; result: unknown; logs: string[] }
+  | { success: false; error: string; logs: string[] };
+
+export function previewWorkflowCode(
+  businessId: string,
+  body: { code: string; input?: unknown },
+) {
+  return apiRequest<PreviewWorkflowCodeResult>(`${base(businessId)}/workflows/preview-code`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export function fetchWorkflows(businessId: string) {
   return apiRequest<WorkflowRow[]>(`${base(businessId)}/workflows`);
 }
@@ -208,7 +222,13 @@ export function runWorkflow(
     runId: string;
     status: string;
     error?: string;
-    steps?: unknown[];
+    steps?: {
+      nodeId: string;
+      type: string;
+      result?: unknown;
+      error?: string;
+      logs?: string[];
+    }[];
   }>(`${base(businessId)}/workflows/${workflowId}/run`, {
     method: 'POST',
     body: JSON.stringify(options && options.definition != null ? { definition: options.definition } : {}),

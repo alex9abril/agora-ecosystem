@@ -61,7 +61,13 @@ export function WorkflowAddNodeUi({ connectors, readOnly }: Props) {
       id: newNodeId(),
       type: 'code',
       position: placePosition(),
-      data: { label: 'Code' },
+      data: {
+        label: 'Code',
+        code: `// Misma API que n8n: $input.first().json, $input.all()
+return $input.first().json;
+`,
+        testInputJson: JSON.stringify({ message: 'ok' }, null, 2),
+      },
     } as Node);
   }, [placePosition, pushNode]);
 
