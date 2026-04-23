@@ -410,6 +410,23 @@ export class IntegrationWorkflowsService {
     return 'Error en consulta MSSQL';
   }
 
+  /**
+   * Opciones de tedious/mssql: servidores on‑prem suelen usar TLS con certificado autofirmado.
+   * - encrypt: true por defecto (cifrado, estándar con puerto 1433/otros)
+   * - trustServerCertificate: true por defecto; use `false` en config del conector si el servidor usa CA pública/validable
+   */
+  private mssqlDriverOptions(
+    opt?: { encrypt?: boolean; trustServerCertificate?: boolean },
+  ): NonNullable<MssqlConfig['options']> {
+    return {
+      encrypt: opt?.encrypt !== false,
+      trustServerCertificate: opt?.trustServerCertificate !== false,
+      enableArithAbort: true,
+      connectTimeout: MS_TIMEOUT_MS,
+      requestTimeout: MS_TIMEOUT_MS,
+    } as any;
+  }
+
   private mssqlErrorMessage(e: unknown): string {
     const ex = e as { message?: string; originalError?: { message?: string } };
     return (ex?.message || ex?.originalError?.message || (typeof e === 'string' ? e : 'Error al conectar o ejecutar en SQL Server')) as string;
@@ -467,13 +484,7 @@ export class IntegrationWorkflowsService {
       server: conf.server,
       port: conf.port,
       database: conf.database,
-      options: {
-        encrypt: conf.options?.encrypt !== false,
-        trustServerCertificate: conf.options?.trustServerCertificate === true,
-        enableArithAbort: true,
-        connectTimeout: MS_TIMEOUT_MS,
-        requestTimeout: MS_TIMEOUT_MS,
-      } as any,
+      options: this.mssqlDriverOptions(conf.options),
     };
 
     if (!mssql?.ConnectionPool) {
@@ -525,13 +536,7 @@ export class IntegrationWorkflowsService {
       server: conf.server,
       port: conf.port,
       database: conf.database,
-      options: {
-        encrypt: conf.options?.encrypt !== false,
-        trustServerCertificate: conf.options?.trustServerCertificate === true,
-        enableArithAbort: true,
-        connectTimeout: MS_TIMEOUT_MS,
-        requestTimeout: MS_TIMEOUT_MS,
-      } as any,
+      options: this.mssqlDriverOptions(conf.options),
     };
   }
 

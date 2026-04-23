@@ -17,8 +17,15 @@ export class CreateConnectorDto {
   @IsBoolean()
   isEnabled?: boolean;
 
+  /** Cuerpo real: se persiste tal cual. `example` es solo para documentación OpenAPI (Swagger), no valor por defecto ni merge. */
   @ApiProperty({
-    example: { server: '10.0.0.1', port: 1433, database: 'DMS', user: 'reader', options: { encrypt: true } },
+    example: {
+      server: '10.0.0.1',
+      port: 1433,
+      database: 'DMS',
+      user: 'reader',
+      options: { encrypt: true, trustServerCertificate: true },
+    },
   })
   @IsObject()
   config: Record<string, unknown>;
