@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { dbPool } from '../../config/database.config';
 import { User } from '@supabase/supabase-js';
-import * as sql from 'mssql';
+import type { config as MssqlConfig } from 'mssql';
 import { CreateConnectorDto } from './dto/create-connector.dto';
 import { UpdateConnectorDto } from './dto/update-connector.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
@@ -16,6 +17,11 @@ import { getLinearExecutionOrder, FlowDefinition, FlowNode } from './workflow-ex
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
+
+/* Cargar mssql vía require: en runtime el default import (import x from 'mssql') a menudo queda
+ * undefined; require es el interop fiable con el paquete commonjs en Nest/ts-node. */
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+const mssql = require('mssql') as typeof import('mssql');
 
 @Injectable()
 export class IntegrationWorkflowsService {
@@ -377,8 +383,8 @@ export class IntegrationWorkflowsService {
       try {
         const rows = await this.queryMssql(userId, businessId, connectorId, queryText);
         return { nodeId: node.id, type: t, result: rows };
-      } catch (e: any) {
-        return { nodeId: node.id, type: t, error: e?.message || 'Error en consulta MSSQL' };
+      } catch (e: unknown) {
+        return { nodeId: node.id, type: t, error: this.nodeErrorMessage(e) };
       }
     }
     if (t === 'code') {
@@ -388,6 +394,25 @@ export class IntegrationWorkflowsService {
       return { nodeId: node.id, type: t, result: { message: 'HTTP request: implementación pendiente' } };
     }
     return { nodeId: node.id, type: t, error: `Tipo de nodo no soportado aún: ${t}` };
+  }
+
+  /** Texto útil para logs de flujo (HttpException no expone solo .message). */
+  private nodeErrorMessage(e: unknown): string {
+    if (e instanceof HttpException) {
+      const r = e.getResponse();
+      if (typeof r === 'string') return r;
+      if (r && typeof r === 'object' && 'message' in r) {
+        const m = (r as { message: string | string[] }).message;
+        return Array.isArray(m) ? String(m[0]) : String(m);
+      }
+    }
+    if (e instanceof Error) return e.message;
+    return 'Error en consulta MSSQL';
+  }
+
+  private mssqlErrorMessage(e: unknown): string {
+    const ex = e as { message?: string; originalError?: { message?: string } };
+    return (ex?.message || ex?.originalError?.message || (typeof e === 'string' ? e : 'Error al conectar o ejecutar en SQL Server')) as string;
   }
 
   private async queryMssql(
@@ -412,7 +437,7 @@ export class IntegrationWorkflowsService {
        FROM integration.connectors WHERE id = $1 AND business_id = $2`,
       [connectorId, businessId],
     );
-    if (crows.length === 0) throw new Error('Conector no encontrado');
+    if (crows.length === 0) throw new NotFoundException('Conector no encontrado');
     const row = crows[0] as {
       password_ciphertext: string;
       config: Record<string, unknown>;
@@ -436,7 +461,7 @@ export class IntegrationWorkflowsService {
       throw new Error('Config de MSSQL incompleta (server, database, user)');
     }
 
-    const config: sql.config = {
+    const config: MssqlConfig = {
       user: conf.user,
       password,
       server: conf.server,
@@ -451,8 +476,21 @@ export class IntegrationWorkflowsService {
       } as any,
     };
 
-    const pool = new sql.ConnectionPool(config);
-    await pool.connect();
+    if (!mssql?.ConnectionPool) {
+      throw new Error('El driver mssql no está disponible (instale la dependencia mssql en el servidor).');
+    }
+
+    const pool = new mssql.ConnectionPool(config);
+    try {
+      await pool.connect();
+    } catch (e) {
+      try {
+        await pool.close();
+      } catch {
+        /* ignore */
+      }
+      throw new Error(this.mssqlErrorMessage(e));
+    }
     try {
       const r = await pool.request().query(queryText);
       const data = (r.recordset as unknown[]) || [];
@@ -460,8 +498,14 @@ export class IntegrationWorkflowsService {
         return { rows: data.slice(0, MAX_RESULT_ROWS), truncated: true, total: data.length };
       }
       return { rows: data, truncated: false };
+    } catch (e) {
+      throw new Error(this.mssqlErrorMessage(e));
     } finally {
-      await pool.close();
+      try {
+        await pool.close();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -474,7 +518,7 @@ export class IntegrationWorkflowsService {
       options?: { encrypt?: boolean; trustServerCertificate?: boolean };
     },
     password: string,
-  ): sql.config {
+  ): MssqlConfig {
     return {
       user: conf.user,
       password,
@@ -504,7 +548,10 @@ export class IntegrationWorkflowsService {
   ): Promise<{ success: true } | { success: false; message: string }> {
     try {
       const config = this.buildMssqlPoolConfig(conf, password);
-      const pool = new sql.ConnectionPool(config);
+      if (!mssql?.ConnectionPool) {
+        return { success: false, message: 'Driver mssql no disponible en el servidor' };
+      }
+      const pool = new mssql.ConnectionPool(config);
       await pool.connect();
       try {
         await pool.request().query('SELECT 1 AS ok');
@@ -619,6 +666,14 @@ export class IntegrationWorkflowsService {
     if (!q) {
       throw new BadRequestException('Indica la consulta SQL');
     }
-    return this.queryMssql(userId, businessId, connectorId, q);
+    try {
+      return await this.queryMssql(userId, businessId, connectorId, q);
+    } catch (e) {
+      if (e instanceof NotFoundException || e instanceof ForbiddenException) {
+        throw e;
+      }
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new BadRequestException(msg);
+    }
   }
 }
