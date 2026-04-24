@@ -366,7 +366,7 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-3">
         {/* Entrada */}
-        <section className="flex min-h-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
           <div className="border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Entrada</h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400">Datos del nodo anterior conectado</p>
@@ -387,7 +387,7 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
               </button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto p-3 text-xs">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 text-xs">
             {!previousNode ? (
               <div className="rounded border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/30">
                 <p className="text-amber-900 dark:text-amber-100">No hay nodo conectado a la entrada.</p>
@@ -406,34 +406,36 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
                 </p>
               </div>
             ) : runExec ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-[10px] font-medium text-emerald-800 dark:text-emerald-200">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-emerald-200/90 bg-emerald-50/40 p-1.5 dark:border-emerald-800/60 dark:bg-emerald-950/20">
+                  <p className="shrink-0 px-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200">
                     Última ejecución: entrada a este nodo (resultado publicado por el paso anterior)
                   </p>
-                  <pre className="mt-0.5 whitespace-pre-wrap break-words rounded border border-emerald-200/90 bg-emerald-50/60 p-2 font-mono text-[11px] text-gray-800 dark:border-emerald-800/60 dark:bg-emerald-950/25 dark:text-gray-200">
-                    {JSON.stringify(runExec.input, null, 2)}
-                  </pre>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-0.5">
+                    <WorkflowJsonResultViewer data={runExec.input} fillContainer />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-gray-50/80 p-1.5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                  <p className="shrink-0 px-0.5 text-[10px] text-gray-500 dark:text-gray-400">
                     Referencia de diseño (nodo conectado en el editor; el objeto puede incluir metadatos de I/O)
                   </p>
-                  <pre className="mt-0.5 whitespace-pre-wrap break-words rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] text-gray-800 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-gray-200">
-                    {JSON.stringify(inputJson, null, 2)}
-                  </pre>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pt-0.5">
+                    <WorkflowJsonResultViewer data={inputJson} fillContainer />
+                  </div>
                 </div>
               </div>
             ) : (
-              <pre className="whitespace-pre-wrap break-words rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] text-gray-800 dark:border-neutral-700 dark:bg-neutral-900/50 dark:text-gray-200">
-                {JSON.stringify(inputJson, null, 2)}
-              </pre>
+              inputJson && (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <WorkflowJsonResultViewer data={inputJson} fillContainer />
+                </div>
+              )
             )}
           </div>
         </section>
 
         {/* Proceso */}
-        <section className="flex min-h-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
+        <section className="flex min-h-0 min-w-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
           <div className="border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Proceso</h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400">Conector y consulta SQL (SELECT)</p>
@@ -495,7 +497,7 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
         </section>
 
         {/* Salida */}
-        <section className="flex min-h-0 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <div className="border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Salida</h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400">
@@ -525,7 +527,7 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
                 {queryBusy ? 'Ejecutando…' : 'Ejecutar consulta (vista previa)'}
               </button>
             </div>
-            <div className="min-h-0 flex-1 flex flex-col overflow-hidden p-2 text-xs">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 text-xs">
               {(isShowingFlowOutput || isShowingFlowJson) && (
                 <p className="mb-1.5 shrink-0 rounded border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
                   Mostrando la salida de la <strong>última ejecución</strong> del flujo. El botón rojo ejecuta otra
@@ -543,8 +545,8 @@ export function WorkflowMssqlNodePanel({ businessId, node, previousNode, connect
                 </pre>
               )}
               {activeJsonPayload != null && !previewError && !showFlowErrorOnly && outTab === 'json' && (
-                <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
-                  <WorkflowJsonResultViewer data={activeJsonPayload} />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <WorkflowJsonResultViewer data={activeJsonPayload} fillContainer />
                 </div>
               )}
               {activePreview && !previewError && !showFlowErrorOnly && outTab === 'table' && rows.length > 0 && tableKeys.length > 0 && (

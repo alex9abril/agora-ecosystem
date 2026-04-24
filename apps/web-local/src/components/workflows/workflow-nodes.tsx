@@ -93,23 +93,51 @@ export function isTriggerNodeType(t: string | undefined) {
   return t === 'triggerManual' || t === 'triggerSchedule';
 }
 
+function IconTrashSmall() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+/**
+ * Banda de acción sobre el nodo: rellena el espacio con `h-9` bajo el cursor para no perder
+ * `group-hover` al bajar subir hacia el botón. Sin hover en el nodo, `pointer-events-none`
+ * en la banda para no bloquear el arrastre del lienzo; con hover, `group-hover:pointer-events-auto`.
+ */
 function NodeDeleteButton({ id, hidden }: { id: string; hidden?: boolean }) {
   const { deleteElements } = useReactFlow();
   const { readOnly } = useContext(WorkflowCanvasEditContext);
   if (readOnly || hidden) return null;
   return (
-    <button
-      type="button"
-      title="Eliminar nodo"
-      aria-label="Eliminar nodo"
-      onClick={(e) => {
-        e.stopPropagation();
-        void deleteElements({ nodes: [{ id }] });
-      }}
-      className="absolute -top-2 -right-2 z-20 flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 dark:border-neutral-500 bg-white dark:bg-neutral-800 text-gray-500 text-sm leading-none shadow hover:bg-red-50 hover:border-red-300 hover:text-red-600"
+    <div
+      className="pointer-events-none absolute -top-9 left-0 right-0 z-30 flex h-9 items-center justify-center group-hover:pointer-events-auto focus-within:pointer-events-auto"
+      onPointerDown={(e) => e.stopPropagation()}
     >
-      ×
-    </button>
+      <div
+        className="flex items-center justify-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-0.5 rounded-md border border-neutral-600/40 bg-neutral-800 px-0.5 py-0.5 shadow-md dark:border-neutral-500/50 dark:bg-neutral-950/95">
+          <button
+            type="button"
+            title="Eliminar nodo"
+            aria-label="Eliminar nodo"
+            onClick={(e) => {
+              e.stopPropagation();
+              void deleteElements({ nodes: [{ id }] });
+            }}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-200 transition hover:bg-white/15 hover:text-white"
+          >
+            <IconTrashSmall />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -199,7 +227,7 @@ export function ConnectorMssqlNode(props: NodeProps) {
   return (
     <div
       className={withRunExecClass(
-        `${box} border-sky-200/90 dark:border-sky-600/50 ${!readOnly ? 'cursor-pointer' : ''}`,
+        `${box} group overflow-visible border-sky-200/90 dark:border-sky-600/50 ${!readOnly ? 'cursor-pointer' : ''}`,
         pData,
       )}
       title={readOnly ? undefined : 'Clic para configurar conector y consulta'}
@@ -239,7 +267,7 @@ export function SinkLogNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string };
   const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={withRunExecClass(`${box} border-emerald-200/90 dark:border-emerald-600/50`, pData)}>
+    <div className={withRunExecClass(`${box} group overflow-visible border-emerald-200/90 dark:border-emerald-600/50`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-emerald-500" />
       <div className="p-2 pr-1 pl-2">
@@ -250,6 +278,44 @@ export function SinkLogNode(props: NodeProps) {
           <div className="min-w-0 flex-1">
             <div className={title}>Salida interna</div>
             <div className={label}>{d.label || 'Log / staging'}</div>
+          </div>
+        </div>
+        <NodeRunSuccessMarker data={pData} />
+      </div>
+    </div>
+  );
+}
+
+export function SinkAutomationNode(props: NodeProps) {
+  const { readOnly } = useContext(WorkflowCanvasEditContext);
+  const d = (props.data || {}) as { label?: string; tableName?: string; arrayPath?: string };
+  const pData = props.data as Record<string, unknown> | undefined;
+  const table = typeof d.tableName === 'string' && d.tableName.trim() ? d.tableName : '—';
+  const path = typeof d.arrayPath === 'string' && d.arrayPath.trim() ? d.arrayPath : '(raíz = arreglo)';
+  return (
+    <div
+      className={withRunExecClass(
+        `${box} group overflow-visible border-cyan-200/90 dark:border-cyan-600/50 ${!readOnly ? 'cursor-pointer' : ''}`,
+        pData,
+      )}
+      title={readOnly ? undefined : 'Clic para tabla automation y mapeo de columnas'}
+    >
+      <NodeDeleteButton id={props.id} />
+      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-cyan-500" />
+      <div className="p-2 pr-1 pl-2">
+        <div className="flex gap-2.5">
+          <IconBadge className="bg-gradient-to-br from-cyan-100 to-sky-100 text-cyan-900 dark:from-cyan-500/30 dark:to-sky-500/25 dark:text-cyan-100">
+            <IconDatabase />
+          </IconBadge>
+          <div className="min-w-0 flex-1">
+            <div className={title}>Guardar en automation</div>
+            <div className={label}>{d.label || 'Destino (filas)'}</div>
+            <div className="text-[10px] text-cyan-800/85 dark:text-cyan-200/85 mt-0.5 font-mono truncate" title={`${table} · ${path}`}>
+              {table} · {path}
+            </div>
+            {!readOnly && (
+              <p className="text-[9px] text-cyan-600/80 dark:text-cyan-400/80 mt-0.5">Clic para configurar</p>
+            )}
           </div>
         </div>
         <NodeRunSuccessMarker data={pData} />
@@ -269,7 +335,7 @@ export function CodeBlockNode(props: NodeProps) {
       : 'Clic para editar';
   const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={withRunExecClass(`${box} border-amber-200/90 dark:border-amber-600/50`, pData)}>
+    <div className={withRunExecClass(`${box} group overflow-visible border-amber-200/90 dark:border-amber-600/50`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-amber-500" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-amber-500" />
@@ -296,7 +362,7 @@ export function HttpRequestNode(props: NodeProps) {
   const d = (props.data || {}) as { label?: string };
   const pData = props.data as Record<string, unknown> | undefined;
   return (
-    <div className={withRunExecClass(`${box} border-violet-200/80 dark:border-violet-600/45`, pData)}>
+    <div className={withRunExecClass(`${box} group overflow-visible border-violet-200/80 dark:border-violet-600/45`, pData)}>
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-violet-500" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-violet-500" />
@@ -322,6 +388,7 @@ export const workflowNodeTypes = {
   triggerSchedule: TriggerScheduleNode,
   connectorMssql: ConnectorMssqlNode,
   sinkLog: SinkLogNode,
+  sinkAutomation: SinkAutomationNode,
   code: CodeBlockNode,
   httpRequest: HttpRequestNode,
   /** @deprecated en favor de httpRequest; se mantiene para definiciones antiguas */

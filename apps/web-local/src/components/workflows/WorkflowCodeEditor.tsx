@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { EditorView } from '@codemirror/view';
@@ -11,10 +11,27 @@ const extensions = [javascript(), EditorView.lineWrapping];
 type Props = {
   value: string;
   onChange: (v: string) => void;
+  /** El padre debe ser flex con `min-h-0` y altura definida (p. ej. columna del panel Code). */
+  fillContainer?: boolean;
 };
 
-export function WorkflowCodeEditor({ value, onChange }: Props) {
+export function WorkflowCodeEditor({ value, onChange, fillContainer }: Props) {
   const [dark, setDark] = useState(false);
+  const cmHolderRef = useRef<HTMLDivElement>(null);
+  const [cmHeightPx, setCmHeightPx] = useState(320);
+
+  useLayoutEffect(() => {
+    if (!fillContainer || !cmHolderRef.current) return;
+    const el = cmHolderRef.current;
+    const apply = () => {
+      const h = el.getBoundingClientRect().height;
+      setCmHeightPx(Math.max(80, Math.round(h)));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fillContainer]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -28,14 +45,19 @@ export function WorkflowCodeEditor({ value, onChange }: Props) {
 
   return (
     <div
-      className="mt-0.5 overflow-hidden rounded-md border border-gray-300 bg-white text-xs shadow-sm dark:border-neutral-600 dark:bg-[#1e1e1e]"
+      ref={fillContainer ? cmHolderRef : undefined}
+      className={
+        fillContainer
+          ? 'mt-0.5 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-300 bg-white text-xs shadow-sm dark:border-neutral-600 dark:bg-[#1e1e1e]'
+          : 'mt-0.5 overflow-hidden rounded-md border border-gray-300 bg-white text-xs shadow-sm dark:border-neutral-600 dark:bg-[#1e1e1e]'
+      }
       data-workflow-code-editor
     >
       <CodeMirror
         value={value}
-        height="300px"
-        minHeight="200px"
-        maxHeight="420px"
+        height={fillContainer ? `${cmHeightPx}px` : '300px'}
+        minHeight={fillContainer ? '80px' : '200px'}
+        maxHeight={fillContainer ? undefined : '420px'}
         theme={dark ? vscodeDark : vscodeLight}
         extensions={extensions}
         onChange={onChange}
@@ -48,7 +70,7 @@ export function WorkflowCodeEditor({ value, onChange }: Props) {
           bracketMatching: true,
           closeBrackets: true,
         }}
-        className="text-[11px] leading-relaxed"
+        className="text-[10px] leading-relaxed"
       />
     </div>
   );

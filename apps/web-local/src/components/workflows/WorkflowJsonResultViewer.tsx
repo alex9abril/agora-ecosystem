@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
@@ -29,6 +29,8 @@ function IconCopy() {
 export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
   const [dark, setDark] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
+  const cmHolderRef = useRef<HTMLDivElement>(null);
+  const [cmHeightPx, setCmHeightPx] = useState(320);
 
   const text = useMemo(() => {
     try {
@@ -48,6 +50,19 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
     }
     return { lines, sizeKb, rowHint };
   }, [data, text]);
+
+  useLayoutEffect(() => {
+    if (!fillContainer || !cmHolderRef.current) return;
+    const el = cmHolderRef.current;
+    const apply = () => {
+      const h = el.getBoundingClientRect().height;
+      setCmHeightPx(Math.max(80, Math.round(h)));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fillContainer, stats.lines]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -74,7 +89,7 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
     <div
       className={
         fillContainer
-          ? 'flex h-full min-h-0 flex-1 flex-col gap-1.5'
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden'
           : 'flex min-h-0 flex-1 flex-col gap-1.5'
       }
       data-json-result-viewer
@@ -113,12 +128,19 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
           JSON muy grande: el resaltado puede ir lento. La tabla o el esquema suelen ser más ligeros.
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-gray-200 bg-white shadow-inner dark:border-neutral-600 dark:bg-[#1e1e1e]">
+      <div
+        ref={fillContainer ? cmHolderRef : undefined}
+        className={
+          fillContainer
+            ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-inner dark:border-neutral-600 dark:bg-[#1e1e1e]'
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-inner dark:border-neutral-600 dark:bg-[#1e1e1e]'
+        }
+      >
         <CodeMirror
           value={text}
-          height={fillContainer ? 'min(52vh, 520px)' : '400px'}
-          minHeight={fillContainer ? '200px' : '180px'}
-          maxHeight={fillContainer ? 'min(70vh, 800px)' : '480px'}
+          height={fillContainer ? `${cmHeightPx}px` : '400px'}
+          minHeight={fillContainer ? '80px' : '180px'}
+          maxHeight={fillContainer ? undefined : '480px'}
           theme={dark ? vscodeDark : vscodeLight}
           extensions={extensions}
           readOnly
@@ -130,7 +152,7 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
             bracketMatching: true,
             dropCursor: false,
           }}
-          className="text-[12px] leading-snug"
+          className="text-[10px] leading-snug"
         />
       </div>
     </div>

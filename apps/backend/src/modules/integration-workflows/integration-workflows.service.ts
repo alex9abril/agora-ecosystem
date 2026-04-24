@@ -19,6 +19,13 @@ import {
   toJsonSafeForWorkflow,
 } from './workflow-code-executor.util';
 import type { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
+import {
+  AUTOMATION_WRITE_TABLE_ALLOWLIST,
+  MAX_AUTOMATION_INSERT_ROWS,
+  extractRowsFromPrevious,
+  isAllowedAutomationWriteTable,
+  resolveFieldSpec,
+} from './workflow-sink-automation.util';
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
@@ -334,7 +341,9 @@ export class IntegrationWorkflowsService {
     try {
       const order = getLinearExecutionOrder(def);
       for (const node of order) {
-        const r = await this.executeNode(node, businessId, userId, steps[steps.length - 1]?.result);
+        const r = await this.executeNode(node, businessId, userId, steps[steps.length - 1]?.result, {
+          workflowId,
+        });
         steps.push(r);
         if (r.error) {
           finalError = r.error;
@@ -365,6 +374,7 @@ export class IntegrationWorkflowsService {
     businessId: string,
     userId: string,
     _previous: unknown,
+    ctx?: { workflowId?: string },
   ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }> {
     const t = node.type;
     const data = (node.data || {}) as Record<string, unknown>;
@@ -413,10 +423,243 @@ export class IntegrationWorkflowsService {
         logs: exec.logs,
       };
     }
+    if (t === 'sinkAutomation') {
+      return this.executeSinkAutomationNode(node, businessId, _previous, ctx ?? {});
+    }
     if (t === 'httpRequest' || t === 'httpPlaceholder') {
       return { nodeId: node.id, type: t, result: { message: 'HTTP request: implementación pendiente' } };
     }
     return { nodeId: node.id, type: t, error: `Tipo de nodo no soportado aún: ${t}` };
+  }
+
+  /** Tablas automation permitidas para el nodo sinkAutomation (BASE TABLE ∩ allowlist). */
+  async listAutomationWriteTables(userId: string, businessId: string) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+    const allowed = Array.from(AUTOMATION_WRITE_TABLE_ALLOWLIST);
+    const { rows } = await dbPool.query(
+      `SELECT table_name AS "tableName"
+       FROM information_schema.tables
+       WHERE table_schema = 'automation'
+         AND table_type = 'BASE TABLE'
+         AND table_name = ANY($1::text[])
+       ORDER BY table_name`,
+      [allowed],
+    );
+    return rows;
+  }
+
+  /** Columnas de una tabla automation permitida (para mapeo en UI). */
+  async getAutomationWriteTableColumns(userId: string, businessId: string, tableName: string) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+    const n = tableName.trim().toLowerCase();
+    if (!isAllowedAutomationWriteTable(n)) {
+      throw new BadRequestException('Tabla no permitida para escritura desde workflows');
+    }
+    const { rows } = await dbPool.query(
+      `SELECT column_name AS "columnName",
+              data_type AS "dataType",
+              is_nullable AS "isNullable",
+              (column_default IS NOT NULL AND column_default <> '') AS "hasDefault"
+       FROM information_schema.columns
+       WHERE table_schema = 'automation' AND table_name = $1
+       ORDER BY ordinal_position`,
+      [n],
+    );
+    return rows;
+  }
+
+  private static readonly AUTOMATION_QUALIFIED_TABLE: Record<string, string> = {
+    workflow_ingested_rows: 'automation.workflow_ingested_rows',
+  };
+
+  private normalizeAutomationInsertValue(dataType: string | undefined, v: unknown): unknown {
+    if (v === null || v === undefined) return null;
+    const t = (dataType || '').toLowerCase();
+    if (t === 'jsonb' || t === 'json') {
+      if (typeof v === 'object' && !Array.isArray(v)) return v;
+      if (typeof v === 'string') {
+        try {
+          return JSON.parse(v) as unknown;
+        } catch {
+          return { raw: v };
+        }
+      }
+      return v;
+    }
+    if (t === 'numeric' || t === 'double precision' || t === 'real' || t === 'integer' || t === 'bigint' || t === 'smallint') {
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+    return v;
+  }
+
+  private async executeSinkAutomationNode(
+    node: FlowNode,
+    businessId: string,
+    _previous: unknown,
+    ctx: { workflowId?: string },
+  ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }> {
+    const t = 'sinkAutomation';
+    const data = (node.data || {}) as Record<string, unknown>;
+    const tableName = String(data.tableName || '').trim().toLowerCase();
+    if (!isAllowedAutomationWriteTable(tableName)) {
+      return { nodeId: node.id, type: t, error: 'Nodo automation: elige una tabla permitida.' };
+    }
+    const qualifiedTable = IntegrationWorkflowsService.AUTOMATION_QUALIFIED_TABLE[tableName];
+    if (!qualifiedTable) {
+      return { nodeId: node.id, type: t, error: 'Nodo automation: tabla no configurada en el servidor.' };
+    }
+
+    const arrayPath = String(data.arrayPath ?? '');
+    const rawMappings = data.fieldMappings;
+    if (!rawMappings || typeof rawMappings !== 'object' || Array.isArray(rawMappings)) {
+      return { nodeId: node.id, type: t, error: 'Nodo automation: define fieldMappings (objeto columna → ruta, $row, $businessId o $workflowId).' };
+    }
+    const fieldMappings: Record<string, string> = { ...(rawMappings as Record<string, string>) };
+    delete fieldMappings.business_id;
+    delete fieldMappings.workflow_id;
+
+    const extracted = extractRowsFromPrevious(_previous, arrayPath);
+    if (extracted.ok === false) {
+      return { nodeId: node.id, type: t, error: extracted.error };
+    }
+    const rows = extracted.rows;
+    if (rows.length === 0) {
+      return {
+        nodeId: node.id,
+        type: t,
+        result: { inserted: 0, failed: 0, table: tableName, sampleErrors: [] as string[] },
+        logs: ['Sin filas en la entrada; no se ejecutó INSERT.'],
+      };
+    }
+    if (rows.length > MAX_AUTOMATION_INSERT_ROWS) {
+      return {
+        nodeId: node.id,
+        type: t,
+        error: `Demasiadas filas para insertar (máx. ${MAX_AUTOMATION_INSERT_ROWS}).`,
+      };
+    }
+
+    if (!dbPool) {
+      return { nodeId: node.id, type: t, error: 'Base de datos no configurada' };
+    }
+
+    const { rows: colRows } = await dbPool.query(
+      `SELECT column_name, data_type, is_nullable,
+              (column_default IS NOT NULL AND column_default <> '') AS has_default
+       FROM information_schema.columns
+       WHERE table_schema = 'automation' AND table_name = $1
+       ORDER BY ordinal_position`,
+      [tableName],
+    );
+    const colMeta = new Map<string, { dataType: string; nullable: boolean; hasDefault: boolean }>();
+    for (const c of colRows as {
+      column_name: string;
+      data_type: string;
+      is_nullable: string;
+      has_default: boolean;
+    }[]) {
+      colMeta.set(c.column_name, {
+        dataType: c.data_type,
+        nullable: c.is_nullable === 'YES',
+        hasDefault: !!c.has_default,
+      });
+    }
+
+    const skipInsert = new Set(['id', 'created_at']);
+    const insertCols = new Set<string>();
+    insertCols.add('business_id');
+    insertCols.add('workflow_id');
+    for (const k of Object.keys(fieldMappings)) {
+      if (typeof fieldMappings[k] !== 'string' || !fieldMappings[k].trim()) continue;
+      if (!colMeta.has(k)) {
+        return { nodeId: node.id, type: t, error: `Columna desconocida en la tabla: ${k}` };
+      }
+      if (skipInsert.has(k)) continue;
+      insertCols.add(k);
+    }
+    if (colMeta.has('row_payload') && !insertCols.has('row_payload')) {
+      insertCols.add('row_payload');
+      fieldMappings.row_payload = '$row';
+    }
+
+    const orderedCols = Array.from(insertCols).filter((c) => !skipInsert.has(c)).sort();
+    const clientCtx = { businessId, workflowId: ctx.workflowId ?? null };
+
+    let inserted = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row == null || typeof row !== 'object' || Array.isArray(row)) {
+        errors.push(`Fila ${i}: no es un objeto`);
+        continue;
+      }
+      const ro = row as Record<string, unknown>;
+      const vals: unknown[] = [];
+      let rowOk = true;
+      for (const col of orderedCols) {
+        if (col === 'business_id') {
+          vals.push(businessId);
+          continue;
+        }
+        if (col === 'workflow_id') {
+          vals.push(ctx.workflowId ?? null);
+          continue;
+        }
+        const spec = fieldMappings[col];
+        if (!spec || typeof spec !== 'string') {
+          errors.push(`Fila ${i}: falta mapeo para la columna ${col}`);
+          rowOk = false;
+          break;
+        }
+        const rawVal = resolveFieldSpec(ro, spec, clientCtx);
+        const meta = colMeta.get(col);
+        if ((rawVal === undefined || rawVal === null) && meta && !meta.nullable && !meta.hasDefault) {
+          errors.push(`Fila ${i}: valor vacío para columna obligatoria ${col}`);
+          rowOk = false;
+          break;
+        }
+        vals.push(this.normalizeAutomationInsertValue(meta?.dataType, rawVal));
+      }
+      if (!rowOk || vals.length !== orderedCols.length) continue;
+
+      const placeholders = orderedCols.map((_, j) => `$${j + 1}`).join(', ');
+      const sql = `INSERT INTO ${qualifiedTable} (${orderedCols.map((c) => `"${c.replace(/"/g, '')}"`).join(', ')}) VALUES (${placeholders})`;
+      try {
+        await dbPool.query(sql, vals);
+        inserted++;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        errors.push(`Fila ${i}: ${msg}`);
+      }
+    }
+
+    if (inserted === 0 && rows.length > 0) {
+      return {
+        nodeId: node.id,
+        type: t,
+        error: errors.slice(0, 3).join(' | ') || 'No se insertó ninguna fila',
+      };
+    }
+
+    return {
+      nodeId: node.id,
+      type: t,
+      result: {
+        inserted,
+        failed: errors.length,
+        table: tableName,
+        sampleErrors: errors.slice(0, 10),
+      },
+      logs:
+        errors.length > 0
+          ? [`Insertadas ${inserted} fila(s); ${errors.length} error(es) (ver sampleErrors en el resultado).`]
+          : [`Insertadas ${inserted} fila(s) en ${tableName}.`],
+    };
   }
 
   /** Texto útil para logs de flujo (HttpException no expone solo .message). */

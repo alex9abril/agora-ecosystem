@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Panel, useReactFlow, type Node } from '@xyflow/react';
 import type { ConnectorRow } from '@/lib/integration-workflows';
 
@@ -80,6 +81,23 @@ return $input.first().json;
     } as Node);
   }, [placePosition, pushNode]);
 
+  const onAddSinkAutomation = useCallback(() => {
+    pushNode({
+      id: newNodeId(),
+      type: 'sinkAutomation',
+      position: placePosition(),
+      data: {
+        label: 'Guardar en automation',
+        tableName: 'workflow_ingested_rows',
+        arrayPath: 'rows',
+        fieldMappings: {
+          product_code: '$row.product_code',
+          quantity: '$row.quantity',
+        },
+      },
+    } as Node);
+  }, [placePosition, pushNode]);
+
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => {
@@ -112,10 +130,12 @@ return $input.first().json;
           <span>Agregar</span>
         </button>
       </Panel>
-      {open && (
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
         <>
           <div
-            className="fixed inset-0 z-[205] bg-black/25 dark:bg-black/50"
+            className="fixed inset-0 z-[300] bg-black/25 dark:bg-black/50"
             aria-hidden
             onClick={() => {
               setOpen(false);
@@ -123,7 +143,7 @@ return $input.first().json;
             }}
           />
           <div
-            className="fixed right-0 top-0 z-[210] flex h-full w-[min(100vw,22rem)] flex-col border-l border-gray-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+            className="fixed right-0 top-0 z-[310] flex h-full w-[min(100vw,22rem)] flex-col border-l border-gray-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
             role="dialog"
             aria-label="Agregar nodo"
           >
@@ -194,6 +214,21 @@ return $input.first().json;
                       <span className="text-xs text-gray-600 dark:text-gray-400">Llamada HTTP (configuración próximamente)</span>
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={onAddSinkAutomation}
+                    className="flex w-full items-start gap-3 rounded-lg border border-cyan-200 bg-cyan-50/80 p-3 text-left transition hover:border-cyan-300 hover:bg-cyan-50 dark:border-cyan-800 dark:bg-cyan-950/40 dark:hover:bg-cyan-900/30"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-cyan-200/80 text-cyan-900 dark:bg-cyan-500/30 dark:text-cyan-100">
+                      <AutomationGlyph />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Guardar en automation</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        INSERT en tablas permitidas del esquema automation (filas del paso anterior)
+                      </span>
+                    </span>
+                  </button>
                 </div>
               )}
               {step === 'connectors' && (
@@ -222,7 +257,8 @@ return $input.first().json;
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </>
   );
@@ -254,6 +290,17 @@ function HttpGlyph() {
       <circle cx="12" cy="12" r="10" />
       <path d="M2 12h20" />
       <path d="M12 2a15 15 0 0 1 0 20" />
+    </svg>
+  );
+}
+
+function AutomationGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.65} strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="8" ry="2.5" />
+      <path d="M4 5v4c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5V5" />
+      <path d="M4 9v3c0 1.4 3.6 2.5 8 2.5" />
+      <path d="M17 16l3 3M20 16l-3 3" />
     </svg>
   );
 }

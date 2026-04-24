@@ -203,6 +203,24 @@ export class IntegrationWorkflowsController {
     return this.integrationWorkflowsService.listWorkflowRuns(user.id, businessId, workflowId, limit);
   }
 
+  @Get('automation/tables')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar tablas automation permitidas para el nodo Guardar en automation' })
+  listAutomationWriteTables(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
+    return this.integrationWorkflowsService.listAutomationWriteTables(user.id, businessId);
+  }
+
+  @Get('automation/tables/:tableName/columns')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Columnas de una tabla automation permitida (mapeo de campos)' })
+  getAutomationWriteTableColumns(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('tableName') tableName: string,
+  ) {
+    return this.integrationWorkflowsService.getAutomationWriteTableColumns(user.id, businessId, tableName);
+  }
+
   @Post('workflows/:workflowId/run')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Ejecutar flujo manualmente (opcional: definition del editor sin guardar)' })

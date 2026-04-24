@@ -154,15 +154,6 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
     return { kind: 'ok' as const, value: runExecution.output, logs: runExecution.logs ?? [] };
   }, [runExecution]);
 
-  const inputJson =
-    previousNode
-      ? {
-          nodeId: previousNode.id,
-          type: previousNode.type,
-          label: (previousNode.data as { label?: string } | undefined)?.label ?? null,
-        }
-      : null;
-
   return (
     <div
       className="fixed inset-0 z-[320] flex flex-col bg-white dark:bg-neutral-950"
@@ -172,9 +163,6 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
       <header className="flex items-center justify-between border-b border-gray-200 dark:border-neutral-800 px-4 py-2.5 shrink-0">
         <div className="min-w-0">
           <h1 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">Código (JavaScript)</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-            Misma ejecución que al correr el flujo: sandbox en servidor, sin require/fs.
-          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -195,31 +183,15 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
         </div>
       </header>
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-3">
-        <section className="flex min-h-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
-          <div className="shrink-0 border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
+        <section className="flex min-h-0 min-w-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/80">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Entrada ($input)</h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Debe ser el <strong className="font-medium">mismo JSON</strong> que publica el nodo previo. Tras
-              &quot;Probar flujo&quot;, el cuadro se rellena con la entrada real; puedes editarlo y usar
-              &quot;Vista previa&quot; sin guardar aún.
-            </p>
-            {runExecution && (
-              <p className="mt-1 text-[10px] text-emerald-800 dark:text-emerald-200">
-                Hay datos de la última ejecución: el JSON mostrado es el que <code className="text-[10px]">$input</code> recibió
-                (salida del paso anterior, p. ej. <code className="text-[10px]">rows</code> del origen MSSQL).
-              </p>
-            )}
-            {inputJson && !runExecution && (
-              <p className="text-[10px] text-gray-500 dark:text-gray-500 mt-1">
-                Nodo previo en el grafo: {String(inputJson.type)} · usa &quot;Sugerir&quot; o pega un ejemplo.
-              </p>
-            )}
             <button
               type="button"
               onClick={onResetTestInput}
-              className="mt-1 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600 hover:bg-gray-100 dark:border-neutral-600 dark:text-gray-300 dark:hover:bg-neutral-800"
+              className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-600 hover:bg-gray-100 dark:border-neutral-600 dark:text-gray-300 dark:hover:bg-neutral-800"
             >
-              Sugerir según nodo previo
+              Sugerir
             </button>
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
@@ -248,7 +220,7 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
               </button>
             </div>
             {inputTab === 'vista' && testInputParse.ok && (
-              <div className="flex min-h-[200px] min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 <WorkflowJsonResultViewer data={testInputParse.value} fillContainer />
               </div>
             )}
@@ -267,7 +239,7 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
               </div>
             )}
             {inputTab === 'texto' && (
-              <div className="flex min-h-[200px] min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col">
                 <label className="shrink-0 text-[10px] text-gray-500" htmlFor="code-test-input">
                   JSON (texto)
                 </label>
@@ -278,30 +250,17 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
                   className="mt-0.5 min-h-[200px] w-full min-w-0 flex-1 resize-y rounded border border-gray-300 bg-white p-2 font-mono text-[11px] text-gray-900 dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
                   spellCheck={false}
                 />
-                <p className="mt-1 shrink-0 text-[10px] text-gray-500 dark:text-gray-400">
-                  Vuelve a &quot;Vista JSON&quot; para ver el mismo resaltado, líneas y copiado que en la salida.
-                </p>
               </div>
             )}
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
-          <div className="border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
+        <section className="flex min-h-0 min-w-0 flex-col border-b border-gray-200 dark:border-neutral-800 md:border-b-0 md:border-r">
+          <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/80">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Código</h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">
-              Cuerpo de función: usa <code className="text-[10px]">return</code>. Variables{' '}
-              <code className="text-[10px]">$input</code> e <code className="text-[10px]">input</code> (alias) y <code className="text-[10px]">console.log</code> a la consola (se guarda en la vista previa).
-            </p>
-            <ul className="mt-1 list-inside list-disc text-[10px] text-amber-800/90 dark:text-amber-200/80 space-y-0.5">
-              <li>
-                Lotes: convierte, por ejemplo, <code className="text-[10px]">rows</code> en un arreglo de objetos <code className="text-[10px]">{'{ json: { … } }'}</code> o devuelve un arreglo; el
-                flujo pasa un único <code className="text-[10px]">result</code> al siguiente nodo.
-              </li>
-            </ul>
           </div>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-            <div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+            <div className="shrink-0">
               <label className="text-[10px] text-gray-500" htmlFor="code-node-label">
                 Etiqueta
               </label>
@@ -312,32 +271,25 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
                 className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-800"
               />
             </div>
-            <div>
-              <WorkflowCodeEditor value={code} onChange={setCode} />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <WorkflowCodeEditor value={code} onChange={setCode} fillContainer />
             </div>
             <button
               type="button"
               onClick={onRunPreview}
               disabled={busy}
-              className="w-full rounded-md bg-amber-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
+              className="shrink-0 w-full rounded-md bg-amber-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
             >
               {busy ? 'Ejecutando…' : 'Vista previa (servidor)'}
             </button>
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col">
-          <div className="border-b border-gray-100 bg-gray-50 dark:border-neutral-800 dark:bg-neutral-900/80 px-3 py-2">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/80">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">Salida</h2>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">Última ejecución del flujo o vista previa (botón en Código)</p>
           </div>
-          <div className="min-h-0 flex-1 flex flex-col overflow-hidden p-2 text-xs">
-            {okPreview === null && fromLastRunOut?.kind === 'ok' && !previewError && (
-              <p className="mb-1.5 shrink-0 rounded border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-                Salida de la <strong>última ejecución</strong> (valor de <code className="text-[10px]">return</code> en el
-                servidor). &quot;Vista previa&quot; la sustituye mientras tengas el panel abierto.
-              </p>
-            )}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2 text-xs">
             {previewError && (
               <p className="shrink-0 text-red-700 dark:text-red-300 whitespace-pre-wrap text-[11px] overflow-y-auto max-h-40">
                 {previewError}
@@ -351,17 +303,17 @@ export function WorkflowCodeNodePanel({ businessId, node, previousNode, onClose,
               </pre>
             )}
             {okPreview !== null && !previewError && (
-              <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
-                <WorkflowJsonResultViewer data={{ result: okPreview.value, consoleLogs: okPreview.logs }} />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <WorkflowJsonResultViewer data={{ result: okPreview.value, consoleLogs: okPreview.logs }} fillContainer />
               </div>
             )}
             {okPreview === null && fromLastRunOut?.kind === 'ok' && !previewError && (
-              <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
-                <WorkflowJsonResultViewer data={{ result: fromLastRunOut.value, consoleLogs: fromLastRunOut.logs }} />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <WorkflowJsonResultViewer data={{ result: fromLastRunOut.value, consoleLogs: fromLastRunOut.logs }} fillContainer />
               </div>
             )}
             {okPreview === null && !previewError && fromLastRunOut === null && (
-              <p className="text-gray-500">Ejecuta &quot;Probar flujo&quot; o &quot;Vista previa (servidor)&quot; para ver un resultado.</p>
+              <p className="text-gray-500 dark:text-gray-400">Sin resultado. Usa vista previa o ejecuta el flujo.</p>
             )}
           </div>
         </section>
