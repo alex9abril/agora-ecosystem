@@ -647,10 +647,14 @@ export class IntegrationWorkflowsService {
       if (!rowOk || vals.length !== orderedCols.length) continue;
 
       const placeholders = orderedCols.map((_, j) => `$${j + 1}`).join(', ');
-      const sql = `INSERT INTO ${qualifiedTable} (${orderedCols.map((c) => `"${c.replace(/"/g, '')}"`).join(', ')}) VALUES (${placeholders})`;
+      const sql = `INSERT INTO ${qualifiedTable} (${orderedCols.map((c) => `"${c.replace(/"/g, '')}"`).join(', ')}) VALUES (${placeholders}) RETURNING 1`;
       try {
-        await dbPool.query(sql, vals);
-        inserted++;
+        const q = await dbPool.query(sql, vals);
+        if ((q.rowCount ?? 0) > 0) {
+          inserted++;
+        } else {
+          errors.push(`Fila ${i}: no se insertó (posible trigger o regla de negocio en la tabla)`);
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         errors.push(`Fila ${i}: ${msg}`);
