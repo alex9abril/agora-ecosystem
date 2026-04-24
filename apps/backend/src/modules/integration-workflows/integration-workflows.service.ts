@@ -20,12 +20,12 @@ import {
 } from './workflow-code-executor.util';
 import type { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
 import {
-  AUTOMATION_WRITE_TABLE_ALLOWLIST,
-  MAX_AUTOMATION_INSERT_ROWS,
+  DATA_BRIDGE_WRITE_TABLE_ALLOWLIST,
+  MAX_DATA_BRIDGE_INSERT_ROWS,
   extractRowsFromPrevious,
-  isAllowedAutomationWriteTable,
+  isAllowedDataBridgeWriteTable,
   resolveFieldSpec,
-} from './workflow-sink-automation.util';
+} from './workflow-sink-data-bridge.util';
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
@@ -432,15 +432,15 @@ export class IntegrationWorkflowsService {
     return { nodeId: node.id, type: t, error: `Tipo de nodo no soportado aún: ${t}` };
   }
 
-  /** Tablas automation permitidas para el nodo sinkAutomation (BASE TABLE ∩ allowlist). */
-  async listAutomationWriteTables(userId: string, businessId: string) {
+  /** Tablas data_bridge permitidas para el nodo sinkAutomation (BASE TABLE ∩ allowlist). */
+  async listDataBridgeWriteTables(userId: string, businessId: string) {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
-    const allowed = Array.from(AUTOMATION_WRITE_TABLE_ALLOWLIST);
+    const allowed = Array.from(DATA_BRIDGE_WRITE_TABLE_ALLOWLIST);
     const { rows } = await dbPool.query(
       `SELECT table_name AS "tableName"
        FROM information_schema.tables
-       WHERE table_schema = 'automation'
+       WHERE table_schema = 'data_bridge'
          AND table_type = 'BASE TABLE'
          AND table_name = ANY($1::text[])
        ORDER BY table_name`,
@@ -449,12 +449,12 @@ export class IntegrationWorkflowsService {
     return rows;
   }
 
-  /** Columnas de una tabla automation permitida (para mapeo en UI). */
-  async getAutomationWriteTableColumns(userId: string, businessId: string, tableName: string) {
+  /** Columnas de una tabla data_bridge permitida (para mapeo en UI). */
+  async getDataBridgeWriteTableColumns(userId: string, businessId: string, tableName: string) {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     const n = tableName.trim().toLowerCase();
-    if (!isAllowedAutomationWriteTable(n)) {
+    if (!isAllowedDataBridgeWriteTable(n)) {
       throw new BadRequestException('Tabla no permitida para escritura desde workflows');
     }
     const { rows } = await dbPool.query(
@@ -463,15 +463,15 @@ export class IntegrationWorkflowsService {
               is_nullable AS "isNullable",
               (column_default IS NOT NULL AND column_default <> '') AS "hasDefault"
        FROM information_schema.columns
-       WHERE table_schema = 'automation' AND table_name = $1
+       WHERE table_schema = 'data_bridge' AND table_name = $1
        ORDER BY ordinal_position`,
       [n],
     );
     return rows;
   }
 
-  private static readonly AUTOMATION_QUALIFIED_TABLE: Record<string, string> = {
-    workflow_ingested_rows: 'automation.workflow_ingested_rows',
+  private static readonly DATA_BRIDGE_QUALIFIED_TABLE: Record<string, string> = {
+    workflow_ingested_rows: 'data_bridge.workflow_ingested_rows',
   };
 
   private normalizeAutomationInsertValue(dataType: string | undefined, v: unknown): unknown {
@@ -505,18 +505,18 @@ export class IntegrationWorkflowsService {
     const t = 'sinkAutomation';
     const data = (node.data || {}) as Record<string, unknown>;
     const tableName = String(data.tableName || '').trim().toLowerCase();
-    if (!isAllowedAutomationWriteTable(tableName)) {
-      return { nodeId: node.id, type: t, error: 'Nodo automation: elige una tabla permitida.' };
+    if (!isAllowedDataBridgeWriteTable(tableName)) {
+      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: elige una tabla permitida.' };
     }
-    const qualifiedTable = IntegrationWorkflowsService.AUTOMATION_QUALIFIED_TABLE[tableName];
+    const qualifiedTable = IntegrationWorkflowsService.DATA_BRIDGE_QUALIFIED_TABLE[tableName];
     if (!qualifiedTable) {
-      return { nodeId: node.id, type: t, error: 'Nodo automation: tabla no configurada en el servidor.' };
+      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: tabla no configurada en el servidor.' };
     }
 
     const arrayPath = String(data.arrayPath ?? '');
     const rawMappings = data.fieldMappings;
     if (!rawMappings || typeof rawMappings !== 'object' || Array.isArray(rawMappings)) {
-      return { nodeId: node.id, type: t, error: 'Nodo automation: define fieldMappings (objeto columna → ruta, $row, $businessId o $workflowId).' };
+      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: define fieldMappings (objeto columna → ruta, $row, $businessId o $workflowId).' };
     }
     const fieldMappings: Record<string, string> = { ...(rawMappings as Record<string, string>) };
     delete fieldMappings.business_id;
@@ -535,11 +535,11 @@ export class IntegrationWorkflowsService {
         logs: ['Sin filas en la entrada; no se ejecutó INSERT.'],
       };
     }
-    if (rows.length > MAX_AUTOMATION_INSERT_ROWS) {
+    if (rows.length > MAX_DATA_BRIDGE_INSERT_ROWS) {
       return {
         nodeId: node.id,
         type: t,
-        error: `Demasiadas filas para insertar (máx. ${MAX_AUTOMATION_INSERT_ROWS}).`,
+        error: `Demasiadas filas para insertar (máx. ${MAX_DATA_BRIDGE_INSERT_ROWS}).`,
       };
     }
 
@@ -551,7 +551,7 @@ export class IntegrationWorkflowsService {
       `SELECT column_name, data_type, is_nullable,
               (column_default IS NOT NULL AND column_default <> '') AS has_default
        FROM information_schema.columns
-       WHERE table_schema = 'automation' AND table_name = $1
+       WHERE table_schema = 'data_bridge' AND table_name = $1
        ORDER BY ordinal_position`,
       [tableName],
     );

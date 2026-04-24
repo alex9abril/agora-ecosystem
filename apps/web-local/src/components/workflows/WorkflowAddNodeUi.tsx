@@ -87,7 +87,7 @@ return $input.first().json;
       type: 'sinkAutomation',
       position: placePosition(),
       data: {
-        label: 'Guardar en automation',
+        label: 'Guardar en data bridge',
         tableName: 'workflow_ingested_rows',
         arrayPath: 'rows',
         fieldMappings: {
@@ -223,9 +223,9 @@ return $input.first().json;
                       <AutomationGlyph />
                     </span>
                     <span>
-                      <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Guardar en automation</span>
+                      <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Guardar en data bridge</span>
                       <span className="text-xs text-gray-600 dark:text-gray-400">
-                        INSERT en tablas permitidas del esquema automation (filas del paso anterior)
+                        INSERT en tablas permitidas del esquema data_bridge (filas del paso anterior)
                       </span>
                     </span>
                   </button>

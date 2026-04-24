@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import { ApiError } from '@/lib/api';
 import {
-  fetchAutomationWriteTableColumns,
-  fetchAutomationWriteTables,
-  type AutomationWriteColumnRow,
+  fetchDataBridgeWriteTableColumns,
+  fetchDataBridgeWriteTables,
+  type DataBridgeWriteColumnRow,
 } from '@/lib/integration-workflows';
 import { WorkflowJsonResultViewer } from './WorkflowJsonResultViewer';
 import type { NodeRunExecutionView } from './workflow-run-types';
@@ -38,14 +38,14 @@ export function WorkflowSinkAutomationNodePanel({
     arrayPath?: string;
     fieldMappings?: Record<string, string>;
   };
-  const [label, setLabel] = useState(d0.label || 'Guardar en automation');
+  const [label, setLabel] = useState(d0.label || 'Guardar en data bridge');
   const [tableName, setTableName] = useState(d0.tableName || '');
   const [arrayPath, setArrayPath] = useState(typeof d0.arrayPath === 'string' ? d0.arrayPath : 'rows');
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>(() =>
     isRecord(d0.fieldMappings) ? { ...(d0.fieldMappings as Record<string, string>) } : {},
   );
   const [tables, setTables] = useState<{ tableName: string }[]>([]);
-  const [columns, setColumns] = useState<AutomationWriteColumnRow[]>([]);
+  const [columns, setColumns] = useState<DataBridgeWriteColumnRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [busyTables, setBusyTables] = useState(false);
   const [busyCols, setBusyCols] = useState(false);
@@ -57,7 +57,7 @@ export function WorkflowSinkAutomationNodePanel({
       arrayPath?: string;
       fieldMappings?: Record<string, string>;
     };
-    setLabel(nd.label || 'Guardar en automation');
+    setLabel(nd.label || 'Guardar en data bridge');
     setTableName(typeof nd.tableName === 'string' ? nd.tableName : '');
     setArrayPath(typeof nd.arrayPath === 'string' ? nd.arrayPath : 'rows');
     setFieldMappings(isRecord(nd.fieldMappings) ? { ...(nd.fieldMappings as Record<string, string>) } : {});
@@ -75,7 +75,7 @@ export function WorkflowSinkAutomationNodePanel({
     let cancelled = false;
     setBusyTables(true);
     setLoadErr(null);
-    void fetchAutomationWriteTables(businessId)
+    void fetchDataBridgeWriteTables(businessId)
       .then((rows) => {
         if (cancelled) return;
         setTables(rows);
@@ -104,7 +104,7 @@ export function WorkflowSinkAutomationNodePanel({
     let cancelled = false;
     setBusyCols(true);
     setLoadErr(null);
-    void fetchAutomationWriteTableColumns(businessId, t)
+    void fetchDataBridgeWriteTableColumns(businessId, t)
       .then((rows) => {
         if (cancelled) return;
         setColumns(rows);
@@ -137,7 +137,7 @@ export function WorkflowSinkAutomationNodePanel({
       if (typeof v === 'string' && v.trim()) clean[k] = v.trim();
     }
     onSave(node.id, {
-      label: label.trim() || 'Guardar en automation',
+      label: label.trim() || 'Guardar en data bridge',
       tableName: tableName.trim(),
       arrayPath: arrayPath.trim(),
       fieldMappings: clean,
@@ -167,11 +167,11 @@ export function WorkflowSinkAutomationNodePanel({
     <div
       className="fixed inset-0 z-[320] flex flex-col bg-white dark:bg-neutral-950"
       role="dialog"
-      aria-label="Configurar destino automation"
+      aria-label="Configurar destino data bridge"
     >
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-2.5 dark:border-neutral-800">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">Guardar en automation</h1>
+          <h1 className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">Guardar en data bridge</h1>
           <p className="truncate text-xs text-gray-500 dark:text-gray-400">
             Nodo: {label || node.id} · flujo {workflowId.slice(0, 8)}…
           </p>
@@ -210,7 +210,7 @@ export function WorkflowSinkAutomationNodePanel({
             className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
           />
 
-          <label className="mt-4 block text-xs font-medium text-gray-700 dark:text-gray-300">Tabla (automation)</label>
+          <label className="mt-4 block text-xs font-medium text-gray-700 dark:text-gray-300">Tabla (data_bridge)</label>
           <select
             value={tableName}
             onChange={(e) => setTableName(e.target.value)}

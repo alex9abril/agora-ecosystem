@@ -241,22 +241,22 @@ export function fetchWorkflowRuns(businessId: string, workflowId: string, limit 
   );
 }
 
-export type AutomationWriteTableRow = { tableName: string };
+export type DataBridgeWriteTableRow = { tableName: string };
 
-export type AutomationWriteColumnRow = {
+export type DataBridgeWriteColumnRow = {
   columnName: string;
   dataType: string;
   isNullable: string;
   hasDefault: boolean;
 };
 
-export function fetchAutomationWriteTables(businessId: string) {
-  return apiRequest<AutomationWriteTableRow[]>(`${base(businessId)}/automation/tables`);
+export function fetchDataBridgeWriteTables(businessId: string) {
+  return apiRequest<DataBridgeWriteTableRow[]>(`${base(businessId)}/data-bridge/tables`);
 }
 
-export function fetchAutomationWriteTableColumns(businessId: string, tableName: string) {
+export function fetchDataBridgeWriteTableColumns(businessId: string, tableName: string) {
   const t = encodeURIComponent(tableName);
-  return apiRequest<AutomationWriteColumnRow[]>(`${base(businessId)}/automation/tables/${t}/columns`);
+  return apiRequest<DataBridgeWriteColumnRow[]>(`${base(businessId)}/data-bridge/tables/${t}/columns`);
 }
 
 export const defaultWorkflowDefinition = (): Record<string, unknown> => ({

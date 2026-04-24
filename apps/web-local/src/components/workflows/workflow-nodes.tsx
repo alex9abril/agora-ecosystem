@@ -298,7 +298,7 @@ export function SinkAutomationNode(props: NodeProps) {
         `${box} group overflow-visible border-cyan-200/90 dark:border-cyan-600/50 ${!readOnly ? 'cursor-pointer' : ''}`,
         pData,
       )}
-      title={readOnly ? undefined : 'Clic para tabla automation y mapeo de columnas'}
+      title={readOnly ? undefined : 'Clic para tabla data_bridge y mapeo de columnas'}
     >
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-cyan-500" />
@@ -308,7 +308,7 @@ export function SinkAutomationNode(props: NodeProps) {
             <IconDatabase />
           </IconBadge>
           <div className="min-w-0 flex-1">
-            <div className={title}>Guardar en automation</div>
+            <div className={title}>Guardar en data bridge</div>
             <div className={label}>{d.label || 'Destino (filas)'}</div>
             <div className="text-[10px] text-cyan-800/85 dark:text-cyan-200/85 mt-0.5 font-mono truncate" title={`${table} · ${path}`}>
               {table} · {path}

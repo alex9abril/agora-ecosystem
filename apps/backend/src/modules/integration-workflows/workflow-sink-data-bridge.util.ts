@@ -1,14 +1,14 @@
-/** Tablas automation permitidas para INSERT desde workflows (allowlist estricta). */
-export const AUTOMATION_WRITE_TABLE_ALLOWLIST = new Set(['workflow_ingested_rows']);
+/** Tablas data_bridge permitidas para INSERT desde workflows (allowlist estricta). */
+export const DATA_BRIDGE_WRITE_TABLE_ALLOWLIST = new Set(['workflow_ingested_rows']);
 
-export const MAX_AUTOMATION_INSERT_ROWS = 500;
+export const MAX_DATA_BRIDGE_INSERT_ROWS = 500;
 
 /** Solo identificadores en minúsculas snake_case (coincide con nombres en allowlist). */
-export const AUTOMATION_TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;
+export const DATA_BRIDGE_TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;
 
-export function isAllowedAutomationWriteTable(name: string): boolean {
+export function isAllowedDataBridgeWriteTable(name: string): boolean {
   const n = name.trim().toLowerCase();
-  return AUTOMATION_TABLE_NAME_RE.test(n) && AUTOMATION_WRITE_TABLE_ALLOWLIST.has(n);
+  return DATA_BRIDGE_TABLE_NAME_RE.test(n) && DATA_BRIDGE_WRITE_TABLE_ALLOWLIST.has(n);
 }
 
 export function extractRowsFromPrevious(

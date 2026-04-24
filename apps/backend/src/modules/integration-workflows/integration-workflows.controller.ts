@@ -203,22 +203,22 @@ export class IntegrationWorkflowsController {
     return this.integrationWorkflowsService.listWorkflowRuns(user.id, businessId, workflowId, limit);
   }
 
-  @Get('automation/tables')
+  @Get('data-bridge/tables')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Listar tablas automation permitidas para el nodo Guardar en automation' })
-  listAutomationWriteTables(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
-    return this.integrationWorkflowsService.listAutomationWriteTables(user.id, businessId);
+  @ApiOperation({ summary: 'Listar tablas data_bridge permitidas para el nodo Guardar en data bridge' })
+  listDataBridgeWriteTables(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
+    return this.integrationWorkflowsService.listDataBridgeWriteTables(user.id, businessId);
   }
 
-  @Get('automation/tables/:tableName/columns')
+  @Get('data-bridge/tables/:tableName/columns')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Columnas de una tabla automation permitida (mapeo de campos)' })
-  getAutomationWriteTableColumns(
+  @ApiOperation({ summary: 'Columnas de una tabla data_bridge permitida (mapeo de campos)' })
+  getDataBridgeWriteTableColumns(
     @CurrentUser() user: User,
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('tableName') tableName: string,
   ) {
-    return this.integrationWorkflowsService.getAutomationWriteTableColumns(user.id, businessId, tableName);
+    return this.integrationWorkflowsService.getDataBridgeWriteTableColumns(user.id, businessId, tableName);
   }
 
   @Post('workflows/:workflowId/run')
