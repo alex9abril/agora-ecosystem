@@ -20,10 +20,9 @@ import {
 } from './workflow-code-executor.util';
 import type { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
 import {
-  DATA_BRIDGE_WRITE_TABLE_ALLOWLIST,
   MAX_DATA_BRIDGE_INSERT_ROWS,
   extractRowsFromPrevious,
-  isAllowedDataBridgeWriteTable,
+  isValidDataBridgeWriteTableName,
   resolveFieldSpec,
 } from './workflow-sink-data-bridge.util';
 
@@ -432,30 +431,34 @@ export class IntegrationWorkflowsService {
     return { nodeId: node.id, type: t, error: `Tipo de nodo no soportado aún: ${t}` };
   }
 
-  /** Tablas data_bridge permitidas para el nodo sinkAutomation (BASE TABLE ∩ allowlist). */
+  /** Tablas BASE en el esquema `data_bridge` (introspección para el editor de workflows). */
   async listDataBridgeWriteTables(userId: string, businessId: string) {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
-    const allowed = Array.from(DATA_BRIDGE_WRITE_TABLE_ALLOWLIST);
     const { rows } = await dbPool.query(
       `SELECT table_name AS "tableName"
        FROM information_schema.tables
-       WHERE table_schema = 'data_bridge'
-         AND table_type = 'BASE TABLE'
-         AND table_name = ANY($1::text[])
+       WHERE table_schema = 'data_bridge' AND table_type = 'BASE TABLE'
        ORDER BY table_name`,
-      [allowed],
     );
     return rows;
   }
 
-  /** Columnas de una tabla data_bridge permitida (para mapeo en UI). */
+  /** Columnas de una tabla BASE en `data_bridge` (mapeo en UI). */
   async getDataBridgeWriteTableColumns(userId: string, businessId: string, tableName: string) {
     await this.assertUserHasBusinessAccess(userId, businessId);
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     const n = tableName.trim().toLowerCase();
-    if (!isAllowedDataBridgeWriteTable(n)) {
-      throw new BadRequestException('Tabla no permitida para escritura desde workflows');
+    if (!isValidDataBridgeWriteTableName(n)) {
+      throw new BadRequestException('Nombre de tabla no válido');
+    }
+    const { rows: exists } = await dbPool.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'data_bridge' AND table_type = 'BASE TABLE' AND table_name = $1 LIMIT 1`,
+      [n],
+    );
+    if (exists.length === 0) {
+      throw new BadRequestException(`La tabla "${n}" no existe en el esquema data_bridge`);
     }
     const { rows } = await dbPool.query(
       `SELECT column_name AS "columnName",
@@ -470,11 +473,7 @@ export class IntegrationWorkflowsService {
     return rows;
   }
 
-  private static readonly DATA_BRIDGE_QUALIFIED_TABLE: Record<string, string> = {
-    workflow_ingested_rows: 'data_bridge.workflow_ingested_rows',
-  };
-
-  private normalizeAutomationInsertValue(dataType: string | undefined, v: unknown): unknown {
+  private normalizeDataBridgeInsertValue(dataType: string | undefined, v: unknown): unknown {
     if (v === null || v === undefined) return null;
     const t = (dataType || '').toLowerCase();
     if (t === 'jsonb' || t === 'json') {
@@ -505,13 +504,10 @@ export class IntegrationWorkflowsService {
     const t = 'sinkAutomation';
     const data = (node.data || {}) as Record<string, unknown>;
     const tableName = String(data.tableName || '').trim().toLowerCase();
-    if (!isAllowedDataBridgeWriteTable(tableName)) {
-      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: elige una tabla permitida.' };
+    if (!isValidDataBridgeWriteTableName(tableName)) {
+      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: nombre de tabla no válido (solo a-z, números y _).' };
     }
-    const qualifiedTable = IntegrationWorkflowsService.DATA_BRIDGE_QUALIFIED_TABLE[tableName];
-    if (!qualifiedTable) {
-      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: tabla no configurada en el servidor.' };
-    }
+    const qualifiedTable = `data_bridge.${tableName}`;
 
     const arrayPath = String(data.arrayPath ?? '');
     const rawMappings = data.fieldMappings;
@@ -547,6 +543,19 @@ export class IntegrationWorkflowsService {
       return { nodeId: node.id, type: t, error: 'Base de datos no configurada' };
     }
 
+    const { rows: existsRows } = await dbPool.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'data_bridge' AND table_type = 'BASE TABLE' AND table_name = $1 LIMIT 1`,
+      [tableName],
+    );
+    if (existsRows.length === 0) {
+      return {
+        nodeId: node.id,
+        type: t,
+        error: `Nodo data_bridge: la tabla "${tableName}" no existe en el esquema data_bridge.`,
+      };
+    }
+
     const { rows: colRows } = await dbPool.query(
       `SELECT column_name, data_type, is_nullable,
               (column_default IS NOT NULL AND column_default <> '') AS has_default
@@ -568,11 +577,14 @@ export class IntegrationWorkflowsService {
         hasDefault: !!c.has_default,
       });
     }
+    if (colMeta.size === 0) {
+      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: no se pudieron leer columnas de la tabla.' };
+    }
 
     const skipInsert = new Set(['id', 'created_at']);
     const insertCols = new Set<string>();
-    insertCols.add('business_id');
-    insertCols.add('workflow_id');
+    if (colMeta.has('business_id')) insertCols.add('business_id');
+    if (colMeta.has('workflow_id')) insertCols.add('workflow_id');
     for (const k of Object.keys(fieldMappings)) {
       if (typeof fieldMappings[k] !== 'string' || !fieldMappings[k].trim()) continue;
       if (!colMeta.has(k)) {
@@ -587,6 +599,13 @@ export class IntegrationWorkflowsService {
     }
 
     const orderedCols = Array.from(insertCols).filter((c) => !skipInsert.has(c)).sort();
+    if (orderedCols.length === 0) {
+      return {
+        nodeId: node.id,
+        type: t,
+        error: 'Nodo data_bridge: no hay columnas para insertar (revisa mapeos y columnas de la tabla).',
+      };
+    }
     const clientCtx = { businessId, workflowId: ctx.workflowId ?? null };
 
     let inserted = 0;
@@ -602,11 +621,11 @@ export class IntegrationWorkflowsService {
       const vals: unknown[] = [];
       let rowOk = true;
       for (const col of orderedCols) {
-        if (col === 'business_id') {
+        if (col === 'business_id' && colMeta.has('business_id')) {
           vals.push(businessId);
           continue;
         }
-        if (col === 'workflow_id') {
+        if (col === 'workflow_id' && colMeta.has('workflow_id')) {
           vals.push(ctx.workflowId ?? null);
           continue;
         }
@@ -623,7 +642,7 @@ export class IntegrationWorkflowsService {
           rowOk = false;
           break;
         }
-        vals.push(this.normalizeAutomationInsertValue(meta?.dataType, rawVal));
+        vals.push(this.normalizeDataBridgeInsertValue(meta?.dataType, rawVal));
       }
       if (!rowOk || vals.length !== orderedCols.length) continue;
 
@@ -639,10 +658,18 @@ export class IntegrationWorkflowsService {
     }
 
     if (inserted === 0 && rows.length > 0) {
+      const summary = {
+        inserted: 0,
+        failed: errors.length,
+        table: tableName,
+        sampleErrors: errors.slice(0, 10),
+      };
       return {
         nodeId: node.id,
         type: t,
+        result: summary,
         error: errors.slice(0, 3).join(' | ') || 'No se insertó ninguna fila',
+        logs: ['No se insertaron filas. Revisa sampleErrors para ver el detalle por fila.'],
       };
     }
 

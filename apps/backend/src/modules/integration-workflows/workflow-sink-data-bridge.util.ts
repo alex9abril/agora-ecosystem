@@ -1,14 +1,11 @@
-/** Tablas data_bridge permitidas para INSERT desde workflows (allowlist estricta). */
-export const DATA_BRIDGE_WRITE_TABLE_ALLOWLIST = new Set(['workflow_ingested_rows']);
-
+/** Límite de filas por ejecución del nodo sinkAutomation → data_bridge. */
 export const MAX_DATA_BRIDGE_INSERT_ROWS = 500;
 
-/** Solo identificadores en minúsculas snake_case (coincide con nombres en allowlist). */
+/** Solo identificadores en minúsculas snake_case (nombres de tabla en data_bridge). */
 export const DATA_BRIDGE_TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;
 
-export function isAllowedDataBridgeWriteTable(name: string): boolean {
-  const n = name.trim().toLowerCase();
-  return DATA_BRIDGE_TABLE_NAME_RE.test(n) && DATA_BRIDGE_WRITE_TABLE_ALLOWLIST.has(n);
+export function isValidDataBridgeWriteTableName(name: string): boolean {
+  return DATA_BRIDGE_TABLE_NAME_RE.test(name.trim().toLowerCase());
 }
 
 export function extractRowsFromPrevious(

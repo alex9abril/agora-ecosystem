@@ -88,12 +88,9 @@ return $input.first().json;
       position: placePosition(),
       data: {
         label: 'Guardar en data bridge',
-        tableName: 'workflow_ingested_rows',
+        tableName: '',
         arrayPath: 'rows',
-        fieldMappings: {
-          product_code: '$row.product_code',
-          quantity: '$row.quantity',
-        },
+        fieldMappings: {},
       },
     } as Node);
   }, [placePosition, pushNode]);

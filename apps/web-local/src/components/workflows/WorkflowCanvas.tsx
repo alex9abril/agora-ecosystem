@@ -339,7 +339,7 @@ function FlowSurface({
         if (step) {
           d.runExecution = {
             input: buildStepInput(steps, idx),
-            output: step.error ? null : step.result,
+            output: step.result,
             error: step.error,
             logs: step.logs,
             stepIndex: idx,
