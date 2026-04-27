@@ -504,6 +504,7 @@ export class IntegrationWorkflowsService {
     const t = 'sinkAutomation';
     const data = (node.data || {}) as Record<string, unknown>;
     const tableName = String(data.tableName || '').trim().toLowerCase();
+    const clearPreviousRecords = data.clearPreviousRecords === true;
     if (!isValidDataBridgeWriteTableName(tableName)) {
       return { nodeId: node.id, type: t, error: 'Nodo data_bridge: nombre de tabla no válido (solo a-z, números y _).' };
     }
@@ -610,6 +611,25 @@ export class IntegrationWorkflowsService {
 
     let inserted = 0;
     const errors: string[] = [];
+    const logs: string[] = [];
+
+    if (clearPreviousRecords) {
+      try {
+        const clearResult = await dbPool.query(`DELETE FROM ${qualifiedTable}`);
+        const cleared = clearResult.rowCount ?? 0;
+        logs.push(`Limpieza previa activa: se eliminaron ${cleared} fila(s) en ${tableName} antes de insertar.`);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return {
+          nodeId: node.id,
+          type: t,
+          error: `No se pudo limpiar la tabla ${tableName} antes de insertar: ${msg}`,
+          logs: ['Activa "Borrar los registros anteriores" requiere permiso DELETE sobre la tabla destino.'],
+        };
+      }
+    } else {
+      logs.push('Limpieza previa desactivada: se insertará sin borrar datos existentes (puede duplicar filas).');
+    }
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -673,7 +693,7 @@ export class IntegrationWorkflowsService {
         type: t,
         result: summary,
         error: errors.slice(0, 3).join(' | ') || 'No se insertó ninguna fila',
-        logs: ['No se insertaron filas. Revisa sampleErrors para ver el detalle por fila.'],
+        logs: [...logs, 'No se insertaron filas. Revisa sampleErrors para ver el detalle por fila.'],
       };
     }
 
@@ -688,8 +708,8 @@ export class IntegrationWorkflowsService {
       },
       logs:
         errors.length > 0
-          ? [`Insertadas ${inserted} fila(s); ${errors.length} error(es) (ver sampleErrors en el resultado).`]
-          : [`Insertadas ${inserted} fila(s) en ${tableName}.`],
+          ? [...logs, `Insertadas ${inserted} fila(s); ${errors.length} error(es) (ver sampleErrors en el resultado).`]
+          : [...logs, `Insertadas ${inserted} fila(s) en ${tableName}.`],
     };
   }
 

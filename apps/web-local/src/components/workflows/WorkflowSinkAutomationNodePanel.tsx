@@ -443,7 +443,7 @@ export function WorkflowSinkAutomationNodePanel({
                     role="switch"
                     aria-checked={clearPreviousRecords}
                     onClick={() => setClearPreviousRecords((v) => !v)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                       clearPreviousRecords ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
                     }`}
                   >
@@ -468,7 +468,7 @@ export function WorkflowSinkAutomationNodePanel({
                     role="switch"
                     aria-checked={false}
                     disabled
-                    className="relative inline-flex h-6 w-11 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
                   >
                     <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
                   </button>
@@ -487,7 +487,7 @@ export function WorkflowSinkAutomationNodePanel({
                     role="switch"
                     aria-checked={false}
                     disabled
-                    className="relative inline-flex h-6 w-11 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
                   >
                     <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
                   </button>
