@@ -13,6 +13,7 @@ type Props = {
 };
 
 const extensions = [json(), EditorView.lineWrapping];
+const LARGE_JSON_FAST_VIEW_THRESHOLD = 80_000;
 
 function IconCopy() {
   return (
@@ -50,6 +51,13 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
     }
     return { lines, sizeKb, rowHint };
   }, [data, text]);
+  const shouldDefaultFastMode = text.length >= LARGE_JSON_FAST_VIEW_THRESHOLD;
+  const [preferPrettyViewer, setPreferPrettyViewer] = useState(false);
+  const usePlainViewer = shouldDefaultFastMode && !preferPrettyViewer;
+
+  useEffect(() => {
+    setPreferPrettyViewer(false);
+  }, [text]);
 
   useLayoutEffect(() => {
     if (!fillContainer || !cmHolderRef.current) return;
@@ -89,7 +97,7 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
     <div
       className={
         fillContainer
-          ? 'flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden'
+          ? 'flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden'
           : 'flex min-h-0 flex-1 flex-col gap-1.5'
       }
       data-json-result-viewer
@@ -100,8 +108,21 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
             {stats.lines} línea{stats.lines === 1 ? '' : 's'} · ~{stats.sizeKb} KB
           </span>
           {stats.rowHint && <span className="text-gray-400 dark:text-gray-500">· {stats.rowHint}</span>}
+          {shouldDefaultFastMode && (
+            <span className="text-amber-700 dark:text-amber-300">· Modo rápido activo</span>
+          )}
         </div>
         <div className="flex items-center gap-1">
+          {shouldDefaultFastMode && (
+            <button
+              type="button"
+              onClick={() => setPreferPrettyViewer((v) => !v)}
+              className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-medium text-gray-800 shadow-sm hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-gray-100 dark:hover:bg-neutral-700"
+              title={usePlainViewer ? 'Cambiar a vista formateada' : 'Cambiar a vista optimizada'}
+            >
+              {usePlainViewer ? 'Vista formateada' : 'Vista optimizada'}
+            </button>
+          )}
           {copyState === 'ok' && (
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400" role="status">
               Copiado
@@ -136,24 +157,32 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
             : 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-gray-200 bg-white shadow-inner dark:border-neutral-600 dark:bg-[#1e1e1e]'
         }
       >
-        <CodeMirror
-          value={text}
-          height={fillContainer ? `${cmHeightPx}px` : '400px'}
-          minHeight={fillContainer ? '80px' : '180px'}
-          maxHeight={fillContainer ? undefined : '480px'}
-          theme={dark ? vscodeDark : vscodeLight}
-          extensions={extensions}
-          readOnly
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: true,
-            highlightActiveLine: true,
-            highlightActiveLineGutter: true,
-            bracketMatching: true,
-            dropCursor: false,
-          }}
-          className="text-[10px] leading-snug"
-        />
+        {usePlainViewer ? (
+          <div className="min-h-0 w-full flex-1 overflow-auto" aria-label="JSON output">
+            <pre className="m-0 min-w-full p-2 font-mono text-[10px] leading-snug text-gray-800 dark:text-gray-100">
+              {text}
+            </pre>
+          </div>
+        ) : (
+          <CodeMirror
+            value={text}
+            height={fillContainer ? `${cmHeightPx}px` : '400px'}
+            minHeight={fillContainer ? '80px' : '180px'}
+            maxHeight={fillContainer ? undefined : '480px'}
+            theme={dark ? vscodeDark : vscodeLight}
+            extensions={extensions}
+            readOnly
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLine: true,
+              highlightActiveLineGutter: true,
+              bracketMatching: true,
+              dropCursor: false,
+            }}
+            className="text-[10px] leading-snug"
+          />
+        )}
       </div>
     </div>
   );

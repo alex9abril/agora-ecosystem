@@ -118,6 +118,9 @@ export function WorkflowSinkAutomationNodePanel({
     tableName?: string;
     arrayPath?: string;
     fieldMappings?: Record<string, string>;
+    clearPreviousRecords?: boolean;
+    syncWithStore?: boolean;
+    notifyAdminByEmail?: boolean;
   };
   const [label, setLabel] = useState(d0.label || 'Guardar en data bridge');
   const [tableName, setTableName] = useState(d0.tableName || '');
@@ -125,6 +128,7 @@ export function WorkflowSinkAutomationNodePanel({
   const [fieldMappings, setFieldMappings] = useState<Record<string, string>>(() =>
     isRecord(d0.fieldMappings) ? { ...(d0.fieldMappings as Record<string, string>) } : {},
   );
+  const [clearPreviousRecords, setClearPreviousRecords] = useState(Boolean(d0.clearPreviousRecords));
   const [tables, setTables] = useState<DataBridgeWriteTableRow[]>([]);
   const [columns, setColumns] = useState<DataBridgeWriteColumnRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -132,6 +136,7 @@ export function WorkflowSinkAutomationNodePanel({
   const [busyCols, setBusyCols] = useState(false);
   const [mappingOtherMode, setMappingOtherMode] = useState<Record<string, boolean>>({});
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
+  const [activeTab, setActiveTab] = useState<'parameters' | 'settings'>('parameters');
 
   useEffect(() => {
     const nd = (node.data || {}) as {
@@ -139,12 +144,17 @@ export function WorkflowSinkAutomationNodePanel({
       tableName?: string;
       arrayPath?: string;
       fieldMappings?: Record<string, string>;
+      clearPreviousRecords?: boolean;
+      syncWithStore?: boolean;
+      notifyAdminByEmail?: boolean;
     };
     setLabel(nd.label || 'Guardar en data bridge');
     setTableName(typeof nd.tableName === 'string' ? nd.tableName : '');
     setArrayPath(typeof nd.arrayPath === 'string' ? nd.arrayPath : 'rows');
     setFieldMappings(isRecord(nd.fieldMappings) ? { ...(nd.fieldMappings as Record<string, string>) } : {});
+    setClearPreviousRecords(Boolean(nd.clearPreviousRecords));
     setMappingOtherMode({});
+    setActiveTab('parameters');
   }, [node.id, node.data]);
 
   useEffect(() => {
@@ -225,9 +235,21 @@ export function WorkflowSinkAutomationNodePanel({
       tableName: tableName.trim(),
       arrayPath: arrayPath.trim(),
       fieldMappings: clean,
+      clearPreviousRecords,
+      syncWithStore: false,
+      notifyAdminByEmail: false,
     });
     onClose();
-  }, [arrayPath, fieldMappings, label, node.id, onClose, onSave, tableName]);
+  }, [
+    arrayPath,
+    clearPreviousRecords,
+    fieldMappings,
+    label,
+    node.id,
+    onClose,
+    onSave,
+    tableName,
+  ]);
 
   const runExec = (node.data as { runExecution?: NodeRunExecutionView } | undefined)?.runExecution;
 
@@ -376,148 +398,238 @@ export function WorkflowSinkAutomationNodePanel({
 
         {/* Centro: configuración */}
         <main className="min-h-0 min-w-0 overflow-y-auto border-b border-gray-200 p-4 dark:border-neutral-800 lg:border-b-0 lg:border-x lg:px-4">
+          <div className="mb-4 flex items-center gap-5 border-b border-gray-200 dark:border-neutral-800">
+            <button
+              type="button"
+              onClick={() => setActiveTab('parameters')}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === 'parameters'
+                  ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
+            >
+              Parameters
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('settings')}
+              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                activeTab === 'settings'
+                  ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
+            >
+              Settings
+            </button>
+          </div>
           {loadErr && (
             <p className="mb-3 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
               {loadErr}
             </p>
           )}
-          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Etiqueta</label>
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-          />
+          {activeTab === 'settings' ? (
+            <>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 dark:border-neutral-700">
+                  <div className="min-w-0 pr-3">
+                    <span className="text-sm text-gray-800 dark:text-gray-200">Borrar los registros anteriores</span>
+                    <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      Activo: limpia la tabla configurada antes de insertar. Inactivo: se agregan filas y pueden
+                      duplicarse entre ejecuciones.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={clearPreviousRecords}
+                    onClick={() => setClearPreviousRecords((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      clearPreviousRecords ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                        clearPreviousRecords ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
 
-          <label className="mt-4 block text-xs font-medium text-gray-700 dark:text-gray-300">Tabla (data_bridge)</label>
-          <select
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            disabled={busyTables || tables.length === 0}
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-          >
-            {tables.length === 0 && !busyTables ? (
-              <option value="">No hay tablas BASE en data_bridge (o sin permiso de lectura al catálogo)</option>
-            ) : null}
-            {tables.map((t) => (
-              <option key={t.tableName} value={t.tableName}>
-                {t.tableName}
-              </option>
-            ))}
-          </select>
-          {busyTables && <p className="mt-1 text-[11px] text-gray-500">Cargando tablas…</p>}
+                <div
+                  className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/70 px-3 py-2 opacity-70 dark:border-neutral-700 dark:bg-neutral-900/50"
+                  aria-disabled="true"
+                >
+                  <div className="min-w-0 pr-3">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Sincronizar con tienda</span>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Próximamente.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={false}
+                    disabled
+                    className="relative inline-flex h-6 w-11 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                  >
+                    <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
+                  </button>
+                </div>
 
-          <label className="mt-4 block text-xs font-medium text-gray-700 dark:text-gray-300">
-            Ruta al arreglo de filas
-          </label>
-          <input
-            type="text"
-            value={arrayPath}
-            onChange={(e) => setArrayPath(e.target.value)}
-            placeholder="rows (vacío = el paso anterior debe ser un arreglo)"
-            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-          />
-          <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-            Tras un nodo MSSQL suele ser <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">rows</code>.
-            Vacío: se espera que la salida del paso anterior sea directamente un arreglo de objetos.
-          </p>
+                <div
+                  className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/70 px-3 py-2 opacity-70 dark:border-neutral-700 dark:bg-neutral-900/50"
+                  aria-disabled="true"
+                >
+                  <div className="min-w-0 pr-3">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Notificar por correo al administrador</span>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Próximamente.</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={false}
+                    disabled
+                    className="relative inline-flex h-6 w-11 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                  >
+                    <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Tabla (data_bridge)</label>
+              <select
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                disabled={busyTables || tables.length === 0}
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+              >
+                {tables.length === 0 && !busyTables ? (
+                  <option value="">No hay tablas BASE en data_bridge (o sin permiso de lectura al catálogo)</option>
+                ) : null}
+                {tables.map((t) => (
+                  <option key={t.tableName} value={t.tableName}>
+                    {t.tableName}
+                  </option>
+                ))}
+              </select>
+              {busyTables && <p className="mt-1 text-[11px] text-gray-500">Cargando tablas…</p>}
 
-          <p className="mt-4 text-xs font-medium text-gray-800 dark:text-gray-200">Mapeo de columnas</p>
-          <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-            Rutas inferidas desde la <strong>entrada</strong> (columna izquierda), según la ruta al arreglo. También{' '}
-            <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$businessId</code> y{' '}
-            <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$workflowId</code>. Si la tabla tiene{' '}
-            <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">business_id</code> /{' '}
-            <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">workflow_id</code>, el servidor las rellena.
-          </p>
-          {!sampleRowForMappings && previousNode && (
-            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
-              No se detectó una fila de ejemplo: revisa la ruta al arreglo o ejecuta el flujo para poblar el
-              desplegable.
-            </p>
+              <label className="mt-4 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                Ruta al arreglo de filas
+              </label>
+              <input
+                type="text"
+                value={arrayPath}
+                onChange={(e) => setArrayPath(e.target.value)}
+                placeholder="rows (vacío = el paso anterior debe ser un arreglo)"
+                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+              />
+              <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                Tras un nodo MSSQL suele ser <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">rows</code>.
+                Vacío: se espera que la salida del paso anterior sea directamente un arreglo de objetos.
+              </p>
+
+              <p className="mt-4 text-xs font-medium text-gray-800 dark:text-gray-200">Mapeo de columnas</p>
+              <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                Rutas inferidas desde la <strong>entrada</strong> (columna izquierda), según la ruta al arreglo. También{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$businessId</code> y{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$workflowId</code>. Si la tabla tiene{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">business_id</code> /{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">workflow_id</code>, el servidor las rellena.
+              </p>
+              {!sampleRowForMappings && previousNode && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
+                  No se detectó una fila de ejemplo: revisa la ruta al arreglo o ejecuta el flujo para poblar el
+                  desplegable.
+                </p>
+              )}
+
+              {busyCols && <p className="mt-2 text-[11px] text-gray-500">Cargando columnas…</p>}
+
+              <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 dark:border-neutral-700">
+                <table className="w-full min-w-[320px] text-left text-xs">
+                  <thead className="bg-gray-50 dark:bg-neutral-900/80">
+                    <tr>
+                      <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Columna</th>
+                      <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Tipo</th>
+                      <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Expresión</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {columns
+                      .filter((c) => SERVER_COLUMNS.has(c.columnName))
+                      .map((c) => (
+                        <tr
+                          key={c.columnName}
+                          className="border-t border-gray-100 bg-gray-50/80 dark:border-neutral-800 dark:bg-neutral-900/40"
+                        >
+                          <td className="px-2 py-1.5 font-mono text-gray-700 dark:text-gray-300">{c.columnName}</td>
+                          <td className="px-2 py-1.5 text-gray-500">{c.dataType}</td>
+                          <td className="px-2 py-1.5 text-gray-500 italic">Servidor</td>
+                        </tr>
+                      ))}
+                    {mappableColumns.map((c) => {
+                      const cur = (fieldMappings[c.columnName] ?? '').trim();
+                      const opts = optionsForColumn(c.columnName);
+                      const inList = cur === '' || opts.includes(cur);
+                      const other = mappingOtherMode[c.columnName] === true;
+                      const selectValue = other ? CUSTOM_MAPPING_VALUE : inList ? cur : CUSTOM_MAPPING_VALUE;
+                      const showTextInput = other || (!inList && cur !== '');
+                      return (
+                        <tr key={c.columnName} className="border-t border-gray-100 dark:border-neutral-800">
+                          <td className="px-2 py-1.5 font-mono text-gray-800 dark:text-gray-200">
+                            {c.columnName}
+                            {c.isNullable === 'YES' || c.hasDefault ? (
+                              <span className="ml-1 text-[10px] text-gray-400">opc.</span>
+                            ) : null}
+                          </td>
+                          <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400">{c.dataType}</td>
+                          <td className="px-1 py-1">
+                            <div className="flex min-w-0 flex-col gap-1">
+                              <select
+                                value={selectValue}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (v === CUSTOM_MAPPING_VALUE) {
+                                    setMappingOtherMode((m) => ({ ...m, [c.columnName]: true }));
+                                    setMapping(c.columnName, '');
+                                    return;
+                                  }
+                                  setMappingOtherMode((m) => ({ ...m, [c.columnName]: false }));
+                                  setMapping(c.columnName, v);
+                                }}
+                                className="w-full min-w-[140px] rounded border border-gray-200 bg-white px-1 py-1 font-mono text-[11px] dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+                                aria-label={`Mapeo para ${c.columnName}`}
+                              >
+                                <option value="">(ninguno)</option>
+                                {opts
+                                  .filter((o) => o !== '')
+                                  .map((o) => (
+                                    <option key={o} value={o}>
+                                      {o}
+                                    </option>
+                                  ))}
+                                <option value={CUSTOM_MAPPING_VALUE}>Otro (texto libre)…</option>
+                              </select>
+                              {showTextInput && (
+                                <input
+                                  type="text"
+                                  value={cur}
+                                  onChange={(e) => setMapping(c.columnName, e.target.value)}
+                                  placeholder={c.columnName === 'row_payload' ? '$row' : `$row.${c.columnName}`}
+                                  className="w-full min-w-[140px] rounded border border-dashed border-gray-300 bg-white px-1.5 py-1 font-mono text-[11px] dark:border-neutral-500 dark:bg-neutral-900 dark:text-gray-100"
+                                />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
-
-          {busyCols && <p className="mt-2 text-[11px] text-gray-500">Cargando columnas…</p>}
-
-          <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 dark:border-neutral-700">
-            <table className="w-full min-w-[320px] text-left text-xs">
-              <thead className="bg-gray-50 dark:bg-neutral-900/80">
-                <tr>
-                  <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Columna</th>
-                  <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Tipo</th>
-                  <th className="px-2 py-1.5 font-medium text-gray-600 dark:text-gray-400">Expresión</th>
-                </tr>
-              </thead>
-              <tbody>
-                {columns
-                  .filter((c) => SERVER_COLUMNS.has(c.columnName))
-                  .map((c) => (
-                    <tr key={c.columnName} className="border-t border-gray-100 bg-gray-50/80 dark:border-neutral-800 dark:bg-neutral-900/40">
-                      <td className="px-2 py-1.5 font-mono text-gray-700 dark:text-gray-300">{c.columnName}</td>
-                      <td className="px-2 py-1.5 text-gray-500">{c.dataType}</td>
-                      <td className="px-2 py-1.5 text-gray-500 italic">Servidor</td>
-                    </tr>
-                  ))}
-                {mappableColumns.map((c) => {
-                  const cur = (fieldMappings[c.columnName] ?? '').trim();
-                  const opts = optionsForColumn(c.columnName);
-                  const inList = cur === '' || opts.includes(cur);
-                  const other = mappingOtherMode[c.columnName] === true;
-                  const selectValue = other ? CUSTOM_MAPPING_VALUE : inList ? cur : CUSTOM_MAPPING_VALUE;
-                  const showTextInput = other || (!inList && cur !== '');
-                  return (
-                    <tr key={c.columnName} className="border-t border-gray-100 dark:border-neutral-800">
-                      <td className="px-2 py-1.5 font-mono text-gray-800 dark:text-gray-200">
-                        {c.columnName}
-                        {c.isNullable === 'YES' || c.hasDefault ? (
-                          <span className="ml-1 text-[10px] text-gray-400">opc.</span>
-                        ) : null}
-                      </td>
-                      <td className="px-2 py-1.5 text-gray-600 dark:text-gray-400">{c.dataType}</td>
-                      <td className="px-1 py-1">
-                        <div className="flex min-w-0 flex-col gap-1">
-                          <select
-                            value={selectValue}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (v === CUSTOM_MAPPING_VALUE) {
-                                setMappingOtherMode((m) => ({ ...m, [c.columnName]: true }));
-                                setMapping(c.columnName, '');
-                                return;
-                              }
-                              setMappingOtherMode((m) => ({ ...m, [c.columnName]: false }));
-                              setMapping(c.columnName, v);
-                            }}
-                            className="w-full min-w-[140px] rounded border border-gray-200 bg-white px-1 py-1 font-mono text-[11px] dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-                            aria-label={`Mapeo para ${c.columnName}`}
-                          >
-                            <option value="">(ninguno)</option>
-                            {opts
-                              .filter((o) => o !== '')
-                              .map((o) => (
-                                <option key={o} value={o}>
-                                  {o}
-                                </option>
-                              ))}
-                            <option value={CUSTOM_MAPPING_VALUE}>Otro (texto libre)…</option>
-                          </select>
-                          {showTextInput && (
-                            <input
-                              type="text"
-                              value={cur}
-                              onChange={(e) => setMapping(c.columnName, e.target.value)}
-                              placeholder={c.columnName === 'row_payload' ? '$row' : `$row.${c.columnName}`}
-                              className="w-full min-w-[140px] rounded border border-dashed border-gray-300 bg-white px-1.5 py-1 font-mono text-[11px] dark:border-neutral-500 dark:bg-neutral-900 dark:text-gray-100"
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
         </main>
 
         {/* Derecha: salida de este nodo */}
