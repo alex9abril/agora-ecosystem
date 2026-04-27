@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { dbPool } from '../../config/database.config';
@@ -15,6 +16,7 @@ import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { encryptSecret, decryptSecret } from './connector-crypto.util';
 import { getLinearExecutionOrder, FlowDefinition, FlowNode, type LinearExecutionEntry } from './workflow-executor.util';
 import { extractScheduleCronFromDefinition } from './workflow-schedule-cron.util';
+import { isWorkflowScheduleLogVerbose } from './workflow-schedule-env.util';
 import {
   executeWorkflowUserCode,
   toJsonSafeForWorkflow,
@@ -37,6 +39,8 @@ const mssql = require('mssql') as typeof import('mssql');
 
 @Injectable()
 export class IntegrationWorkflowsService {
+  private readonly logger = new Logger(IntegrationWorkflowsService.name);
+
   private async assertUserHasBusinessAccess(userId: string, businessId: string): Promise<void> {
     if (!dbPool) {
       throw new BadRequestException('Base de datos no configurada');
@@ -346,8 +350,9 @@ export class IntegrationWorkflowsService {
   /**
    * Ejecuta un flujo activo disparado por el scheduler interno (sin JWT).
    * No-op si el flujo no existe, está desactivado, no tiene cron de programación o ya hubo un run schedule en el mismo minuto.
+   * @returns executed true solo si insertó run y ejecutó el grafo (no dedupe).
    */
-  async runWorkflowScheduledJob(workflowId: string): Promise<void> {
+  async runWorkflowScheduledJob(workflowId: string): Promise<{ executed: boolean }> {
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     const { rows } = await dbPool.query(
       `SELECT id, business_id, definition, is_enabled
@@ -356,16 +361,16 @@ export class IntegrationWorkflowsService {
        LIMIT 1`,
       [workflowId],
     );
-    if (rows.length === 0) return;
+    if (rows.length === 0) return { executed: false };
     const row = rows[0] as {
       id: string;
       business_id: string;
       definition: Record<string, unknown>;
       is_enabled: boolean;
     };
-    if (!row.is_enabled) return;
+    if (!row.is_enabled) return { executed: false };
     const cron = extractScheduleCronFromDefinition(row.definition);
-    if (!cron) return;
+    if (!cron) return { executed: false };
 
     const { rows: dup } = await dbPool.query(
       `SELECT 1 AS ok
@@ -376,7 +381,14 @@ export class IntegrationWorkflowsService {
        LIMIT 1`,
       [workflowId],
     );
-    if (dup.length > 0) return;
+    if (dup.length > 0) {
+      if (isWorkflowScheduleLogVerbose()) {
+        this.logger.log(
+          `[workflow-cron] Sin ejecutar: ya existe un run schedule en este minuto (workflowId=${workflowId}).`,
+        );
+      }
+      return { executed: false };
+    }
 
     const { rows: runInsert } = await dbPool.query(
       `INSERT INTO integration.workflow_runs (workflow_id, status, trigger_type, started_at)
@@ -386,7 +398,8 @@ export class IntegrationWorkflowsService {
     );
     const runId = (runInsert[0] as { id: string }).id;
     const def = (row.definition || {}) as FlowDefinition;
-    await this.finalizeWorkflowRun(
+    this.logger.log(`[workflow-cron] Inicio ejecución programada workflowId=${workflowId} runId=${runId}`);
+    const result = await this.finalizeWorkflowRun(
       runId,
       row.business_id,
       workflowId,
@@ -396,6 +409,11 @@ export class IntegrationWorkflowsService {
       'schedule',
       true,
     );
+    this.logger.log(
+      `[workflow-cron] Fin ejecución programada workflowId=${workflowId} runId=${runId} status=${result.status}` +
+        (result.error ? ` error=${result.error}` : ''),
+    );
+    return { executed: true };
   }
 
   private async finalizeWorkflowRun(

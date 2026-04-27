@@ -55,6 +55,7 @@ Implicaciones:
   - **Granularidad:** un minuto; no se garantizan sub-minutos.
   - **Idempotencia:** como mucho un run con `trigger_type = schedule` por flujo y por minuto de reloj del servidor de base de datos (`date_trunc('minute', CURRENT_TIMESTAMP)` en la deduplicación).
   - **Implementación:** `IntegrationWorkflowsScheduler` + `IntegrationWorkflowsService.runWorkflowScheduledJob` en `apps/backend/src/modules/integration-workflows/`.
+  - **Bitácora en consola:** al arrancar el backend se registra si el cron está ACTIVO o INACTIVO. Cada ejecución programada genera líneas `[workflow-cron] Inicio/Fin…`. Para diagnóstico minuto a minuto, `INTEGRATION_WORKFLOW_SCHEDULE_LOG_VERBOSE=true` (reiniciar tras cambiar `.env`).
 
 ### 5.3 Tipos de nodos previstos (evolutivo)
 
