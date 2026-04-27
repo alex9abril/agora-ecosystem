@@ -44,8 +44,15 @@ export function resolveFieldSpec(
   if (s === '$row') return row;
   const parts = s.split('.').filter(Boolean);
   if (parts.length === 0) return undefined;
+  /** `$row.campo` = la fila actual; el primer segmento no es una clave del objeto. */
+  let i = 0;
   let cur: unknown = row;
-  for (const p of parts) {
+  if (parts[0] === '$row') {
+    i = 1;
+    cur = row;
+  }
+  for (; i < parts.length; i++) {
+    const p = parts[i];
     if (cur == null || typeof cur !== 'object' || Array.isArray(cur)) return undefined;
     cur = (cur as Record<string, unknown>)[p];
   }
