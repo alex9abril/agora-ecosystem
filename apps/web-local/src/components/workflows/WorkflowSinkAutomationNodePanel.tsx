@@ -92,7 +92,7 @@ function collectPathsFromRow(
 }
 
 function buildBaseMappingOptions(sampleRow: Record<string, unknown> | null): Set<string> {
-  const s = new Set<string>(['', '$businessId', '$workflowId', '$row']);
+  const s = new Set<string>(['', '$businessId', '$workflowId', '$row', '$now']);
   if (sampleRow) {
     collectPathsFromRow(sampleRow, '$row', 0, 4, s, { n: 64 });
   }
@@ -101,7 +101,17 @@ function buildBaseMappingOptions(sampleRow: Record<string, unknown> | null): Set
 
 function sortMappingSelectOptions(opts: string[]): string[] {
   const rank = (x: string) =>
-    x === '' ? 0 : x === '$businessId' ? 1 : x === '$workflowId' ? 2 : x === '$row' ? 3 : 4;
+    x === ''
+      ? 0
+      : x === '$businessId'
+        ? 1
+        : x === '$workflowId'
+          ? 2
+          : x === '$row'
+            ? 3
+            : x === '$now'
+              ? 4
+              : 5;
   return [...opts].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
@@ -532,10 +542,14 @@ export function WorkflowSinkAutomationNodePanel({
               <p className="mt-4 text-xs font-medium text-gray-800 dark:text-gray-200">Mapeo de columnas</p>
               <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
                 Rutas inferidas desde la <strong>entrada</strong> (columna izquierda), según la ruta al arreglo. También{' '}
-                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$businessId</code> y{' '}
-                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$workflowId</code>. Si la tabla tiene{' '}
-                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">business_id</code> /{' '}
-                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">workflow_id</code>, el servidor las rellena.
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$businessId</code>,{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$workflowId</code> y{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$now</code> (fecha/hora del servidor al
+                ejecutar el nodo; misma marca para todas las filas del lote, útil p. ej. en{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">fecha_importacion</code>). Si la tabla
+                tiene <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">business_id</code> /{' '}
+                <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">workflow_id</code>, el servidor las
+                rellena.
               </p>
               {!sampleRowForMappings && previousNode && (
                 <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">

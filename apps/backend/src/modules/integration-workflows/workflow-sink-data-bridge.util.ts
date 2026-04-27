@@ -33,14 +33,23 @@ export function extractRowsFromPrevious(
   return { ok: true, rows: v };
 }
 
+/** Contexto para resolver expresiones de mapeo (incluye una sola `executedAt` por ejecución del nodo). */
+export type DataBridgeFieldResolveCtx = {
+  businessId: string;
+  workflowId?: string | null;
+  executedAt: Date;
+};
+
 export function resolveFieldSpec(
   row: Record<string, unknown>,
   spec: string,
-  ctx: { businessId: string; workflowId?: string | null },
+  ctx: DataBridgeFieldResolveCtx,
 ): unknown {
   const s = spec.trim();
   if (s === '$businessId') return ctx.businessId;
   if (s === '$workflowId') return ctx.workflowId ?? null;
+  /** Fecha/hora del servidor al ejecutar el nodo (misma para todas las filas del lote). */
+  if (s === '$now') return ctx.executedAt;
   if (s === '$row') return row;
   const parts = s.split('.').filter(Boolean);
   if (parts.length === 0) return undefined;

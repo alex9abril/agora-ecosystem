@@ -476,6 +476,10 @@ export class IntegrationWorkflowsService {
   private normalizeDataBridgeInsertValue(dataType: string | undefined, v: unknown): unknown {
     if (v === null || v === undefined) return null;
     const t = (dataType || '').toLowerCase();
+    if (v instanceof Date) {
+      if (t.includes('timestamp') || t === 'date' || t.includes('time')) return v;
+      return v.toISOString();
+    }
     if (t === 'jsonb' || t === 'json') {
       if (typeof v === 'object' && !Array.isArray(v)) return v;
       if (typeof v === 'string') {
@@ -513,7 +517,12 @@ export class IntegrationWorkflowsService {
     const arrayPath = String(data.arrayPath ?? '');
     const rawMappings = data.fieldMappings;
     if (!rawMappings || typeof rawMappings !== 'object' || Array.isArray(rawMappings)) {
-      return { nodeId: node.id, type: t, error: 'Nodo data_bridge: define fieldMappings (objeto columna → ruta, $row, $businessId o $workflowId).' };
+      return {
+        nodeId: node.id,
+        type: t,
+        error:
+          'Nodo data_bridge: define fieldMappings (objeto columna → ruta, $row, $businessId, $workflowId o $now).',
+      };
     }
     const fieldMappings: Record<string, string> = { ...(rawMappings as Record<string, string>) };
     delete fieldMappings.business_id;
@@ -607,7 +616,7 @@ export class IntegrationWorkflowsService {
         error: 'Nodo data_bridge: no hay columnas para insertar (revisa mapeos y columnas de la tabla).',
       };
     }
-    const clientCtx = { businessId, workflowId: ctx.workflowId ?? null };
+    const clientCtx = { businessId, workflowId: ctx.workflowId ?? null, executedAt: new Date() };
 
     let inserted = 0;
     const errors: string[] = [];
