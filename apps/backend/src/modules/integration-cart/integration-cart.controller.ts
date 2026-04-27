@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -28,6 +29,7 @@ import { CreateIntegrationCartDto } from './dto/create-integration-cart.dto';
 import { AddIntegrationCartItemDto } from './dto/add-integration-cart-item.dto';
 import { PatchIntegrationCartItemDto } from './dto/patch-integration-cart-item.dto';
 import { CreateIntegrationCartLinkDto } from './dto/create-integration-cart-link.dto';
+import { IntegrationCartBitacoraInterceptor } from './integration-cart-bitacora.interceptor';
 
 @ApiTags('Integration Cart')
 @ApiSecurity('ApiKey')
@@ -38,6 +40,7 @@ import { CreateIntegrationCartLinkDto } from './dto/create-integration-cart-link
 })
 @Public()
 @UseGuards(IntegrationCartWebhookGuard)
+@UseInterceptors(IntegrationCartBitacoraInterceptor)
 @Controller('integrations/cart')
 export class IntegrationCartController {
   constructor(private readonly integrationCartService: IntegrationCartService) {}

@@ -11,6 +11,8 @@ import { SKIP_INTEGRATION_CART_WEBHOOK_KEY } from '../decorators/skip-integratio
 import * as crypto from 'crypto';
 import { WebhookSecretsService } from '../../settings/webhook-secrets.service';
 import { dbPool } from '../../../config/database.config';
+import { IntegrationCartExecutionLogService } from '../integration-cart-execution-log.service';
+import { sanitizeBody, sanitizeQuery, bitacoraRequestMetadata } from '../integration-cart-bitacora.util';
 
 const PROVIDER = 'integration_cart';
 
@@ -37,6 +39,7 @@ export class IntegrationCartWebhookGuard implements CanActivate {
   constructor(
     private readonly webhookSecretsService: WebhookSecretsService,
     private readonly reflector: Reflector,
+    private readonly integrationCartExecutionLog: IntegrationCartExecutionLogService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -48,6 +51,7 @@ export class IntegrationCartWebhookGuard implements CanActivate {
       return true;
     }
 
+    const started = Date.now();
     const request = context.switchToHttp().getRequest<Request>();
     const pickFirst = (v: string | string[] | undefined): string =>
       typeof v === 'string' ? v : Array.isArray(v) && v[0] ? String(v[0]) : '';
@@ -71,19 +75,21 @@ export class IntegrationCartWebhookGuard implements CanActivate {
         'integration_cart: 0 secretos activos (BD + env). Revise provider, is_active, expires_at y DATABASE_URL.',
       );
       if (!dbPool) {
-        throw new UnauthorizedException(
-          'Carrito de integración: DATABASE_URL no está configurada; el backend no puede leer core.webhook_secrets. Defina DATABASE_URL o use INTEGRATION_CART_WEBHOOK_SECRET en .env',
-        );
+        const msg =
+          'Carrito de integración: DATABASE_URL no está configurada; el backend no puede leer core.webhook_secrets. Defina DATABASE_URL o use INTEGRATION_CART_WEBHOOK_SECRET en .env';
+        await this.logGuardRejection(request, started, msg);
+        throw new UnauthorizedException(msg);
       }
-      throw new UnauthorizedException(
-        'Carrito de integración: no hay claves activas. En Supabase, tabla core.webhook_secrets: provider = integration_cart (sin espacios extra), is_active = true, expires_at vacío o futuro, y columna secret con el mismo valor que envías en X-Webhook-Secret. Alternativa: variable INTEGRATION_CART_WEBHOOK_SECRET en el servidor.',
-      );
+      const msg =
+        'Carrito de integración: no hay claves activas. En Supabase, tabla core.webhook_secrets: provider = integration_cart (sin espacios extra), is_active = true, expires_at vacío o futuro, y columna secret con el mismo valor que envías en X-Webhook-Secret. Alternativa: variable INTEGRATION_CART_WEBHOOK_SECRET en el servidor.';
+      await this.logGuardRejection(request, started, msg);
+      throw new UnauthorizedException(msg);
     }
 
     if (!keyFromHeader) {
-      throw new UnauthorizedException(
-        'Se requiere X-Webhook-Secret o Authorization: Bearer con una clave válida',
-      );
+      const msg = 'Se requiere X-Webhook-Secret o Authorization: Bearer con una clave válida';
+      await this.logGuardRejection(request, started, msg);
+      throw new UnauthorizedException(msg);
     }
 
     const bufA = Buffer.from(keyFromHeader, 'utf8');
@@ -99,8 +105,52 @@ export class IntegrationCartWebhookGuard implements CanActivate {
     this.logger.warn(
       `integration_cart: clave inválida (longitud enviada: ${keyFromHeader.length}; secretos activos a comparar: ${activeSecrets.length})`,
     );
-    throw new UnauthorizedException(
-      'Clave de integración inválida: debe coincidir exactamente con un secreto activo (provider integration_cart en core.webhook_secrets o INTEGRATION_CART_WEBHOOK_SECRET). En Postman no pongas comillas en la variable; use X-Webhook-Secret o Authorization: Bearer &lt;clave&gt;',
-    );
+    const msg =
+      'Clave de integración inválida: debe coincidir exactamente con un secreto activo (provider integration_cart en core.webhook_secrets o INTEGRATION_CART_WEBHOOK_SECRET). En Postman no pongas comillas en la variable; use X-Webhook-Secret o Authorization: Bearer <clave>';
+    await this.logGuardRejection(request, started, msg);
+    throw new UnauthorizedException(msg);
+  }
+
+  private async logGuardRejection(request: Request, started: number, errorMessage: string): Promise<void> {
+    const pathParams =
+      request.params && Object.keys(request.params).length > 0 ? { ...request.params } : null;
+    const queryParams =
+      request.query && Object.keys(request.query).length > 0
+        ? sanitizeQuery(request.query as Record<string, unknown>)
+        : null;
+    const bodyParams = sanitizeBody(request.body);
+    const cartId =
+      typeof request.params?.cartId === 'string' && /^[0-9a-f-]{36}$/i.test(request.params.cartId)
+        ? request.params.cartId
+        : null;
+    const storeId =
+      bodyParams?.storeId && typeof bodyParams.storeId === 'string' && /^[0-9a-f-]{36}$/i.test(bodyParams.storeId)
+        ? (bodyParams.storeId as string)
+        : null;
+
+    await this.integrationCartExecutionLog.record({
+      httpMethod: request.method,
+      path: (request.originalUrl || request.url || '').split('?')[0],
+      routePath: (request as Request & { route?: { path?: string } }).route?.path ?? null,
+      pathParams,
+      queryParams,
+      bodyParams,
+      statusCode: 401,
+      success: false,
+      durationMs: Date.now() - started,
+      errorName: 'UnauthorizedException',
+      errorMessage,
+      cartId,
+      storeId,
+      responseSummary: null,
+      metadata: bitacoraRequestMetadata(request, {
+        source: 'integration_cart_webhook_guard',
+        webhook_key_length: typeof request.headers['x-webhook-secret'] === 'string'
+          ? String(request.headers['x-webhook-secret']).length
+          : typeof request.headers.authorization === 'string'
+            ? Math.max(0, request.headers.authorization.length - 7)
+            : 0,
+      }),
+    });
   }
 }
