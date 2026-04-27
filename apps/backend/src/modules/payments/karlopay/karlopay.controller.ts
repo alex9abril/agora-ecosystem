@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { CreateKarlopayOrderDto } from './dto/create-karlopay-order.dto';
 import { KarlopayPaymentWebhookDto } from './dto/karlopay-payment-webhook.dto';
 import { CreatePaymentSessionDto } from './dto/create-payment-session.dto';
 import { EmbeddedInitDto } from './dto/embedded-init.dto';
+import { KarlopayPaymentWebhookBitacoraInterceptor } from './karlopay-payment-webhook-bitacora.interceptor';
 
 @ApiTags('Payments - Karlopay')
 @Controller('payments/karlopay')
@@ -81,6 +83,7 @@ export class KarlopayController {
   @Post('webhook/payment')
   @Public()
   @UseGuards(KarlopayWebhookGuard)
+  @UseInterceptors(KarlopayPaymentWebhookBitacoraInterceptor)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Webhook para recibir confirmación de pago de Karlopay (protegido por IP whitelist y/o secret)' })
   @ApiResponse({ status: 200, description: 'Webhook procesado exitosamente' })

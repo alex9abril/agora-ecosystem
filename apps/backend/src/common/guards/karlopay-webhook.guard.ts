@@ -8,17 +8,26 @@ import {
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { WebhookSecretsService } from '../../modules/settings/webhook-secrets.service';
+import { KarlopayPaymentWebhookExecutionLogService } from '../../modules/payments/karlopay/karlopay-payment-webhook-execution-log.service';
+import {
+  sanitizeKarlopayWebhookBody,
+  karlopayWebhookRequestMetadata,
+} from '../../modules/payments/karlopay/karlopay-payment-webhook-bitacora.util';
 
 @Injectable()
 export class KarlopayWebhookGuard implements CanActivate {
   private readonly logger = new Logger(KarlopayWebhookGuard.name);
 
-  constructor(private readonly webhookSecretsService: WebhookSecretsService) {}
+  constructor(
+    private readonly webhookSecretsService: WebhookSecretsService,
+    private readonly karlopayWebhookExecutionLog: KarlopayPaymentWebhookExecutionLogService,
+  ) {}
   private readonly rateLimitMap = new Map<string, { count: number; resetAt: number }>();
   private readonly RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minuto
   private readonly RATE_LIMIT_MAX_REQUESTS = 100; // Máximo 100 requests por minuto por IP
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const started = Date.now();
     const request = context.switchToHttp().getRequest<Request>();
     const clientIp = this.extractClientIp(request);
 
@@ -29,15 +38,17 @@ export class KarlopayWebhookGuard implements CanActivate {
     const allowedIps = await this.getAllowedIps();
     if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
       this.logger.warn(`❌ IP no autorizada intentando acceder al webhook: ${clientIp}`);
-      await this.logUnauthorizedAccess(clientIp, 'IP_NOT_ALLOWED');
-      throw new UnauthorizedException('IP no autorizada para acceder al webhook');
+      const msg = 'IP no autorizada para acceder al webhook';
+      await this.logUnauthorizedAccess(request, started, msg, 'IP_NOT_ALLOWED');
+      throw new UnauthorizedException(msg);
     }
 
     // 2. Rate Limiting
     if (!this.checkRateLimit(clientIp)) {
       this.logger.warn(`⚠️ Rate limit excedido para IP: ${clientIp}`);
-      await this.logUnauthorizedAccess(clientIp, 'RATE_LIMIT_EXCEEDED');
-      throw new UnauthorizedException('Demasiadas solicitudes. Intenta más tarde.');
+      const msg = 'Demasiadas solicitudes. Intenta más tarde.';
+      await this.logUnauthorizedAccess(request, started, msg, 'RATE_LIMIT_EXCEEDED');
+      throw new UnauthorizedException(msg);
     }
 
     // 3. Validar Webhook Secret: exigir key o firma cuando hay claves activas
@@ -46,10 +57,10 @@ export class KarlopayWebhookGuard implements CanActivate {
       const isValid = await this.validateWebhookKeyOrSignature(request, activeSecrets);
       if (!isValid) {
         this.logger.warn(`❌ Webhook sin key válida o firma inválida desde IP: ${clientIp}`);
-        await this.logUnauthorizedAccess(clientIp, 'INVALID_KEY_OR_SIGNATURE');
-        throw new UnauthorizedException(
-          'Se requiere header X-Webhook-Secret (o Authorization: Bearer <clave>) con una clave de webhook válida, o firma HMAC correcta'
-        );
+        const msg =
+          'Se requiere header X-Webhook-Secret (o Authorization: Bearer <clave>) con una clave de webhook válida, o firma HMAC correcta';
+        await this.logUnauthorizedAccess(request, started, msg, 'INVALID_KEY_OR_SIGNATURE');
+        throw new UnauthorizedException(msg);
       }
     }
 
@@ -203,18 +214,46 @@ export class KarlopayWebhookGuard implements CanActivate {
   }
 
   /**
-   * Registra intentos de acceso no autorizados
+   * Registra intentos de acceso no autorizados (consola + bitácora Supabase)
    */
-  private async logUnauthorizedAccess(ip: string, reason: string): Promise<void> {
+  private async logUnauthorizedAccess(
+    request: Request,
+    started: number,
+    errorMessage: string,
+    reasonCode: string,
+  ): Promise<void> {
     try {
-      // Limpiar rate limit expirado antes de registrar
       this.cleanupRateLimit();
+      this.logger.warn(`🚫 Acceso no autorizado al webhook KarloPay — ${reasonCode}`);
 
-      // Intentar registrar en integration_logs si está disponible
-      // Por ahora solo logueamos en consola
-      this.logger.warn(`🚫 Acceso no autorizado al webhook - IP: ${ip}, Razón: ${reason}`);
+      const pathParams =
+        request.params && Object.keys(request.params).length > 0 ? { ...request.params } : null;
+      const queryParams =
+        request.query && Object.keys(request.query).length > 0
+          ? ({ ...request.query } as Record<string, unknown>)
+          : null;
+
+      await this.karlopayWebhookExecutionLog.record({
+        httpMethod: request.method,
+        path: (request.originalUrl || request.url || '').split('?')[0],
+        routePath: (request as Request & { route?: { path?: string } }).route?.path ?? null,
+        pathParams,
+        queryParams,
+        bodyParams: sanitizeKarlopayWebhookBody(request.body),
+        statusCode: 401,
+        success: false,
+        durationMs: Date.now() - started,
+        errorName: 'UnauthorizedException',
+        errorMessage,
+        cartId: null,
+        storeId: null,
+        responseSummary: null,
+        metadata: karlopayWebhookRequestMetadata(request, {
+          source: 'karlopay_webhook_guard',
+          rejection_reason: reasonCode,
+        }),
+      });
     } catch (error) {
-      // No fallar si no se puede registrar el log
       this.logger.error('Error registrando acceso no autorizado:', error);
     }
   }
