@@ -7,7 +7,7 @@ export default function Topbar() {
   const { user } = useAuth();
 
   return (
-    <header className="bg-white dark:bg-neutral-800">
+    <header className="relative z-[205] bg-white dark:bg-neutral-800">
       <div className="flex items-center justify-end h-16 px-6">
         <div className="flex items-center space-x-4">
           <BranchDropdown />

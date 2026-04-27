@@ -72,7 +72,7 @@ export default function BranchDropdown() {
 
       {isOpen && availableBusinesses.length > 0 && (
         <div
-          className="absolute left-0 mt-1 min-w-[12rem] max-w-[16rem] max-h-[20rem] overflow-y-auto bg-white dark:bg-neutral-800 rounded-lg shadow-xl border border-gray-200 dark:border-neutral-600 z-50 py-1"
+          className="absolute left-0 z-[280] mt-1 min-w-[12rem] max-w-[16rem] max-h-[20rem] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-neutral-600 dark:bg-neutral-800"
           role="listbox"
           aria-label="Lista de sucursales"
         >

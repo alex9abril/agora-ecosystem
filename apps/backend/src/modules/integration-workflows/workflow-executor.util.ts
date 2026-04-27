@@ -21,11 +21,17 @@ export type FlowDefinition = {
 
 const TRIGGER_TYPES = new Set(['triggerManual', 'triggerSchedule']);
 
+export type LinearExecutionEntry = 'default' | 'schedule';
+
 /**
  * Recorre el grafo en orden lineal desde el primer nodo trigger (manual o programado).
  * v1: un solo camino, un edge saliente por nodo como máximo.
+ * @param entry `schedule` prioriza triggerSchedule (ejecución por cron); `default` prioriza triggerManual (Play / API).
  */
-export function getLinearExecutionOrder(definition: FlowDefinition): FlowNode[] {
+export function getLinearExecutionOrder(
+  definition: FlowDefinition,
+  options?: { entry?: LinearExecutionEntry },
+): FlowNode[] {
   const nodes: FlowNode[] = Array.isArray(definition?.nodes) ? (definition.nodes as FlowNode[]) : [];
   const edges: FlowEdge[] = Array.isArray(definition?.edges) ? (definition.edges as FlowEdge[]) : [];
   if (nodes.length === 0) {
@@ -44,10 +50,14 @@ export function getLinearExecutionOrder(definition: FlowDefinition): FlowNode[] 
     }
   }
 
-  // Igual intención que n8n al pulsar "Execute workflow": un disparo manual tiene prioridad si existe
-  // (evita quedarse con el programado por orden al azar en el array de nodos).
+  const entry = options?.entry ?? 'default';
+  // default: prioridad manual (Play / API). schedule: prioridad programado (cron interno).
   const trigger =
-    nodes.find((n) => n.type === 'triggerManual') || nodes.find((n) => n.type && TRIGGER_TYPES.has(n.type));
+    entry === 'schedule'
+      ? nodes.find((n) => n.type === 'triggerSchedule') ||
+        nodes.find((n) => n.type === 'triggerManual') ||
+        nodes.find((n) => n.type && TRIGGER_TYPES.has(n.type))
+      : nodes.find((n) => n.type === 'triggerManual') || nodes.find((n) => n.type && TRIGGER_TYPES.has(n.type));
   if (!trigger) {
     throw new BadRequestException('Añade un nodo de inicio: disparo manual o programado (interno)');
   }

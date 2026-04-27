@@ -13,7 +13,8 @@ import { UpdateConnectorDto } from './dto/update-connector.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { encryptSecret, decryptSecret } from './connector-crypto.util';
-import { getLinearExecutionOrder, FlowDefinition, FlowNode } from './workflow-executor.util';
+import { getLinearExecutionOrder, FlowDefinition, FlowNode, type LinearExecutionEntry } from './workflow-executor.util';
+import { extractScheduleCronFromDefinition } from './workflow-schedule-cron.util';
 import {
   executeWorkflowUserCode,
   toJsonSafeForWorkflow,
@@ -92,8 +93,8 @@ export class IntegrationWorkflowsService {
     return rows.map((r) => this.mapConnectorRow(r));
   }
 
-  async getConnector(userId: string, businessId: string, id: string) {
-    await this.assertUserHasBusinessAccess(userId, businessId);
+  /** Lectura de conector por sucursal sin comprobar membresía (solo jobs internos como el cron de workflows). */
+  private async fetchConnectorRow(businessId: string, id: string) {
     if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     const { rows } = await dbPool.query(
       `SELECT id, business_id, connector_type_id, name, is_enabled, config, password_ciphertext, created_at, updated_at
@@ -103,6 +104,11 @@ export class IntegrationWorkflowsService {
     );
     if (rows.length === 0) throw new NotFoundException('Conector no encontrado');
     return this.mapConnectorRow(rows[0]);
+  }
+
+  async getConnector(userId: string, businessId: string, id: string) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    return this.fetchConnectorRow(businessId, id);
   }
 
   async createConnector(userId: string, businessId: string, dto: CreateConnectorDto) {
@@ -323,25 +329,95 @@ export class IntegrationWorkflowsService {
     );
     const runId = (runInsert[0] as { id: string }).id;
 
-    const steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[] = [];
-    let finalError: string | null = null;
     const hasInlineDef =
       options?.definition &&
       typeof options.definition === 'object' &&
       options.definition !== null &&
       'nodes' in options.definition;
     // is_enabled no bloquea runWorkflow: la ejecución manual (Play / API) siempre está permitida.
-    // El flag se reservará para futura ejecución automática (cron / cola).
     const def = (
       hasInlineDef ? (options?.definition as FlowDefinition) : (wf.definition || {})
     ) as FlowDefinition;
     const definitionSource = hasInlineDef ? 'inline' : 'stored';
 
+    return this.finalizeWorkflowRun(runId, businessId, workflowId, userId, def, definitionSource, 'default', false);
+  }
+
+  /**
+   * Ejecuta un flujo activo disparado por el scheduler interno (sin JWT).
+   * No-op si el flujo no existe, está desactivado, no tiene cron de programación o ya hubo un run schedule en el mismo minuto.
+   */
+  async runWorkflowScheduledJob(workflowId: string): Promise<void> {
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+    const { rows } = await dbPool.query(
+      `SELECT id, business_id, definition, is_enabled
+       FROM integration.workflows
+       WHERE id = $1
+       LIMIT 1`,
+      [workflowId],
+    );
+    if (rows.length === 0) return;
+    const row = rows[0] as {
+      id: string;
+      business_id: string;
+      definition: Record<string, unknown>;
+      is_enabled: boolean;
+    };
+    if (!row.is_enabled) return;
+    const cron = extractScheduleCronFromDefinition(row.definition);
+    if (!cron) return;
+
+    const { rows: dup } = await dbPool.query(
+      `SELECT 1 AS ok
+       FROM integration.workflow_runs
+       WHERE workflow_id = $1
+         AND trigger_type = 'schedule'
+         AND started_at >= date_trunc('minute', CURRENT_TIMESTAMP)
+       LIMIT 1`,
+      [workflowId],
+    );
+    if (dup.length > 0) return;
+
+    const { rows: runInsert } = await dbPool.query(
+      `INSERT INTO integration.workflow_runs (workflow_id, status, trigger_type, started_at)
+       VALUES ($1, 'running', 'schedule', CURRENT_TIMESTAMP)
+       RETURNING id`,
+      [workflowId],
+    );
+    const runId = (runInsert[0] as { id: string }).id;
+    const def = (row.definition || {}) as FlowDefinition;
+    await this.finalizeWorkflowRun(
+      runId,
+      row.business_id,
+      workflowId,
+      null,
+      def,
+      'stored',
+      'schedule',
+      true,
+    );
+  }
+
+  private async finalizeWorkflowRun(
+    runId: string,
+    businessId: string,
+    workflowId: string,
+    userId: string | null,
+    def: FlowDefinition,
+    definitionSource: 'inline' | 'stored',
+    linearEntry: LinearExecutionEntry,
+    scheduledTriggerContext: boolean,
+  ): Promise<{ runId: string; status: string; error?: string; steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[] }> {
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+    const steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[] = [];
+    let finalError: string | null = null;
+
     try {
-      const order = getLinearExecutionOrder(def);
+      const order = getLinearExecutionOrder(def, { entry: linearEntry });
       for (const node of order) {
         const r = await this.executeNode(node, businessId, userId, steps[steps.length - 1]?.result, {
           workflowId,
+          scheduled: scheduledTriggerContext,
         });
         steps.push(r);
         if (r.error) {
@@ -354,7 +430,6 @@ export class IntegrationWorkflowsService {
     }
 
     const status = finalError ? 'failed' : 'success';
-    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
     await dbPool.query(
       `UPDATE integration.workflow_runs
        SET status = $2, finished_at = CURRENT_TIMESTAMP, error = $3, log_summary = $4::jsonb
@@ -371,14 +446,20 @@ export class IntegrationWorkflowsService {
   private async executeNode(
     node: FlowNode,
     businessId: string,
-    userId: string,
+    userId: string | null,
     _previous: unknown,
-    ctx?: { workflowId?: string },
+    ctx?: { workflowId?: string; scheduled?: boolean },
   ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }> {
     const t = node.type;
     const data = (node.data || {}) as Record<string, unknown>;
-    if (t === 'triggerManual' || t === 'triggerSchedule') {
-      return { nodeId: node.id, type: t, result: { message: t === 'triggerSchedule' ? 'Disparo manual (programación interna aún no ejecuta cron)' : 'ok' } };
+    if (t === 'triggerManual') {
+      return { nodeId: node.id, type: t, result: { message: 'ok' } };
+    }
+    if (t === 'triggerSchedule') {
+      const message = ctx?.scheduled
+        ? 'Ejecución programada por cron del servidor'
+        : 'Inicio programado (ejecución manual o API)';
+      return { nodeId: node.id, type: t, result: { message } };
     }
     if (t === 'sinkLog') {
       // Estilo n8n (paso intermedio): reenvía el Último payload al siguiente nodo sin anidarlo, para
@@ -800,12 +881,16 @@ export class IntegrationWorkflowsService {
   }
 
   private async queryMssql(
-    userId: string,
+    userId: string | null,
     businessId: string,
     connectorId: string,
     queryText: string,
   ) {
-    const c = (await this.getConnector(userId, businessId, connectorId)) as any;
+    const c = (
+      userId
+        ? await this.getConnector(userId, businessId, connectorId)
+        : await this.fetchConnectorRow(businessId, connectorId)
+    ) as any;
     if (!c.isEnabled) {
       throw new Error('Conector desactivado; actívalo en Configuración');
     }

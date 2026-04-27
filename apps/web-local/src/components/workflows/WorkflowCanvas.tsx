@@ -145,7 +145,7 @@ function WorkflowFlowViewTabs({
   onViewModeChange: (m: 'editor' | 'executions') => void;
 }) {
   return (
-    <div className="relative z-[202] flex shrink-0 items-center justify-center border-b border-gray-200 bg-gray-50/95 px-2 py-1.5 dark:border-neutral-600 dark:bg-neutral-800/90">
+    <div className="relative z-10 flex shrink-0 items-center justify-center border-b border-gray-200 bg-gray-50/95 px-2 py-1.5 dark:border-neutral-600 dark:bg-neutral-800/90">
       <div
         className="inline-flex rounded-lg border border-gray-200 bg-gray-100/90 p-0.5 dark:border-neutral-600 dark:bg-neutral-800/90"
         role="tablist"
@@ -185,7 +185,7 @@ function WorkflowFlowViewTabs({
 /** Barra al maximizar: mismo criterio que el layout (logo + sucursal vía BranchDropdown). */
 function WorkflowCanvasMaximizeHeader() {
   return (
-    <header className="relative z-[201] flex h-16 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 dark:border-neutral-600 dark:bg-neutral-800">
+    <header className="relative z-[220] flex h-16 shrink-0 items-center justify-between gap-3 overflow-visible border-b border-gray-200 bg-white px-4 dark:border-neutral-600 dark:bg-neutral-800">
       <Image
         src={agoraLogoBlack}
         alt="AGORA"

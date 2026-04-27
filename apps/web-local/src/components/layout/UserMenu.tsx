@@ -116,7 +116,7 @@ export default function UserMenu({ user }: UserMenuProps) {
 
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 z-50 py-3"
+          className="absolute right-0 z-[280] mt-2 w-64 rounded-lg border border-gray-200 bg-white py-3 shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
           role="menu"
           aria-label="Opciones de usuario"
         >

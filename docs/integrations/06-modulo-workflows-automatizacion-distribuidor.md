@@ -48,8 +48,13 @@ Implicaciones:
 ### 5.2 Disparadores (triggers)
 
 - **Webhook:** URL y método configurables; validación de autenticación (token, firmas, etc.) acorde a la política de seguridad.
-- **Manual / “Ejecutar ahora”:** desde la UI, para pruebas y reejecuciones.
-- **Programado (opcional en fases posteriores):** expresión cron o intervalo, ejecutado por un worker de backend.
+- **Manual / “Ejecutar ahora”:** desde la UI o API (`POST .../workflows/:id/run`), para pruebas y reejecuciones. El historial usa `trigger_type = manual`.
+- **Programado (cron en servidor):** el nodo `triggerSchedule` guarda `data.cron` (expresión compatible con el parser del backend). Si el flujo está **activo** (`is_enabled`), el proceso Nest evalúa candidatos **cada minuto** y ejecuta los que coinciden con el minuto actual.
+  - **Activación:** variable de entorno `INTEGRATION_WORKFLOW_SCHEDULE_ENABLED=true` en el backend.
+  - **Zona horaria del cron:** `WORKFLOW_SCHED_TZ` (IANA, p. ej. `America/Mexico_City`); si no se define, se usa `UTC`. Debe alinearse con lo que los operadores esperan de las horas configuradas en la UI.
+  - **Granularidad:** un minuto; no se garantizan sub-minutos.
+  - **Idempotencia:** como mucho un run con `trigger_type = schedule` por flujo y por minuto de reloj del servidor de base de datos (`date_trunc('minute', CURRENT_TIMESTAMP)` en la deduplicación).
+  - **Implementación:** `IntegrationWorkflowsScheduler` + `IntegrationWorkflowsService.runWorkflowScheduledJob` en `apps/backend/src/modules/integration-workflows/`.
 
 ### 5.3 Tipos de nodos previstos (evolutivo)
 

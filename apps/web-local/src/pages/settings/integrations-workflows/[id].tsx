@@ -135,6 +135,10 @@ export default function IntegrationsWorkflowEditorPage() {
   const [runAnimHighlight, setRunAnimHighlight] = useState<string | null>(null);
   const [userRunFocus, setUserRunFocus] = useState<string | null>(null);
   const [canvasMaximized, setCanvasMaximized] = useState(false);
+  const [saveSnackbar, setSaveSnackbar] = useState<{
+    variant: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const businessId = selectedBusiness?.business_id;
   const role = selectedBusiness?.role ?? 'operations_staff';
@@ -190,6 +194,12 @@ export default function IntegrationsWorkflowEditorPage() {
     setCanvasMaximized(false);
   }, [workflowId]);
 
+  useEffect(() => {
+    if (!saveSnackbar) return;
+    const t = window.setTimeout(() => setSaveSnackbar(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [saveSnackbar]);
+
   const onSave = async () => {
     if (!businessId || !workflowId) return;
     setSaving(true);
@@ -199,7 +209,9 @@ export default function IntegrationsWorkflowEditorPage() {
         typeof canvasRef.current?.getDefinition === 'function' ? canvasRef.current.getDefinition() : null;
       const def = fromCanvas ?? wf?.definition;
       if (!def) {
-        setErr('No hay definición de flujo');
+        const msg = 'No hay definición de flujo';
+        setErr(msg);
+        setSaveSnackbar({ variant: 'error', message: msg });
         return;
       }
       await updateWorkflow(businessId, workflowId, {
@@ -208,8 +220,11 @@ export default function IntegrationsWorkflowEditorPage() {
         definition: def,
       });
       await load();
+      setSaveSnackbar({ variant: 'success', message: 'Flujo guardado correctamente.' });
     } catch (e: any) {
-      setErr(e?.message || 'Error al guardar');
+      const msg = e?.message || 'Error al guardar';
+      setErr(msg);
+      setSaveSnackbar({ variant: 'error', message: msg });
     } finally {
       setSaving(false);
     }
@@ -384,9 +399,19 @@ export default function IntegrationsWorkflowEditorPage() {
                             type="button"
                             onClick={onSave}
                             disabled={saving}
-                            className="px-4 py-2 rounded-md bg-black text-white text-sm"
+                            className="inline-flex min-h-[38px] min-w-[7.5rem] items-center justify-center gap-2 rounded-md bg-black px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-75 dark:bg-white dark:text-black"
                           >
-                            Guardar
+                            {saving ? (
+                              <>
+                                <span
+                                  className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/35 border-t-white dark:border-black/30 dark:border-t-black"
+                                  aria-hidden
+                                />
+                                Guardando…
+                              </>
+                            ) : (
+                              'Guardar'
+                            )}
                           </button>
                           <button
                             type="button"
@@ -488,6 +513,23 @@ export default function IntegrationsWorkflowEditorPage() {
           </div>
         </div>
       </LocalLayout>
+      {saveSnackbar && (
+        <div
+          className="pointer-events-none fixed bottom-6 left-1/2 z-[500] flex w-[min(100%-2rem,24rem)] -translate-x-1/2 justify-center px-4 sm:left-auto sm:right-6 sm:translate-x-0 sm:justify-end"
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className={`pointer-events-auto w-full rounded-lg border px-4 py-3 text-sm shadow-lg ${
+              saveSnackbar.variant === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100'
+                : 'border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/90 dark:text-red-100'
+            }`}
+          >
+            {saveSnackbar.message}
+          </div>
+        </div>
+      )}
     </>
   );
 }

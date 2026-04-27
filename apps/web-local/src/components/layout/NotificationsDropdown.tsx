@@ -62,7 +62,7 @@ export default function NotificationsDropdown() {
 
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-80 max-h-[24rem] bg-white dark:bg-neutral-800 rounded-lg shadow-lg border border-gray-200 dark:border-neutral-700 z-50 flex flex-col"
+          className="absolute right-0 z-[280] mt-2 flex max-h-[24rem] w-80 flex-col rounded-lg border border-gray-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
           role="dialog"
           aria-label="Listado de notificaciones"
         >

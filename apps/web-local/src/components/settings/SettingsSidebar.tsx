@@ -247,7 +247,7 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
 
   if (loading) {
     return (
-      <div className="w-64 flex-shrink-0 border-r border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-800/80">
+      <div className="w-64 flex-shrink-0 bg-transparent pr-2">
         <div className="p-4">
           <div className="animate-pulse">
             <div className="mb-4 h-4 w-28 rounded bg-gray-200 dark:bg-gray-600" />
@@ -265,15 +265,15 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
   const activePath = currentPath || router.pathname;
 
   return (
-    <div className="w-64 flex-shrink-0 border-r border-gray-100 bg-white dark:border-neutral-800 dark:bg-neutral-800/80">
+    <div className="w-64 flex-shrink-0 bg-transparent pr-2">
       <div className="sticky top-0 p-4 pt-1">
-        <h2 className="mb-5 border-b border-gray-100 pb-3 text-sm font-semibold text-gray-900 dark:border-neutral-700 dark:text-white">
+        <h2 className="mb-5 border-b border-gray-200/40 pb-3 text-sm font-semibold text-gray-900 dark:border-neutral-700/50 dark:text-gray-100">
           Ajustes
         </h2>
         <nav className="space-y-7">
           {settingsSections.map((section) => (
             <div key={section.title}>
-              <h3 className="mb-2.5 pl-0.5 text-[0.7rem] font-medium uppercase leading-none tracking-[0.12em] text-gray-400 dark:text-gray-500">
+              <h3 className="mb-2.5 pl-0.5 text-[0.7rem] font-medium uppercase leading-none tracking-[0.12em] text-gray-500 dark:text-gray-500">
                 {section.title}
               </h3>
               <ul className="space-y-0.5">
@@ -286,10 +286,10 @@ export default function SettingsSidebar({ currentPath }: SettingsSidebarProps) {
                         type="button"
                         onClick={() => router.push(category.href)}
                         className={[
-                          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13.5px] leading-snug transition-colors',
+                          'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-[13.5px] leading-snug transition-colors duration-150',
                           isActive
-                            ? 'bg-gray-100 font-semibold text-gray-900 shadow-sm dark:bg-neutral-700/90 dark:text-white'
-                            : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-neutral-700/50 dark:hover:text-white',
+                            ? 'bg-white font-semibold text-gray-900 shadow-sm ring-1 ring-gray-200/80 dark:bg-neutral-800 dark:text-white dark:ring-neutral-600/70 dark:shadow-md dark:shadow-black/20'
+                            : 'text-gray-600 hover:bg-gray-100/60 dark:text-gray-400 dark:hover:bg-neutral-800/50 dark:hover:text-gray-100',
                         ].join(' ')}
                       >
                         <span
