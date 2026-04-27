@@ -1377,6 +1377,7 @@ const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
     domain: '',
     login_endpoint: '',
     orders_endpoint: '',
+    business_area: '',
     auth_email: '',
     auth_password: '',
     redirect_url: '',
@@ -1385,6 +1386,7 @@ const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
     domain: '',
     login_endpoint: '',
     orders_endpoint: '',
+    business_area: '',
     auth_email: '',
     auth_password: '',
     redirect_url: '',
@@ -1440,7 +1442,14 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
 
   const updateEnvField = (
     env: 'dev' | 'prod',
-    key: 'domain' | 'login_endpoint' | 'orders_endpoint' | 'auth_email' | 'auth_password' | 'redirect_url',
+    key:
+      | 'domain'
+      | 'login_endpoint'
+      | 'orders_endpoint'
+      | 'business_area'
+      | 'auth_email'
+      | 'auth_password'
+      | 'redirect_url',
     value: string,
   ) => {
     setSettings((prev) => ({
@@ -1635,6 +1644,27 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Área de negocio (businessArea)
+                </label>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+                  Valor que exige KarloPay por comercio. Si lo dejas vacío se usa el default del servidor (p. ej. ventas).
+                </p>
+                <input
+                  type="text"
+                  value={settings.dev.business_area || ''}
+                  onChange={(e) => updateEnvField('dev', 'business_area', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isActiveMode
+                      ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
+                      : isDevMode
+                        ? 'border-yellow-300 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50'
+                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  } dark:bg-neutral-700 dark:border-neutral-600`}
+                  placeholder="Ej. ventas o el código que indique KarloPay"
+                />
+              </div>
+              <div>
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">Auth Email</label>
                   {isActiveMode && settings.dev.auth_email ? (
@@ -1799,6 +1829,27 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
                       : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
                   }`}
                   placeholder="https://karlopay.com/api/orders/create-or-update"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Área de negocio (businessArea)
+                </label>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">
+                  Valor que exige KarloPay por comercio. Si lo dejas vacío se usa el default del servidor (p. ej. ventas).
+                </p>
+                <input
+                  type="text"
+                  value={settings.prod.business_area || ''}
+                  onChange={(e) => updateEnvField('prod', 'business_area', e.target.value)}
+                  className={`w-full px-3 py-2 text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
+                    isProdMode
+                      ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
+                      : !isDevMode
+                        ? 'border-green-300 focus:border-green-500 focus:ring-green-500 bg-green-50'
+                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 bg-gray-50'
+                  } dark:bg-neutral-700 dark:border-neutral-600`}
+                  placeholder="Ej. ventas o el código que indique KarloPay"
                 />
               </div>
               <div>

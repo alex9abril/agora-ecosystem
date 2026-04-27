@@ -38,6 +38,8 @@ export class UpdateBusinessKarlopaySettingsDto {
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;
+    /** Valor del campo `businessArea` en la API de KarloPay (por comercio). Vacío = default del servidor. */
+    business_area?: string;
   };
 
   @ApiPropertyOptional({ 
@@ -60,6 +62,7 @@ export class UpdateBusinessKarlopaySettingsDto {
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;
+    business_area?: string;
   };
 }
 

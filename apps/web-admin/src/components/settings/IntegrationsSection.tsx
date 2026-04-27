@@ -45,8 +45,8 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
     providerName: string,
     providerIcon: React.ReactNode,
     enabledKey: string,
-    devKeys: { label: string; key: string; type?: 'password' | 'text' }[],
-    prodKeys: { label: string; key: string; type?: 'password' | 'text' }[]
+    devKeys: { label: string; key: string; type?: 'password' | 'text'; optional?: boolean; placeholder?: string }[],
+    prodKeys: { label: string; key: string; type?: 'password' | 'text'; optional?: boolean; placeholder?: string }[],
   ) => {
     const enabled = getSettingValue(enabledKey) === true;
     const isExpanded = expandedProviders[providerKey] || false;
@@ -112,7 +112,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                   </span>
                 )}
               </div>
-              {devKeys.map(({ label, key, type = 'text' }) => {
+              {devKeys.map(({ label, key, type = 'text', optional, placeholder: fieldPlaceholder }) => {
                 const setting = getSetting(key);
                 const value = getSettingValue(key);
                 const isActive = devMode && enabled;
@@ -137,7 +137,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                       {isActive && !isEmpty && (
                         <span className="text-xs text-yellow-600 font-medium">✓ En uso</span>
                       )}
-                      {isActive && isEmpty && (
+                      {isActive && isEmpty && !optional && (
                         <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
                       )}
                     </div>
@@ -159,7 +159,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                         value={value || ''}
                         onChange={(e) => onUpdate(key, e.target.value)}
                         disabled={saving}
-                        placeholder={setting?.description || ''}
+                        placeholder={fieldPlaceholder || setting?.description || ''}
                         className={`w-full px-3 py-2 ${type === 'password' ? 'pr-10' : ''} text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
                           isActive
                             ? 'border-yellow-400 focus:border-yellow-500 focus:ring-yellow-500 bg-yellow-50 ring-2 ring-yellow-200'
@@ -205,7 +205,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                   </span>
                 )}
               </div>
-              {prodKeys.map(({ label, key, type = 'text' }) => {
+              {prodKeys.map(({ label, key, type = 'text', optional, placeholder: fieldPlaceholder }) => {
                 const setting = getSetting(key);
                 const value = getSettingValue(key);
                 const isActive = !devMode && enabled;
@@ -230,7 +230,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                       {isActive && !isEmpty && (
                         <span className="text-xs text-green-600 font-medium">✓ En uso</span>
                       )}
-                      {isActive && isEmpty && (
+                      {isActive && isEmpty && !optional && (
                         <span className="text-xs text-red-600 font-medium">⚠ Requerido</span>
                       )}
                     </div>
@@ -252,7 +252,7 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
                         value={value || ''}
                         onChange={(e) => onUpdate(key, e.target.value)}
                         disabled={saving}
-                        placeholder={setting?.description || ''}
+                        placeholder={fieldPlaceholder || setting?.description || ''}
                         className={`w-full px-3 py-2 ${type === 'password' ? 'pr-10' : ''} text-xs border rounded focus:outline-none focus:ring-1 font-mono ${
                           isActive
                             ? 'border-green-400 focus:border-green-500 focus:ring-green-500 bg-green-50 ring-2 ring-green-200'
@@ -348,6 +348,12 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
         { label: 'Dominio', key: 'integrations.payments.karlopay.dev.domain' },
         { label: 'Login Endpoint', key: 'integrations.payments.karlopay.dev.login_endpoint' },
         { label: 'Órdenes Endpoint', key: 'integrations.payments.karlopay.dev.orders_endpoint' },
+        {
+          label: 'Área de negocio (businessArea)',
+          key: 'integrations.payments.karlopay.dev.business_area',
+          optional: true,
+          placeholder: 'Valor que indique KarloPay por comercio; vacío = ventas',
+        },
         { label: 'Auth Email', key: 'integrations.payments.karlopay.dev.auth_email' },
         { label: 'Auth Password', key: 'integrations.payments.karlopay.dev.auth_password', type: 'password' },
         { label: 'Redirect URL', key: 'integrations.payments.karlopay.dev.redirect_url' },
@@ -356,6 +362,12 @@ export default function IntegrationsSection({ settings, onUpdate, saving }: Inte
         { label: 'Dominio', key: 'integrations.payments.karlopay.prod.domain' },
         { label: 'Login Endpoint', key: 'integrations.payments.karlopay.prod.login_endpoint' },
         { label: 'Órdenes Endpoint', key: 'integrations.payments.karlopay.prod.orders_endpoint' },
+        {
+          label: 'Área de negocio (businessArea)',
+          key: 'integrations.payments.karlopay.prod.business_area',
+          optional: true,
+          placeholder: 'Valor que indique KarloPay por comercio; vacío = ventas',
+        },
         { label: 'Auth Email', key: 'integrations.payments.karlopay.prod.auth_email' },
         { label: 'Auth Password', key: 'integrations.payments.karlopay.prod.auth_password', type: 'password' },
         { label: 'Redirect URL', key: 'integrations.payments.karlopay.prod.redirect_url' },

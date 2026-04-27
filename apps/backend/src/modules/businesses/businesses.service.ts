@@ -3178,6 +3178,8 @@ export class BusinessesService {
       auth_email: '',
       auth_password: '',
       redirect_url: '',
+      /** Valor del campo businessArea en KarloPay; vacío = usa el default del backend (p. ej. ventas) */
+      business_area: '',
       embedded_config: undefined as Record<string, unknown> | undefined,
     },
     prod: {
@@ -3187,6 +3189,7 @@ export class BusinessesService {
       auth_email: '',
       auth_password: '',
       redirect_url: '',
+      business_area: '',
       embedded_config: undefined as Record<string, unknown> | undefined,
     },
   };
@@ -3283,6 +3286,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        business_area?: string;
         embedded_config?: Record<string, unknown>;
       };
       prod?: {
@@ -3292,6 +3296,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        business_area?: string;
         embedded_config?: Record<string, unknown>;
       };
     },
@@ -3506,6 +3511,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        business_area?: string;
         embedded_config?: Record<string, unknown>;
       };
       prod?: {
@@ -3515,6 +3521,7 @@ export class BusinessesService {
         auth_email?: string;
         auth_password?: string;
         redirect_url?: string;
+        business_area?: string;
         embedded_config?: Record<string, unknown>;
       };
     },

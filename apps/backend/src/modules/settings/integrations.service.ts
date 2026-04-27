@@ -31,6 +31,8 @@ export interface KarlopayCredentials extends PaymentProviderCredentials {
   redirectUrl: string; // URL base con placeholders: {tienda} y {session_id}
   /** Modo de integración: redirect (hosted externo) | embedded (widget en tienda). Default: redirect */
   integrationMode?: 'redirect' | 'embedded';
+  /** Área de negocio enviada a KarloPay (create-or-update). Si vacío, el backend usa el del DTO o "ventas". */
+  businessArea?: string;
 }
 
 /**
@@ -92,6 +94,13 @@ export class IntegrationsService {
 
     const prefix = mode === 'dev' ? 'dev' : 'prod';
     
+    const businessAreaRaw = await this.getSettingValue(
+      `integrations.payments.karlopay.${prefix}.business_area`,
+      '',
+    );
+    const businessArea =
+      typeof businessAreaRaw === 'string' && businessAreaRaw.trim() ? businessAreaRaw.trim() : undefined;
+
     return {
       enabled: true,
       domain: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.domain`, ''),
@@ -103,6 +112,7 @@ export class IntegrationsService {
       endpoint: await this.getSettingValue(`integrations.payments.karlopay.${prefix}.domain`, ''),
       mode,
       integrationMode: 'redirect', // Global siempre redirect; embedded solo por sucursal (BranchKarlopaySettings)
+      businessArea,
     };
   }
 

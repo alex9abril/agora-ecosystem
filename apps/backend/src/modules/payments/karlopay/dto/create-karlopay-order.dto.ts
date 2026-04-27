@@ -40,9 +40,11 @@ class OperationDto {
 }
 
 export class CreateKarlopayOrderDto {
-  @ApiProperty({ description: 'Área de negocio', example: 'ventas' })
+  /** Si se omite, el servicio usa `business_area` de la integración (web-local / web-admin) o el default del servidor. */
+  @ApiPropertyOptional({ description: 'Área de negocio KarloPay', example: 'ventas' })
+  @IsOptional()
   @IsString()
-  businessArea: string;
+  businessArea?: string;
 
   @ApiProperty({ description: 'Número de orden', example: 'payses_01JJD1VWT2ESR3101A9Q3TMN5V' })
   @IsString()

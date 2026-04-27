@@ -4,11 +4,12 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
 import { KarlopayWebhookGuard } from '../../../common/guards/karlopay-webhook.guard';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -97,6 +98,34 @@ export class KarlopayController {
   @ApiResponse({ status: 200, description: 'Confirmación procesada' })
   async confirmRedirect(@Body() payload: any) {
     return this.karlopayService.processRedirectConfirmation(payload);
+  }
+
+  @Get('checkout-context')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Contexto público de KarloPay para el checkout (entorno dev/prod y origen de credenciales, sin secretos)',
+  })
+  @ApiQuery({ name: 'branchBusinessId', required: false, description: 'ID de sucursal del carrito' })
+  @ApiQuery({
+    name: 'resolveBranchOrGroupFirst',
+    required: false,
+    description:
+      'true = misma resolución que "pago directo a sucursal" (sucursal → grupo → global). false = solo integración global (tarjeta estándar)',
+  })
+  @ApiResponse({ status: 200, description: 'Metadatos de configuración efectiva' })
+  async getCheckoutContext(
+    @Query('branchBusinessId') branchBusinessId?: string,
+    @Query('resolveBranchOrGroupFirst') resolveBranchOrGroupFirst?: string,
+  ) {
+    const resolve =
+      resolveBranchOrGroupFirst === 'true' ||
+      resolveBranchOrGroupFirst === '1' ||
+      resolveBranchOrGroupFirst === 'yes';
+    return this.karlopayService.getPublicCheckoutContext({
+      branchBusinessId: branchBusinessId?.trim() || undefined,
+      resolveBranchOrGroupFirst: resolve,
+    });
   }
 }
 

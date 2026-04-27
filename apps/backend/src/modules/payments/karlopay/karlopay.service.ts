@@ -33,6 +33,82 @@ export interface KarlopayOrderResponse {
   [key: string]: any;
 }
 
+/** Solo si no hay `business_area` en credenciales (sucursal/grupo/global) ni `businessArea` en el DTO. */
+const KARLOPAY_DEFAULT_BUSINESS_AREA = 'ventas';
+
+/**
+ * Obtiene urlPayment del JSON de create-or-update.
+ * Mismo algoritmo para credenciales **dev** o **prod** (la sucursal/grupo/global elige el host; el shape puede variar).
+ * - Doc / staging a veces: orden plana en la raíz (`urlPayment` en el mismo nivel que `id`).
+ * - Producción observada: wrapper `{ message, statusCode, outPut: { urlPayment, ... } }`.
+ */
+function extractUrlPaymentFromKarlopayResponseBody(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+
+  const pickString = (obj: Record<string, unknown>): string | undefined => {
+    for (const key of ['urlPayment', 'url_payment', 'URLPayment', 'paymentUrl', 'payment_url']) {
+      const v = obj[key];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    return undefined;
+  };
+
+  const o = body as Record<string, unknown>;
+  const direct = pickString(o);
+  if (direct) return direct;
+
+  for (const nestedKey of ['outPut', 'output', 'data', 'order', 'result', 'payload', 'body']) {
+    const nested = o[nestedKey];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      const found = pickString(nested as Record<string, unknown>);
+      if (found) return found;
+    }
+  }
+
+  const list = o.orders ?? o.items;
+  if (Array.isArray(list) && list[0] && typeof list[0] === 'object') {
+    const found = pickString(list[0] as Record<string, unknown>);
+    if (found) return found;
+  }
+
+  if (Array.isArray(body) && body[0] && typeof body[0] === 'object') {
+    return pickString(body[0] as Record<string, unknown>);
+  }
+
+  return undefined;
+}
+
+/** ¿Parece el objeto-orden de KarloPay (no un meta-wrapper genérico)? */
+function looksLikeKarlopayOrderRecord(obj: Record<string, unknown>): boolean {
+  if (typeof obj.urlPayment === 'string' && obj.urlPayment.trim()) return true;
+  if (typeof obj.url_payment === 'string' && obj.url_payment.trim()) return true;
+  if (typeof obj.numberOfOrder === 'string' && obj.numberOfOrder.trim()) return true;
+  return false;
+}
+
+/**
+ * Deja la orden en forma "plana" para el resto del backend (`id`, `numberOfOrder`, `urlPayment` en raíz).
+ * Aplica igual si la integración está en **dev** o **prod** (solo cambia el endpoint, no esta lógica).
+ * - Prod frecuente: `outPut` / `output`
+ * - Dev u otros: orden en raíz, o anidada en `data` / `result`
+ */
+function flattenKarlopayCreateOrderResponseBody(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return {};
+  const o = body as Record<string, unknown>;
+
+  for (const key of ['outPut', 'output', 'data', 'result', 'order', 'payload'] as const) {
+    const inner = o[key];
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+      const rec = inner as Record<string, unknown>;
+      if (looksLikeKarlopayOrderRecord(rec)) {
+        return { ...o, ...rec };
+      }
+    }
+  }
+
+  return { ...o };
+}
+
 @Injectable()
 export class KarlopayService {
   private readonly logger = new Logger(KarlopayService.name);
@@ -108,6 +184,10 @@ export class KarlopayService {
       }
 
       const integrationMode = (karlopaySettings.mode || 'redirect') as 'redirect' | 'embedded';
+      const businessAreaRaw = (envSettings as { business_area?: string }).business_area;
+      const businessArea =
+        typeof businessAreaRaw === 'string' && businessAreaRaw.trim() ? businessAreaRaw.trim() : undefined;
+
       return {
         enabled: true,
         domain: envSettings.domain || '',
@@ -119,6 +199,7 @@ export class KarlopayService {
         endpoint: envSettings.domain || '',
         mode,
         integrationMode,
+        businessArea,
       };
     } catch (error: any) {
       // Si hay error (ej: sucursal no encontrada), retornar null para usar globales
@@ -157,6 +238,10 @@ export class KarlopayService {
       }
 
       const integrationMode = (karlopaySettings.mode || 'redirect') as 'redirect' | 'embedded';
+      const businessAreaRaw = (envSettings as { business_area?: string }).business_area;
+      const businessArea =
+        typeof businessAreaRaw === 'string' && businessAreaRaw.trim() ? businessAreaRaw.trim() : undefined;
+
       return {
         enabled: true,
         domain: envSettings.domain || '',
@@ -168,10 +253,59 @@ export class KarlopayService {
         endpoint: envSettings.domain || '',
         mode,
         integrationMode,
+        businessArea,
       };
     } catch (error: any) {
       this.logger.debug(`Error obteniendo credenciales grupo: ${error.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Metadatos públicos para el checkout (sin credenciales).
+   * Replica el orden usado en el cobro: con resolveBranchOrGroupFirst = sucursal → grupo → global;
+   * con false = solo integración global (flujo "Tarjeta" sin pago directo a sucursal).
+   */
+  async getPublicCheckoutContext(options: {
+    branchBusinessId?: string;
+    resolveBranchOrGroupFirst: boolean;
+  }): Promise<{
+    karlopayEnabled: boolean;
+    environment?: 'dev' | 'prod';
+    credentialSource?: 'branch' | 'group' | 'global';
+    integrationMode?: 'redirect' | 'embedded';
+  }> {
+    if (options.resolveBranchOrGroupFirst && options.branchBusinessId) {
+      const branch = await this.getBranchKarlopayCredentials(options.branchBusinessId);
+      if (branch) {
+        return {
+          karlopayEnabled: true,
+          environment: branch.mode as 'dev' | 'prod',
+          credentialSource: 'branch',
+          integrationMode: branch.integrationMode || 'redirect',
+        };
+      }
+      const group = await this.getGroupKarlopayCredentials(options.branchBusinessId);
+      if (group) {
+        return {
+          karlopayEnabled: true,
+          environment: group.mode as 'dev' | 'prod',
+          credentialSource: 'group',
+          integrationMode: group.integrationMode || 'redirect',
+        };
+      }
+    }
+
+    try {
+      const global = await this.integrationsService.getKarlopayCredentials();
+      return {
+        karlopayEnabled: true,
+        environment: global.mode as 'dev' | 'prod',
+        credentialSource: 'global',
+        integrationMode: global.integrationMode || 'redirect',
+      };
+    } catch {
+      return { karlopayEnabled: false };
     }
   }
 
@@ -280,6 +414,15 @@ export class KarlopayService {
     const credentials = await this.getCredentials(businessId);
     const token = await this.getAuthToken(credentials);
 
+    const effectiveBusinessArea =
+      (credentials.businessArea && credentials.businessArea.trim()) ||
+      (orderDto.businessArea && String(orderDto.businessArea).trim()) ||
+      KARLOPAY_DEFAULT_BUSINESS_AREA;
+    const orderPayload: CreateKarlopayOrderDto = {
+      ...orderDto,
+      businessArea: effectiveBusinessArea,
+    };
+
     this.logger.log(`📦 Creando/actualizando orden en Karlopay: ${orderDto.numberOfOrder} (modo: ${credentials.mode})`);
 
     try {
@@ -298,38 +441,64 @@ export class KarlopayService {
 
       // Log de parámetros enviados (sin credenciales)
       this.logger.debug('📦 Payload enviado a Karlopay:', {
-        businessArea: orderDto.businessArea,
-        numberOfOrder: orderDto.numberOfOrder,
-        status: orderDto.status,
-        total: orderDto.total,
+        businessArea: orderPayload.businessArea,
+        numberOfOrder: orderPayload.numberOfOrder,
+        status: orderPayload.status,
+        total: orderPayload.total,
         customer: {
-          foreignId: orderDto.customer?.foreignId,
-          fullName: orderDto.customer?.fullName,
-          phoneNumber: orderDto.customer?.phoneNumber,
-          email: orderDto.customer?.email,
+          foreignId: orderPayload.customer?.foreignId,
+          fullName: orderPayload.customer?.fullName,
+          phoneNumber: orderPayload.customer?.phoneNumber,
+          email: orderPayload.customer?.email,
         },
-        operationsCount: orderDto.operations?.length || 0,
-        redirectUrl: orderDto.redirectUrl,
-        additional: orderDto.additional,
+        operationsCount: orderPayload.operations?.length || 0,
+        redirectUrl: orderPayload.redirectUrl,
+        additional: orderPayload.additional,
       });
 
       const response = await axiosInstance.post<KarlopayOrderResponse>(
         ordersUrl,
-        orderDto
+        orderPayload
       );
 
-      // Asegurar que urlPayment tenga protocolo si es relativa
-      let urlPayment = response.data.urlPayment;
+      // Log completo del cuerpo para validar con KarloPay (formato real puede incluir message/outPut en 200)
+      try {
+        const raw = response.data;
+        const serialized = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        this.logger.log(
+          `[KarloPay] create-or-update HTTP ${response.status} — cuerpo recibido (JSON tal cual): ${serialized}`,
+        );
+      } catch (e: any) {
+        this.logger.warn(`[KarloPay] create-or-update: no se pudo serializar response.data: ${e?.message}`);
+      }
+
+      // urlPayment: documentación usa camelCase a nivel raíz; producción puede anidar o usar snake_case
+      let urlPayment =
+        extractUrlPaymentFromKarlopayResponseBody(response.data) ?? response.data?.urlPayment;
+
+      if (!urlPayment) {
+        const keys =
+          response.data && typeof response.data === 'object' && !Array.isArray(response.data)
+            ? Object.keys(response.data as object).join(', ')
+            : typeof response.data;
+        this.logger.warn(
+          `⚠️ KarloPay respondió sin URL de pago utilizable (urlPayment). Claves en response.data: [${keys}]. ` +
+            `El checkout no podrá redirigir a la pasarela hasta que la API devuelva la URL o se ajuste el parseo.`,
+        );
+      }
+
       if (urlPayment && !urlPayment.startsWith('http://') && !urlPayment.startsWith('https://')) {
-        // Si es relativa, agregar https://
         urlPayment = `https://${urlPayment}`;
         this.logger.debug(`🔗 URL de pago normalizada: ${urlPayment}`);
       }
 
       this.logger.log(`✅ Orden ${orderDto.numberOfOrder} procesada exitosamente. URL de pago: ${urlPayment}`);
       this.logger.debug(`[Karlopay] businessArea para orden ${orderDto.numberOfOrder}:`, {
-        businessArea: orderDto.businessArea,
+        businessArea: orderPayload.businessArea,
       });
+
+      const flatResponse = flattenKarlopayCreateOrderResponseBody(response.data);
+
       await this.integrationLogs.log({
         integration: 'karlopay',
         eventType: 'order_create_or_update',
@@ -339,17 +508,18 @@ export class KarlopayService {
         requestPayload: {
           numberOfOrder: orderDto.numberOfOrder,
           total: orderDto.total,
-          businessArea: orderDto.businessArea,
+          businessArea: orderPayload.businessArea,
         },
         responsePayload: {
-          id: response.data.id,
-          numberOfOrder: response.data.numberOfOrder,
-          status: response.data.status,
+          id: flatResponse.id,
+          numberOfOrder: flatResponse.numberOfOrder,
+          status: flatResponse.status,
+          urlPayment,
         },
       });
 
       return {
-        ...response.data,
+        ...(flatResponse as KarlopayOrderResponse),
         urlPayment,
       };
     } catch (error: any) {
@@ -368,7 +538,7 @@ export class KarlopayService {
         requestPayload: {
           numberOfOrder: orderDto.numberOfOrder,
           total: orderDto.total,
-          businessArea: orderDto.businessArea,
+          businessArea: effectiveBusinessArea,
         },
         responsePayload: error.response?.data || null,
       });
@@ -413,7 +583,6 @@ export class KarlopayService {
     const integrationMode = credentials.integrationMode || 'redirect';
 
     const orderDto: CreateKarlopayOrderDto = {
-      businessArea: 'ventas',
       numberOfOrder: input.numberOfOrder,
       status: 'R',
       total: input.total,

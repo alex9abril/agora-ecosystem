@@ -326,6 +326,14 @@ export default function CheckoutPage() {
     numberOfOrder: string;
     businessId?: string;
   } | null>(null);
+  /** Metadatos públicos del backend: entorno dev/prod y origen de credenciales (misma lógica que el cobro) */
+  const [karlopayCheckoutContext, setKarlopayCheckoutContext] = useState<{
+    karlopayEnabled: boolean;
+    environment?: 'dev' | 'prod';
+    credentialSource?: 'branch' | 'group' | 'global';
+    integrationMode?: 'redirect' | 'embedded';
+  } | null>(null);
+  const [karlopayCheckoutContextLoading, setKarlopayCheckoutContextLoading] = useState(false);
   /** Cuando la tienda está embebida y enviamos postMessage al parent para breakout */
   const [embedBreakoutPending, setEmbedBreakoutPending] = useState(false);
   const [confirmedOrderData, setConfirmedOrderData] = useState<{
@@ -571,6 +579,47 @@ export default function CheckoutPage() {
       ]);
     }
   }, [branchKarlopayEnabled]);
+
+  // Contexto KarloPay (entorno + origen) para QA: alinea con resolveBranchOrGroupFirst del backend
+  useEffect(() => {
+    if (currentStep !== 'payment') {
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setKarlopayCheckoutContextLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (branchKarlopayEnabled && branchKarlopayBusinessId) {
+          params.set('branchBusinessId', branchKarlopayBusinessId);
+          params.set('resolveBranchOrGroupFirst', 'true');
+        } else {
+          params.set('resolveBranchOrGroupFirst', 'false');
+        }
+        const data = await apiRequest<{
+          karlopayEnabled: boolean;
+          environment?: 'dev' | 'prod';
+          credentialSource?: 'branch' | 'group' | 'global';
+          integrationMode?: 'redirect' | 'embedded';
+        }>(`/payments/karlopay/checkout-context?${params.toString()}`, { method: 'GET' });
+        if (!cancelled) {
+          setKarlopayCheckoutContext(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setKarlopayCheckoutContext(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setKarlopayCheckoutContextLoading(false);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStep, branchKarlopayEnabled, branchKarlopayBusinessId]);
 
   // Mantener selección válida: si la actual no está en la lista, o no hay selección y solo hay una tarjeta, elegir la opción de tarjeta
   useEffect(() => {
@@ -2910,7 +2959,7 @@ export default function CheckoutPage() {
                 {/* Paso 4: Pago */}
                 {currentStep === 'payment' && (
                   <div>
-                    <h2 className="text-xl font-medium text-gray-900 mb-6">Método de Pago</h2>
+                    <h2 className="text-xl font-medium text-gray-900 dark:text-gray-100 mb-6">Método de Pago</h2>
 
                     {/* Mostrar saldo del wallet si está disponible */}
                     {isAuthenticated && walletBalance !== null && walletBalance > 0 && (
@@ -3150,6 +3199,70 @@ export default function CheckoutPage() {
                       >
                         {processingOrder ? 'Procesando Orden...' : 'Realizar Pedido'}
                       </button>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-gray-100/80 dark:border-neutral-800/80">
+                      {karlopayCheckoutContextLoading && (
+                        <div className="flex gap-2.5 items-start" role="status">
+                          <span
+                            className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-gray-400/60 dark:bg-gray-500/45"
+                            aria-hidden
+                          />
+                          <p className="text-[11px] leading-snug text-gray-400/80 dark:text-gray-500/50">
+                            Consultando configuración de KarloPay…
+                          </p>
+                        </div>
+                      )}
+                      {!karlopayCheckoutContextLoading &&
+                        karlopayCheckoutContext?.karlopayEnabled && (
+                          <div className="flex gap-2.5 items-start" role="status">
+                            <span
+                              className={
+                                karlopayCheckoutContext.environment === 'prod'
+                                  ? 'mt-[5px] h-2 w-2 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400'
+                                  : 'mt-[5px] h-2 w-2 shrink-0 rounded-full bg-amber-400 dark:bg-amber-400'
+                              }
+                              title={
+                                karlopayCheckoutContext.environment === 'prod'
+                                  ? 'Entorno: producción'
+                                  : 'Entorno: desarrollo'
+                              }
+                              aria-hidden
+                            />
+                            <p className="text-[11px] leading-relaxed font-normal text-gray-400/90 dark:text-gray-500/55">
+                              KarloPay (referencia QA): entorno{' '}
+                              {karlopayCheckoutContext.environment === 'prod' ? 'Producción' : 'Desarrollo'}, credenciales
+                              desde{' '}
+                              {karlopayCheckoutContext.credentialSource === 'branch'
+                                ? 'sucursal (web-local / web-admin)'
+                                : karlopayCheckoutContext.credentialSource === 'group'
+                                  ? 'grupo empresarial'
+                                  : 'integración global'}
+                              .{' '}
+                              {karlopayCheckoutContext.integrationMode === 'embedded'
+                                ? 'Pasarela: embedded. '
+                                : 'Pasarela: redirect. '}
+                              {branchKarlopayEnabled
+                                ? 'Flujo: pago directo a sucursal (sucursal → grupo → global).'
+                                : 'Flujo: tarjeta vía integración global.'}
+                            </p>
+                          </div>
+                        )}
+                      {!karlopayCheckoutContextLoading &&
+                        karlopayCheckoutContext &&
+                        !karlopayCheckoutContext.karlopayEnabled &&
+                        paymentMethods.some((m) => m.type === 'card') && (
+                          <div className="flex gap-2.5 items-start" role="alert">
+                            <span
+                              className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-gray-400/60 dark:bg-gray-500/45"
+                              aria-hidden
+                            />
+                            <p className="text-[11px] leading-relaxed text-gray-500/90 dark:text-gray-400/50 font-normal">
+                              KarloPay no está disponible para este flujo; el pago con tarjeta podría no abrir la
+                              pasarela.
+                            </p>
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}

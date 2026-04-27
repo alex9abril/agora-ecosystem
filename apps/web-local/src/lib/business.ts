@@ -186,6 +186,8 @@ export interface BranchKarlopaySettings {
     domain?: string;
     login_endpoint?: string;
     orders_endpoint?: string;
+    /** Valor enviado a KarloPay como `businessArea` (por comercio). Vacío = default del servidor (p. ej. ventas). */
+    business_area?: string;
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;
@@ -196,6 +198,7 @@ export interface BranchKarlopaySettings {
     domain?: string;
     login_endpoint?: string;
     orders_endpoint?: string;
+    business_area?: string;
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;

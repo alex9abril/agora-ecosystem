@@ -1,0 +1,140 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-karl-0001-pay0-collection",
+    "name": "KarloPay API (conexión directa)",
+    "description": "Prueba login y create-or-update contra KarloPay **desarrollo o producción** (cambia `karlopay_base` y credenciales) sin pasar por Agora.\n\n1. `karlopay_base`: ej. producción `https://backend-production.karlopay.com` o staging `https://backend-staging.karlopay.com`.\n2. Edita `karlopay_email` y `karlopay_password`.\n3. Ejecuta **Login** → guarda `karlopay_token`.\n4. **Create or update order**: la URL puede venir en raíz (`urlPayment`) o dentro de `outPut` / `data` (el backend soporta ambos en dev y prod).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "karlopay_base",
+      "value": "https://backend-production.karlopay.com"
+    },
+    {
+      "key": "karlopay_email",
+      "value": "toyota.satelite.agora@karlo.io"
+    },
+    {
+      "key": "karlopay_password",
+      "value": ""
+    },
+    {
+      "key": "karlopay_token",
+      "value": ""
+    },
+    {
+      "key": "last_urlPayment",
+      "value": ""
+    },
+    {
+      "key": "businessArea",
+      "value": "pedidos agora"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth — Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{karlopay_email}}\",\n  \"password\": \"{{karlopay_password}}\"\n}"
+        },
+        "url": "{{karlopay_base}}/api/auth/login",
+        "description": "Misma petición que usa el backend (`email` + `password`). El token esperado suele estar en `session.access_token`."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 2xx', function () { pm.expect(pm.response.code).to.be.within(200, 299); });",
+              "try {",
+              "  const json = pm.response.json();",
+              "  const t =",
+              "    json.session?.access_token ||",
+              "    json.token ||",
+              "    json.access_token ||",
+              "    json.accessToken ||",
+              "    (json.data && (json.data.token || json.data.access_token));",
+              "  if (t) {",
+              "    pm.collectionVariables.set('karlopay_token', t);",
+              "    console.log('Token guardado en variable de colección karlopay_token (longitud ' + t.length + ')');",
+              "  } else {",
+              "    console.warn('No se encontró token. Cuerpo:', JSON.stringify(json).substring(0, 2000));",
+              "  }",
+              "} catch (e) {",
+              "  console.error('Respuesta no JSON:', pm.response.text().substring(0, 500));",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Orders — Create or update",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{karlopay_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"businessArea\": \"{{businessArea}}\",\n  \"numberOfOrder\": \"POSTMAN_{{$timestamp}}\",\n  \"status\": \"R\",\n  \"total\": 11.6,\n  \"customer\": {\n    \"foreignId\": \"postman-test-user\",\n    \"fullName\": \"Prueba Postman\",\n    \"phoneNumber\": \"5555555555\",\n    \"email\": \"test@example.com\",\n    \"invoiceProfile\": null\n  },\n  \"operations\": [\n    {\n      \"description\": \"Prueba desde Postman\",\n      \"quantity\": 1,\n      \"price\": 11.6\n    }\n  ],\n  \"product\": null,\n  \"redirectUrl\": \"https://example.com/karlopay-redirect?session_id=POSTMAN_{{$timestamp}}\",\n  \"additional\": {\n    \"session_id\": \"POSTMAN_{{$timestamp}}\"\n  }\n}"
+        },
+        "url": "{{karlopay_base}}/api/orders/create-or-update",
+        "description": "Requiere ejecutar antes **1. Auth — Login**. Revisa en la respuesta `urlPayment` (o anidamientos) para la pasarela."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 2xx', function () { pm.expect(pm.response.code).to.be.within(200, 299); });",
+              "try {",
+              "  const json = pm.response.json();",
+              "  const pick = (o) =>",
+              "    o && (o.urlPayment || o.url_payment || o.paymentUrl || o.payment_url);",
+              "  let url = pick(json);",
+              "  if (!url && json.outPut) url = pick(json.outPut);",
+              "  if (!url && json.output) url = pick(json.output);",
+              "  if (!url && json.data) url = pick(json.data);",
+              "  if (!url && json.order) url = pick(json.order);",
+              "  if (!url && json.result) url = pick(json.result);",
+              "  if (url) {",
+              "    console.log('URL de pago detectada:', url);",
+              "    pm.collectionVariables.set('last_urlPayment', url);",
+              "  } else {",
+              "    console.warn('Sin urlPayment en raíz conocida. Claves nivel raíz:', Object.keys(json));",
+              "  }",
+              "} catch (e) {",
+              "  console.error(e);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

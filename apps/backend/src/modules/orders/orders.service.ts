@@ -660,7 +660,6 @@ export class OrdersService {
 
           // Crear orden en Karlopay (pasar businessId si es pago branch)
           const karlopayOrder = await this.karlopayService.createOrUpdateOrder({
-            businessArea: 'ventas', // ventas // pedidos agora
             numberOfOrder,
             status: 'R', // Remission
             total: karlopayAmount,
