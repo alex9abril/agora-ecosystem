@@ -1387,6 +1387,7 @@ const DEFAULT_KARLOPAY_SETTINGS: BranchKarlopaySettings = {
     login_endpoint: '',
     orders_endpoint: '',
     business_area: '',
+    kiosk_payment_enabled: false,
     auth_email: '',
     auth_password: '',
     redirect_url: '',
@@ -1851,6 +1852,43 @@ export function BranchKarlopaySettings({ branch, onBack, onUpdated, backLabel = 
                   } dark:bg-neutral-700 dark:border-neutral-600`}
                   placeholder="Ej. ventas o el código que indique KarloPay"
                 />
+              </div>
+              <div
+                className={`flex items-center justify-between gap-4 rounded-md border px-3 py-2 ${
+                  settings.environment === 'prod'
+                    ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20'
+                    : 'border-gray-200 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800/50 opacity-90'
+                }`}
+              >
+                <div>
+                  <label htmlFor="prod-kiosk-enabled" className="block text-xs font-medium text-gray-900 dark:text-gray-100">
+                    Pago en kiosco KarloPay
+                  </label>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5 max-w-xl">
+                    Solo aplica cuando arriba el <strong>ambiente</strong> de Karlopay está en <strong>Producción</strong>: entonces, si activas esta casilla, en la tienda aparece &quot;Pago en KarloPay Kiosco&quot; (sin redirección web; pago en sucursal). En <strong>Desarrollo</strong> esa opción no existe en el checkout.
+                  </p>
+                  {settings.environment !== 'prod' && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300/90 mt-1.5">
+                      Cambia el ambiente a Producción para poder activar el kiosco en la tienda.
+                    </p>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 shrink-0 text-sm text-gray-800 dark:text-gray-200">
+                  <input
+                    id="prod-kiosk-enabled"
+                    type="checkbox"
+                    disabled={settings.environment !== 'prod'}
+                    checked={!!settings.prod.kiosk_payment_enabled}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        prod: { ...prev.prod, kiosk_payment_enabled: e.target.checked },
+                      }))
+                    }
+                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-neutral-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  Activo
+                </label>
               </div>
               <div>
                 <div className="flex items-center justify-between">

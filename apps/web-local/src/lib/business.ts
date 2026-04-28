@@ -199,6 +199,8 @@ export interface BranchKarlopaySettings {
     login_endpoint?: string;
     orders_endpoint?: string;
     business_area?: string;
+    /** Solo con ambiente Producción: permite método “Pago en KarloPay Kiosco” en la tienda. */
+    kiosk_payment_enabled?: boolean;
     auth_email?: string;
     auth_password?: string;
     redirect_url?: string;

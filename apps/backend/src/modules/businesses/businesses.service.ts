@@ -3190,6 +3190,8 @@ export class BusinessesService {
       auth_password: '',
       redirect_url: '',
       business_area: '',
+      /** Si true y environment es prod: la tienda puede ofrecer "Pago en KarloPay Kiosko" (checkout). */
+      kiosk_payment_enabled: false,
       embedded_config: undefined as Record<string, unknown> | undefined,
     },
   };
@@ -3297,6 +3299,7 @@ export class BusinessesService {
         auth_password?: string;
         redirect_url?: string;
         business_area?: string;
+        kiosk_payment_enabled?: boolean;
         embedded_config?: Record<string, unknown>;
       };
     },
@@ -3522,6 +3525,7 @@ export class BusinessesService {
         auth_password?: string;
         redirect_url?: string;
         business_area?: string;
+        kiosk_payment_enabled?: boolean;
         embedded_config?: Record<string, unknown>;
       };
     },

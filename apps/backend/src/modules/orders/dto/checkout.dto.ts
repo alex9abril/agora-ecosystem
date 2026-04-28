@@ -1,5 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsOptional, IsNumber, Min, ValidateNested, IsObject, ValidateIf, IsIn, ValidatorConstraint, ValidatorConstraintInterface, Validate, ValidationArguments } from 'class-validator';
+import {
+  IsUUID,
+  IsString,
+  IsOptional,
+  IsNumber,
+  Min,
+  ValidateNested,
+  IsObject,
+  ValidateIf,
+  IsIn,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  Validate,
+  ValidationArguments,
+  IsEmail,
+  MinLength,
+  IsNotEmpty,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class WalletPaymentDto {
@@ -19,9 +36,9 @@ export class PaymentInfoValidConstraint implements ValidatorConstraintInterface 
     const payment = value as PaymentInfoDto;
     if (!payment) return true;
 
-    // Validar branchId: solo permitir si method es karlopay-branch
+    // Validar branchId: solo permitir si method es karlopay-branch o karlopay-kiosk
     if (payment.branchId !== undefined && payment.branchId !== null && payment.branchId !== '') {
-      if (payment.method !== 'karlopay-branch') {
+      if (payment.method !== 'karlopay-branch' && payment.method !== 'karlopay-kiosk') {
         return false;
       }
     }
@@ -38,8 +55,8 @@ export class PaymentInfoValidConstraint implements ValidatorConstraintInterface 
 
   defaultMessage(args: ValidationArguments) {
     const payment = args.value as PaymentInfoDto;
-    if (payment.branchId && payment.method !== 'karlopay-branch') {
-      return `payment.branchId solo se permite cuando payment.method es 'karlopay-branch'. Método actual: '${payment.method}'`;
+    if (payment.branchId && payment.method !== 'karlopay-branch' && payment.method !== 'karlopay-kiosk') {
+      return `payment.branchId solo se permite cuando payment.method es 'karlopay-branch' o 'karlopay-kiosk'. Método actual: '${payment.method}'`;
     }
     if (payment.secondary_branchId && payment.secondary_method !== 'karlopay-branch') {
       return `payment.secondary_branchId solo se permite cuando payment.secondary_method es 'karlopay-branch'. Método secundario actual: '${payment.secondary_method || 'ninguno'}'`;
@@ -48,8 +65,23 @@ export class PaymentInfoValidConstraint implements ValidatorConstraintInterface 
   }
 }
 
+class KioskContactDto {
+  @ApiProperty({ description: 'Correo donde recibir instrucciones de pago en kiosco', example: 'cliente@correo.com' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Teléfono (WhatsApp) para instrucciones', example: '+525512345678' })
+  @IsString()
+  @MinLength(10, { message: 'El teléfono debe tener al menos 10 caracteres' })
+  phone: string;
+}
+
 class PaymentInfoDto {
-  @ApiProperty({ description: 'Método de pago principal', example: 'wallet', enum: ['card', 'cash', 'transfer', 'wallet', 'karlopay', 'karlopay-branch'] })
+  @ApiProperty({
+    description: 'Método de pago principal',
+    example: 'wallet',
+    enum: ['card', 'cash', 'transfer', 'wallet', 'karlopay', 'karlopay-branch', 'karlopay-kiosk'],
+  })
   @IsString()
   method: string;
 
@@ -70,11 +102,18 @@ class PaymentInfoDto {
   @Min(0)
   secondary_amount?: number;
 
-  @ApiPropertyOptional({ description: 'ID de la sucursal cuando se usa karlopay-branch', example: '11111111-1111-1111-1111-111111111111' })
+  @ApiPropertyOptional({ description: 'ID de la sucursal cuando se usa karlopay-branch o karlopay-kiosk', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
-  @ValidateIf((o) => o.method === 'karlopay-branch')
+  @ValidateIf((o) => o.method === 'karlopay-branch' || o.method === 'karlopay-kiosk')
   @IsUUID('4', { message: 'branchId debe ser un UUID válido' })
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Contacto confirmado para enviar instrucciones de pago en kiosco (requerido si method es karlopay-kiosk)', type: KioskContactDto })
+  @ValidateIf((o) => o.method === 'karlopay-kiosk')
+  @IsNotEmpty({ message: 'kiosk_contact es obligatorio para pago en kiosco KarloPay' })
+  @ValidateNested()
+  @Type(() => KioskContactDto)
+  kiosk_contact?: KioskContactDto;
 
   @ApiPropertyOptional({ description: 'ID de la sucursal cuando se usa karlopay-branch como método secundario', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()

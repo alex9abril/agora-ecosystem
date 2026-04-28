@@ -34,6 +34,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   included_in_price: false,
@@ -142,7 +143,7 @@ export default function CheckoutPage() {
     branchTaxSettings[businessId] || DEFAULT_BRANCH_TAX_SETTINGS;
 
   const userPhone = (user?.profile?.phone || user?.phone || '').trim();
-  
+
   // Estados para autenticación
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -311,6 +312,23 @@ export default function CheckoutPage() {
   const [secondaryPaymentMethod, setSecondaryPaymentMethod] = useState<string | null>(null);
   const [branchKarlopayEnabled, setBranchKarlopayEnabled] = useState(false);
   const [branchKarlopayBusinessId, setBranchKarlopayBusinessId] = useState<string | null>(null);
+  /** Config pública de Karlopay de la sucursal (p. ej. kiosco: flag en credenciales prod) */
+  const [branchKarlopayPublic, setBranchKarlopayPublic] = useState<{
+    environment?: 'dev' | 'prod';
+    prod?: { kiosk_payment_enabled?: boolean };
+  } | null>(null);
+  const [kioskContactEmail, setKioskContactEmail] = useState('');
+  const [kioskContactPhone, setKioskContactPhone] = useState('');
+
+  /** Toggle en credenciales prod + integración Karlopay en Producción. En Desarrollo no existe esta opción en checkout. */
+  const showKioskOption = useMemo(
+    () =>
+      branchKarlopayEnabled &&
+      branchKarlopayPublic?.environment === 'prod' &&
+      !!branchKarlopayPublic?.prod?.kiosk_payment_enabled,
+    [branchKarlopayEnabled, branchKarlopayPublic],
+  );
+
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
     { id: 'card', type: 'card', label: 'Tarjeta de crédito/débito' },
     { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' },
@@ -347,8 +365,12 @@ export default function CheckoutPage() {
       walletAmount?: number;
       secondaryMethod?: string;
       secondaryAmount?: number;
+      kioskFlow?: boolean;
     };
+    /** Referencia AGORA_… / KarloPay para pago en kiosco */
+    karlopayKioskReference?: string;
   } | null>(null);
+  const [kioskQrDataUrl, setKioskQrDataUrl] = useState<string | null>(null);
 
   // Redirigir si no hay carrito (pero no si estamos en confirmación o en proceso de autenticación)
   useEffect(() => {
@@ -522,34 +544,45 @@ export default function CheckoutPage() {
         if (!targetBranchId) {
           setBranchKarlopayEnabled(false);
           setBranchKarlopayBusinessId(null);
+          setBranchKarlopayPublic(null);
           return;
         }
 
         // Verificar si hay configuración de Karlopay para esta sucursal
         try {
-          const response = await apiRequest<{ karlopay?: { enabled: boolean } }>(
-            `/businesses/branches/id/${targetBranchId}/karlopay-settings`,
-            { method: 'GET' }
-          );
+          const response = await apiRequest<{
+            karlopay?: {
+              enabled: boolean;
+              environment?: 'dev' | 'prod';
+              prod?: { kiosk_payment_enabled?: boolean };
+            };
+          }>(`/businesses/branches/id/${targetBranchId}/karlopay-settings`, { method: 'GET' });
 
           const karlopayConfig = response?.karlopay;
           if (karlopayConfig && karlopayConfig.enabled === true) {
             setBranchKarlopayEnabled(true);
             setBranchKarlopayBusinessId(targetBranchId);
+            setBranchKarlopayPublic({
+              environment: karlopayConfig.environment,
+              prod: karlopayConfig.prod,
+            });
           } else {
             setBranchKarlopayEnabled(false);
             setBranchKarlopayBusinessId(null);
+            setBranchKarlopayPublic(null);
           }
         } catch (error: any) {
           // Si no hay configuración o hay error, deshabilitar
           console.debug('[Checkout] No hay configuración Karlopay branch o error:', error.message);
           setBranchKarlopayEnabled(false);
           setBranchKarlopayBusinessId(null);
+          setBranchKarlopayPublic(null);
         }
       } catch (error) {
         console.warn('[Checkout] Error verificando configuración Karlopay branch:', error);
         setBranchKarlopayEnabled(false);
         setBranchKarlopayBusinessId(null);
+        setBranchKarlopayPublic(null);
       }
     };
 
@@ -558,6 +591,7 @@ export default function CheckoutPage() {
     } else {
       setBranchKarlopayEnabled(false);
       setBranchKarlopayBusinessId(null);
+      setBranchKarlopayPublic(null);
     }
   }, [cart, branchId]);
 
@@ -566,11 +600,17 @@ export default function CheckoutPage() {
     const walletMethod: PaymentMethod = { id: 'wallet', type: 'wallet', label: 'Monedero electrónico' };
 
     if (branchKarlopayEnabled) {
-      // Solo opción de pago directo a sucursal (mismo método de pago, config por sucursal)
-      setPaymentMethods([
+      const cardMethods: PaymentMethod[] = [
         { id: 'karlopay-branch', type: 'card', label: 'Tarjeta de crédito/débito (Pago directo a sucursal)' },
-        walletMethod,
-      ]);
+      ];
+      if (showKioskOption) {
+        cardMethods.push({
+          id: 'karlopay-kiosk',
+          type: 'card',
+          label: 'Pago en KarloPay Kiosco',
+        });
+      }
+      setPaymentMethods([...cardMethods, walletMethod]);
     } else {
       // Solo opción global
       setPaymentMethods([
@@ -578,7 +618,37 @@ export default function CheckoutPage() {
         walletMethod,
       ]);
     }
-  }, [branchKarlopayEnabled]);
+  }, [branchKarlopayEnabled, showKioskOption]);
+
+  useEffect(() => {
+    if (selectedPaymentMethod === 'karlopay-kiosk' && user) {
+      setKioskContactEmail((prev) => (prev.trim() ? prev : user.email || ''));
+      setKioskContactPhone((prev) => (prev.trim() ? prev : userPhone));
+    }
+  }, [selectedPaymentMethod, user, userPhone]);
+
+  useEffect(() => {
+    const ref = confirmedOrderData?.karlopayKioskReference?.trim();
+    if (!confirmedOrderData?.paymentInfo?.kioskFlow || !ref) {
+      setKioskQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    void import('qrcode')
+      .then((QRMod) => {
+        const QR = QRMod.default;
+        return QR.toDataURL(ref, { width: 220, margin: 2, errorCorrectionLevel: 'M' });
+      })
+      .then((url) => {
+        if (!cancelled) setKioskQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setKioskQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmedOrderData?.paymentInfo?.kioskFlow, confirmedOrderData?.karlopayKioskReference]);
 
   // Contexto KarloPay (entorno + origen) para QA: alinea con resolveBranchOrGroupFirst del backend
   useEffect(() => {
@@ -1610,6 +1680,19 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (selectedPaymentMethod === 'karlopay-kiosk') {
+      const em = kioskContactEmail.trim();
+      const phDigits = kioskContactPhone.replace(/\D/g, '');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        setError('Ingresa un correo electrónico válido para el pago en kiosco.');
+        return;
+      }
+      if (phDigits.length < 10) {
+        setError('Ingresa un teléfono válido (mínimo 10 dígitos) para el pago en kiosco.');
+        return;
+      }
+    }
+
     // Validar distribución de pago si se usa wallet
     if (selectedPaymentMethod === 'wallet' && useWallet && walletAmount < total && !secondaryPaymentMethod) {
       setError('Por favor, selecciona un método de pago adicional para completar el pago');
@@ -1657,15 +1740,30 @@ export default function CheckoutPage() {
       
       // Preparar información de pago para el backend
       // Si se selecciona "Tarjeta de crédito/débito" (card), usar Karlopay internamente
-      // Si se selecciona "karlopay-branch", mantenerlo y agregar branchId
-      const backendPaymentMethod = selectedPaymentMethod === 'card' ? 'karlopay' : selectedPaymentMethod;
+      // Si se selecciona "karlopay-branch" o "karlopay-kiosk", mantener id y agregar branchId / contacto kiosco
+      const backendPaymentMethod =
+        selectedPaymentMethod === 'card'
+          ? 'karlopay'
+          : selectedPaymentMethod === 'karlopay-kiosk'
+            ? 'karlopay-kiosk'
+            : selectedPaymentMethod;
       const paymentInfo: any = {
         method: backendPaymentMethod,
       };
 
-      // Si es karlopay-branch, agregar branchId
-      if (selectedPaymentMethod === 'karlopay-branch' && branchKarlopayBusinessId) {
+      // Si es karlopay-branch o karlopay-kiosk, agregar branchId
+      if (
+        (selectedPaymentMethod === 'karlopay-branch' || selectedPaymentMethod === 'karlopay-kiosk') &&
+        branchKarlopayBusinessId
+      ) {
         paymentInfo.branchId = branchKarlopayBusinessId;
+      }
+
+      if (selectedPaymentMethod === 'karlopay-kiosk') {
+        paymentInfo.kiosk_contact = {
+          email: kioskContactEmail.trim(),
+          phone: kioskContactPhone.trim(),
+        };
       }
 
       // Si se usa wallet, agregar información de distribución
@@ -1740,10 +1838,13 @@ export default function CheckoutPage() {
         }),
       });
 
-      // Si el método de pago es Tarjeta (que usa Karlopay internamente) o karlopay-branch, o hay método secundario Tarjeta, redirigir
-      const needsPaymentRedirect = 
-        (selectedPaymentMethod === 'card' || selectedPaymentMethod === 'karlopay' || selectedPaymentMethod === 'karlopay-branch') ||
-        (selectedPaymentMethod === 'wallet' && (secondaryPaymentMethod === 'card' || secondaryPaymentMethod === 'karlopay-branch'));
+      // Si el método de pago es Tarjeta (Karlopay redirect) o karlopay-branch, o hay método secundario Tarjeta, redirigir (no aplica a kiosco)
+      const needsPaymentRedirect =
+        (selectedPaymentMethod === 'card' ||
+          selectedPaymentMethod === 'karlopay' ||
+          selectedPaymentMethod === 'karlopay-branch') ||
+        (selectedPaymentMethod === 'wallet' &&
+          (secondaryPaymentMethod === 'card' || secondaryPaymentMethod === 'karlopay-branch'));
       
       if (needsPaymentRedirect && order.karlopay_payment_url) {
         const orderGroupId = order.karlopay_order_group_id || order.order_group_id || order.id;
@@ -1806,7 +1907,12 @@ export default function CheckoutPage() {
           secondaryAmount: walletAmount < total ? total - walletAmount : undefined,
         } : {
           method: selectedPaymentMethod || 'cash',
+          kioskFlow: selectedPaymentMethod === 'karlopay-kiosk',
         },
+        karlopayKioskReference:
+          selectedPaymentMethod === 'karlopay-kiosk' && order.karlopay_number_of_order
+            ? String(order.karlopay_number_of_order)
+            : undefined,
       });
       
       setOrderId(order.id);
@@ -3004,6 +3110,10 @@ export default function CheckoutPage() {
                               checked={selectedPaymentMethod === method.id}
                               onChange={() => {
                                 setSelectedPaymentMethod(method.id);
+                                if (method.id === 'karlopay-kiosk' && user) {
+                                  setKioskContactEmail(user.email || '');
+                                  setKioskContactPhone(userPhone);
+                                }
                                 if (method.id === 'wallet') {
                                   // Al seleccionar wallet, activar uso y usar todo el saldo disponible (o el total si es menor)
                                   if (walletBalance !== null && walletBalance > 0) {
@@ -3027,7 +3137,12 @@ export default function CheckoutPage() {
                               className="w-5 h-5"
                             />
                             <div className="flex items-center gap-3 flex-1">
-                              {method.type === 'card' && <CreditCardIcon className="w-6 h-6 text-gray-600" />}
+                              {method.type === 'card' && method.id !== 'karlopay-kiosk' && (
+                                <CreditCardIcon className="w-6 h-6 text-gray-600" />
+                              )}
+                              {method.id === 'karlopay-kiosk' && (
+                                <PointOfSaleIcon className="w-6 h-6 text-gray-600" aria-hidden />
+                              )}
                               {method.type === 'wallet' && (
                                 <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -3044,6 +3159,36 @@ export default function CheckoutPage() {
                         </label>
                       ))}
                     </div>
+
+                    {selectedPaymentMethod === 'karlopay-kiosk' && (
+                      <div className="mb-6 p-4 border border-blue-200 bg-blue-50/80 rounded-lg space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-900">Datos de contacto para instrucciones de pago</h3>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Confirma o edita el correo y el teléfono donde enviaremos cómo completar el pago en el kiosco de la sucursal. El pedido en KarloPay se crea al confirmar estos datos al pulsar &quot;Realizar pedido&quot;.
+                        </p>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Correo electrónico</label>
+                          <input
+                            type="email"
+                            autoComplete="email"
+                            value={kioskContactEmail}
+                            onChange={(e) => setKioskContactEmail(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Teléfono (WhatsApp)</label>
+                          <input
+                            type="tel"
+                            autoComplete="tel"
+                            value={kioskContactPhone}
+                            onChange={(e) => setKioskContactPhone(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Ej. 5512345678"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Opciones de distribución de pago si se selecciona wallet */}
                     {selectedPaymentMethod === 'wallet' && walletBalance !== null && walletBalance > 0 && (
@@ -3119,7 +3264,7 @@ export default function CheckoutPage() {
                                         Selecciona un método de pago adicional:
                                       </label>
                                       {paymentMethods
-                                        .filter(m => m.id !== 'wallet')
+                                        .filter((m) => m.id !== 'wallet' && m.id !== 'karlopay-kiosk')
                                         .map((method) => (
                                           <label
                                             key={method.id}
@@ -3191,9 +3336,13 @@ export default function CheckoutPage() {
                       <button
                         onClick={handlePlaceOrder}
                         disabled={
-                          !selectedPaymentMethod || 
+                          !selectedPaymentMethod ||
                           processingOrder ||
-                          (selectedPaymentMethod === 'wallet' && useWallet && walletAmount < total && !secondaryPaymentMethod)
+                          (selectedPaymentMethod === 'wallet' && useWallet && walletAmount < total && !secondaryPaymentMethod) ||
+                          (selectedPaymentMethod === 'karlopay-kiosk' &&
+                            (!kioskContactEmail.trim() ||
+                              kioskContactPhone.replace(/\D/g, '').length < 10 ||
+                              !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(kioskContactEmail.trim())))
                         }
                         className="px-8 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                       >
@@ -3279,9 +3428,48 @@ export default function CheckoutPage() {
                       <p className="text-lg text-gray-600 mb-2">
                         Tu pedido ha sido procesado exitosamente
                       </p>
-                      <p className="text-sm text-gray-500">
-                        Recibirás un correo de confirmación con los detalles de tu pedido
-                      </p>
+                      {confirmedOrderData?.paymentInfo?.kioskFlow ? (
+                        <div className="max-w-lg mx-auto text-left space-y-4">
+                          <p className="text-sm text-gray-700">
+                            Tu pago queda <strong>pendiente</strong> hasta que lo completes en el <strong>kiosco KarloPay</strong> de la sucursal.
+                          </p>
+                          {confirmedOrderData.karlopayKioskReference && (
+                            <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4 text-center">
+                              <p className="text-xs font-medium uppercase tracking-wide text-blue-800 mb-1">
+                                Número de orden KarloPay (presenta en kiosco)
+                              </p>
+                              <p className="text-lg sm:text-xl font-bold font-mono text-blue-900 break-all">
+                                {confirmedOrderData.karlopayKioskReference}
+                              </p>
+                              {kioskQrDataUrl && (
+                                <div className="mt-4 flex justify-center">
+                                  <img
+                                    src={kioskQrDataUrl}
+                                    alt="Código QR con tu referencia de pago en kiosco"
+                                    width={220}
+                                    height={220}
+                                    className="rounded-lg border border-blue-100 bg-white p-1"
+                                  />
+                                </div>
+                              )}
+                              <p className="text-xs text-blue-800/80 mt-3">
+                                El mismo código llegó por correo (confirmación e instrucciones) para que lo tengas a la mano.
+                              </p>
+                            </div>
+                          )}
+                          <p className="text-sm text-gray-700">
+                            Hemos enviado las instrucciones al correo <strong>{kioskContactEmail.trim()}</strong> y al teléfono{' '}
+                            <strong>{kioskContactPhone.trim()}</strong> (WhatsApp, si Karbot está configurado en la sucursal).
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            También recibirás el correo habitual de confirmación del pedido.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          Recibirás un correo de confirmación con los detalles de tu pedido
+                        </p>
+                      )}
                     </div>
 
                     {/* Información del pedido */}
@@ -3292,7 +3480,9 @@ export default function CheckoutPage() {
                           <p className="text-xl font-bold text-gray-900">{orderId}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm text-gray-500 mb-1">Total pagado</p>
+                          <p className="text-sm text-gray-500 mb-1">
+                            {confirmedOrderData?.paymentInfo?.kioskFlow ? 'Total por pagar' : 'Total pagado'}
+                          </p>
                           <p className="text-xl font-bold text-toyota-red">
                             {formatPrice(confirmedOrderData?.total || total)}
                           </p>

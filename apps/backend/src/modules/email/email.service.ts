@@ -413,7 +413,14 @@ export class EmailService {
     orderItemsDetailHtml?: string,
     businessId?: string,
     businessGroupId?: string,
-    context?: { userId?: string; orderId?: string }
+    context?: {
+      userId?: string;
+      orderId?: string;
+      /** HTML inyectado como {{delivery_detail_section}} (p. ej. QR pago kiosco KarloPay). */
+      deliveryDetailSectionHtml?: string;
+      /** Texto plano para plantillas que usen {{karlopay_kiosk_reference}}. */
+      karlopayKioskReference?: string;
+    },
   ): Promise<IntegrationLogStatus> {
     return this.sendEmail(
       userEmail,
@@ -425,6 +432,8 @@ export class EmailService {
         payment_method: paymentMethod,
         order_url: orderUrl || `${process.env.FRONTEND_URL || 'https://agoramp.mx'}/orders/${orderNumber}`,
         order_items_detail: orderItemsDetailHtml ?? '',
+        delivery_detail_section: context?.deliveryDetailSectionHtml ?? '',
+        karlopay_kiosk_reference: context?.karlopayKioskReference ?? '',
       },
       businessId,
       businessGroupId,
@@ -599,6 +608,70 @@ export class EmailService {
         requestPayload: { to: userEmail },
       });
 
+      return 'failed';
+    }
+  }
+
+  /**
+   * Envío HTML directo (sin plantilla en BD). Para instrucciones puntuales (p. ej. pago en kiosco KarloPay).
+   */
+  async sendRawHtmlEmail(
+    to: string,
+    subject: string,
+    html: string,
+    context?: { businessId?: string; businessGroupId?: string; userId?: string; orderId?: string },
+  ): Promise<IntegrationLogStatus> {
+    if (!this.transporter) {
+      this.logger.warn('[EmailService.sendRawHtmlEmail] Transporter no inicializado');
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'raw_html',
+        channel: 'email',
+        status: 'skipped',
+        businessId: context?.businessId,
+        userId: context?.userId,
+        orderId: context?.orderId,
+        message: 'SMTP no configurado',
+        requestPayload: { to, subject },
+      });
+      return 'skipped';
+    }
+
+    try {
+      const mailOptions = {
+        from: `"AGORA" <${process.env.SMTP_USER || 'contacto@agoramp.mx'}>`,
+        to,
+        subject,
+        html,
+      };
+      const info = await this.transporter.sendMail(mailOptions);
+      this.logger.log(`[EmailService.sendRawHtmlEmail] Enviado a ${to}`);
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'karlopay_kiosk_instructions',
+        channel: 'email',
+        status: 'success',
+        businessId: context?.businessId,
+        userId: context?.userId,
+        orderId: context?.orderId,
+        message: `Instrucciones kiosco enviadas a ${to}`,
+        requestPayload: { to, subject },
+        responsePayload: { messageId: info.messageId },
+      });
+      return 'success';
+    } catch (error: any) {
+      this.logger.error(`[EmailService.sendRawHtmlEmail] Error: ${error?.message || error}`);
+      await this.integrationLogs.log({
+        integration: 'email',
+        eventType: 'karlopay_kiosk_instructions',
+        channel: 'email',
+        status: 'failed',
+        businessId: context?.businessId,
+        userId: context?.userId,
+        orderId: context?.orderId,
+        message: error?.message || String(error),
+        requestPayload: { to, subject },
+      });
       return 'failed';
     }
   }

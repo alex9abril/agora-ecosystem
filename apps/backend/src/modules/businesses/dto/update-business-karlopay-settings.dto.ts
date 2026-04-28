@@ -63,6 +63,8 @@ export class UpdateBusinessKarlopaySettingsDto {
     auth_password?: string;
     redirect_url?: string;
     business_area?: string;
+    /** Si true y el ambiente activo de Karlopay es producción: el checkout ofrece “Pago en KarloPay Kiosco”. En dev no aplica. */
+    kiosk_payment_enabled?: boolean;
   };
 }
 

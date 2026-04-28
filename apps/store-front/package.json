@@ -17,12 +17,14 @@
     "@reduxjs/toolkit": "^2.11.2",
     "@supabase/supabase-js": "^2.38.0",
     "next": "14.0.0",
+    "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-redux": "^9.2.0"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",

@@ -112,6 +112,35 @@ export class OrdersService {
         itemsByBusiness.get(businessId)!.push(item);
       }
 
+      const requestedPaymentMethod = checkoutDto.payment?.method;
+      if (requestedPaymentMethod === 'karlopay-kiosk') {
+        if (checkoutDto.payment?.secondary_method) {
+          throw new BadRequestException(
+            'El pago en kiosco KarloPay no se puede combinar con un método de pago secundario.',
+          );
+        }
+        if (itemsByBusiness.size !== 1) {
+          throw new BadRequestException(
+            'El pago en kiosco KarloPay solo está disponible cuando el carrito pertenece a una sola sucursal.',
+          );
+        }
+        const soleBusinessId = Array.from(itemsByBusiness.keys())[0];
+        const branchId = checkoutDto.payment?.branchId;
+        if (!branchId || branchId !== soleBusinessId) {
+          throw new BadRequestException(
+            'Debes indicar payment.branchId igual a la sucursal del carrito para pago en kiosco KarloPay.',
+          );
+        }
+        const kpSettings = await this.businessesService.getBusinessKarlopaySettings(branchId);
+        const k = kpSettings.karlopay;
+        const prodKiosk = !!(k.prod as { kiosk_payment_enabled?: boolean })?.kiosk_payment_enabled;
+        if (!k.enabled || k.environment !== 'prod' || !prodKiosk) {
+          throw new BadRequestException(
+            'El pago en kiosco KarloPay no está disponible: Karlopay debe estar habilitado, en ambiente Producción, con la opción de kiosco activa en credenciales de producción (web-local). En desarrollo no aplica.',
+          );
+        }
+      }
+
       // 4. Obtener configuracion de impuestos por sucursal (hereda valores globales)
       const taxSettingsByBusiness = new Map<string, any>();
       for (const businessId of itemsByBusiness.keys()) {
@@ -542,10 +571,17 @@ export class OrdersService {
       // 16. Si todas las transacciones están completadas (solo wallet, sin KarloPay pendiente), actualizar payment_status a 'paid'
       // Esto solo aplica si NO hay método secundario o si el método secundario no es KarloPay
       if (walletAmountUsed > 0 && walletTransaction && createdOrders.length > 0) {
-        const hasSecondaryKarlopay = checkoutDto.payment?.secondary_method === 'karlopay';
-        
+        const hasSecondaryKarlopay =
+          checkoutDto.payment?.secondary_method === 'karlopay' ||
+          checkoutDto.payment?.secondary_method === 'karlopay-branch';
+
         // Si no hay KarloPay pendiente, todas las transacciones están completadas
-        if (!hasSecondaryKarlopay && paymentMethod !== 'karlopay') {
+        if (
+          !hasSecondaryKarlopay &&
+          paymentMethod !== 'karlopay' &&
+          paymentMethod !== 'karlopay-branch' &&
+          paymentMethod !== 'karlopay-kiosk'
+        ) {
           for (const order of createdOrders) {
             await dbPool.query(
               `UPDATE orders.orders 
@@ -558,20 +594,27 @@ export class OrdersService {
         }
       }
 
-      // 16.5 Enviar correo de confirmación de pedido por cada orden creada (no bloquea la respuesta)
+      // 16.5 Enviar correo de confirmación de pedido por cada orden creada (no bloquea la respuesta).
+      // kiosco KarloPay: el correo va después de crear la orden en KarloPay (incluye referencia AGORA_ y QR).
       for (const order of createdOrders) {
-        this.sendOrderConfirmationEmail(order.id, order.business_id).catch((err) => {
-          console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, err);
-        });
+        if (paymentMethod !== 'karlopay-kiosk') {
+          this.sendOrderConfirmationEmail(order.id, order.business_id).catch((err) => {
+            console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, err);
+          });
+        }
       }
 
-      // 17. Crear orden en Karlopay si el método de pago es karlopay/karlopay-branch o si hay método secundario karlopay/karlopay-branch (después del COMMIT)
+      // 17. Crear orden en Karlopay si el método de pago es karlopay/karlopay-branch/karlopay-kiosk o si hay método secundario karlopay/karlopay-branch (después del COMMIT)
       let karlopayPaymentUrl: string | null = null;
       let karlopayMode: 'redirect' | 'embedded' = 'redirect';
       let karlopayNumberOfOrder: string | null = null;
-      const needsKarlopay = 
-        paymentMethod === 'karlopay' || 
+      /** Referencia AGORA_ enviada a KarloPay (para respuesta API y UI kiosco). */
+      let kioskAgReference: string | null = null;
+      const isKioskPayment = paymentMethod === 'karlopay-kiosk';
+      const needsKarlopay =
+        paymentMethod === 'karlopay' ||
         paymentMethod === 'karlopay-branch' ||
+        paymentMethod === 'karlopay-kiosk' ||
         checkoutDto.payment?.secondary_method === 'karlopay' ||
         checkoutDto.payment?.secondary_method === 'karlopay-branch';
       if (needsKarlopay && createdOrders.length > 0) {
@@ -614,6 +657,11 @@ export class OrdersService {
             receiverPhone = receiverInfo.receiver_phone || userPhone;
           }
 
+          if (isKioskPayment && checkoutDto.payment?.kiosk_contact) {
+            userEmail = checkoutDto.payment.kiosk_contact.email.trim();
+            receiverPhone = checkoutDto.payment.kiosk_contact.phone.trim();
+          }
+
           // Construir operaciones desde los items del carrito
           const operations = itemsResult.rows.map((item: any) => ({
             description: item.product_name,
@@ -623,14 +671,21 @@ export class OrdersService {
 
           // Crear número de orden único (usar orderGroupId como base)
           const numberOfOrder = `AGORA_${orderGroupId.replace(/-/g, '').substring(0, 20).toUpperCase()}`;
+          kioskAgReference = numberOfOrder;
 
           // Determinar si se usa configuración branch y obtener businessId
-          const isBranchPayment = paymentMethod === 'karlopay-branch' || checkoutDto.payment?.secondary_method === 'karlopay-branch';
+          const isBranchPayment =
+            paymentMethod === 'karlopay-branch' ||
+            paymentMethod === 'karlopay-kiosk' ||
+            checkoutDto.payment?.secondary_method === 'karlopay-branch';
           let karlopayBusinessId: string | undefined = undefined;
-          
+
           if (isBranchPayment) {
             // Obtener businessId desde el DTO o del primer item del carrito
-            if (paymentMethod === 'karlopay-branch' && checkoutDto.payment?.branchId) {
+            if (
+              (paymentMethod === 'karlopay-branch' || paymentMethod === 'karlopay-kiosk') &&
+              checkoutDto.payment?.branchId
+            ) {
               karlopayBusinessId = checkoutDto.payment.branchId;
             } else if (checkoutDto.payment?.secondary_method === 'karlopay-branch' && checkoutDto.payment?.secondary_branchId) {
               karlopayBusinessId = checkoutDto.payment.secondary_branchId;
@@ -679,7 +734,7 @@ export class OrdersService {
             },
           }, karlopayBusinessId);
 
-          karlopayPaymentUrl = karlopayOrder.urlPayment;
+          karlopayPaymentUrl = isKioskPayment ? null : karlopayOrder.urlPayment;
           // Usar modo de la sucursal: si hay branchId (karlopay-branch) usarlo; si no, intentar con la primera orden
           const modeBusinessId = karlopayBusinessId || createdOrders[0]?.business_id;
           karlopayMode = await this.karlopayService.getIntegrationMode(modeBusinessId);
@@ -687,11 +742,12 @@ export class OrdersService {
 
           // Guardar la URL de pago y número de orden de Karlopay en la primera orden
           // Guardar tanto el que enviamos como el que recibimos
+          const urlNote = karlopayOrder.urlPayment || '(kiosco — sin URL de redirección)';
           await dbPool.query(
             `UPDATE orders.orders
              SET delivery_notes = COALESCE(delivery_notes, '') || E'\nKarlopay Order (sent): ' || $1 || E'\nKarlopay Order (received): ' || $2 || E'\nKarlopay Payment URL: ' || $3
              WHERE id = $4`,
-            [numberOfOrder, karlopayNumberOfOrder, karlopayPaymentUrl, createdOrders[0].id]
+            [numberOfOrder, karlopayNumberOfOrder, urlNote, createdOrders[0].id]
           );
 
           // Guardar transacción de KarloPay en payment_transactions para todas las órdenes del grupo.
@@ -725,12 +781,37 @@ export class OrdersService {
                   karlopay_order_id: karlopayOrder.id,
                   karlopay_number_of_order: karlopayNumberOfOrder,
                   karlopay_number_of_order_sent: numberOfOrder,
-                  karlopay_payment_url: karlopayPaymentUrl,
+                  karlopay_payment_url: karlopayOrder.urlPayment || null,
                   order_group_id: orderGroupId,
                   pending_webhook: true, // Será actualizado por el webhook al confirmar
+                  ...(isKioskPayment ? { kiosk_flow: true } : {}),
                 }),
               ]
             );
+          }
+
+          if (isKioskPayment && checkoutDto.payment?.kiosk_contact) {
+            const bizId = createdOrders[0].business_id;
+            const groupRow = await dbPool.query(`SELECT group_id FROM core.businesses WHERE id = $1`, [bizId]);
+            const businessGroupId = groupRow.rows[0]?.group_id ?? null;
+            await dbPool.query(
+              `UPDATE core.user_profiles SET phone = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND (phone IS DISTINCT FROM $1)`,
+              [checkoutDto.payment.kiosk_contact.phone.trim(), userId],
+            );
+            this.sendKarlopayKioskInstructionNotifications({
+              userId,
+              businessId: bizId,
+              businessGroupId,
+              orderId: createdOrders[0].id,
+              orderGroupId,
+              emailTo: checkoutDto.payment.kiosk_contact.email.trim(),
+              phoneTo: checkoutDto.payment.kiosk_contact.phone.trim(),
+              numberOfOrder,
+              karlopayNumberOfOrder: karlopayNumberOfOrder || numberOfOrder,
+              totalLabel: karlopayAmount.toFixed(2),
+            }).catch((err) => {
+              console.error('❌ Error enviando instrucciones de pago en kiosco:', err);
+            });
           }
           // No actualizar payment_status aquí: la orden permanece 'pending' hasta que el webhook
           // de Karlopay invoque y confirme el pago (o falle).
@@ -739,6 +820,14 @@ export class OrdersService {
           console.error('❌ Error creando orden en Karlopay:', karlopayError);
           // No fallar el checkout si hay error con Karlopay, solo loguear
           // El pedido ya está creado en la base de datos
+        }
+      }
+
+      if (paymentMethod === 'karlopay-kiosk' && createdOrders.length > 0) {
+        for (const order of createdOrders) {
+          this.sendOrderConfirmationEmail(order.id, order.business_id).catch((err) => {
+            console.error(`❌ Error enviando correo de confirmación para orden ${order.id} (no crítico):`, err);
+          });
         }
       }
 
@@ -755,12 +844,16 @@ export class OrdersService {
         related_orders: createdOrders.map(o => ({ id: o.id, business_id: o.business_id, total_amount: o.total_amount })),
       };
 
-      // Si se creó orden en Karlopay, agregar URL de pago, modo y numberOfOrder (para embedded/status)
+      // Si se creó orden en Karlopay, agregar URL de pago, modo y numberOfOrder (para embedded/status). Kiosco: sin URL (no redirige).
       if (karlopayPaymentUrl) {
         response.karlopay_payment_url = karlopayPaymentUrl;
         response.karlopay_mode = karlopayMode;
         response.karlopay_order_group_id = orderGroupId;
         if (karlopayNumberOfOrder) response.karlopay_number_of_order = karlopayNumberOfOrder;
+      } else if (isKioskPayment && (karlopayNumberOfOrder || kioskAgReference)) {
+        response.karlopay_order_group_id = orderGroupId;
+        response.karlopay_number_of_order = karlopayNumberOfOrder || kioskAgReference;
+        response.karlopay_mode = karlopayMode;
       }
 
       return response;
@@ -3173,6 +3266,89 @@ $${this.formatCurrency(subtotal)}
     return html;
   }
 
+  private normalizeMxWhatsappDigits(raw: string): string {
+    const d = raw.replace(/\D/g, '');
+    if (d.length === 10) return `52${d}`;
+    if (d.length === 12 && d.startsWith('52')) return d;
+    if (d.length === 13 && d.startsWith('521')) return d;
+    return d.length >= 10 ? d : '';
+  }
+
+  /**
+   * Instrucciones de pago en kiosco: correo HTML directo y, si Karbot está configurado, WhatsApp con plantilla order_confirmation.
+   */
+  private async sendKarlopayKioskInstructionNotifications(params: {
+    userId: string;
+    businessId: string;
+    businessGroupId: string | null;
+    orderId: string;
+    orderGroupId: string;
+    emailTo: string;
+    phoneTo: string;
+    numberOfOrder: string;
+    karlopayNumberOfOrder: string;
+    totalLabel: string;
+  }): Promise<void> {
+    const subject = 'Instrucciones para pagar en kiosco KarloPay — AGORA';
+    const qrBlock = await this.buildKioskPaymentQrEmailSectionHtml(params.orderId, params.karlopayNumberOfOrder);
+    const body = `
+<p style="font-family: Arial, sans-serif; font-size: 15px; color: #111827;">
+  Tu pedido quedó <strong>pendiente de pago</strong>. Para completarlo en el <strong>kiosco KarloPay de la sucursal</strong>, usa esta referencia de orden (también en el código QR):
+</p>
+<p style="font-family: monospace; font-size: 16px; font-weight: 700; color: #1d4ed8; margin: 16px 0;">
+  ${params.karlopayNumberOfOrder}
+</p>
+${qrBlock}
+<p style="font-family: Arial, sans-serif; font-size: 14px; color: #374151;">
+  Importe a pagar: <strong>$${params.totalLabel} MXN</strong><br/>
+  Referencia interna de pedido: ${params.orderId}<br/>
+  Grupo de pedido: ${params.orderGroupId}
+</p>
+<p style="font-family: Arial, sans-serif; font-size: 13px; color: #6b7280;">
+  Cuando completes el pago en kiosco, el estado de tu pedido se actualizará automáticamente al confirmar KarloPay.
+</p>`;
+    const html = `<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#f9fafb;">${body}</body></html>`;
+
+    await this.emailService.sendRawHtmlEmail(params.emailTo, subject, html, {
+      businessId: params.businessId,
+      businessGroupId: params.businessGroupId ?? undefined,
+      userId: params.userId,
+      orderId: params.orderId,
+    });
+
+    const digits = this.normalizeMxWhatsappDigits(params.phoneTo);
+    if (!digits) {
+      return;
+    }
+
+    const orderNumber = formatOrderFolioFromUuid(params.orderId);
+    const orderDate = new Date().toLocaleDateString('es-MX', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    await this.karbotService.sendWhatsappNotification({
+      businessId: params.businessId,
+      triggerType: 'order_confirmation',
+      to: digits,
+      userId: params.userId,
+      orderId: params.orderId,
+      data: {
+        order_id: params.orderId,
+        order_number: orderNumber,
+        order_date: orderDate,
+        order_total: `$${params.totalLabel} MXN`,
+        payment_method: 'KarloPay Kiosco (pendiente)',
+        order_url: '',
+        kiosk_instructions:
+          `Pago pendiente en kiosco KarloPay. Referencia: ${params.karlopayNumberOfOrder}. Importe: $${params.totalLabel} MXN.`,
+      },
+    });
+  }
+
   /**
    * Enviar correo de confirmación de pedido
    */
@@ -3277,6 +3453,40 @@ $${this.formatCurrency(subtotal)}
       });
       const orderItemsDetailHtml = this.buildOrderItemsDetailHtml(items);
 
+      let deliveryDetailSectionHtml = '';
+      let karlopayKioskReferenceVar = '';
+      if (String(order.payment_method || '').toLowerCase() === 'karlopay-kiosk') {
+        const txResult = await dbPool.query(
+          `SELECT external_reference, payment_data
+           FROM orders.payment_transactions
+           WHERE order_id = $1 AND payment_method = 'karlopay' AND status = 'pending'
+           ORDER BY created_at ASC
+           LIMIT 1`,
+          [orderId],
+        );
+        const row = txResult.rows[0];
+        let ref = (row?.external_reference as string)?.trim() || '';
+        if (row?.payment_data) {
+          let pd: Record<string, unknown> = {};
+          try {
+            pd =
+              typeof row.payment_data === 'string'
+                ? (JSON.parse(row.payment_data) as Record<string, unknown>)
+                : (row.payment_data as Record<string, unknown>);
+          } catch {
+            pd = {};
+          }
+          const kn = pd.karlopay_number_of_order;
+          if (typeof kn === 'string' && kn.trim()) {
+            ref = kn.trim();
+          }
+        }
+        if (ref) {
+          karlopayKioskReferenceVar = ref;
+          deliveryDetailSectionHtml = await this.buildKioskPaymentQrEmailSectionHtml(order.id, ref);
+        }
+      }
+
       const channels = await this.businessesService.getNotificationChannels(
         order.business_id,
         'order_confirmation',
@@ -3357,7 +3567,12 @@ $${this.formatCurrency(subtotal)}
           orderItemsDetailHtml,
           order.business_id,
           order.business_group_id,
-          { userId: order.client_id, orderId: order.id }
+          {
+            userId: order.client_id,
+            orderId: order.id,
+            deliveryDetailSectionHtml,
+            karlopayKioskReference: karlopayKioskReferenceVar,
+          },
         );
       }
 
@@ -3575,13 +3790,11 @@ $${this.formatCurrency(subtotal)}
   }
 
   /**
-   * Genera PNG del QR y lo sube a Storage público (bucket SUPABASE_STORAGE_BUCKET, p. ej. personalizacion).
-   * Ruta bajo email-templates/pickup-qr/ para alinearse con las políticas RLS del bucket.
-   * Las URLs data: en &lt;img&gt; suelen bloquearse en clientes de correo; la URL HTTPS sí se muestra.
+   * Genera PNG del QR y lo sube a Storage público bajo `email-templates/...` (misma política RLS que pickup).
    */
-  private async uploadPickupQrPngAndGetPublicUrl(orderUuid: string): Promise<string | null> {
+  private async uploadTemplateQrPngAndGetPublicUrl(storagePath: string, qrPayload: string): Promise<string | null> {
     if (!supabaseAdmin) {
-      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] supabaseAdmin no configurado');
+      console.warn('[OrdersService.uploadTemplateQrPngAndGetPublicUrl] supabaseAdmin no configurado');
       return null;
     }
 
@@ -3593,36 +3806,82 @@ $${this.formatCurrency(subtotal)}
 
     let pngBuffer: Buffer;
     try {
-      pngBuffer = await QRCode.toBuffer(orderUuid, {
+      pngBuffer = await QRCode.toBuffer(qrPayload, {
         errorCorrectionLevel: 'M',
         type: 'png',
         margin: 2,
         width: 220,
       });
     } catch (e) {
-      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] Falló generación de PNG:', e);
+      console.warn('[OrdersService.uploadTemplateQrPngAndGetPublicUrl] Falló generación de PNG:', e);
       return null;
     }
 
-    // Primer segmento debe ser `email-templates` para cumplir políticas RLS del bucket personalizacion (ver add_email_templates_policies_to_personalizacion.sql).
-    const filePath = `email-templates/pickup-qr/${orderUuid}.png`;
-    const { error: uploadError } = await supabaseAdmin.storage.from(bucketName).upload(filePath, pngBuffer, {
+    const { error: uploadError } = await supabaseAdmin.storage.from(bucketName).upload(storagePath, pngBuffer, {
       contentType: 'image/png',
       upsert: true,
     });
 
     if (uploadError) {
-      console.warn('[OrdersService.uploadPickupQrPngAndGetPublicUrl] Error subiendo QR:', uploadError);
+      console.warn('[OrdersService.uploadTemplateQrPngAndGetPublicUrl] Error subiendo QR:', uploadError);
       return null;
     }
 
-    const { data } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filePath);
+    const { data } = supabaseAdmin.storage.from(bucketName).getPublicUrl(storagePath);
     return data.publicUrl;
+  }
+
+  private async uploadPickupQrPngAndGetPublicUrl(orderUuid: string): Promise<string | null> {
+    return this.uploadTemplateQrPngAndGetPublicUrl(`email-templates/pickup-qr/${orderUuid}.png`, orderUuid);
+  }
+
+  private async uploadKioskPaymentQrPngAndGetPublicUrl(orderId: string, reference: string): Promise<string | null> {
+    return this.uploadTemplateQrPngAndGetPublicUrl(`email-templates/kiosk-qr/${orderId}.png`, reference);
   }
 
   /**
    * Bloque HTML con QR del UUID del pedido para recogida en tienda (correo al marcar surtido / completed).
    */
+  /**
+   * Bloque HTML con QR de la referencia KarloPay (AGORA_…) para pago en kiosco (correo de confirmación e instrucciones).
+   */
+  private async buildKioskPaymentQrEmailSectionHtml(orderId: string, reference: string): Promise<string> {
+    const escapeHtml = (s: string) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const ref = reference.trim();
+    const fallbackHtml = `
+<div style="margin-top:16px;padding:16px;border:1px dashed #1d4ed8;border-radius:8px;background:#eff6ff;">
+<p style="font-size:14px;color:#1e3a8a;margin:0 0 8px;font-family:Arial,sans-serif;font-weight:600;">Referencia para pagar en kiosco KarloPay</p>
+<p style="font-size:13px;color:#374151;margin:0;font-family:Arial,sans-serif;">Presenta en sucursal: <strong style="font-family:monospace;">${escapeHtml(ref)}</strong></p>
+</div>`;
+
+    try {
+      const publicUrl = await this.uploadKioskPaymentQrPngAndGetPublicUrl(orderId, ref);
+      if (!publicUrl) {
+        console.warn('[OrdersService.buildKioskPaymentQrEmailSectionHtml] Sin URL pública del QR; fallback textual');
+        return fallbackHtml;
+      }
+
+      const safeSrc = escapeHtml(publicUrl);
+      return `
+<div style="margin-top:16px;padding:20px;border:2px solid #2563eb;border-radius:12px;background:#ffffff;text-align:center;">
+<p style="font-size:15px;font-weight:600;color:#1e3a8a;margin:0 0 6px;font-family:Arial,sans-serif;">Tu código para pagar en kiosco</p>
+<p style="font-size:13px;color:#4b5563;margin:0 0 16px;font-family:Arial,sans-serif;line-height:1.4;">Escanea este QR en el kiosco KarloPay de la sucursal. Contiene tu número de orden de pago.</p>
+<img src="${safeSrc}" alt="Código QR pago kiosco KarloPay" width="220" height="220" style="display:block;margin:0 auto;border:1px solid #e5e7eb;border-radius:8px;" />
+<p style="font-size:12px;font-weight:600;color:#111827;margin:14px 0 0;font-family:monospace;word-break:break-all;">${escapeHtml(ref)}</p>
+<p style="font-size:11px;color:#6b7280;margin:8px 0 0;font-family:Arial,sans-serif;">Mismo dato si el escáner no lee la imagen: dicta o escribe la referencia en el kiosco.</p>
+</div>`;
+    } catch (e) {
+      console.warn('[OrdersService.buildKioskPaymentQrEmailSectionHtml] Falló generación de QR:', e);
+      return fallbackHtml;
+    }
+  }
+
   private async buildPickupCollectionQrSectionHtml(orderUuid: string): Promise<string> {
     const escapeHtml = (s: string) =>
       String(s ?? '')
