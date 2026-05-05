@@ -3,7 +3,7 @@
  * Permite filtrar por columnas con operadores y valor; soporta texto (con autocomplete), número y enum/colección.
  */
 
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, type SetStateAction } from 'react';
 import { createPortal } from 'react-dom';
 
 export type FilterFieldType = 'text' | 'number' | 'enum';
@@ -62,7 +62,7 @@ export function getOperatorsForField(
 interface TableFiltersProps {
   columns: FilterColumn[];
   filters: FilterRow[];
-  onChange: (filters: FilterRow[]) => void;
+  onChange: (next: SetStateAction<FilterRow[]>) => void;
   /** Sugerencias para autocomplete por campo (ej. { name: ['Producto A', 'Producto B'] }) */
   valueSuggestions?: Record<string, string[]>;
   /** Si true, los filtros se aplican al cambiar (no hace falta botón Aplicar) */
@@ -114,17 +114,15 @@ export default function TableFilters({
   }, []);
 
   const addFilter = () => {
-    onChange([...filters, createEmptyFilterRow(columns, filters)]);
+    onChange((prev) => [...prev, createEmptyFilterRow(columns, prev)]);
   };
 
   const removeFilter = (id: string) => {
-    onChange(filters.filter((f) => f.id !== id));
+    onChange((prev) => prev.filter((f) => f.id !== id));
   };
 
   const updateFilter = (id: string, patch: Partial<FilterRow>) => {
-    onChange(
-      filters.map((f) => (f.id === id ? { ...f, ...patch } : f))
-    );
+    onChange((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
     if (applyOnChange && onApply) onApply();
   };
 
@@ -515,11 +513,11 @@ export function ActiveFilterChips({
   if (active.length === 0) return null;
 
   const patch = (id: string, partial: Partial<FilterRow>) => {
-    onChange(filters.map((f) => (f.id === id ? { ...f, ...partial } : f)));
+    onChange((prev) => prev.map((f) => (f.id === id ? { ...f, ...partial } : f)));
   };
 
   const remove = (id: string) => {
-    onChange(filters.filter((f) => f.id !== id));
+    onChange((prev) => prev.filter((f) => f.id !== id));
   };
 
   const controlClass =

@@ -203,6 +203,12 @@ export default function ProductsPage() {
     prevHadAdvancedFiltersRef.current = hasActiveAdvancedFilters;
   }, [hasActiveAdvancedFilters]);
 
+  // Al cambiar reglas/valores con filtros activos, volver a la primera página (evita “mezclas” visuales al paginar en cliente)
+  useEffect(() => {
+    if (!hasActiveAdvancedFilters) return;
+    setCurrentPage((prev) => (prev === 1 ? prev : 1));
+  }, [advancedFilters, hasActiveAdvancedFilters]);
+
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState<number>(() => {
     if (typeof window !== "undefined") {
@@ -416,11 +422,17 @@ export default function ProductsPage() {
     };
   }, [availableBusinesses.map((b) => b.business_id).join(",")]);
 
+  // Evitar que respuestas antiguas (paginado vs. catálogo completo) sobre-escriban el estado actual.
+  const productsLoadSeqRef = useRef(0);
+  const [catalogMode, setCatalogMode] = useState<"paged" | "full">("paged");
+  const [catalogSearchKey, setCatalogSearchKey] = useState<string>("");
+
   const loadData = async (
     page: number = currentPage,
     limit: number = pageSize,
     searchValue: string = searchTerm,
   ) => {
+    const seq = ++productsLoadSeqRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -445,7 +457,14 @@ export default function ProductsPage() {
       const loadedProducts = Array.isArray(productsResponse.data)
         ? productsResponse.data
         : [];
-      setProducts(loadedProducts);
+      if (seq !== productsLoadSeqRef.current) return;
+      setCatalogMode("paged");
+      setCatalogSearchKey("");
+      const unique = new Map<string, Product>();
+      for (const p of loadedProducts) {
+        if (p?.id && !unique.has(p.id)) unique.set(p.id, p);
+      }
+      setProducts(Array.from(unique.values()));
       setTotalProducts(productsResponse.pagination.total || 0);
       setTotalPages(productsResponse.pagination.totalPages || 0);
       setCurrentPage(productsResponse.pagination.page || 1);
@@ -461,10 +480,12 @@ export default function ProductsPage() {
         });
       }
     } catch (err: any) {
-      console.error("Error cargando datos:", err);
-      setError("Error al cargar los productos");
+      if (seq === productsLoadSeqRef.current) {
+        console.error("Error cargando datos:", err);
+        setError("Error al cargar los productos");
+      }
     } finally {
-      setLoading(false);
+      if (seq === productsLoadSeqRef.current) setLoading(false);
     }
   };
 
@@ -515,6 +536,7 @@ export default function ProductsPage() {
     options?: { signal?: AbortSignal },
   ) => {
     const signal = options?.signal;
+    const seq = ++productsLoadSeqRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -531,7 +553,7 @@ export default function ProductsPage() {
         productsService.getCategories(),
       ]);
 
-      if (signal?.aborted) return;
+      if (signal?.aborted || seq !== productsLoadSeqRef.current) return;
 
       setCategories(Array.isArray(categoriesData) ? categoriesData : []);
 
@@ -545,7 +567,7 @@ export default function ProductsPage() {
         : [];
 
       for (let p = 2; p <= totalPagesApi; p++) {
-        if (signal?.aborted) return;
+        if (signal?.aborted || seq !== productsLoadSeqRef.current) return;
         const res = await productsService.getProducts(
           undefined,
           userVehicle || undefined,
@@ -559,9 +581,17 @@ export default function ProductsPage() {
         all = all.concat(Array.isArray(res.data) ? res.data : []);
       }
 
-      if (signal?.aborted) return;
+      if (signal?.aborted || seq !== productsLoadSeqRef.current) return;
 
-      setProducts(all);
+      // Marcamos que el set actual proviene de catálogo completo para esta búsqueda.
+      setCatalogMode("full");
+      setCatalogSearchKey(searchValue.trim());
+
+      const unique = new Map<string, Product>();
+      for (const p of all) {
+        if (p?.id && !unique.has(p.id)) unique.set(p.id, p);
+      }
+      setProducts(Array.from(unique.values()));
       setTotalProducts(total);
       setTotalPages(totalPagesApi);
 
@@ -572,13 +602,13 @@ export default function ProductsPage() {
       }
     } catch (err: unknown) {
       if (!signal?.aborted) {
-        console.error("Error cargando catálogo completo para filtros:", err);
-        setError("Error al cargar los productos");
+        if (seq === productsLoadSeqRef.current) {
+          console.error("Error cargando catálogo completo para filtros:", err);
+          setError("Error al cargar los productos");
+        }
       }
     } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
+      if (!signal?.aborted && seq === productsLoadSeqRef.current) setLoading(false);
     }
   };
 
@@ -591,13 +621,22 @@ export default function ProductsPage() {
   useEffect(() => {
     if (!advancedFiltersStorageReady || !hasActiveAdvancedFilters) return;
 
+    const key = searchTerm.trim();
+    const needFullCatalog =
+      catalogMode !== "full" ||
+      catalogSearchKey !== key;
+    if (!needFullCatalog) return;
+
     const ac = new AbortController();
-    void loadEntireCatalogForSearch(searchTerm, { signal: ac.signal });
+    void loadEntireCatalogForSearch(key, { signal: ac.signal });
     return () => ac.abort();
   }, [
     advancedFiltersStorageReady,
     hasActiveAdvancedFilters,
+    advancedFilters,
     searchTerm,
+    catalogMode,
+    catalogSearchKey,
     availableBusinesses.length,
   ]);
 
@@ -620,6 +659,9 @@ export default function ProductsPage() {
     if (e) {
       e.preventDefault();
     }
+    // Nueva búsqueda invalida el dataset completo actual
+    setCatalogMode("paged");
+    setCatalogSearchKey("");
     setCurrentPage(1);
     setSearchTerm(searchInput.trim());
   };
