@@ -7,6 +7,9 @@ import { productsService, Product, ProductCategory, ProductType, CreateProductDa
 import { getUserVehicle } from '@/lib/storage';
 import ImageUpload from '@/components/ImageUpload';
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 20;
+
 export default function ProductsPage() {
   const router = useRouter();
   const { selectedBusiness } = useSelectedBusiness();
@@ -17,6 +20,13 @@ export default function ProductsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Estados para paginaciÃ³n
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
 
   // Estados del formulario
   const [formData, setFormData] = useState<CreateProductData>({
@@ -39,14 +49,18 @@ export default function ProductsPage() {
   const [allergens, setAllergens] = useState<string[]>([]);
   const [nutritionalInfo, setNutritionalInfo] = useState<Record<string, any>>({});
 
-  // Cargar datos iniciales
+  // Resetear a la primera pÃ¡gina al cambiar de negocio
   useEffect(() => {
-    if (selectedBusiness?.business_id) {
-      loadData();
-    }
+    setCurrentPage(1);
   }, [selectedBusiness?.business_id]);
 
-  const loadData = async () => {
+  // Cargar datos (paginado en el servidor)
+  useEffect(() => {
+    if (!selectedBusiness?.business_id) return;
+    void loadData(currentPage, pageSize);
+  }, [selectedBusiness?.business_id, currentPage, pageSize]);
+
+  const loadData = async (page: number = currentPage, limit: number = pageSize) => {
     if (!selectedBusiness?.business_id) return;
 
     try {
@@ -58,11 +72,34 @@ export default function ProductsPage() {
       
       // Cargar productos y categorías en paralelo
       const [productsResponse, categoriesData] = await Promise.all([
-        productsService.getProducts(selectedBusiness.business_id, userVehicle || undefined, { includeZeroPrice: true }),
+        productsService.getProducts(selectedBusiness.business_id, userVehicle || undefined, {
+          page,
+          limit,
+          includeZeroPrice: true,
+        }),
         productsService.getCategories(),
       ]);
 
       setProducts(productsResponse.data);
+
+      const pagination = productsResponse.pagination || {
+        page,
+        limit,
+        total: productsResponse.data.length,
+        totalPages: 1,
+      };
+
+      setTotalProducts(pagination.total || 0);
+      setTotalPages(pagination.totalPages && pagination.totalPages > 0 ? pagination.totalPages : 1);
+      setCurrentPage(pagination.page || page || 1);
+
+      // Si el backend no da totalPages, permitir "Siguiente" solo si llegÃ³ lleno el lote
+      setHasNextPage(
+        pagination.totalPages && pagination.totalPages > 0
+          ? (pagination.page || page) < pagination.totalPages
+          : productsResponse.data.length === limit,
+      );
+
       setCategories(categoriesData);
     } catch (err: any) {
       console.error('Error cargando datos:', err);
@@ -167,7 +204,8 @@ export default function ProductsPage() {
         await productsService.createProduct(productData);
       }
 
-      await loadData();
+      await loadData(1, pageSize);
+      setCurrentPage(1);
       setShowCreateModal(false);
       resetForm();
     } catch (err: any) {
@@ -185,7 +223,7 @@ export default function ProductsPage() {
 
     try {
       await productsService.deleteProduct(productId);
-      await loadData();
+      await loadData(currentPage, pageSize);
     } catch (err: any) {
       console.error('Error eliminando producto:', err);
       setError('Error al eliminar el producto');
@@ -285,6 +323,88 @@ export default function ProductsPage() {
             </div>
           ))}
         </div>
+
+        {/* PaginaciÃ³n */}
+        {(products.length > 0 || currentPage > 1) && (totalPages > 1 || hasNextPage || totalProducts > 0) && (
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-600">
+              {totalProducts > 0 ? (
+                <>
+                  Mostrando{' '}
+                  <span className="font-medium text-gray-800">
+                    {(currentPage - 1) * pageSize + (products.length > 0 ? 1 : 0)}
+                    {'-'}{(currentPage - 1) * pageSize + products.length}
+                  </span>{' '}
+                  de <span className="font-medium text-gray-800">{totalProducts}</span>
+                </>
+              ) : (
+                <>
+                  PÃ¡gina <span className="font-medium text-gray-800">{currentPage}</span>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 justify-between sm:justify-end">
+              <label className="text-sm text-gray-600 flex items-center gap-2">
+                Por pÃ¡gina
+                <select
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+                  value={pageSize}
+                  onChange={(e) => {
+                    const next = parseInt(e.target.value, 10);
+                    if (!Number.isFinite(next)) return;
+                    setPageSize(next);
+                    setCurrentPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage <= 1}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Â«
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Anterior
+                </button>
+                <div className="px-2 text-sm text-gray-700">
+                  {currentPage} / {Math.max(1, totalPages)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  disabled={totalPages > 1 ? currentPage >= totalPages : !hasNextPage}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Siguiente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={totalPages <= 1 || currentPage >= totalPages}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Â»
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {products.length === 0 && (
           <div className="text-center py-12">

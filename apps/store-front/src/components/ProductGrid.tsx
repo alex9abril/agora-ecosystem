@@ -2,7 +2,7 @@
  * Grid de productos con filtros por contexto
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { productsService, Product } from '@/lib/products';
 import { taxesService } from '@/lib/taxes';
@@ -21,6 +21,9 @@ const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   show_tax_included_label: true,
 };
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE = 20;
+
 type ViewMode = 'grid' | 'list';
 
 interface ProductGridProps {
@@ -33,6 +36,107 @@ interface ProductGridProps {
   onProductClick?: (product: Product) => void;
   className?: string;
   defaultView?: ViewMode;
+}
+
+function PaginationBar({
+  currentPage,
+  pageSize,
+  totalPages,
+  totalProducts,
+  pageItemCount,
+  setCurrentPage,
+  setPageSize,
+}: {
+  currentPage: number;
+  pageSize: number;
+  totalPages: number;
+  totalProducts: number;
+  pageItemCount: number;
+  setCurrentPage: React.Dispatch<React.SetStateAction<number>>;
+  setPageSize: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const showBar = totalPages > 1 || currentPage > 1 || pageItemCount >= pageSize;
+  if (!showBar) return null;
+
+  const canGoNext = totalPages > 1 ? currentPage < totalPages : pageItemCount >= pageSize;
+  const totalPagesLabel = totalPages > 1 ? String(totalPages) : '?';
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm text-gray-600">
+        Mostrando{' '}
+        <span className="font-medium text-gray-800">
+          {(currentPage - 1) * pageSize + (pageItemCount > 0 ? 1 : 0)}
+          {'-'}{(currentPage - 1) * pageSize + pageItemCount}
+        </span>{' '}
+        {totalProducts > 0 && (
+          <>
+            de <span className="font-medium text-gray-800">{totalProducts}</span>
+          </>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 justify-between sm:justify-end">
+        <label className="text-sm text-gray-600 flex items-center gap-2">
+          Por página
+          <select
+            className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+            value={pageSize}
+            onChange={(e) => {
+              const next = parseInt(e.target.value, 10);
+              if (!Number.isFinite(next)) return;
+              setPageSize(next);
+              setCurrentPage(1);
+            }}
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage <= 1}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Â«
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage <= 1}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Anterior
+          </button>
+          <div className="px-2 text-sm text-gray-700">
+            {currentPage} / {totalPagesLabel}
+          </div>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => (totalPages > 1 ? Math.min(totalPages, p + 1) : p + 1))}
+            disabled={!canGoNext}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Siguiente
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={totalPages <= 1 || currentPage >= totalPages}
+            className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          >
+            Â»
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ProductGrid({ filters, onProductClick, className = '', defaultView = 'list' }: ProductGridProps) {
@@ -48,6 +152,13 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   const [taxSettingsByBusiness, setTaxSettingsByBusiness] = useState<Record<string, BranchTaxSettings>>({});
   const [taxSettingsLoaded, setTaxSettingsLoaded] = useState(false);
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
+
+  // PaginaciÃ³n (server-side)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const loadSeqRef = useRef(0);
 
   // Guardar preferencia de vista en localStorage
   useEffect(() => {
@@ -73,9 +184,14 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   }, [filters]);
 
   useEffect(() => {
-    loadProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Al cambiar contexto/filtros, volver a la primera pÃ¡gina
+    setCurrentPage(1);
   }, [contextType, groupId, branchId, brandId, filtersKey]);
+
+  useEffect(() => {
+    void loadProducts(currentPage, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contextType, groupId, branchId, brandId, filtersKey, currentPage, pageSize]);
 
   // Cargar configuracion de impuestos de la sucursal (solo contexto sucursal)
   useEffect(() => {
@@ -145,7 +261,8 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     loadBusinessTaxSettings();
   }, [products, contextType, branchId]);
 
-  const loadProducts = async () => {
+  const loadProducts = async (page: number = currentPage, limit: number = pageSize) => {
+    const seq = ++loadSeqRef.current;
     try {
       setLoading(true);
       setError(null);
@@ -154,6 +271,8 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       const params: any = {
         isAvailable: true,
         ...filters,
+        page,
+        limit,
       };
 
       // Filtrar según contexto
@@ -185,12 +304,27 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
           hasImageUrl: !!p.image_url,
         })) || [],
       });
+      if (seq !== loadSeqRef.current) return;
       setProducts(response.data || []);
+      const pagination = response.pagination || {
+        page,
+        limit,
+        total: response.data?.length || 0,
+        totalPages: 0,
+      };
+      const computedTotalPages =
+        pagination.totalPages ||
+        Math.ceil((pagination.total || 0) / (pagination.limit || limit)) ||
+        1;
+
+      setTotalProducts(pagination.total || 0);
+      setTotalPages(Math.max(1, computedTotalPages));
+      setCurrentPage(pagination.page || page || 1);
     } catch (err: any) {
       console.error('Error cargando productos:', err);
       setError(err.message || 'Error al cargar productos');
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   };
 
@@ -379,6 +513,18 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       </div>
 
       {/* Contenido según el modo de vista */}
+      <div className="mb-6">
+        <PaginationBar
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          totalProducts={totalProducts}
+          pageItemCount={products.length}
+          setCurrentPage={setCurrentPage}
+          setPageSize={setPageSize}
+        />
+      </div>
+
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-stretch">
           {products.map((product) => (
@@ -404,6 +550,92 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
           ))}
         </div>
       )}
+
+      {/* PaginaciÃ³n */}
+      {false && totalPages > 1 && (
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-gray-600">
+            Mostrando{' '}
+            <span className="font-medium text-gray-800">
+              {(currentPage - 1) * pageSize + (products.length > 0 ? 1 : 0)}
+              {'-'}{(currentPage - 1) * pageSize + products.length}
+            </span>{' '}
+            de <span className="font-medium text-gray-800">{totalProducts}</span>
+          </div>
+
+          <div className="flex items-center gap-2 justify-between sm:justify-end">
+            <label className="text-sm text-gray-600 flex items-center gap-2">
+              Por pÃ¡gina
+              <select
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm bg-white"
+                value={pageSize}
+                onChange={(e) => {
+                  const next = parseInt(e.target.value, 10);
+                  if (!Number.isFinite(next)) return;
+                  setPageSize(next);
+                  setCurrentPage(1);
+                }}
+              >
+                {PAGE_SIZE_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Â«
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Anterior
+              </button>
+              <div className="px-2 text-sm text-gray-700">
+                {currentPage} / {Math.max(1, totalPages)}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Siguiente
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Â»
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-8">
+        <PaginationBar
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalPages={totalPages}
+          totalProducts={totalProducts}
+          pageItemCount={products.length}
+          setCurrentPage={setCurrentPage}
+          setPageSize={setPageSize}
+        />
+      </div>
     </div>
   );
 }
