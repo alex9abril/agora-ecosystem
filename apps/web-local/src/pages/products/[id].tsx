@@ -580,7 +580,13 @@ export default function ProductDetailPage() {
   };
 
   const handleCancel = () => {
-    router.push('/products');
+    const search =
+      typeof router.query.search === 'string' ? router.query.search.trim() : '';
+    if (search) {
+      void router.push({ pathname: '/products', query: { search } });
+    } else {
+      void router.push('/products');
+    }
   };
 
   // Obtener categorías filtradas por tipo de producto

@@ -156,6 +156,14 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState<"name" | "price">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
+  // Initialize search from the URL (?search=...) so "back to list" keeps the previous search.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const urlSearch = typeof router.query.search === "string" ? router.query.search : "";
+    setSearchInput(urlSearch);
+    setSearchTerm(urlSearch);
+  }, [router.isReady, router.query.search]);
+
   // Filtros acumulables por columna (campo, operador, valor); persistidos en localStorage
   const [advancedFilters, setAdvancedFilters] = useState<FilterRow[]>([]);
   const [advancedFiltersStorageReady, setAdvancedFiltersStorageReady] =
@@ -663,7 +671,13 @@ export default function ProductsPage() {
     setCatalogMode("paged");
     setCatalogSearchKey("");
     setCurrentPage(1);
-    setSearchTerm(searchInput.trim());
+    const nextSearch = searchInput.trim();
+    setSearchTerm(nextSearch);
+    void router.replace(
+      nextSearch ? { pathname: "/products", query: { search: nextSearch } } : "/products",
+      undefined,
+      { shallow: true },
+    );
   };
 
   const loadTaxTypes = async () => {
@@ -925,7 +939,11 @@ export default function ProductsPage() {
 
   const handleEdit = async (product: Product) => {
     // Navegar a la página de detalle del producto con el ID en la URL
-    router.push(`/products/${product.id}`);
+    void router.push(
+      searchTerm.trim()
+        ? { pathname: `/products/${product.id}`, query: { search: searchTerm.trim() } }
+        : `/products/${product.id}`,
+    );
   };
 
   const resetForm = () => {
@@ -1112,7 +1130,11 @@ export default function ProductsPage() {
       }
       if (!editingProduct) {
         if (savedProduct?.id) {
-          router.push(`/products/${savedProduct.id}`);
+          void router.push(
+            searchTerm.trim()
+              ? { pathname: `/products/${savedProduct.id}`, query: { search: searchTerm.trim() } }
+              : `/products/${savedProduct.id}`,
+          );
         } else {
           setError("No se pudo redirigir al producto recien creado");
         }
@@ -1231,7 +1253,11 @@ export default function ProductsPage() {
       };
       const newProduct = await productsService.createProduct(duplicateData);
       if (newProduct?.id) {
-        router.push(`/products/${newProduct.id}`);
+        void router.push(
+          searchTerm.trim()
+            ? { pathname: `/products/${newProduct.id}`, query: { search: searchTerm.trim() } }
+            : `/products/${newProduct.id}`,
+        );
       }
     } catch (err: any) {
       console.error("Error duplicando producto:", err);
