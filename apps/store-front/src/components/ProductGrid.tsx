@@ -104,7 +104,7 @@ function PaginationBar({
             disabled={currentPage <= 1}
             className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
-            Â«
+            &laquo;
           </button>
           <button
             type="button"
@@ -131,7 +131,7 @@ function PaginationBar({
             disabled={totalPages <= 1 || currentPage >= totalPages}
             className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
           >
-            Â»
+            &raquo;
           </button>
         </div>
       </div>
@@ -591,7 +591,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
                 disabled={currentPage <= 1}
                 className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
-                Â«
+                &laquo;
               </button>
               <button
                 type="button"
@@ -618,7 +618,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
                 disabled={currentPage >= totalPages}
                 className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
               >
-                Â»
+                &raquo;
               </button>
             </div>
           </div>
