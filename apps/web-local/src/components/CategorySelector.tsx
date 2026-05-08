@@ -29,16 +29,34 @@ export default function CategorySelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const normalizeText = (text: string) =>
-    text
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase();
+  const normalizeText = (text: string) => {
+    // Some JS runtimes can throw on `.normalize()` with certain inputs; keep search resilient.
+    try {
+      return text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    } catch {
+      return (text || '').toLowerCase();
+    }
+  };
 
   // Construir jerarquía de categorías agrupadas
+  const categoriesUnique = useMemo(() => {
+    const seen = new Set<string>();
+    const unique: ProductCategory[] = [];
+    for (const cat of categories) {
+      if (!cat?.id) continue;
+      if (seen.has(cat.id)) continue;
+      seen.add(cat.id);
+      unique.push(cat);
+    }
+    return unique;
+  }, [categories]);
+
   const categoriesGrouped = useMemo(() => {
     const categoryById = new Map<string, ProductCategory>();
-    categories.forEach((c) => categoryById.set(c.id, c));
+    categoriesUnique.forEach((c) => categoryById.set(c.id, c));
 
     const buildAncestors = (category: ProductCategory): ProductCategory[] => {
       const ancestors: ProductCategory[] = [];
@@ -63,11 +81,13 @@ export default function CategorySelector({
     const rootCategories: CategoryWithPath[] = [];
     const childrenMap = new Map<string, CategoryWithPath[]>();
 
-    categories.forEach((cat) => {
+    categoriesUnique.forEach((cat) => {
       const ancestors = buildAncestors(cat);
       const fullPath = [...ancestors.map((a) => a.name), cat.name].join(' / ');
       const level = ancestors.length;
 
+      // Search should behave like a normal dropdown search: match the item itself, not its ancestors.
+      // (Using fullPath makes many unrelated descendants match when an ancestor contains the term.)
       const searchIndex = normalizeText([cat.name, cat.description || ''].filter(Boolean).join(' '));
       const categoryWithPath: CategoryWithPath = {
         ...cat,
@@ -114,7 +134,7 @@ export default function CategorySelector({
 
     rootCategories.forEach((root) => addCategoryAndChildren(root));
     return grouped;
-  }, [categories]);
+  }, [categoriesUnique]);
 
   // Filtrar categorías según búsqueda
   const searchState = useMemo(() => {
@@ -124,7 +144,10 @@ export default function CategorySelector({
       return { items: categoriesGrouped, matchIds: new Set<string>() };
     }
 
-    const tokens = normalizeText(term).split(/\s+/).filter(Boolean);
+    const tokens = normalizeText(term)
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
     if (tokens.length === 0) {
       return { items: [] as CategoryWithPath[], matchIds: new Set<string>() };
     }
@@ -140,19 +163,8 @@ export default function CategorySelector({
       return { items: [] as CategoryWithPath[], matchIds };
     }
 
-    const categoryById = new Map<string, CategoryWithPath>();
-    categoriesGrouped.forEach((cat) => categoryById.set(cat.id, cat));
-
-    const includeIds = new Set<string>(matchIds);
-    matchIds.forEach((id) => {
-      let current = categoryById.get(id);
-      while (current?.parent_category_id) {
-        includeIds.add(current.parent_category_id);
-        current = categoryById.get(current.parent_category_id);
-      }
-    });
-
-    return { items: categoriesGrouped.filter((cat) => includeIds.has(cat.id)), matchIds };
+    // Only return matching items (no ancestors/other categories) to behave like a normal search filter.
+    return { items: categoriesGrouped.filter((cat) => matchIds.has(cat.id)), matchIds };
   }, [categoriesGrouped, searchTerm]);
 
   // Obtener categoría seleccionada
@@ -188,7 +200,8 @@ export default function CategorySelector({
 
   const handleInputFocus = () => {
     setIsOpen(true);
-    // Keep searchTerm as-is so an empty input shows all categories
+    // Start from an empty query when opening, so search behaves predictably.
+    setSearchTerm('');
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

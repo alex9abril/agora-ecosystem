@@ -129,7 +129,11 @@ export const productsService = {
         page += 1;
       }
 
-      return allCategories;
+      const byId = new Map<string, ProductCategory>();
+      for (const cat of allCategories) {
+        if (!byId.has(cat.id)) byId.set(cat.id, cat);
+      }
+      return Array.from(byId.values());
     } catch (error: any) {
       console.error('Error obteniendo categorías:', error);
       throw error;
