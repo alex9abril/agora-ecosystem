@@ -85,6 +85,8 @@ async function bootstrap() {
     .addTag('businesses', 'Gestión de negocios')
     .addTag('products', 'Catálogo de productos')
     .addTag('repartidores', 'Gestión de repartidores')
+    .addTag('agent', 'Agente: mejora de textos y tareas')
+    .addTag('storefront', 'Chat y asistencia en tienda')
     .addServer('http://localhost:3000', 'Servidor de desarrollo')
     .build();
 

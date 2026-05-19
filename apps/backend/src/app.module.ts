@@ -35,6 +35,8 @@ import { EmailModule } from './modules/email/email.module';
 import { StoresModule } from './modules/stores/stores.module';
 import { IntegrationCartModule } from './modules/integration-cart/integration-cart.module';
 import { IntegrationWorkflowsModule } from './modules/integration-workflows/integration-workflows.module';
+import { AgentTaskDetailModule } from './modules/agent-task-detail/agent-task-detail.module';
+import { StorefrontChatModule } from './modules/storefront-chat/storefront-chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -68,6 +70,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     StoresModule,
     IntegrationCartModule,
     IntegrationWorkflowsModule,
+    AgentTaskDetailModule,
+    StorefrontChatModule,
     // Otros módulos se agregarán aquí
     // UsersModule,
     // etc.

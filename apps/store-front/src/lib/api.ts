@@ -153,6 +153,7 @@ function requiresAuthentication(endpoint: string): boolean {
     '/catalog/vehicles', // Todos los endpoints de catálogo de vehículos son públicos
     '/businesses/branches',
     '/businesses/groups',
+    '/storefront/chat',
   ];
   
   // Endpoints que SÍ requieren autenticación
