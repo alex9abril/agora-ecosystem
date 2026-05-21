@@ -1092,7 +1092,11 @@ export default function OrderDetailPage() {
             </div>
               <div className="flex items-center gap-3">
                 {nextActions.map((action) => {
-                  const disabledByFulfill = !canFulfill && !action.isPaymentAction;
+                  const orderStatus = (order as any)?.status ?? order.status;
+                  const isEarlyCancel =
+                    action.status === 'cancelled' &&
+                    (orderStatus === 'pending' || orderStatus === 'confirmed');
+                  const disabledByFulfill = !canFulfill && !action.isPaymentAction && !isEarlyCancel;
                   const isDisabled = action.disabled === true || disabledByFulfill || updating;
                   const tooltip = isDisabled
                     ? (action.disabledReason

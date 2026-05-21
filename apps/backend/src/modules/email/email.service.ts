@@ -16,6 +16,14 @@ export interface EmailVariables {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: nodemailer.Transporter | null = null;
+  private smtpDiagnostics: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    passConfigured: boolean;
+    tlsRejectUnauthorized: boolean;
+  } | null = null;
 
   constructor(private readonly integrationLogs: IntegrationLogsService) {
     this.initializeTransporter();
@@ -27,6 +35,14 @@ export class EmailService {
   private initializeTransporter() {
     // Configuración del servidor SMTP
     // Por ahora usamos configuración básica, se puede mejorar con variables de entorno
+    const tlsRejectUnauthorizedEnv = process.env.SMTP_TLS_REJECT_UNAUTHORIZED;
+    const isProd = process.env.NODE_ENV === 'production';
+    // Default: en producción, validar certificados; en local/dev, permitir cadenas con self-signed (p. ej. antivirus/proxy).
+    const tlsRejectUnauthorized =
+      tlsRejectUnauthorizedEnv !== undefined
+        ? tlsRejectUnauthorizedEnv === 'true'
+        : isProd;
+
     const smtpConfig = {
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
@@ -35,11 +51,23 @@ export class EmailService {
         user: process.env.SMTP_USER || 'contacto@agoramp.mx',
         pass: process.env.SMTP_PASSWORD || '',
       },
+      ...(tlsRejectUnauthorized === false
+        ? { tls: { rejectUnauthorized: false } }
+        : {}),
+    };
+
+    this.smtpDiagnostics = {
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      user: smtpConfig.auth.user,
+      passConfigured: Boolean(smtpConfig.auth.pass),
+      tlsRejectUnauthorized,
     };
 
     if (process.env.NODE_ENV !== 'production') {
       this.logger.debug(
-        `SMTP config: host=${smtpConfig.host} port=${smtpConfig.port} secure=${smtpConfig.secure} user=${smtpConfig.auth.user} passConfigured=${Boolean(smtpConfig.auth.pass)}`
+        `SMTP config: host=${smtpConfig.host} port=${smtpConfig.port} secure=${smtpConfig.secure} user=${smtpConfig.auth.user} passConfigured=${Boolean(smtpConfig.auth.pass)} tlsRejectUnauthorized=${tlsRejectUnauthorized}`
       );
     }
 
@@ -57,6 +85,14 @@ export class EmailService {
     } catch (error: any) {
       this.logger.error('❌ Error inicializando transporter:', error);
     }
+  }
+
+  /** Diagnóstico simple (sin secretos) para saber si SMTP está listo. */
+  getTransportDiagnostics() {
+    return {
+      transporterInitialized: !!this.transporter,
+      smtp: this.smtpDiagnostics,
+    };
   }
 
   /**

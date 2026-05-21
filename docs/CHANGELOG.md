@@ -1,5 +1,9 @@
 # Changelog
 
+## Selector de categorias: busqueda correcta en web-local (2026-05-08)
+- El selector de categorias en `apps/web-local` ahora elimina duplicados por `id` al cargar categorias paginadas, evitando keys duplicadas en React y que el dropdown muestre items no relacionados aunque el conteo de resultados sea correcto.
+- La busqueda del selector devuelve **solo coincidencias** por `name` y `description` (manteniendo la indentacion por nivel), en lugar de incluir ancestros/descendientes no coincidentes.
+
 ## Normalizacion de slugs en sucursales web-local (2026-01-16)
 - `apps/web-local/src/pages/settings/branches.tsx` ahora normaliza acentos/diacriticos al generar slugs (NFD + sin marcas), evitando que caracteres como `á`, `é`, `í`, `ó`, `ú` o `ñ` se eliminen y garantizando URLs limpias.
 

@@ -13,12 +13,22 @@ import { formatPrice } from '@/lib/format';
 import ContextualLink from '@/components/ContextualLink';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import CancelOrderReasonModal from '@/components/orders/CancelOrderReasonModal';
 
 export default function OrdersPage() {
   const router = useRouter();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelTargetOrder, setCancelTargetOrder] = useState<Order | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const visibleOrders = orders.filter(
+    (o) => String(o.status || '').toLowerCase() !== 'cancelled'
+  );
+  const cancelledCount = orders.length - visibleOrders.length;
+  const filteredOrders = showCancelled ? orders : visibleOrders;
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -43,6 +53,39 @@ export default function OrdersPage() {
       console.error('Error cargando pedidos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const canCancelOrder = (order: Order) => ['pending', 'confirmed'].includes(String(order.status || '').toLowerCase());
+  const openCancelModal = (order: Order) => {
+    if (!order?.id || cancellingOrderId) return;
+    if (!canCancelOrder(order)) return;
+    setCancelTargetOrder(order);
+    setCancelModalOpen(true);
+  };
+
+  const closeCancelModal = () => {
+    if (cancellingOrderId) return;
+    setCancelModalOpen(false);
+    setCancelTargetOrder(null);
+  };
+
+  const confirmCancelOrder = async (reason?: string) => {
+    if (!cancelTargetOrder?.id || cancellingOrderId) return;
+    if (!canCancelOrder(cancelTargetOrder)) return;
+
+    try {
+      setCancellingOrderId(cancelTargetOrder.id);
+      await ordersService.cancel(cancelTargetOrder.id, reason);
+      await loadOrders();
+      alert('Pedido cancelado.');
+      setCancelModalOpen(false);
+      setCancelTargetOrder(null);
+    } catch (err: any) {
+      console.error('Error cancelando pedido:', err);
+      alert(err?.message || 'No se pudo cancelar el pedido');
+    } finally {
+      setCancellingOrderId(null);
     }
   };
 
@@ -109,9 +152,22 @@ export default function OrdersPage() {
 
           {/* Contenido principal */}
           <div className="flex-1 min-w-0" style={{ minHeight: '600px' }}>
-            <h1 className="text-3xl font-bold text-gray-900 mb-8">Mis Pedidos</h1>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-8">
+              <h1 className="text-3xl font-bold text-gray-900">Mis Pedidos</h1>
+              {cancelledCount > 0 && (
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={showCancelled}
+                    onChange={(e) => setShowCancelled(e.target.checked)}
+                    className="h-4 w-4 accent-toyota-red"
+                  />
+                  Mostrar cancelados ({cancelledCount})
+                </label>
+              )}
+            </div>
 
-            {orders.length === 0 ? (
+            {filteredOrders.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                 <ReceiptIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg mb-2">No tienes pedidos aún</p>
@@ -127,7 +183,7 @@ export default function OrdersPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {orders.map((order) => (
+                {filteredOrders.map((order) => (
                   <div
                     key={order.id}
                     className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
@@ -190,13 +246,29 @@ export default function OrdersPage() {
                           </p>
                         )}
                       </div>
-                      <ContextualLink
-                        href={`/orders/${order.id}`}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-toyota-red hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        Ver detalles
-                        <ArrowForwardIcon className="w-4 h-4" />
-                      </ContextualLink>
+                      <div className="flex items-center gap-2">
+                        {canCancelOrder(order) && (
+                          <button
+                            type="button"
+                            onClick={() => openCancelModal(order)}
+                            disabled={cancellingOrderId === order.id}
+                            className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                              cancellingOrderId === order.id
+                                ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                                : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                            }`}
+                          >
+                            {cancellingOrderId === order.id ? 'Cancelando…' : 'Cancelar'}
+                          </button>
+                        )}
+                        <ContextualLink
+                          href={`/orders/${order.id}`}
+                          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-toyota-red hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          Ver detalles
+                          <ArrowForwardIcon className="w-4 h-4" />
+                        </ContextualLink>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -205,6 +277,16 @@ export default function OrdersPage() {
             </div>
           </div>
         </div>
+
+        <CancelOrderReasonModal
+          open={cancelModalOpen}
+          orderLabel={
+            cancelTargetOrder ? `#${cancelTargetOrder.id.slice(-8).toUpperCase()}` : undefined
+          }
+          busy={cancellingOrderId === cancelTargetOrder?.id}
+          onClose={closeCancelModal}
+          onConfirm={confirmCancelOrder}
+        />
       </StoreLayout>
     </>
   );

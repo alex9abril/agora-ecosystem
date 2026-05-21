@@ -22,6 +22,7 @@ import { OrdersService } from './orders.service';
 import { CheckoutDto } from './dto/checkout.dto';
 import { SupabaseAuthGuard } from '../../common/guards/supabase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { User } from '@supabase/supabase-js';
 
 @ApiTags('orders')
@@ -29,6 +30,14 @@ import { User } from '@supabase/supabase-js';
 @UseGuards(SupabaseAuthGuard)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
+
+  @Get('version')
+  @ApiOperation({ summary: 'VersiÃ³n/commit del backend (debug)' })
+  @ApiResponse({ status: 200, description: 'InformaciÃ³n de versiÃ³n' })
+  @Public()
+  async version() {
+    return this.ordersService.getOrdersModuleVersion();
+  }
 
   @Post('checkout')
   @ApiBearerAuth('JWT-auth')

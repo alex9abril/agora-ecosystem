@@ -1056,6 +1056,15 @@ export class KarlopayService {
               // Fulfillment: si la orden está en pending, pasarla a confirmed para que el negocio pueda surtir
               const orderStatus = order.status;
               if (orderStatus === 'pending') {
+                // Configurar variables de sesión para trigger de historial (si existe).
+                try {
+                  await client.query(`SELECT set_config('app.current_user_role', $1, true)`, ['admin']);
+                  await client.query(`SELECT set_config('app.status_change_reason', $1, true)`, [
+                    'Pago confirmado por webhook de Karlopay',
+                  ]);
+                } catch {
+                  // ignore
+                }
                 const confirmResult = await client.query(
                   `UPDATE orders.orders
                    SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP

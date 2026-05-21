@@ -473,6 +473,43 @@ export class BusinessUsersService {
   }
 
   /**
+   * Verificar si el usuario puede gestionar pedidos para el negocio.
+   * Devuelve true si: es superadmin/admin del negocio, o tiene permissions.modules.orders === true.
+   * Para operadores legacy (permissions vacíos), se asume true para no bloquear operación.
+   */
+  async userCanManageOrdersForBusiness(userId: string, businessId: string): Promise<boolean> {
+    if (!dbPool) return false;
+    try {
+      const result = await dbPool.query<{ role: string; permissions: any }>(
+        `SELECT role, permissions
+         FROM core.business_users
+         WHERE user_id = $1 AND business_id = $2 AND is_active = TRUE`,
+        [userId, businessId],
+      );
+      if (result.rows.length === 0) return false;
+      const row = result.rows[0];
+      if (row.role === 'superadmin' || row.role === 'admin') return true;
+
+      const permissions = row.permissions ?? {};
+      const modules = (permissions.modules as Record<string, unknown>) ?? null;
+      if (!modules || typeof modules !== 'object') {
+        // Operador legacy: si no hay módulos definidos, permitir pedidos (frontend hace lo mismo)
+        return true;
+      }
+
+      const anyTrue = Object.values(modules).some((v) => v === true);
+      if (!anyTrue) {
+        // Operador legacy (estructura presente pero todo false o vacío)
+        return true;
+      }
+
+      return (modules.orders as boolean) === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Verificar si el usuario puede asignar pedidos a surtidores para el negocio.
    */
   async userCanAssignFulfillment(userId: string, businessId: string): Promise<boolean> {

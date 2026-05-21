@@ -1310,38 +1310,41 @@ export class LogisticsService {
             options.orderId,
           ]);
           const previousOrderStatus = ordRes.rows[0]?.status as string;
+          let didUpdateOrderStatus = false;
 
-          await client.query(
-            `UPDATE orders.orders
-             SET status = $1, updated_at = CURRENT_TIMESTAMP
-             ${orderNew === 'delivered' ? ', delivered_at = CURRENT_TIMESTAMP' : ''}
-             WHERE id = $2`,
-            [orderNew, options.orderId]
-          );
+          // No permitir que logÃ­stica "reviva" Ã³rdenes canceladas/reembolsadas.
+          if (previousOrderStatus === 'cancelled' || previousOrderStatus === 'refunded') {
+            this.logger.warn(
+              `âš ï¸ LogÃ­stica: omitiendo update de estado de orden ${options.orderId} (${previousOrderStatus} â†’ ${orderNew})`
+            );
+          } else {
+            // Configurar variables de sesión para trigger de historial (si existe).
+            try {
+              await client.query(`SELECT set_config('app.current_user_role', $1, true)`, ['admin']);
+              await client.query(`SELECT set_config('app.status_change_reason', $1, true)`, [
+                'Actualización automática desde servicio de logística',
+              ]);
+            } catch {
+              // ignore
+            }
 
-          if (previousOrderStatus && previousOrderStatus !== orderNew) {
+            await client.query(
+              `UPDATE orders.orders
+               SET status = $1, updated_at = CURRENT_TIMESTAMP
+               ${orderNew === 'delivered' ? ', delivered_at = CURRENT_TIMESTAMP' : ''}
+               WHERE id = $2`,
+              [orderNew, options.orderId]
+            );
+            didUpdateOrderStatus = true;
+          }
+
+          if (didUpdateOrderStatus && previousOrderStatus && previousOrderStatus !== orderNew) {
             orderStatusNotify = {
               orderId: options.orderId,
               prev: previousOrderStatus,
               next: orderNew,
             };
-            try {
-              await client.query(
-                `INSERT INTO orders.order_status_history (
-                  order_id, previous_status, new_status, changed_by_user_id, changed_by_role, change_reason
-                ) VALUES ($1, $2::order_status, $3::order_status, NULL, NULL, $4)`,
-                [
-                  options.orderId,
-                  previousOrderStatus,
-                  orderNew,
-                  'Actualización automática desde servicio de logística',
-                ]
-              );
-            } catch (historyError: any) {
-              this.logger.warn(
-                `⚠️ No se pudo registrar en order_status_history: ${historyError?.message || historyError}`
-              );
-            }
+            // Historial: se registra vía trigger (si está instalado).
           }
         }
       }

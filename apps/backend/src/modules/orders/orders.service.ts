@@ -1403,36 +1403,9 @@ export class OrdersService {
 
       // Hacer COMMIT PRIMERO para asegurar que el cambio persista
       await client.query('COMMIT');
-      
-      // Registrar cambio en historial DESPUÉS del COMMIT (no crítico)
-      // Usar una nueva conexión para no afectar la transacción principal
-      try {
-        const historyClient = await dbPool.connect();
-        try {
-          await historyClient.query(
-            `INSERT INTO orders.order_status_history (
-              order_id, previous_status, new_status, 
-              changed_by_user_id, changed_by_role, change_reason
-            ) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              orderId,
-              `payment_${currentPaymentStatus}`,
-              `payment_${newPaymentStatus}`,
-              metadata?.changed_by_user_id || null,
-              metadata?.changed_by_role || null,
-              metadata?.changed_by_user_id 
-                ? `Cambio manual de estado de pago: ${currentPaymentStatus} → ${newPaymentStatus}`
-                : `Cambio automático de estado de pago (pasarela): ${currentPaymentStatus} → ${newPaymentStatus}`
-            ]
-          );
-        } finally {
-          historyClient.release();
-        }
-      } catch (historyError) {
-        // No crítico, solo loguear - el pago ya se actualizó
-        console.warn('⚠️ No se pudo registrar en historial:', historyError);
-      }
-      
+
+      // Nota: `order_status_history` usa enum `order_status`. No se registra aquí el cambio de `payment_status`.
+
       return updatedOrder;
     } catch (error: any) {
       await client.query('ROLLBACK');
@@ -1481,51 +1454,59 @@ export class OrdersService {
 
       const currentStatus = order.status;
 
+      // Configurar variables de sesiÃ³n para trigger de historial (si existe).
+      try {
+        const userProfile = await this.getUserProfile(userId);
+        await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId]);
+        await client.query(`SELECT set_config('app.current_user_role', $1, true)`, [
+          (userProfile?.role || 'client') as any,
+        ]);
+        await client.query(`SELECT set_config('app.status_change_reason', $1, true)`, [reason || null]);
+      } catch {
+        // ignore: no bloquear cancelaciÃ³n por falla en set_config
+      }
+
       // Actualizar pedido
-      const updateFields = [
+      const updateFields: string[] = [
         'status = $1',
         'cancelled_at = CURRENT_TIMESTAMP',
         'updated_at = CURRENT_TIMESTAMP',
-        'cancellation_reason = $2'
       ];
-      const updateParams: any[] = ['cancelled', reason || null];
+      const updateParams: any[] = ['cancelled'];
+      let paramIndex = 2;
+
+      updateFields.push(`cancellation_reason = $${paramIndex}`);
+      updateParams.push(reason || null);
+      paramIndex++;
 
       // Si el pago ya fue procesado, cambiar payment_status
       if (order.payment_status === 'paid') {
-        updateFields.push('payment_status = $3');
+        updateFields.push(`payment_status = $${paramIndex}`);
         updateParams.push('refund_pending');
+        paramIndex++;
       }
+
+      const whereOrderIdParam = paramIndex++;
+      const whereUserIdParam = paramIndex++;
 
       const result = await client.query(
-        `UPDATE orders.orders 
+        `UPDATE orders.orders
          SET ${updateFields.join(', ')}
-         WHERE id = $4 AND client_id = $5
+         WHERE id = $${whereOrderIdParam}
+           AND client_id = $${whereUserIdParam}
+           AND status IN ('pending', 'confirmed')
          RETURNING *`,
-        [...updateParams, orderId, userId]
+        [...updateParams, orderId, userId],
       );
 
-      const cancelledOrder = result.rows[0];
-
-      // Registrar en historial de estados
-      try {
-        const userProfile = await this.getUserProfile(userId);
-        await client.query(
-          `INSERT INTO orders.order_status_history (
-            order_id, previous_status, new_status, 
-            changed_by_user_id, changed_by_role, change_reason
-          ) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            orderId,
-            currentStatus,
-            'cancelled',
-            userId,
-            userProfile?.role || 'client',
-            reason || null
-          ]
+      if (!result.rowCount) {
+        throw new BadRequestException(
+          'El pedido no se puede cancelar porque cambiÃ³ de estado. Actualiza la pÃ¡gina e intÃ©ntalo de nuevo.'
         );
-      } catch (historyError) {
-        console.warn('⚠️ No se pudo registrar en historial:', historyError);
       }
+
+      const cancelledOrder = result.rows[0];
+      // Historial: se registra vÃ­a trigger (si estÃ¡ instalado).
 
       await client.query('COMMIT');
       this.notifyOrderStatusChange(orderId, currentStatus, 'cancelled');
@@ -1540,6 +1521,44 @@ export class OrdersService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * Debug: expone info para validar que el backend corresponde al cÃ³digo actual.
+   */
+  getOrdersModuleVersion() {
+    const rawDbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || '';
+    const safe = (s: string) => String(s || '').replace(/:[^:@]+@/, ':****@');
+    let dbHost: string | null = null;
+    let dbPort: string | null = null;
+    try {
+      const u = new URL(rawDbUrl.includes('://') ? rawDbUrl.replace(/\\[|\\]/g, '') : '');
+      dbHost = u.hostname || null;
+      dbPort = u.port || null;
+    } catch {
+      // ignore
+    }
+    return {
+      module: 'orders',
+      features: {
+        clientCancelEndpoint: true,
+        clientCancelStrictUpdate: true,
+        orderStatusChangeEmailOnCancel: true,
+        logisticsDoesNotOverrideCancelled: true,
+      },
+      env: {
+        nodeEnv: process.env.NODE_ENV,
+        port: process.env.PORT,
+        databaseUrlMasked: rawDbUrl ? safe(rawDbUrl) : null,
+        databaseHost: dbHost,
+        databasePort: dbPort,
+        hasDbPool: !!dbPool,
+        hasSupabaseAdmin: !!supabaseAdmin,
+      },
+      email: this.emailService.getTransportDiagnostics(),
+      now: new Date().toISOString(),
+      node: process.version,
+    };
   }
 
   /**
@@ -1633,6 +1652,20 @@ export class OrdersService {
         }
       }
 
+      // Configurar variables de sesión para trigger de historial (si existe).
+      try {
+        const userProfile = await this.getUserProfile(repartidorId);
+        await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [repartidorId]);
+        await client.query(`SELECT set_config('app.current_user_role', $1, true)`, [
+          (userProfile?.role || 'repartidor') as any,
+        ]);
+        await client.query(`SELECT set_config('app.status_change_reason', $1, true)`, [
+          `Cambio de estado (repartidor): ${currentStatus} → ${newStatus}`,
+        ]);
+      } catch {
+        // ignore
+      }
+
       const orderResult = await client.query(
         `UPDATE orders.orders 
          SET ${orderUpdateFields.join(', ')}
@@ -1643,25 +1676,7 @@ export class OrdersService {
 
       const updatedOrder = orderResult.rows[0];
 
-      // Registrar en historial de estados
-      try {
-        const userProfile = await this.getUserProfile(repartidorId);
-        await client.query(
-          `INSERT INTO orders.order_status_history (
-            order_id, previous_status, new_status, 
-            changed_by_user_id, changed_by_role
-          ) VALUES ($1, $2, $3, $4, $5)`,
-          [
-            orderId,
-            delivery.status,
-            newStatus,
-            repartidorId,
-            userProfile?.role || 'repartidor'
-          ]
-        );
-      } catch (historyError) {
-        console.warn('⚠️ No se pudo registrar en historial:', historyError);
-      }
+      // Historial: se registra vía trigger (si está instalado).
 
       await client.query('COMMIT');
       if (nextOrderStatus !== currentStatus) {
@@ -2428,12 +2443,30 @@ export class OrdersService {
       const paymentStatus = order.payment_status;
       const isPickupOrderRow = order.delivery_address_text === 'Recoger en tienda';
 
-      // Permiso de surtir: quien cambia estado debe tener can_fulfill para el negocio
+      // Permisos: cambios de estado (confirmar/surtir/logística) requieren can_fulfill.
+      // Cancelación temprana (pending/confirmed -> cancelled) debe permitirse aunque can_fulfill sea false,
+      // siempre que el usuario tenga acceso a pedidos del negocio.
       const changedByUserId = metadata?.changed_by_user_id;
       if (changedByUserId) {
-        const canFulfill = await this.businessUsersService.userCanFulfillForBusiness(changedByUserId, businessId);
-        if (!canFulfill) {
-          throw new ForbiddenException('No tienes permiso para surtir pedidos en este negocio');
+        const isEarlyCancel =
+          newStatus === 'cancelled' && (currentStatus === 'pending' || currentStatus === 'confirmed');
+
+        if (isEarlyCancel) {
+          const canManageOrders = await this.businessUsersService.userCanManageOrdersForBusiness(
+            changedByUserId,
+            businessId,
+          );
+          if (!canManageOrders) {
+            throw new ForbiddenException('No tienes permiso para gestionar pedidos en este negocio');
+          }
+        } else {
+          const canFulfill = await this.businessUsersService.userCanFulfillForBusiness(
+            changedByUserId,
+            businessId,
+          );
+          if (!canFulfill) {
+            throw new ForbiddenException('No tienes permiso para surtir pedidos en este negocio');
+          }
         }
       }
 
@@ -2565,6 +2598,25 @@ export class OrdersService {
       }
 
       // Actualizar estado del pedido
+      // Configurar variables de sesión para trigger de historial (si existe).
+      try {
+        const actorId = metadata?.changed_by_user_id || null;
+        if (actorId) {
+          const actorProfile = await this.getUserProfile(actorId);
+          const actorRole = (metadata?.changed_by_role || actorProfile?.role || 'local') as any;
+          await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [actorId]);
+          await client.query(`SELECT set_config('app.current_user_role', $1, true)`, [actorRole]);
+        } else if (metadata?.changed_by_role) {
+          await client.query(`SELECT set_config('app.current_user_role', $1, true)`, [
+            metadata.changed_by_role as any,
+          ]);
+        }
+        await client.query(`SELECT set_config('app.status_change_reason', $1, true)`, [
+          metadata?.cancellation_reason || `Cambio de estado: ${currentStatus} → ${newStatus}`,
+        ]);
+      } catch {
+        // ignore
+      }
 
       const result = await client.query(
         `UPDATE orders.orders 
@@ -2583,33 +2635,7 @@ export class OrdersService {
 
       // Hacer COMMIT PRIMERO para asegurar que el cambio persista
       await client.query('COMMIT');
-      
-      // Registrar en historial DESPUÉS del COMMIT (no crítico)
-      // Usar una nueva conexión para no afectar la transacción principal
-      try {
-        const historyClient = await dbPool.connect();
-        try {
-          await historyClient.query(
-            `INSERT INTO orders.order_status_history (
-              order_id, previous_status, new_status, 
-              changed_by_user_id, changed_by_role, change_reason
-            ) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              orderId,
-              currentStatus,
-              newStatus,
-              metadata?.changed_by_user_id || null,
-              metadata?.changed_by_role || null,
-              metadata?.cancellation_reason || `Cambio de estado: ${currentStatus} → ${newStatus}`
-            ]
-          );
-        } finally {
-          historyClient.release();
-        }
-      } catch (historyError) {
-        // No crítico, solo loguear - el estado ya se actualizó
-        console.warn('⚠️ No se pudo registrar en historial:', historyError);
-      }
+      // Historial: se registra vía trigger (si está instalado).
       
       // Enviar correo de cambio de estado (no bloquea el flujo si falla)
       this.notifyOrderStatusChange(orderId, currentStatus, newStatus);
@@ -3540,6 +3566,19 @@ ${qrBlock}
           userId: order.client_id,
           orderId: order.id,
           message: 'Email no disponible para notificación',
+          requestPayload: {
+            to: null,
+            orderNumber,
+            orderDate,
+            orderTotal,
+            paymentMethod,
+            orderUrl,
+          },
+          metadata: {
+            businessId: order.business_id,
+            businessGroupId: order.business_group_id,
+            frontendOrigin: order.frontend_origin || null,
+          },
         });
       }
 
@@ -4021,6 +4060,18 @@ ${qrBlock}
           userId: order.client_id,
           orderId: order.id,
           message: 'Email no disponible para notificación',
+          requestPayload: {
+            to: null,
+            orderId: order.id,
+            orderNumber: formatOrderFolioFromUuid(order.id),
+            oldStatus,
+            newStatus,
+          },
+          metadata: {
+            businessId: order.business_id,
+            businessGroupId: order.business_group_id,
+            frontendOrigin: order.frontend_origin || null,
+          },
         });
       }
 

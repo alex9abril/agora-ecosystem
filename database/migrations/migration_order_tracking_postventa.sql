@@ -440,14 +440,15 @@ SELECT
     -- Información de entrega
     d.status as delivery_status,
     d.repartidor_id,
-    r.name as repartidor_name,
+    NULLIF(TRIM(CONCAT_WS(' ', rup.first_name, rup.last_name)), '') as repartidor_name,
     -- Información de devoluciones/reembolsos
     (SELECT COUNT(*) FROM orders.order_returns WHERE order_id = o.id) as returns_count,
     (SELECT COUNT(*) FROM orders.order_refunds WHERE order_id = o.id) as refunds_count
 FROM orders.orders o
 LEFT JOIN core.businesses b ON o.business_id = b.id
 LEFT JOIN orders.deliveries d ON o.id = d.order_id
-LEFT JOIN core.repartidores r ON d.repartidor_id = r.id;
+LEFT JOIN core.repartidores r ON d.repartidor_id = r.id
+LEFT JOIN core.user_profiles rup ON rup.id = r.user_id;
 
 COMMENT ON VIEW orders.order_tracking_view IS 
     'Vista consolidada para seguimiento y análisis de pedidos';

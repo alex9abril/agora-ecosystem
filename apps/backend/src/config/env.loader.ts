@@ -35,7 +35,13 @@ let result: dotenv.DotenvConfigOutput | null = null;
 for (const possiblePath of possiblePaths) {
   if (fs.existsSync(possiblePath)) {
     envPath = possiblePath;
-    result = dotenv.config({ path: envPath });
+    // Primero cargar sin override para respetar variables del entorno (especialmente en producción).
+    result = dotenv.config({ path: envPath, override: false });
+    // Si después de cargar NO estamos en producción, recargar con override para que el .env
+    // gane sobre variables globales del sistema (común en entornos locales).
+    if (process.env.NODE_ENV !== 'production') {
+      result = dotenv.config({ path: envPath, override: true });
+    }
     break;
   }
 }
@@ -43,7 +49,10 @@ for (const possiblePath of possiblePaths) {
 // Si no se encontró ningún .env, intentar cargar desde la ruta por defecto
 if (!envPath) {
   envPath = path.resolve(__dirname, '../.env');
-  result = dotenv.config({ path: envPath });
+  result = dotenv.config({ path: envPath, override: false });
+  if (process.env.NODE_ENV !== 'production') {
+    result = dotenv.config({ path: envPath, override: true });
+  }
 }
 
 // Logs de debug

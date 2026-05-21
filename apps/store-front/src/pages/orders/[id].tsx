@@ -14,7 +14,9 @@ import ContextualLink from '@/components/ContextualLink';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import PaymentIcon from '@mui/icons-material/Payment';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { formatPrice } from '@/lib/format';
+import CancelOrderReasonModal from '@/components/orders/CancelOrderReasonModal';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -23,6 +25,8 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<Record<string, Product>>({});
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   useEffect(() => {
     if (id && typeof id === 'string') {
@@ -69,6 +73,32 @@ export default function OrderDetailPage() {
       setError(err.message || 'Error al cargar el pedido');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const canCancelOrder = (o: Order) => ['pending', 'confirmed'].includes(String(o.status || '').toLowerCase());
+  const handleCancelOrder = () => {
+    if (!order || cancelling) return;
+    if (!canCancelOrder(order)) return;
+    setCancelModalOpen(true);
+  };
+
+  const confirmCancelOrder = async (reason?: string) => {
+    if (!order || cancelling) return;
+    if (!canCancelOrder(order)) return;
+
+    try {
+      setCancelling(true);
+      setError(null);
+      await ordersService.cancel(order.id, reason);
+      await loadOrder(order.id);
+      alert('Pedido cancelado.');
+      setCancelModalOpen(false);
+    } catch (err: any) {
+      console.error('Error cancelando pedido:', err);
+      alert(err?.message || 'No se pudo cancelar el pedido');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -155,24 +185,52 @@ export default function OrderDetailPage() {
           {/* Contenido principal */}
           <div className="flex-1 min-w-0" style={{ minHeight: '600px' }}>
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Pedido #{order.id.slice(-8).toUpperCase()}
-            </h1>
-            <div className="flex items-center gap-3">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
-                {getStatusLabel(order.status)}
-              </span>
-              <span className="text-sm text-gray-500">
-                Creado el {new Date(order.created_at).toLocaleDateString('es-MX', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  Pedido #{order.id.slice(-8).toUpperCase()}
+                </h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                    {getStatusLabel(order.status)}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    Creado el {new Date(order.created_at).toLocaleDateString('es-MX', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              {canCancelOrder(order) && (
+                <button
+                  type="button"
+                  onClick={handleCancelOrder}
+                  disabled={cancelling}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    cancelling
+                      ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                      : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                  }`}
+                >
+                  <CancelIcon className="w-4 h-4" />
+                  {cancelling ? 'Cancelando…' : 'Cancelar pedido'}
+                </button>
+              )}
             </div>
           </div>
+
+          <CancelOrderReasonModal
+            open={cancelModalOpen}
+            orderLabel={`#${order.id.slice(-8).toUpperCase()}`}
+            busy={cancelling}
+            onClose={() => setCancelModalOpen(false)}
+            onConfirm={confirmCancelOrder}
+          />
 
           {/* Información del negocio */}
           {order.business_name && (
