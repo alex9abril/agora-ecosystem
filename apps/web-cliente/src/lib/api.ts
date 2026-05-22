@@ -148,14 +148,36 @@ export async function apiRequest<T = any>(
   const url = `${API_URL}${endpoint}`;
   
   const authToken = getAuthTokenFromStorage();
-  const headers: HeadersInit = {
+
+  const headersObj: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
   };
 
-  if (authToken && !headers.Authorization && !(options.headers as HeadersInit)?.Authorization) {
-    headers.Authorization = `Bearer ${authToken}`;
+  // Copiar headers existentes si vienen como objeto plano
+  if (
+    options.headers &&
+    typeof options.headers === 'object' &&
+    !Array.isArray(options.headers) &&
+    !(options.headers instanceof Headers)
+  ) {
+    Object.assign(headersObj, options.headers as Record<string, string>);
   }
+
+  const existingHeaders = options.headers;
+  let hasExistingAuth = false;
+  if (existingHeaders instanceof Headers) {
+    hasExistingAuth = existingHeaders.has('Authorization');
+  } else if (Array.isArray(existingHeaders)) {
+    hasExistingAuth = existingHeaders.some(([key]) => key.toLowerCase() === 'authorization');
+  } else if (existingHeaders && typeof existingHeaders === 'object') {
+    hasExistingAuth = 'Authorization' in (existingHeaders as Record<string, unknown>) || 'authorization' in (existingHeaders as Record<string, unknown>);
+  }
+
+  if (authToken && !hasExistingAuth && !('Authorization' in headersObj) && !('authorization' in headersObj)) {
+    headersObj['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  const headers: HeadersInit = headersObj;
   
   const response = await fetch(url, {
     ...options,

@@ -8,6 +8,7 @@ export const translations = {
     nav: {
       home: 'Home',
       stores: 'Stores',
+      messages: 'Messages',
       cart: 'Cart',
       profile: 'Profile',
       login: 'Login',
@@ -135,6 +136,7 @@ export const translations = {
     nav: {
       home: 'Inicio',
       stores: 'Tiendas',
+      messages: 'Mensajes',
       cart: 'Carrito',
       profile: 'Perfil',
       login: 'Iniciar Sesión',

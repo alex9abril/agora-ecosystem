@@ -41,6 +41,11 @@ const triggerInfo: Record<EmailTriggerType, { name: string; description: string;
     description: 'Se envía cuando un usuario solicita restablecer su contraseña',
     variables: ['user_name', 'recovery_link', 'business_name', 'business_logo'],
   },
+  custom_message: {
+    name: 'Mensaje personalizado',
+    description: 'Se envía manualmente desde el panel para contactar a un cliente',
+    variables: ['subject', 'message_body', 'business_name', 'to_email'],
+  },
 };
 
 const buildLogoHtml = (logoUrl: string) =>
@@ -323,6 +328,28 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
   </div>
 </body>
 </html>`,
+  custom_message: `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 24px;">
+    <div style="background-color: #111827; color: white; padding: 18px 20px; border-radius: 12px 12px 0 0;">
+      <div style="font-size: 12px; opacity: 0.85; margin-bottom: 6px;">Mensaje de {{business_name}}</div>
+      <div style="font-size: 18px; font-weight: 700;">{{subject}}</div>
+    </div>
+    <div style="background-color: white; padding: 20px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb;">
+      {{message_body}}
+      <div style="margin-top: 18px; font-size: 12px; color: #6b7280;">
+        Si tienes alguna duda, responde a este correo.
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
 };
 
 export default function EmailsPage() {
@@ -355,6 +382,7 @@ export default function EmailsPage() {
     order_status_change: null,
     supervisor_notification: null,
     password_recovery: null,
+    custom_message: null,
   });
   const [showResolverInfoFor, setShowResolverInfoFor] = useState<EmailTriggerType | null>(null);
 
@@ -524,6 +552,7 @@ export default function EmailsPage() {
           order_status_change: null,
           supervisor_notification: null,
           password_recovery: null,
+          custom_message: null,
         };
         
         globalTemplatesList.forEach((template) => {
@@ -974,6 +1003,7 @@ export default function EmailsPage() {
     'order_confirmation',
     'order_status_change',
     'password_recovery',
+    'custom_message',
   ];
 
   // Obtener templates para mostrar (uno por cada trigger)

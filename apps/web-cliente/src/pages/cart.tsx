@@ -53,7 +53,9 @@ export default function CartPage() {
       const loadProducts = async () => {
         setLoadingProducts(true);
         try {
-          const productIds = [...new Set(cart.items.map(item => item.product_id))];
+          const productIds = cart.items
+            .map((item) => item.product_id)
+            .filter((id, index, all) => all.indexOf(id) === index);
           const productsMap: Record<string, Product> = {};
           
           await Promise.all(

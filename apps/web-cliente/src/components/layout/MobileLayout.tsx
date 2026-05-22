@@ -12,6 +12,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import StoreIcon from '@mui/icons-material/Store';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import PersonIcon from '@mui/icons-material/Person';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
 interface MobileLayoutProps {
   children: ReactNode;
@@ -30,6 +31,7 @@ export default function MobileLayout({ children, showNavigation = true }: Mobile
   const navItems = [
     { href: '/', label: t('nav.home'), icon: HomeIcon },
     { href: '/stores', label: t('nav.stores'), icon: StoreIcon },
+    { href: '/messages', label: t('nav.messages'), icon: MailOutlineIcon },
     { href: '/cart', label: t('nav.cart'), icon: ShoppingCartIcon },
     { href: isAuthenticated ? '/profile' : '/auth/login', label: t('nav.profile'), icon: PersonIcon },
   ];

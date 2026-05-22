@@ -9,7 +9,8 @@ export type EmailTriggerType =
   | 'order_confirmation'
   | 'order_status_change'
   | 'supervisor_notification'
-  | 'password_recovery';
+  | 'password_recovery'
+  | 'custom_message';
 
 export type EmailTemplateLevel = 'global' | 'group' | 'business';
 

@@ -57,7 +57,9 @@ export default function OrderDetailPage() {
         const loadProducts = async () => {
           setLoadingProducts(true);
           try {
-            const productIds = [...new Set(orderData.items.map((item: any) => item.product_id))];
+            const productIds = (orderData.items || [])
+              .map((item: any) => item.product_id)
+              .filter((id: string, index: number, all: string[]) => all.indexOf(id) === index);
             const productsMap: Record<string, Product> = {};
             
             await Promise.all(
