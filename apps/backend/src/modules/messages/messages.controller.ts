@@ -22,11 +22,26 @@ import { ListInboxDto } from './dto/list-inbox.dto';
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 
+  @Get('inbox/unread-count')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Bandeja de entrada (cliente): cantidad de mensajes no leídos' })
+  async unreadCount(@CurrentUser() user: User, @Query() dto: ListInboxDto) {
+    return this.messagesService.unreadCount(user.id, dto);
+  }
+
   @Get('inbox')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Bandeja de entrada (cliente): mensajes recibidos' })
   async inbox(@CurrentUser() user: User, @Query() dto: ListInboxDto) {
     return this.messagesService.listInbox(user.id, dto);
+  }
+
+  @Post('inbox/:id/read')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Bandeja de entrada (cliente): marcar mensaje como leído' })
+  @ApiParam({ name: 'id', description: 'ID del mensaje', type: String })
+  async markRead(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.messagesService.markInboxRead(user.id, id);
   }
 
   @Post('email')

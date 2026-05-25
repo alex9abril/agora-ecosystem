@@ -30,6 +30,7 @@ import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import StoreMenu from '../StoreMenu';
 import NavigationDialog from '../NavigationDialog';
 import CategoriesMenu from '../CategoriesMenu';
@@ -38,6 +39,7 @@ import { getStoredVehicle, getSelectedVehicle, setSelectedVehicle } from '@/lib/
 import { userVehiclesService, UserVehicle } from '@/lib/user-vehicles';
 import { getSearchHistory, addSearchToHistory, removeSearchFromHistory, clearSearchHistory } from '@/lib/search-history';
 import { useBranding } from '@/contexts/BrandingContext';
+import { useMessagesNotifications } from '@/contexts/MessagesContext';
 
 export default function Header() {
   const { branding: brandingContext } = useBranding();
@@ -53,6 +55,7 @@ export default function Header() {
     getStoreName,
   } = useStoreContext();
   const { isAuthenticated, user, signOut } = useAuth();
+  const { unread, refreshUnread } = useMessagesNotifications();
   const { itemCount, cart } = useCart();
   const { getCartUrl } = useStoreRouting();
   const cartTotal = useMemo(() => {
@@ -92,6 +95,12 @@ export default function Header() {
   const [isCompactHeader, setIsCompactHeader] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useEffect(() => {
+    if (showUserMenu) {
+      refreshUnread();
+    }
+  }, [showUserMenu, refreshUnread]);
 
   // Ocultar botón Navegar cuando la tienda se muestra dentro de un iframe
   useEffect(() => {
@@ -773,7 +782,12 @@ export default function Header() {
                     ) : (
                       <div className="relative flex-shrink-0">
                         <button onClick={() => setShowUserMenu(!showUserMenu)} className="px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
-                          <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                          <div className="relative">
+                            <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                            {unread > 0 && (
+                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-600 rounded-full" />
+                            )}
+                          </div>
                           <span className="hidden sm:inline truncate max-w-[64px]">{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</span>
                           <ArrowDropDownIcon className="w-3 h-3" style={{ color: embedColor }} />
                         </button>
@@ -784,6 +798,7 @@ export default function Header() {
                               <div className="px-5 py-4" style={{ backgroundColor: primaryColor }}><p className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: textColorOpacity90 }}>Bienvenido</p><p className="text-base font-bold truncate" style={{ color: textColor }}>{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</p>{user?.email && <p className="text-xs truncate mt-1" style={{ color: textColorOpacity80 }}>{user.email}</p>}</div>
                               <div className="py-2">
                                 <ContextualLink href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><HomeIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis direcciones</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                                <ContextualLink href="/messages" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><MailOutlineIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mensajes</span>{unread > 0 ? (<span className="ml-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>) : null}</div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                                 <ContextualLink href="/orders" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><ReceiptIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis pedidos</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                                 <ContextualLink href="/profile?tab=payment" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><CreditCardIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis formas de pago</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                               </div>
@@ -961,7 +976,12 @@ export default function Header() {
                 ) : (
                   <div className="relative flex-shrink-0">
                     <button onClick={() => setShowUserMenu(!showUserMenu)} className="px-1.5 py-1 rounded flex items-center gap-1 hover:opacity-80" style={{ color: embedColor, ...embedTextStyle }}>
-                      <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                      <div className="relative">
+                        <AccountCircleIcon className="w-3.5 h-3.5" style={{ color: embedColor }} />
+                        {unread > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-600 rounded-full" />
+                        )}
+                      </div>
                       <span className="hidden sm:inline truncate max-w-[64px]">{user?.profile?.first_name || user?.profile?.name || user?.email?.split('@')[0] || 'Usuario'}</span>
                       <ArrowDropDownIcon className="w-3 h-3" style={{ color: embedColor }} />
                     </button>
@@ -976,6 +996,7 @@ export default function Header() {
                           </div>
                           <div className="py-2">
                             <ContextualLink href="/profile" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><HomeIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis direcciones</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
+                            <ContextualLink href="/messages" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><MailOutlineIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mensajes</span>{unread > 0 ? (<span className="ml-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">{unread > 99 ? '99+' : unread}</span>) : null}</div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                             <ContextualLink href="/orders" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><ReceiptIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis pedidos</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                             <ContextualLink href="/profile?tab=payment" onClick={() => setShowUserMenu(false)} className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50"><div className="flex items-center gap-3"><CreditCardIcon className="w-5 h-5 text-gray-400" /><span className="font-medium">Mis formas de pago</span></div><KeyboardArrowRightIcon className="w-4 h-4 text-gray-300" /></ContextualLink>
                           </div>
@@ -1127,7 +1148,12 @@ export default function Header() {
                       style={{ color: textColor }}
                     >
                       <div className="flex items-center gap-2">
-                        <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
+                        <div className="relative">
+                          <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
+                          {unread > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-600 rounded-full" />
+                          )}
+                        </div>
                         <div className="hidden sm:flex flex-col items-start leading-tight">
                           <span style={{ color: textColorOpacity80 }}>
                             Hola,
@@ -1177,6 +1203,23 @@ export default function Header() {
                               <div className="flex items-center gap-3">
                                 <HomeIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
                                 <span className="font-medium">Mis direcciones</span>
+                              </div>
+                              <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                            </ContextualLink>
+
+                            <ContextualLink
+                              href="/messages"
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <MailOutlineIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                <span className="font-medium">Mensajes</span>
+                                {unread > 0 && (
+                                  <span className="ml-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">
+                                    {unread > 99 ? '99+' : unread}
+                                  </span>
+                                )}
                               </div>
                               <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
                             </ContextualLink>
@@ -1728,7 +1771,12 @@ export default function Header() {
                         className="px-3 py-2 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1.5 group"
                         style={{ color: textColor }}
                       >
-                        <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
+                        <div className="relative">
+                          <AccountCircleIcon className="w-5 h-5" style={{ color: textColorOpacity90 }} />
+                          {unread > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-600 rounded-full" />
+                          )}
+                        </div>
                         <ArrowDropDownIcon className="w-4 h-4" style={{ color: textColorOpacity80 }} />
                       </button>
                       {showUserMenu && (
@@ -1765,6 +1813,22 @@ export default function Header() {
                                 <div className="flex items-center gap-3">
                                   <HomeIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
                                   <span className="font-medium">Mis direcciones</span>
+                                </div>
+                                <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
+                              </ContextualLink>
+                              <ContextualLink
+                                href="/messages"
+                                onClick={() => setShowUserMenu(false)}
+                                className="flex items-center justify-between px-5 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <MailOutlineIcon className="w-5 h-5 text-gray-400 group-hover:text-toyota-red transition-colors" />
+                                  <span className="font-medium">Mensajes</span>
+                                  {unread > 0 && (
+                                    <span className="ml-1 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">
+                                      {unread > 99 ? '99+' : unread}
+                                    </span>
+                                  )}
                                 </div>
                                 <KeyboardArrowRightIcon className="w-4 h-4 text-gray-300 group-hover:text-toyota-red transition-colors" />
                               </ContextualLink>

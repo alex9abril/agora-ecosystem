@@ -11,6 +11,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import { useMessagesNotifications } from '@/contexts/MessagesContext';
 
 interface AccountSidebarProps {
   activeTab?: string;
@@ -18,6 +19,7 @@ interface AccountSidebarProps {
 
 export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebarProps) {
   const router = useRouter();
+  const { unread } = useMessagesNotifications();
 
   const menuItems = [
     {
@@ -50,6 +52,12 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
       icon: ReceiptIcon,
       href: '/orders',
     },
+    {
+      id: 'messages',
+      label: 'Mensajes',
+      icon: PersonIcon,
+      href: '/messages',
+    },
   ];
 
   return (
@@ -62,12 +70,12 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
         <nav>
           <ul className="space-y-1">
             {menuItems.map((item) => {
-              const Icon = item.icon;
               const isActive = activeTab === item.id || 
                 (item.id === 'addresses' && router.query.tab === 'addresses') ||
                 (item.id === 'vehicles' && router.query.tab === 'vehicles') ||
                 (item.id === 'payment' && router.query.tab === 'payment') ||
                 (item.id === 'orders' && (router.pathname === '/orders' || router.pathname.includes('/orders'))) ||
+                (item.id === 'messages' && (router.pathname === '/messages' || router.pathname.includes('/messages'))) ||
                 (item.id === 'profile' && (router.pathname === '/profile' || router.pathname.includes('/profile')) && !router.query.tab);
 
               return (
@@ -80,7 +88,12 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
                         : 'text-gray-700 hover:text-gray-900'
                     }`}
                   >
-                    {item.label}
+                    <span className="inline-flex items-center gap-2">
+                      {item.label}
+                      {item.id === 'messages' && unread > 0 && (
+                        <span className="w-2.5 h-2.5 bg-red-600 rounded-full" aria-label="Mensajes no leídos" />
+                      )}
+                    </span>
                   </ContextualLink>
                 </li>
               );

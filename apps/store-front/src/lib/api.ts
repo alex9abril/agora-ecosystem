@@ -161,6 +161,7 @@ function requiresAuthentication(endpoint: string): boolean {
     '/orders',
     '/addresses',
     '/user-vehicles',
+    '/messages',
     '/auth/me',
     '/auth/refresh',
     '/payments',

@@ -260,7 +260,7 @@ export class MessagesService {
     values.push(offset);
     const dataResult = await dbPool.query(
       `SELECT m.id, m.business_id, m.business_group_id, m.to_user_id, m.to_email,
-              m.subject, m.body_html, m.trigger_type, m.status, m.error_message, m.created_at, m.sent_at, m.updated_at,
+              m.subject, m.body_html, m.trigger_type, m.status, m.error_message, m.read_at, m.created_at, m.sent_at, m.updated_at,
               b.name as business_name
        FROM communication.outbound_messages m
        LEFT JOIN core.businesses b ON b.id = m.business_id
@@ -271,5 +271,45 @@ export class MessagesService {
     );
 
     return { total, items: dataResult.rows, limit, offset };
+  }
+
+  async unreadCount(currentUserId: string, dto: ListInboxDto) {
+    if (!dbPool) throw new ServiceUnavailableException('ConexiÃ³n a base de datos no configurada');
+
+    const where: string[] = ['m.to_user_id = $1', 'm.read_at IS NULL'];
+    const values: any[] = [currentUserId];
+
+    if (dto.business_id) {
+      values.push(dto.business_id);
+      where.push(`m.business_id = $${values.length}`);
+    }
+
+    const r = await dbPool.query<{ total: string }>(
+      `SELECT COUNT(*)::text as total
+       FROM communication.outbound_messages m
+       WHERE ${where.join(' AND ')}`,
+      values,
+    );
+
+    return { unread: parseInt(r.rows[0]?.total || '0', 10) };
+  }
+
+  async markInboxRead(currentUserId: string, id: string) {
+    if (!dbPool) throw new ServiceUnavailableException('ConexiÃ³n a base de datos no configurada');
+
+    const r = await dbPool.query(
+      `UPDATE communication.outbound_messages
+       SET read_at = COALESCE(read_at, CURRENT_TIMESTAMP),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND to_user_id = $2
+       RETURNING id, read_at`,
+      [id, currentUserId],
+    );
+
+    if (r.rows.length === 0) {
+      throw new NotFoundException('Mensaje no encontrado');
+    }
+
+    return r.rows[0];
   }
 }

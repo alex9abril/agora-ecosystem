@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS communication.outbound_messages (
 
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   sent_at TIMESTAMP,
+  read_at TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -54,9 +55,14 @@ COMMENT ON COLUMN communication.outbound_messages.variables IS 'Variables usadas
 COMMENT ON COLUMN communication.outbound_messages.status IS 'Estado de envío: queued, sent, failed, skipped.';
 
 CREATE INDEX IF NOT EXISTS idx_outbound_messages_business_id ON communication.outbound_messages(business_id);
+CREATE INDEX IF NOT EXISTS idx_outbound_messages_to_user_id ON communication.outbound_messages(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_outbound_messages_to_email ON communication.outbound_messages(to_email);
 CREATE INDEX IF NOT EXISTS idx_outbound_messages_status ON communication.outbound_messages(status);
 CREATE INDEX IF NOT EXISTS idx_outbound_messages_created_at ON communication.outbound_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_outbound_messages_unread ON communication.outbound_messages(to_user_id, created_at DESC) WHERE read_at IS NULL;
+
+-- Compatibilidad: si la tabla ya existía, agregar columnas faltantes sin romper.
+ALTER TABLE communication.outbound_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
 
 -- Trigger updated_at (usa la función existente update_updated_at_column del schema public)
 DROP TRIGGER IF EXISTS update_outbound_messages_updated_at ON communication.outbound_messages;
