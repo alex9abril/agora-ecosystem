@@ -38,7 +38,7 @@ INSERT INTO communication.email_templates (
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Actualización de Pedido - AGORA</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #333; min-height: 100vh;">
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <!-- Fondo gris oscuro con logo y tagline -->
   <div style="background-color: #333; padding: 40px 20px 60px 20px; text-align: center; position: relative; overflow: hidden;">
     <!-- Elementos decorativos sutiles -->
@@ -48,7 +48,7 @@ INSERT INTO communication.email_templates (
     
     <!-- Logo AGORA -->
     <div style="margin-bottom: 20px;">
-      <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
+      <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
     </div>
     
     <!-- Tagline -->

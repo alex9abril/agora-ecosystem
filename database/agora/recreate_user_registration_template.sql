@@ -37,14 +37,14 @@ INSERT INTO communication.email_templates (
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bienvenido a AGORA</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 0; margin: 0;">
     <tr>
       <td align="center" style="padding: 24px 16px 48px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%; border-collapse: separate; border-spacing: 0;">
           <tr>
             <td style="background-color: #333; padding: 36px 24px; text-align: center; border-radius: 16px 16px 0 0;">
-              <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" style="max-width: 200px; height: auto; display: block; margin: 0 auto 16px;" />
+              <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 200px; height: auto; display: block; margin: 0 auto 16px;" />
               <p style="color: #ffffff; font-size: 14px; margin: 0; opacity: 0.9; font-weight: 300;">
                 La mejor solución de comercio en línea para la industria automotriz
               </p>

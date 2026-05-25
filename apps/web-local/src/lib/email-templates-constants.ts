@@ -319,19 +319,57 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{subject}}</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f3f4f6;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 24px;">
-    <div style="background-color: #111827; color: white; padding: 18px 20px; border-radius: 12px 12px 0 0;">
-      <div style="font-size: 12px; opacity: 0.85; margin-bottom: 6px;">Mensaje de {{business_name}}</div>
-      <div style="font-size: 18px; font-weight: 700;">{{subject}}</div>
-    </div>
-    <div style="background-color: white; padding: 20px; border-radius: 0 0 12px 12px; border: 1px solid #e5e7eb;">
-      {{message_body}}
-      <div style="margin-top: 18px; font-size: 12px; color: #6b7280;">
-        Si tienes alguna duda, responde a este correo.
-      </div>
-    </div>
-  </div>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333;">
+    <tr>
+      <td align="center" style="padding: 40px 16px 18px 16px;">
+        <img src="https://agoramp.mx/_next/static/media/agora_logo_white.7075c997.png" alt="AGORA" data-email-logo="true" style="max-width: 180px; height: auto; display: block;" />
+        <div style="height: 10px; line-height: 10px;">&nbsp;</div>
+        <div style="color: #ffffff; font-size: 13px; opacity: 0.9; font-weight: 400; font-family: Arial, sans-serif;">
+          {{business_name}}
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding: 0 16px 48px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 16px;">
+          <tr>
+            <td align="center" style="padding: 34px 28px 22px 28px;">
+              <div style="width: 72px; height: 72px; border-radius: 999px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); display: inline-block;">
+                <div style="line-height: 72px; text-align: center; color: white; font-size: 30px; font-weight: 700; font-family: Arial, sans-serif;">✉</div>
+              </div>
+              <div style="height: 18px; line-height: 18px;">&nbsp;</div>
+              <div style="font-size: 22px; font-weight: 800; color: #111827; font-family: Arial, sans-serif;">
+                {{subject}}
+              </div>
+              <div style="height: 8px; line-height: 8px;">&nbsp;</div>
+              <div style="font-size: 13px; color: #6b7280; font-family: Arial, sans-serif;">
+                Mensaje para <span style="color: #2563eb; text-decoration: none;">{{to_email}}</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 0 28px 26px 28px;">
+              <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px;">
+                {{message_body}}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 0 28px 34px 28px;">
+              <div style="font-size: 12px; color: #9ca3af; font-family: Arial, sans-serif;">
+                Si tienes alguna duda, responde a este correo.
+              </div>
+            </td>
+          </tr>
+        </table>
+        <div style="height: 16px; line-height: 16px;">&nbsp;</div>
+        <div style="font-size: 12px; color: #9ca3af; font-family: Arial, sans-serif; text-align: center;">
+          © 2026 AGORA. Todos los derechos reservados.
+        </div>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`,
 };
