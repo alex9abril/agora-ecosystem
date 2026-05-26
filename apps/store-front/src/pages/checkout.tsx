@@ -976,26 +976,36 @@ export default function CheckoutPage() {
           return a.price - b.price;
         });
 
-      // Agregar opción de recoger en tienda
-      const pickupOption: ShippingOption = {
-        id: `${storeId}-pickup`,
-        provider: 'pickup',
-        label: 'Recoger en tienda',
-        price: 0,
-        estimatedDays: 0,
-      };
+      if (skydropxOptions.length === 0) {
+        setQuotationErrors(prev => ({
+          ...prev,
+          [storeId]: 'No se encontraron opciones de envío para esta tienda.',
+        }));
+      }
 
-      // Actualizar opciones de envío para esta tienda
+      // Actualizar opciones de envío para esta tienda (solo entrega a domicilio)
       setShippingOptionsByStore(prev => ({
         ...prev,
-        [storeId]: [...skydropxOptions, pickupOption],
+        [storeId]: skydropxOptions,
       }));
 
-      // Seleccionar "Recoger en tienda" por defecto
-      setShippingSelections(prev => ({
-        ...prev,
-        [storeId]: pickupOption.id,
-      }));
+      // Seleccionar por defecto la opción más barata disponible (si existe)
+      setShippingSelections(prev => {
+        const currentSelection = prev[storeId];
+        if (currentSelection && skydropxOptions.some(o => o.id === currentSelection)) {
+          return prev;
+        }
+
+        if (skydropxOptions.length === 0) {
+          return { ...prev, [storeId]: '' };
+        }
+
+        const cheapestOption = skydropxOptions.reduce(
+          (best, option) => (option.price < best.price ? option : best),
+          skydropxOptions[0]
+        );
+        return { ...prev, [storeId]: cheapestOption.id };
+      });
     } catch (error: any) {
       console.error(`[Checkout] Error obteniendo cotizaciones para tienda ${storeId}:`, error);
       setQuotationErrors(prev => ({
@@ -1003,22 +1013,11 @@ export default function CheckoutPage() {
         [storeId]: error.message || 'Error al obtener cotizaciones de envío',
       }));
 
-      // En caso de error, mostrar solo la opción de recoger en tienda
-      const pickupOption: ShippingOption = {
-        id: `${storeId}-pickup`,
-        provider: 'pickup',
-        label: 'Recoger en tienda',
-        price: 0,
-        estimatedDays: 0,
-      };
       setShippingOptionsByStore(prev => ({
         ...prev,
-        [storeId]: [pickupOption],
+        [storeId]: [],
       }));
-      setShippingSelections(prev => ({
-        ...prev,
-        [storeId]: pickupOption.id,
-      }));
+      setShippingSelections(prev => ({ ...prev, [storeId]: '' }));
     } finally {
       setLoadingQuotations(prev => ({ ...prev, [storeId]: false }));
     }
@@ -2978,16 +2977,13 @@ export default function CheckoutPage() {
                               </div>
                             )}
                             
-                            {error && !isLoading && (
-                              <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                <p className="text-xs text-yellow-800">
-                                  {error}
-                                </p>
-                                <p className="text-xs text-yellow-700 mt-1">
-                                  Solo está disponible la opción de recoger en tienda.
-                                </p>
-                              </div>
-                            )}
+                             {error && !isLoading && (
+                               <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                 <p className="text-xs text-yellow-800">
+                                   {error}
+                                 </p>
+                               </div>
+                             )}
                             
                             {!isLoading && (
                               <div className="space-y-2">

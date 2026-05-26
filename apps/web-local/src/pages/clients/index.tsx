@@ -6,6 +6,9 @@ import { clientsService, Client, ClientFilters } from '@/lib/clients';
 import Link from 'next/link';
 import { SkeletonTable } from '@/components/ui/Skeleton';
 import { usePermission } from '@/lib/role-guards';
+import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
+import ComposeMessageModal from '@/components/messages/ComposeMessageModal';
+import { messagesService } from '@/lib/messages';
 
 const PAGE_SIZE_STORAGE_KEY = 'clients_page_size';
 const CURRENT_PAGE_STORAGE_KEY = 'clients_current_page';
@@ -15,6 +18,8 @@ const CLIENTS_ROUTE_PREFIX = '/clients';
 
 export default function ClientsPage() {
   const router = useRouter();
+  const { selectedBusiness } = useSelectedBusiness();
+  const businessId = selectedBusiness?.business_id;
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +54,8 @@ export default function ClientsPage() {
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeToEmail, setComposeToEmail] = useState('');
 
   const canManageClients = usePermission('canManageClients');
 
@@ -364,6 +371,24 @@ export default function ClientsPage() {
                           </Link>
                           <button
                             type="button"
+                            onClick={() => {
+                              setComposeToEmail(client.email || '');
+                              setComposeOpen(true);
+                            }}
+                            disabled={!businessId || !client.email}
+                            className="text-gray-900 dark:text-gray-100 hover:text-black dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={
+                              !businessId
+                                ? 'Selecciona una sucursal para enviar mensajes'
+                                : !client.email
+                                  ? 'Cliente sin email'
+                                  : 'Enviar mensaje'
+                            }
+                          >
+                            Mensaje
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteClient(client)}
                             disabled={!canManageClients || deletingId === client.id}
                             className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -468,6 +493,21 @@ export default function ClientsPage() {
             </p>
           </div>
         )}
+
+        <ComposeMessageModal
+          isOpen={composeOpen}
+          defaultToEmail={composeToEmail}
+          onClose={() => setComposeOpen(false)}
+          onSend={async ({ to_email, subject, body }) => {
+            if (!businessId) throw new Error('Selecciona una sucursal para enviar mensajes');
+            await messagesService.sendCustomEmail({
+              business_id: businessId,
+              subject,
+              body,
+              to_email,
+            });
+          }}
+        />
       </div>
     </LocalLayout>
   );

@@ -247,20 +247,6 @@ export default function OrdersPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {canCancelOrder(order) && (
-                          <button
-                            type="button"
-                            onClick={() => openCancelModal(order)}
-                            disabled={cancellingOrderId === order.id}
-                            className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                              cancellingOrderId === order.id
-                                ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
-                                : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                            }`}
-                          >
-                            {cancellingOrderId === order.id ? 'Cancelando…' : 'Cancelar'}
-                          </button>
-                        )}
                         <ContextualLink
                           href={`/orders/${order.id}`}
                           className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-toyota-red hover:bg-red-50 rounded-lg transition-colors"

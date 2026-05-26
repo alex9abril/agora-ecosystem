@@ -10,6 +10,8 @@ import { productsService, Product } from '@/lib/products';
 import { walletService, WalletTransaction } from '@/lib/wallet';
 import { logisticsService, ShippingLabel, ShipmentTracking, TrackingEvent } from '@/lib/logistics';
 import { Skeleton } from '@/components/ui/Skeleton';
+import ComposeMessageModal from '@/components/messages/ComposeMessageModal';
+import { messagesService } from '@/lib/messages';
 
 /** Layout de carga: replica cabecera, timeline, columna principal y sidebar del detalle de pedido. */
 function OrderDetailPageSkeleton() {
@@ -169,6 +171,7 @@ export default function OrderDetailPage() {
   const [expandedPayloadTxId, setExpandedPayloadTxId] = useState<string | null>(null);
   const [payloadViewTab, setPayloadViewTab] = useState<'resumen' | 'json'>('resumen');
   const [branchKarlopaySettings, setBranchKarlopaySettings] = useState<BranchKarlopaySettings | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
     if (id && router.isReady) {
@@ -1202,6 +1205,26 @@ export default function OrderDetailPage() {
             ))}
           </div>
         </div>
+
+        {/* Motivo de cancelación (si aplica) */}
+        {order.status === 'cancelled' && (
+          <div className="flex-shrink-0 border-b border-red-200 bg-red-50 px-6 py-3">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-700">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4c-.77-1.33-2.69-1.33-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-900">Pedido cancelado</p>
+                <p className="text-sm text-red-800">
+                  <span className="font-medium">Motivo:</span>{' '}
+                  {order.cancellation_reason?.trim() ? order.cancellation_reason : 'No especificado'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Contenedor principal con flex para sidebar fijo y contenido con scroll */}
         <div className="flex-1 flex overflow-hidden">
@@ -2367,6 +2390,19 @@ export default function OrderDetailPage() {
                         <a href={`mailto:${order.client_email}`} className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block">
                           Ver perfil
                         </a>
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setComposeOpen(true)}
+                            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded border border-gray-300 text-xs text-gray-900 hover:bg-gray-50 transition-colors"
+                            title="Enviar un correo personalizado al cliente"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8m-18 8h18V8H3v8z" />
+                            </svg>
+                            Enviar mensaje
+                          </button>
+                        </div>
                       </div>
                     )}
                     <div>
@@ -2497,6 +2533,27 @@ export default function OrderDetailPage() {
           </div>
         </div>
       )}
+
+      <ComposeMessageModal
+        isOpen={composeOpen}
+        defaultToEmail={order?.client_email || ''}
+        onClose={() => setComposeOpen(false)}
+        onSend={async ({ to_email, subject, body }) => {
+          if (!order) return;
+          const businessId =
+            selectedBusiness?.business_id ||
+            (typeof window !== 'undefined' ? sessionStorage.getItem('temp_order_business_id') : null) ||
+            order.business_id;
+          if (!businessId) throw new Error('No se pudo determinar la sucursal del pedido');
+          await messagesService.sendCustomEmail({
+            business_id: businessId,
+            order_id: order.id,
+            subject,
+            body,
+            to_email,
+          });
+        }}
+      />
     </LocalLayout>
   );
 }

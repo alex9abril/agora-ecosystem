@@ -335,7 +335,7 @@ const defaultTemplates: Record<EmailTriggerType, string> = {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{subject}} - AGORA</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+<body style="margin: 0; padding: 0; background-color: #333; font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
   <!-- Fondo gris oscuro con logo y tagline -->
   <div style="background-color: #333; padding: 40px 20px 60px 20px; text-align: center; position: relative; overflow: hidden;">
     <!-- Elementos decorativos sutiles -->
@@ -751,7 +751,8 @@ export default function EmailsPage() {
         }
       }
       
-      return headMatch[1] + '<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">' + bodyContent + '</body>' + bodyEndMatch[1];
+      const openingBodyTag = originalTemplate.match(/<body[^>]*>/i)?.[0] || '<body>';
+      return headMatch[1] + openingBodyTag + bodyContent + '</body>' + bodyEndMatch[1];
     }
     return originalTemplate;
   };

@@ -206,21 +206,6 @@ export default function OrderDetailPage() {
                 </div>
               </div>
 
-              {canCancelOrder(order) && (
-                <button
-                  type="button"
-                  onClick={handleCancelOrder}
-                  disabled={cancelling}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    cancelling
-                      ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
-                      : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
-                  }`}
-                >
-                  <CancelIcon className="w-4 h-4" />
-                  {cancelling ? 'Cancelando…' : 'Cancelar pedido'}
-                </button>
-              )}
             </div>
           </div>
 
@@ -559,14 +544,33 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Botón de regresar */}
-          <div className="text-center">
-            <ContextualLink
-              href="/orders"
-              className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block font-medium"
-            >
-              Volver a Mis Pedidos
-            </ContextualLink>
+          {/* Acciones */}
+          <div className="relative">
+            <div className="relative flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              {canCancelOrder(order) && (
+                <button
+                  type="button"
+                  onClick={handleCancelOrder}
+                  disabled={cancelling}
+                  className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg border text-sm font-medium transition-colors sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2 ${
+                    cancelling
+                      ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                      : 'border-red-300 text-red-700 bg-white hover:bg-red-50'
+                  }`}
+                >
+                  <CancelIcon className="w-4 h-4" />
+                  {cancelling ? 'Cancelando...' : 'Cancelar pedido'}
+                </button>
+              )}
+              <div>
+                <ContextualLink
+                  href="/orders"
+                  className="px-6 py-3 bg-toyota-red text-white rounded-lg hover:bg-toyota-red-dark transition-colors inline-block font-medium"
+                >
+                  Volver a Mis Pedidos
+                </ContextualLink>
+              </div>
+            </div>
           </div>
             </div>
           </div>

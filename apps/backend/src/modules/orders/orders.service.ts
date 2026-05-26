@@ -3390,11 +3390,14 @@ ${qrBlock}
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name IN ('store_context', 'frontend_origin')`
+           AND column_name IN ('store_context', 'frontend_origin', 'cancellation_reason')`
       );
       const existingCols = new Set(columnCheck.rows.map(r => r.column_name));
       const storeContextField = existingCols.has('store_context') ? 'o.store_context,' : 'NULL as store_context,';
       const frontendOriginField = existingCols.has('frontend_origin') ? 'o.frontend_origin,' : 'NULL as frontend_origin,';
+      const cancellationReasonField = existingCols.has('cancellation_reason')
+        ? 'o.cancellation_reason,'
+        : 'NULL as cancellation_reason,';
 
       const orderResult = await dbPool.query(
         `SELECT 
@@ -3977,11 +3980,14 @@ ${qrBlock}
          FROM information_schema.columns 
          WHERE table_schema = 'orders' 
            AND table_name = 'orders' 
-           AND column_name IN ('store_context', 'frontend_origin')`
+           AND column_name IN ('store_context', 'frontend_origin', 'cancellation_reason')`
       );
       const existingCols = new Set(columnCheck.rows.map(r => r.column_name));
       const storeContextField = existingCols.has('store_context') ? 'o.store_context,' : 'NULL as store_context,';
       const frontendOriginField = existingCols.has('frontend_origin') ? 'o.frontend_origin,' : 'NULL as frontend_origin,';
+      const cancellationReasonField = existingCols.has('cancellation_reason')
+        ? 'o.cancellation_reason,'
+        : 'NULL as cancellation_reason,';
 
       // Obtener datos del pedido enriquecidos para email
       const orderResult = await dbPool.query(
@@ -3996,6 +4002,7 @@ ${qrBlock}
           o.delivery_notes,
           ${storeContextField}
           ${frontendOriginField}
+          ${cancellationReasonField}
           b.business_group_id,
           b.slug AS business_slug,
           b.name AS business_name,
@@ -4092,7 +4099,25 @@ ${qrBlock}
         refunded: 'Tu pedido ha sido reembolsado',
       };
 
-      const statusMessage = statusMessages[newStatus] || `Tu pedido cambió de estado: ${oldStatus} → ${newStatus}`;
+      const cancellationReasonRaw =
+        typeof order.cancellation_reason === 'string' ? order.cancellation_reason.trim() : '';
+
+      let statusMessage =
+        statusMessages[newStatus] || `Tu pedido cambió de estado: ${oldStatus} → ${newStatus}`;
+
+      if (newStatus === 'cancelled' && cancellationReasonRaw) {
+        statusMessage = `${statusMessages.cancelled} (Motivo: ${cancellationReasonRaw})`;
+      }
+
+      const escapeHtml = (s: string) =>
+        String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+
+      const statusMessageEmail = escapeHtml(statusMessage);
       const userName = await this.getClientDisplayName(order.client_id);
       const previousStatusLabel = this.orderStatusLabelEs(oldStatus);
       const currentStatusLabel = this.orderStatusLabelEs(newStatus);
@@ -4132,7 +4157,7 @@ ${qrBlock}
         previousStatusLabel,
         currentStatusLabel,
         userName,
-        statusMessage,
+        statusMessage: statusMessageEmail,
         orderUrl,
         isPickup,
         deliveryAddressText: order.delivery_address_text,
@@ -4151,7 +4176,7 @@ ${qrBlock}
           previousStatusLabel,
           currentStatusLabel,
           userName,
-          statusMessage,
+          statusMessageEmail,
           orderUrl,
           order.business_id,
           order.business_group_id,

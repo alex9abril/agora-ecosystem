@@ -122,7 +122,8 @@ export const rebuildTemplate = (content: string, originalTemplate: string, logoU
       bodyContent = bodyContent.replace(logoRegex, (m) => m.replace(/src="[^"]*"/, `src="${logoUrl}"`));
       bodyContent = bodyContent.replace(/<img[^>]*alt="AGORA"[^>]*>/gi, (m) => m.replace(/src="[^"]*"/, `src="${logoUrl}"`));
     }
-    return headMatch[1] + '<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">' + bodyContent + '</body>' + bodyEndMatch[1];
+    const openingBodyTag = originalTemplate.match(/<body[^>]*>/i)?.[0] || '<body>';
+    return headMatch[1] + openingBodyTag + bodyContent + '</body>' + bodyEndMatch[1];
   }
   return originalTemplate;
 };
@@ -317,9 +318,9 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{subject}}</title>
+  <title>{{subject}} - AGORA</title>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+<body style="margin: 0; padding: 0; background-color: #333; font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #333;">
     <tr>
       <td align="center" style="padding: 40px 16px 18px 16px;">
@@ -343,9 +344,7 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
                 {{subject}}
               </div>
               <div style="height: 8px; line-height: 8px;">&nbsp;</div>
-              <div style="font-size: 13px; color: #6b7280; font-family: Arial, sans-serif;">
-                Mensaje para <span style="color: #2563eb; text-decoration: none;">{{to_email}}</span>
-              </div>
+              <div style="font-size: 13px; color: #6b7280; font-family: Arial, sans-serif;">Has recibido un mensaje de <strong>{{business_name}}</strong>.</div>
             </td>
           </tr>
           <tr>
@@ -358,7 +357,7 @@ export const defaultTemplates: Record<EmailTriggerType, string> = {
           <tr>
             <td align="center" style="padding: 0 28px 34px 28px;">
               <div style="font-size: 12px; color: #9ca3af; font-family: Arial, sans-serif;">
-                Si tienes alguna duda, responde a este correo.
+                Este mensaje fue enviado a {{to_email}}. Si tienes alguna duda, responde a este correo.
               </div>
             </td>
           </tr>
