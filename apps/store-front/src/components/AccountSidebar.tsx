@@ -11,6 +11,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import { useMessagesNotifications } from '@/contexts/MessagesContext';
 
 interface AccountSidebarProps {
@@ -55,7 +56,7 @@ export default function AccountSidebar({ activeTab = 'profile' }: AccountSidebar
     {
       id: 'messages',
       label: 'Mensajes',
-      icon: PersonIcon,
+      icon: MailOutlineIcon,
       href: '/messages',
     },
   ];
