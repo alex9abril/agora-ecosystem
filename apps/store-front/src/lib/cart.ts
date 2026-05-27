@@ -28,6 +28,9 @@ export interface CartItem {
   unit_price: number | string;
   variant_price_adjustment: number | string;
   item_subtotal: number | string;
+  installation_selected?: boolean;
+  installation_cost?: number | string;
+  installation_forced?: boolean;
   special_instructions?: string;
   product_name: string;
   product_description?: string;
@@ -58,6 +61,7 @@ export interface AddToCartPayload {
   variantSelections?: Record<string, string | string[]>;
   specialInstructions?: string;
   branchId?: string;
+  installationSelected?: boolean;
 }
 
 class CartService {
@@ -117,7 +121,11 @@ class CartService {
         quantity: requestBody.quantity,
         branchId: requestBody.branchId,
       });
-      
+
+      if (payload.installationSelected !== undefined) {
+        requestBody.installationSelected = !!payload.installationSelected;
+      }
+
       return await apiRequest<Cart>('/cart/items', {
         method: 'POST',
         body: JSON.stringify(requestBody),

@@ -65,6 +65,8 @@ export default function ProductDetailPage() {
     stock: number | null;
     allow_backorder?: boolean;
     backorder_lead_time_days?: number | null;
+    installation_cost?: number | null;
+    installation_forced?: boolean;
     collection_ids?: string[];
     collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
     is_active?: boolean;
@@ -125,6 +127,9 @@ export default function ProductDetailPage() {
             availability.backorder_lead_time_days !== undefined
               ? availability.backorder_lead_time_days
               : null,
+          installation_cost:
+            availability.installation_cost !== undefined ? (availability.installation_cost ?? null) : null,
+          installation_forced: availability.installation_forced === true,
           is_active:
             availability.is_active !== undefined
               ? availability.is_active
@@ -511,6 +516,13 @@ export default function ProductDetailPage() {
                 avail.backorder_lead_time_days !== undefined
                   ? avail.backorder_lead_time_days
                   : null,
+              installation_cost:
+                avail.installation_cost !== null && avail.installation_cost !== undefined
+                  ? avail.installation_cost
+                  : null,
+              installation_forced:
+                (avail.installation_cost !== null && avail.installation_cost !== undefined) &&
+                avail.installation_forced === true,
             }));
           
           if (availabilitiesToSave.length > 0) {

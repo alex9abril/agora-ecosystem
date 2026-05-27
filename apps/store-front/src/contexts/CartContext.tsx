@@ -16,7 +16,7 @@ interface CartContextType {
   loading: boolean;
   itemCount: number;
   isAnimating: boolean;
-  addItem: (productId: string, quantity: number, variantSelections?: Record<string, string | string[]>, specialInstructions?: string, branchId?: string, businessId?: string) => Promise<void>;
+  addItem: (productId: string, quantity: number, variantSelections?: Record<string, string | string[]>, specialInstructions?: string, branchId?: string, businessId?: string, installationSelected?: boolean) => Promise<void>;
   updateItem: (itemId: string, quantity: number, specialInstructions?: string) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -190,6 +190,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             variantSelections: item.variantSelections,
             specialInstructions: item.specialInstructions,
             branchId: item.branchId,
+            installationSelected: item.installationSelected,
           });
           
           successCount++;
@@ -278,13 +279,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
               unitPrice = product.branch_price;
             }
 
+            const configuredInstallationCost =
+              product.branch_installation_cost !== null && product.branch_installation_cost !== undefined
+                ? product.branch_installation_cost
+                : null;
+            const installationForced = product.branch_installation_forced === true;
+            const installationSelected =
+              configuredInstallationCost !== null &&
+              (installationForced || item.installationSelected === true);
+            const installationCostPerUnit =
+              installationSelected && configuredInstallationCost !== null ? configuredInstallationCost : 0;
+
             const cartItem: CartItem = {
               id: `guest-${item.productId}-${item.branchId || 'global'}-${index}`, // ID único para el item
               product_id: item.productId,
               quantity: item.quantity,
               unit_price: unitPrice,
               variant_price_adjustment: 0, // No calculamos ajustes de variantes en guest cart
-              item_subtotal: unitPrice * item.quantity,
+              item_subtotal: (unitPrice + installationCostPerUnit) * item.quantity,
+              installation_selected: installationSelected,
+              installation_cost: installationCostPerUnit,
+              installation_forced: installationForced,
               variant_selections: item.variantSelections,
               special_instructions: item.specialInstructions,
               product_name: product.name,
@@ -411,7 +426,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     variantSelections?: Record<string, string | string[]>,
     specialInstructions?: string,
     branchId?: string,
-    businessId?: string
+    businessId?: string,
+    installationSelected?: boolean
   ) => {
     try {
       // Validar productId antes de proceder
@@ -448,6 +464,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           variantSelections,
           specialInstructions,
           branchId,
+          installationSelected,
         });
         const enriched = await enrichCartWithTaxes(updatedCart);
         setCart(enriched);
@@ -467,7 +484,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           branchId,
           businessIdToUse,
           variantSelections,
-          specialInstructions
+          specialInstructions,
+          installationSelected
         );
         // Actualizar carrito completo (carga productos y convierte a formato Cart)
         await loadGuestCart();

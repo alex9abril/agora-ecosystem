@@ -50,6 +50,24 @@ export class ProductBranchAvailabilityDto {
   @Min(0)
   @Type(() => Number)
   backorder_lead_time_days?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Costo de instalaciÃ³n por unidad en esta sucursal (NULL = no ofrece instalaciÃ³n)',
+    example: 250.0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  installation_cost?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Si la instalaciÃ³n es forzada en esta sucursal para este producto',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  installation_forced?: boolean;
 }
 
 export class UpdateProductBranchAvailabilityDto {
@@ -97,6 +115,24 @@ export class UpdateProductBranchAvailabilityDto {
   @Min(0)
   @Type(() => Number)
   backorder_lead_time_days?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Costo de instalaciÃ³n por unidad en esta sucursal (NULL = no ofrece instalaciÃ³n)',
+    example: 250.0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  installation_cost?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Si la instalaciÃ³n es forzada en esta sucursal para este producto',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  installation_forced?: boolean;
 }
 
 export class BulkUpdateProductBranchAvailabilityDto {

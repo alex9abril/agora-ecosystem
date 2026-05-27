@@ -410,6 +410,18 @@ export default function CartPage() {
                             : parseFloat(String(item.item_subtotal || 0));
                         const itemTaxTotal = itemTaxBreakdown?.total_tax || 0;
                         const itemGrandTotal = itemNetSubtotal + itemTaxTotal;
+                        const installationSelected = item.installation_selected === true;
+                        const installationCostRaw = (item as any).installation_cost;
+                        const installationCost =
+                          typeof installationCostRaw === 'string'
+                            ? Number(installationCostRaw)
+                            : typeof installationCostRaw === 'number'
+                              ? installationCostRaw
+                              : 0;
+                        const safeInstallationCost = Number.isFinite(installationCost) ? installationCost : 0;
+                        const installationLineTotal = installationSelected
+                          ? safeInstallationCost * (item.quantity || 0)
+                          : 0;
                         const shouldShowTaxBreakdown = false; // Desglose desactivado globalmente
 
                         return (
@@ -478,6 +490,26 @@ export default function CartPage() {
                                         </p>
                                       )}
                                       <div className="flex items-center gap-6 mt-2">
+                                        {false && installationLineTotal > 0 && (
+                                          <div>
+                                            <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                              InstalaciÃ³n
+                                            </span>
+                                            <p className="text-base font-normal text-gray-700 mt-0.5">
+                                              {formatPrice(installationLineTotal)}
+                                            </p>
+                                          </div>
+                                        )}
+                                        {installationLineTotal > 0 && (
+                                          <div>
+                                            <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                              Instalación
+                                            </span>
+                                            <p className="text-base font-normal text-gray-700 mt-0.5">
+                                              {formatPrice(installationLineTotal)}
+                                            </p>
+                                          </div>
+                                        )}
                                         <div>
                                           <span className="text-xs text-gray-500 uppercase tracking-wide">
                                             Subtotal
@@ -595,6 +627,12 @@ export default function CartPage() {
               <div className="bg-white rounded-lg shadow-sm p-6 sticky top-6">
                 <h2 className="text-xl font-normal text-gray-900 mb-6">Resumen del Pedido</h2>
                 <div className="space-y-4 mb-6">
+                  {false && (
+                    <div className="flex justify-between items-center py-2">
+                      <span className="text-gray-600">Instalación</span>
+                      <span className="text-gray-900 font-normal">{formatPrice(0)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-2">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="text-gray-900 font-normal">{formatPrice(subtotal)}</span>

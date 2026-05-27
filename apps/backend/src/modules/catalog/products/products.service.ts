@@ -728,7 +728,7 @@ export class ProductsService {
 
     // Si se proporciona branchId, incluir datos de disponibilidad de la sucursal
     const branchAvailabilitySelect = branchId 
-      ? `, pba.price as branch_price, pba.stock as branch_stock, pba.is_enabled as branch_is_enabled`
+      ? `, pba.price as branch_price, pba.stock as branch_stock, pba.is_enabled as branch_is_enabled, pba.installation_cost as branch_installation_cost, pba.installation_forced as branch_installation_forced`
       : '';
     
     const branchAvailabilityJoin = branchId
@@ -792,7 +792,7 @@ export class ProductsService {
                p.category_id, p.is_available, p.is_featured, p.variants, p.nutritional_info,
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.metadata, p.created_at, p.updated_at,
-               b.name, pc.name, pc.business_id, pi_main.file_path${branchId ? ', pba.price, pba.stock, pba.is_enabled' : ''}
+               b.name, pc.name, pc.business_id, pi_main.file_path${branchId ? ', pba.price, pba.stock, pba.is_enabled, pba.installation_cost, pba.installation_forced' : ''}
     `;
 
     try {
@@ -981,6 +981,14 @@ export class ProductsService {
         branch_is_enabled: branchId && row.branch_is_enabled !== null && row.branch_is_enabled !== undefined
           ? row.branch_is_enabled
           : undefined,
+        branch_installation_cost:
+          branchId && row.branch_installation_cost !== null && row.branch_installation_cost !== undefined
+            ? parseFloat(row.branch_installation_cost.toString())
+            : undefined,
+        branch_installation_forced:
+          branchId && row.branch_installation_forced !== null && row.branch_installation_forced !== undefined
+            ? !!row.branch_installation_forced
+            : undefined,
         // Campos de farmacia
         requires_prescription: row.requires_prescription || false,
         age_restriction: row.age_restriction || null,
@@ -1593,6 +1601,8 @@ export class ProductsService {
           pba.stock,
           COALESCE(pba.allow_backorder, FALSE) AS allow_backorder,
           pba.backorder_lead_time_days,
+          pba.installation_cost,
+          COALESCE(pba.installation_forced, FALSE) AS installation_forced,
           collections.collection_ids,
           collections.collection_list,
           -- Construir dirección completa desde core.addresses si existe
@@ -1646,6 +1656,11 @@ export class ProductsService {
             row.backorder_lead_time_days !== null && row.backorder_lead_time_days !== undefined
               ? parseInt(row.backorder_lead_time_days.toString(), 10)
               : null,
+          installation_cost:
+            row.installation_cost !== null && row.installation_cost !== undefined
+              ? parseFloat(row.installation_cost.toString())
+              : null,
+          installation_forced: row.installation_forced === true,
           is_active: row.branch_is_active !== undefined ? row.branch_is_active : true,
         })),
       };
@@ -1690,6 +1705,8 @@ export class ProductsService {
       collection_ids?: string[] | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
+      installation_cost?: number | null;
+      installation_forced?: boolean;
     }>
   ) {
     if (!dbPool) {
@@ -1752,15 +1769,25 @@ export class ProductsService {
           }
         }
 
+        const installationCost =
+          availability.installation_cost === undefined ? null : (availability.installation_cost ?? null);
+
+        const installationForced =
+          installationCost === null ? false : availability.installation_forced === true;
+
+        if (installationForced && installationCost === null) {
+          throw new BadRequestException('No se puede forzar la instalación si no hay costo de instalación');
+        }
+
         const shouldEnable = availability.is_enabled || collectionIds.length > 0;
 
         if (shouldEnable) {
           // Si está habilitada, insertar o actualizar
           const upsertQuery = `
             INSERT INTO catalog.product_branch_availability (
-              product_id, branch_id, is_enabled, price, stock, allow_backorder, backorder_lead_time_days, is_active, updated_at
+              product_id, branch_id, is_enabled, price, stock, allow_backorder, backorder_lead_time_days, installation_cost, installation_forced, is_active, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, CURRENT_TIMESTAMP)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, CURRENT_TIMESTAMP)
             ON CONFLICT (product_id, branch_id)
             DO UPDATE SET
               is_enabled = EXCLUDED.is_enabled,
@@ -1768,6 +1795,8 @@ export class ProductsService {
               stock = EXCLUDED.stock,
               allow_backorder = EXCLUDED.allow_backorder,
               backorder_lead_time_days = EXCLUDED.backorder_lead_time_days,
+              installation_cost = EXCLUDED.installation_cost,
+              installation_forced = EXCLUDED.installation_forced,
               is_active = TRUE,
               updated_at = CURRENT_TIMESTAMP
           `;
@@ -1780,6 +1809,8 @@ export class ProductsService {
             availability.stock ?? null,
             availability.allow_backorder ?? false,
             availability.backorder_lead_time_days ?? null,
+            installationCost,
+            installationForced,
           ]);
 
           // Limpiar asignaciones previas y reinsertar solo las seleccionadas como activas

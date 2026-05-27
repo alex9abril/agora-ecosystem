@@ -84,6 +84,9 @@ export interface OrderItem {
   original_quantity?: number; // Cantidad original solicitada
   variant_selection?: any;
   item_subtotal: number;
+  installation_selected?: boolean;
+  installation_cost?: number;
+  installation_forced?: boolean;
   special_instructions?: string;
   quotation_id?: string; // ID de cotización de Skydropx
   shipping_carrier?: string; // Paquetería seleccionada (ej: "FEDEX", "DHL", "ESTAFETA")

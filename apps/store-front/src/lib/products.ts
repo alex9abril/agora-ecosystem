@@ -55,6 +55,8 @@ export interface Product {
   branch_allow_backorder?: boolean;
   branch_backorder_lead_time_days?: number | null;
   branch_backorder_notes?: string | null;
+  branch_installation_cost?: number | null;
+  branch_installation_forced?: boolean;
   /** Metadatos adicionales clave-valor (ej. Ubicación, Marca) */
   metadata?: Record<string, string> | null;
 }
@@ -98,6 +100,8 @@ export interface ProductBranchAvailability {
   allow_backorder?: boolean;
   backorder_lead_time_days?: number | null;
   backorder_notes?: string | null;
+  installation_cost?: number | null;
+  installation_forced?: boolean;
   is_active: boolean;
   taxed_price?: number; // Precio final con impuestos (cálculo en frontend)
   compare_at_price?: number; // Precio de referencia para descuentos en la misma base fiscal

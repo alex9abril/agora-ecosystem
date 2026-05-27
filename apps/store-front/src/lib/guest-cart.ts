@@ -10,6 +10,7 @@ export interface GuestCartItem {
   specialInstructions?: string;
   branchId?: string;
   businessId?: string;
+  installationSelected?: boolean;
   addedAt: string;
 }
 
@@ -64,7 +65,8 @@ export const guestCartService = {
     branchId?: string,
     businessId?: string,
     variantSelections?: Record<string, string | string[]>,
-    specialInstructions?: string
+    specialInstructions?: string,
+    installationSelected?: boolean
   ): GuestCart {
     // Validar productId
     if (!productId || typeof productId !== 'string') {
@@ -100,6 +102,9 @@ export const guestCartService = {
     if (existingIndex >= 0) {
       // Actualizar cantidad
       cart.items[existingIndex].quantity += quantity;
+      if (installationSelected !== undefined) {
+        cart.items[existingIndex].installationSelected = !!installationSelected;
+      }
     } else {
       // Agregar nuevo item
       cart.items.push({
@@ -109,6 +114,7 @@ export const guestCartService = {
         businessId,
         variantSelections,
         specialInstructions,
+        installationSelected: installationSelected !== undefined ? !!installationSelected : undefined,
         addedAt: new Date().toISOString(),
       });
     }

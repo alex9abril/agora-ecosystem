@@ -303,6 +303,8 @@ export const productsService = {
       stock: number | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
+      installation_cost?: number | null;
+      installation_forced?: boolean;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
       collection_ids?: string[];
       collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
@@ -318,6 +320,8 @@ export const productsService = {
           stock: number | null;
           allow_backorder?: boolean;
           backorder_lead_time_days?: number | null;
+          installation_cost?: number | null;
+          installation_forced?: boolean;
           is_active?: boolean;
           collection_ids?: string[];
           collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
@@ -346,6 +350,8 @@ export const productsService = {
       collection_ids?: string[] | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
+      installation_cost?: number | null;
+      installation_forced?: boolean;
     }>
   ): Promise<{
     product_id: string;
@@ -357,6 +363,8 @@ export const productsService = {
       stock: number | null;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
+      installation_cost?: number | null;
+      installation_forced?: boolean;
       is_active: boolean;
       collection_ids?: string[];
       collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
@@ -373,6 +381,8 @@ export const productsService = {
           stock: number | null;
           allow_backorder?: boolean;
           backorder_lead_time_days?: number | null;
+          installation_cost?: number | null;
+          installation_forced?: boolean;
           is_active: boolean;
         }>;
       }>(`/catalog/products/${productId}/branch-availability`, {

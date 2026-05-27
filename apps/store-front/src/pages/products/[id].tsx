@@ -54,6 +54,7 @@ export default function ProductDetailPage() {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string | string[]>>({});
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [installationSelected, setInstallationSelected] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [storedBranch, setStoredBranch] = useState<{ id: string; name: string } | null>(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -914,7 +915,8 @@ export default function ProductDetailPage() {
         selectedVariants,
         specialInstructions || undefined,
         branchIdToUse,
-        businessIdToUse
+        businessIdToUse,
+        effectiveInstallationSelected
       );
       
       console.log('✅ [handleAddToCart] Producto agregado exitosamente');
@@ -933,6 +935,43 @@ export default function ProductDetailPage() {
       setAddingToCart(false);
     }
   };
+
+  // Instalación / servicio (config por sucursal)
+  const getInstallationConfig = (): { cost: number | null; forced: boolean; available: boolean } => {
+    if (!product) return { cost: null, forced: false, available: false };
+
+    if (contextType === 'sucursal') {
+      const cost =
+        product.branch_installation_cost !== null && product.branch_installation_cost !== undefined
+          ? Number(product.branch_installation_cost)
+          : null;
+      const forced = product.branch_installation_forced === true;
+      return { cost, forced, available: cost !== null && !Number.isNaN(cost) };
+    }
+
+    const availability = getSelectedAvailability();
+    const costRaw = availability?.installation_cost;
+    const cost = costRaw !== null && costRaw !== undefined ? Number(costRaw) : null;
+    const forced = availability?.installation_forced === true;
+    return { cost, forced, available: cost !== null && !Number.isNaN(cost) };
+  };
+
+  const installationConfig = getInstallationConfig();
+  const effectiveInstallationSelected =
+    installationConfig.available && (installationConfig.forced || installationSelected);
+  const installationCostPerUnit =
+    effectiveInstallationSelected && installationConfig.cost !== null ? installationConfig.cost : 0;
+
+  useEffect(() => {
+    if (!installationConfig.available) {
+      if (installationSelected) setInstallationSelected(false);
+      return;
+    }
+
+    if (installationConfig.forced && !installationSelected) {
+      setInstallationSelected(true);
+    }
+  }, [installationConfig.available, installationConfig.forced, installationSelected]);
 
   if (loading) {
     return (
@@ -988,7 +1027,7 @@ export default function ProductDetailPage() {
   // Calcular precio total con variantes
   const calculateTotalPrice = () => {
     const unitPrice = getSelectedDisplayPrice();
-    return unitPrice * quantity;
+    return (unitPrice + installationCostPerUnit) * quantity;
   };
 
   const displayPrice = getSelectedDisplayPrice();
@@ -1279,6 +1318,38 @@ export default function ProductDetailPage() {
                   >
                     <span className="text-xl">+</span>
                   </button>
+                </div>
+              </div>
+
+              {/* Instalación */}
+              <div className="mb-6">
+                <div className="flex items-start justify-between gap-4 p-4 border border-gray-200 rounded-lg bg-white">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">Instalación</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {installationConfig.available
+                        ? 'Agrega el servicio de instalación a este producto.'
+                        : contextType !== 'sucursal' && !selectedBranch
+                        ? 'Selecciona una sucursal para ver si hay instalación disponible.'
+                        : 'Este producto no tiene instalación disponible en esta sucursal.'}
+                    </p>
+                    {installationConfig.available && (
+                      <p className="text-xs text-gray-700 mt-2">
+                        Costo: <span className="font-medium">{formatPrice(installationConfig.cost || 0)}</span>
+                        {installationConfig.forced ? ' (forzada)' : ''}
+                      </p>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={effectiveInstallationSelected}
+                      onChange={(e) => setInstallationSelected(e.target.checked)}
+                      disabled={!installationConfig.available || installationConfig.forced}
+                      className="h-4 w-4 rounded border-gray-300 text-black focus:ring-black disabled:opacity-50"
+                    />
+                    Agregar
+                  </label>
                 </div>
               </div>
 

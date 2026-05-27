@@ -313,6 +313,8 @@ export default function ProductsPage() {
       collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
       allow_backorder?: boolean;
       backorder_lead_time_days?: number | null;
+      installation_cost?: number | null;
+      installation_forced?: boolean;
       is_active?: boolean; // Estado activo/inactivo de la sucursal
     }>
   >([]);
@@ -821,6 +823,9 @@ export default function ProductsPage() {
               avail.backorder_lead_time_days !== undefined
                 ? avail.backorder_lead_time_days
                 : null,
+            installation_cost:
+              avail.installation_cost !== undefined ? (avail.installation_cost ?? null) : null,
+            installation_forced: avail.installation_forced === true,
             is_active:
               avail.is_active !== undefined
                 ? avail.is_active
@@ -866,6 +871,13 @@ export default function ProductsPage() {
             avail.backorder_lead_time_days !== undefined
               ? avail.backorder_lead_time_days
               : null,
+          installation_cost:
+            avail.installation_cost !== null && avail.installation_cost !== undefined
+              ? avail.installation_cost
+              : null,
+          installation_forced:
+            (avail.installation_cost !== null && avail.installation_cost !== undefined) &&
+            avail.installation_forced === true,
         }));
 
       if (availabilitiesToSave.length > 0) {
@@ -5650,6 +5662,8 @@ interface BranchAvailabilitySectionProps {
     stock: number | null;
     allow_backorder?: boolean;
     backorder_lead_time_days?: number | null;
+    installation_cost?: number | null;
+    installation_forced?: boolean;
     collection_ids?: string[];
     collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
     is_active?: boolean; // Estado activo/inactivo de la sucursal
@@ -5664,6 +5678,8 @@ interface BranchAvailabilitySectionProps {
         stock: number | null;
         allow_backorder?: boolean;
         backorder_lead_time_days?: number | null;
+        installation_cost?: number | null;
+        installation_forced?: boolean;
         collection_ids?: string[];
         collections?: Array<{ id: string; name: string; slug: string; status?: string }>;
         is_active?: boolean;
@@ -5722,6 +5738,8 @@ function BranchAvailabilitySection({
         stock: null,
         allow_backorder: false,
         backorder_lead_time_days: null,
+        installation_cost: null,
+        installation_forced: false,
         collection_ids: [],
         collections: [],
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
@@ -5788,6 +5806,45 @@ function BranchAvailabilitySection({
     );
   };
 
+  const handleToggleInstallationEnabled = (branchId: string) => {
+    setBranchAvailabilities((prev) =>
+      prev.map((avail) => {
+        if (avail.branch_id !== branchId) return avail;
+        const enabled = avail.installation_cost !== null && avail.installation_cost !== undefined;
+        return enabled
+          ? { ...avail, installation_cost: null, installation_forced: false }
+          : { ...avail, installation_cost: 0, installation_forced: false };
+      }),
+    );
+  };
+
+  const handleInstallationCostChange = (branchId: string, value: string) => {
+    const cleaned = value.replace(/,/g, "");
+    const next = cleaned === "" ? null : parseFloat(cleaned);
+    setBranchAvailabilities((prev) =>
+      prev.map((avail) => {
+        if (avail.branch_id !== branchId) return avail;
+        const normalized = next === null || Number.isNaN(next) ? null : next;
+        return {
+          ...avail,
+          installation_cost: normalized,
+          installation_forced: normalized === null ? false : avail.installation_forced === true,
+        };
+      }),
+    );
+  };
+
+  const handleToggleInstallationForced = (branchId: string) => {
+    setBranchAvailabilities((prev) =>
+      prev.map((avail) => {
+        if (avail.branch_id !== branchId) return avail;
+        const enabled = avail.installation_cost !== null && avail.installation_cost !== undefined;
+        if (!enabled) return { ...avail, installation_forced: false };
+        return { ...avail, installation_forced: !(avail.installation_forced === true) };
+      }),
+    );
+  };
+
   // Asegurar que todas las sucursales (no archivadas) estén en la lista
   // Sincronizar branchAvailabilities con availableBusinesses
   useEffect(() => {
@@ -5807,6 +5864,8 @@ function BranchAvailabilitySection({
             stock: null,
             allow_backorder: false,
             backorder_lead_time_days: null,
+            installation_cost: null,
+            installation_forced: false,
             collection_ids: [],
             collections: [],
             is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
@@ -5840,6 +5899,8 @@ function BranchAvailabilitySection({
         stock: null,
         allow_backorder: false,
         backorder_lead_time_days: null,
+        installation_cost: null,
+        installation_forced: false,
         collection_ids: [],
         collections: [],
         is_active: business.is_active ?? true, // Incluir estado activo de la sucursal
@@ -6027,6 +6088,68 @@ function BranchAvailabilitySection({
                             }
                             className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 disabled:bg-gray-100 dark:disabled:bg-neutral-800 disabled:text-gray-500"
                           />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 border-t border-gray-100 dark:border-neutral-700 pt-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                            Instalación
+                          </p>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                            <input
+                              type="checkbox"
+                              checked={availability.installation_cost !== null && availability.installation_cost !== undefined}
+                              onChange={() => handleToggleInstallationEnabled(availability.branch_id)}
+                              disabled={!availability.is_enabled || !isBranchActive}
+                              className="h-4 w-4 rounded border-gray-300 dark:border-neutral-500 text-gray-600 focus:ring-gray-400 dark:focus:ring-neutral-500 disabled:opacity-50"
+                            />
+                            Activar costo de instalación
+                          </label>
+
+                          <div>
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              Costo de instalación
+                            </label>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={formatPriceForInput(availability.installation_cost ?? null)}
+                              onChange={(e) => handleInstallationCostChange(availability.branch_id, e.target.value)}
+                              placeholder="0.00"
+                              disabled={
+                                !availability.is_enabled ||
+                                !isBranchActive ||
+                                availability.installation_cost === null ||
+                                availability.installation_cost === undefined
+                              }
+                              className="w-full px-3 py-2 text-sm text-right border border-gray-200 dark:border-neutral-600 rounded bg-white dark:bg-neutral-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 disabled:bg-gray-100 dark:disabled:bg-neutral-800 disabled:text-gray-500 tabular-nums"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-3">
+                          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                            <input
+                              type="checkbox"
+                              checked={availability.installation_forced === true}
+                              onChange={() => handleToggleInstallationForced(availability.branch_id)}
+                              disabled={
+                                !availability.is_enabled ||
+                                !isBranchActive ||
+                                availability.installation_cost === null ||
+                                availability.installation_cost === undefined
+                              }
+                              className="h-4 w-4 rounded border-gray-300 dark:border-neutral-500 text-gray-600 focus:ring-gray-400 dark:focus:ring-neutral-500 disabled:opacity-50"
+                            />
+                            Forzar instalación
+                          </label>
+                          <p className="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                            Si está activado, la tienda no permitirá desactivar la instalación para este producto en esta sucursal.
+                          </p>
                         </div>
                       </div>
 

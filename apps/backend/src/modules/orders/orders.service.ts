@@ -84,6 +84,9 @@ export class OrdersService {
           sci.unit_price,
           sci.variant_price_adjustment,
           sci.item_subtotal,
+          sci.installation_selected,
+          sci.installation_cost,
+          sci.installation_forced,
           sci.special_instructions,
           sci.branch_id,
           p.name as product_name,
@@ -475,9 +478,9 @@ export class OrdersService {
           await client.query(
             `INSERT INTO orders.order_items (
               order_id, product_id, item_name, item_price,
-              quantity, original_quantity, variant_selection, item_subtotal, special_instructions, tax_breakdown, 
+              quantity, original_quantity, variant_selection, item_subtotal, installation_selected, installation_cost, installation_forced, special_instructions, tax_breakdown, 
               quotation_id, rate_id, shipping_carrier, shipping_service
-            ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            ) VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
             [
               order.id,
               item.product_id,
@@ -486,6 +489,9 @@ export class OrdersService {
               item.quantity, // quantity y original_quantity son iguales al crear el pedido
               item.variant_selections ? JSON.stringify(item.variant_selections) : null,
               item.item_subtotal,
+              item.installation_selected === true,
+              item.installation_cost ?? 0,
+              item.installation_forced === true,
               item.special_instructions || null,
               JSON.stringify(taxBreakdown),
               quotationId, // quotation_id de Skydropx (si aplica)
@@ -1183,6 +1189,9 @@ export class OrdersService {
           oi.quantity,
           oi.variant_selection,
           oi.item_subtotal,
+          oi.installation_selected,
+          oi.installation_cost,
+          oi.installation_forced,
           oi.special_instructions,
           oi.tax_breakdown,
           oi.quotation_id,
@@ -2213,6 +2222,9 @@ export class OrdersService {
           COALESCE(original_quantity, quantity) as original_quantity,
           variant_selection,
           item_subtotal,
+          installation_selected,
+          installation_cost,
+          installation_forced,
           special_instructions,
           quotation_id,
           rate_id,

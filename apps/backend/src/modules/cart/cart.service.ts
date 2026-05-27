@@ -92,6 +92,9 @@ export class CartService {
           sci.unit_price,
           sci.variant_price_adjustment,
           sci.item_subtotal,
+          sci.installation_selected,
+          sci.installation_cost,
+          sci.installation_forced,
           sci.special_instructions,
           sci.branch_id,
           sci.created_at,
@@ -317,20 +320,43 @@ export class CartService {
       // Determinar el precio a usar
       // Si hay branchId y tiene precio personalizado, usarlo; sino usar precio global
       let unitPrice = parseFloat(product.price);
+      let installationSelected = false;
+      let installationForced = false;
+      let installationCostPerUnit = 0;
       
-      if (addItemDto.branchId) {
+      // La instalaciÃ³n se configura por sucursal. Si no hay branchId explÃ­cito, usar la sucursal dueÃ±a del producto.
+      const installationBranchId = addItemDto.branchId || product.business_id;
+
+      if (installationBranchId) {
         const availabilityResult = await client.query(
-          `SELECT price FROM catalog.product_branch_availability 
+          `SELECT price, installation_cost, installation_forced FROM catalog.product_branch_availability 
            WHERE product_id = $1 AND branch_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
-          [addItemDto.productId, addItemDto.branchId]
+          [addItemDto.productId, installationBranchId]
         );
         
-        if (availabilityResult.rows.length > 0 && availabilityResult.rows[0].price !== null) {
-          unitPrice = parseFloat(availabilityResult.rows[0].price);
+        if (availabilityResult.rows.length > 0) {
+          const availability = availabilityResult.rows[0];
+
+          if (availability.price !== null && availability.price !== undefined) {
+            unitPrice = parseFloat(availability.price);
+          }
+
+          const configuredInstallationCost =
+            availability.installation_cost !== null && availability.installation_cost !== undefined
+              ? parseFloat(String(availability.installation_cost))
+              : null;
+
+          if (configuredInstallationCost !== null && Number.isFinite(configuredInstallationCost)) {
+            installationForced = availability.installation_forced === true;
+            installationSelected = installationForced || addItemDto.installationSelected === true;
+            installationCostPerUnit = installationSelected ? configuredInstallationCost : 0;
+          }
         }
       }
       
-      const itemSubtotal = (unitPrice + variantPriceAdjustment) * addItemDto.quantity;
+      const perUnitSubtotal =
+        unitPrice + variantPriceAdjustment + (installationSelected ? installationCostPerUnit : 0);
+      const itemSubtotal = perUnitSubtotal * addItemDto.quantity;
 
       // Normalizar variant_selections para el constraint UNIQUE
       const variantSelectionsJson = JSON.stringify(variantSelections);
@@ -346,15 +372,30 @@ export class CartService {
            AND variant_selections @> $3::jsonb
            AND variant_selections <@ $3::jsonb
            AND special_instructions_normalized = $4
-           AND (branch_id IS NOT DISTINCT FROM $5::uuid)`,
-        [cart.id, addItemDto.productId, variantSelectionsJson, specialInstructionsNormalized, addItemDto.branchId || null]
+           AND (branch_id IS NOT DISTINCT FROM $5::uuid)
+           AND installation_selected = $6
+           AND installation_cost = $7`,
+        [
+          cart.id,
+          addItemDto.productId,
+          variantSelectionsJson,
+          specialInstructionsNormalized,
+          addItemDto.branchId || null,
+          installationSelected,
+          installationCostPerUnit,
+        ]
       );
 
       if (existingItemResult.rows.length > 0) {
         // Item idéntico existe, actualizar cantidad
         const existingItem = existingItemResult.rows[0];
         const newQuantity = existingItem.quantity + addItemDto.quantity;
-        const newSubtotal = (unitPrice + variantPriceAdjustment) * newQuantity;
+        const existingUnitPrice = parseFloat(String(existingItem.unit_price || 0));
+        const existingVariantAdj = parseFloat(String(existingItem.variant_price_adjustment || 0));
+        const existingInstallationUnit = existingItem.installation_selected
+          ? parseFloat(String(existingItem.installation_cost || 0))
+          : 0;
+        const newSubtotal = (existingUnitPrice + existingVariantAdj + existingInstallationUnit) * newQuantity;
 
         await client.query(
           `UPDATE orders.shopping_cart_items
@@ -380,8 +421,9 @@ export class CartService {
       await client.query(
         `INSERT INTO orders.shopping_cart_items (
           cart_id, product_id, variant_selections, quantity,
-          unit_price, variant_price_adjustment, item_subtotal, special_instructions, branch_id
-        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)`,
+          unit_price, variant_price_adjustment, item_subtotal, special_instructions, branch_id,
+          installation_selected, installation_cost, installation_forced
+        ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         [
           cart.id,
           addItemDto.productId,
@@ -392,6 +434,9 @@ export class CartService {
           itemSubtotal,
           addItemDto.specialInstructions || null,
           addItemDto.branchId || null, // Guardar branch_id si está disponible
+          installationSelected,
+          installationCostPerUnit,
+          installationForced,
         ]
       );
 
@@ -452,7 +497,10 @@ export class CartService {
         paramIndex++;
 
         // Recalcular subtotal
-        const newSubtotal = (parseFloat(item.unit_price) + parseFloat(item.variant_price_adjustment || 0)) * updateItemDto.quantity;
+        const installationUnit = item.installation_selected ? parseFloat(item.installation_cost || 0) : 0;
+        const newSubtotal =
+          (parseFloat(item.unit_price) + parseFloat(item.variant_price_adjustment || 0) + installationUnit) *
+          updateItemDto.quantity;
         updates.push(`item_subtotal = $${paramIndex}`);
         values.push(newSubtotal);
         paramIndex++;

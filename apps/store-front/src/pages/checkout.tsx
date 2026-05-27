@@ -3752,6 +3752,12 @@ export default function CheckoutPage() {
 
                 {/* Totales */}
                 <div className="space-y-3 mb-6">
+                  {false && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Instalación</span>
+                      <span className="text-gray-900">{formatPrice(0)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="text-gray-900">{formatPrice(subtotal)}</span>

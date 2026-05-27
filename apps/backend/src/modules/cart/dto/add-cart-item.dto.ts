@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsInt, Min, IsOptional, IsString, IsObject, ValidateNested, Matches } from 'class-validator';
+import { IsUUID, IsInt, Min, IsOptional, IsString, IsObject, ValidateNested, Matches, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AddCartItemDto {
@@ -49,5 +49,14 @@ export class AddCartItemDto {
     message: 'El branchId debe ser un UUID válido',
   })
   branchId?: string;
+
+  @ApiProperty({
+    description: 'Si el usuario seleccionÃ³ agregar instalaciÃ³n (cuando aplica)',
+    example: false,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'installationSelected debe ser booleano' })
+  installationSelected?: boolean;
 }
 

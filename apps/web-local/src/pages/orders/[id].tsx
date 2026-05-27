@@ -1306,6 +1306,12 @@ export default function OrderDetailPage() {
                             </td>
                             <td className="py-4 px-4 text-right">
                               <span className="text-sm font-medium text-gray-900">{formatCurrency(parseFloat(item.item_subtotal.toString()))}</span>
+                              {item.installation_selected && (item.installation_cost || 0) > 0 && (
+                                <div className="mt-1 text-[11px] text-gray-500">
+                                  Instalación: {formatCurrency((item.installation_cost || 0) * item.quantity)}
+                                  {item.installation_forced ? ' (forzada)' : ''}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
