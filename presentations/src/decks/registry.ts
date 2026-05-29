@@ -1,3 +1,4 @@
+import { comercialAgoraDeck } from "./comercial-agora";
 import { kickoffQardealCoreDeck } from "./kickoff-qardeal-core";
 import { statusSemanalQardealCoreDeck } from "./status-semanal-qardeal-core";
 import { statusSemanalQardealCore27MayDeck } from "./status-semanal-qardeal-core-27may";
@@ -5,6 +6,7 @@ import type { DeckMeta } from "../types";
 
 /** Registro central: añade aquí nuevas presentaciones. */
 export const deckRegistry: DeckMeta[] = [
+  comercialAgoraDeck,
   statusSemanalQardealCore27MayDeck,
   statusSemanalQardealCoreDeck,
   kickoffQardealCoreDeck,

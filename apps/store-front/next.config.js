@@ -8,6 +8,12 @@ const nextConfig = {
       process.env.GOOGLE_MAPS_API_KEY ||
       (process.env.NODE_ENV === 'development' ? process.env.GOOGLE_MAPS_API_KEY : undefined),
   },
+  async rewrites() {
+    return [
+      // URL limpia para la presentación comercial estática (public/presentacion.html)
+      { source: '/conocenos', destination: '/presentacion.html' },
+    ]
+  },
 }
 
 module.exports = nextConfig

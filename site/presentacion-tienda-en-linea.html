@@ -1,0 +1,2290 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agora Marketplace | Tu tienda en línea completa</title>
+  <meta name="description" content="Agora Marketplace es una tienda en línea completa: catálogo cargado desde tu DMS, checkout, pagos con Karlo Pay y logística con Skydropx. Tu sucursal solo prepara y entrega.">
+  <style>
+    :root {
+      --bg: #f5f8ff;
+      --ink: #0f172a;
+      --ink-2: #1f2937;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --card: #ffffff;
+      --blue: #2563eb;
+      --indigo: #4f46e5;
+      --violet: #7c3aed;
+      --cyan: #06b6d4;
+      --mint: #10b981;
+      --teal: #0d9488;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --red: #dc2626;
+      --dark: #0b1220;
+      --soft: rgba(37, 99, 235, 0.08);
+      --shadow-soft: 0 12px 40px rgba(15, 23, 42, 0.08);
+      --shadow-strong: 0 32px 80px rgba(37, 99, 235, 0.18);
+      --radius: 22px;
+      --nav-h: 76px;
+      --max: 1200px;
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 24px); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 5% 0%, rgba(124, 58, 237, 0.18), transparent 38%),
+        radial-gradient(circle at 95% 5%, rgba(6, 182, 212, 0.18), transparent 32%),
+        radial-gradient(circle at 50% 100%, rgba(244, 63, 94, 0.10), transparent 38%),
+        linear-gradient(180deg, #f5f8ff 0%, #eef4ff 55%, #fff5fb 100%);
+      color: var(--ink);
+    }
+    a { color: inherit; }
+
+    /* Header */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      height: var(--nav-h);
+      background: rgba(245, 248, 255, 0.78);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+      backdrop-filter: blur(16px);
+    }
+    .topbar-inner {
+      max-width: var(--max);
+      height: 100%;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .logo-space {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      height: 48px;
+      padding: 4px 8px;
+      border-radius: 12px;
+      text-decoration: none;
+      color: var(--dark);
+      transition: background 160ms ease;
+    }
+    .logo-space:hover { background: rgba(15, 23, 42, 0.04); }
+    .logo-space img {
+      height: 36px;
+      width: auto;
+      display: block;
+    }
+    .logo-space .tagline {
+      font-size: 10.5px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--blue);
+      line-height: 1;
+      border-left: 1px solid var(--line);
+      padding-left: 10px;
+    }
+    @media (max-width: 680px) {
+      .logo-space .tagline { display: none; }
+      .logo-space img { height: 32px; }
+    }
+    .menu {
+      list-style: none;
+      margin: 0 0 0 auto;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .menu a {
+      display: block;
+      padding: 9px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 800;
+      text-decoration: none;
+      transition: color 160ms ease, background 160ms ease;
+    }
+    .menu a:hover,
+    .menu a:focus-visible {
+      color: var(--dark);
+      background: #ffffff;
+      box-shadow: 0 6px 20px rgba(37, 99, 235, 0.10);
+      outline: none;
+    }
+    .menu .cta {
+      color: white;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      box-shadow: 0 12px 28px rgba(79, 70, 229, 0.32);
+    }
+    .menu .cta:hover { color: white; background: linear-gradient(135deg, var(--indigo), var(--violet)); }
+    .menu-button {
+      display: none;
+      margin-left: auto;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 14px;
+      color: white;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* Layout */
+    .container {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+    section { padding: 96px 0; }
+    h1, h2, h3 {
+      margin: 0;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      color: var(--dark);
+    }
+    h1 { font-size: clamp(36px, 6vw, 78px); }
+    h2 { font-size: clamp(34px, 4.6vw, 56px); }
+    h3 { font-size: 22px; }
+    p { color: var(--ink-2); line-height: 1.7; }
+    .lead {
+      color: var(--muted);
+      font-size: clamp(17px, 1.5vw, 21px);
+      line-height: 1.7;
+    }
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      padding: 8px 12px;
+      border: 1px solid rgba(37, 99, 235, 0.16);
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      box-shadow: 0 8px 22px rgba(37, 99, 235, 0.10);
+    }
+    .section-head {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      align-items: end;
+      gap: 32px;
+      margin-bottom: 38px;
+    }
+    .section-head p { margin-top: 16px; max-width: 720px; }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 11px;
+      border-radius: 999px;
+      color: white;
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .badge.alt { background: linear-gradient(135deg, var(--blue), var(--cyan)); }
+    .badge.warn { background: linear-gradient(135deg, var(--amber), #f97316); color: #3b2600; }
+    .badge.risk { background: linear-gradient(135deg, var(--rose), #fb7185); }
+    .badge.ok { background: linear-gradient(135deg, var(--teal), var(--mint)); }
+    .badge.dark { background: var(--dark); }
+
+    /* Buttons */
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
+      padding: 13px 20px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 900;
+      text-decoration: none;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button.primary {
+      color: white;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      box-shadow: 0 18px 38px rgba(79, 70, 229, 0.32);
+    }
+    .button.secondary {
+      color: var(--dark);
+      background: white;
+      border: 1px solid rgba(15, 23, 42, 0.12);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 64px 0 96px;
+      min-height: calc(100vh - var(--nav-h));
+      display: grid;
+      align-items: center;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 56px;
+      align-items: center;
+    }
+    .hero-stats {
+      margin-top: 32px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .hero-stats .stat {
+      padding: 18px;
+      background: white;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+    .hero-stats strong {
+      display: block;
+      font-size: 30px;
+      letter-spacing: -0.04em;
+      color: var(--dark);
+    }
+    .hero-stats span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+    .hero-visual {
+      position: relative;
+      min-height: 540px;
+    }
+    .panel {
+      position: relative;
+      padding: 24px;
+      background: white;
+      border-radius: 26px;
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      box-shadow: var(--shadow-strong);
+    }
+    .panel.demo {
+      max-width: 460px;
+      margin-left: auto;
+      background: linear-gradient(160deg, #0b1220 0%, #1e1b4b 65%, #312e81 100%);
+      color: white;
+      border-color: rgba(15, 23, 42, 0.6);
+    }
+    .panel.demo h4 {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .panel.demo .demo-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .pulse {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.75);
+    }
+    .pulse::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.18);
+    }
+    .demo-cards {
+      display: grid;
+      gap: 10px;
+    }
+    .demo-card {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .demo-card b {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      font-size: 14px;
+      background: rgba(37, 99, 235, 0.3);
+      color: white;
+    }
+    .demo-card.r b { background: rgba(244, 63, 94, 0.4); }
+    .demo-card.w b { background: rgba(245, 158, 11, 0.4); }
+    .demo-card.g b { background: rgba(16, 185, 129, 0.4); }
+    .demo-card span {
+      color: white;
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1.3;
+    }
+    .demo-card small {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .floating {
+      position: absolute;
+      padding: 14px 16px;
+      background: white;
+      border-radius: 18px;
+      box-shadow: var(--shadow-strong);
+      border: 1px solid var(--line);
+      font-size: 13px;
+      font-weight: 850;
+    }
+    .floating.green { color: var(--teal); top: 20px; left: -10px; }
+    .floating.red { color: var(--red); right: -20px; top: 250px; }
+    .floating.blue { color: var(--blue); left: 40px; bottom: -10px; }
+    .floating small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 4px;
+    }
+
+    /* Reusable card */
+    .glass {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+
+    /* Problem section */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 36px;
+      align-items: stretch;
+    }
+
+    /* Value pillars */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .pillar {
+      padding: 24px;
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      position: relative;
+      overflow: hidden;
+    }
+    .pillar::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto;
+      height: 5px;
+      background: linear-gradient(90deg, var(--blue), var(--violet));
+    }
+    .pillar:nth-child(2)::before { background: linear-gradient(90deg, var(--cyan), var(--blue)); }
+    .pillar:nth-child(3)::before { background: linear-gradient(90deg, var(--amber), var(--rose)); }
+    .pillar:nth-child(4)::before { background: linear-gradient(90deg, var(--teal), var(--mint)); }
+    .pillar h3 { font-size: 19px; margin-top: 10px; }
+    .pillar p { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+
+    /* Mechanism matrix */
+    .mechanism {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .mechanism .card {
+      padding: 26px;
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      position: relative;
+    }
+    .mechanism .card header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .mechanism .ico {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--blue), var(--indigo));
+      color: white;
+      font-weight: 950;
+      font-size: 17px;
+    }
+    .mechanism .card:nth-child(2) .ico { background: linear-gradient(135deg, var(--rose), #fb7185); }
+    .mechanism .card:nth-child(3) .ico { background: linear-gradient(135deg, var(--teal), var(--mint)); }
+    .mechanism .card:nth-child(4) .ico { background: linear-gradient(135deg, var(--amber), #f97316); }
+    .mechanism .card:nth-child(5) .ico { background: linear-gradient(135deg, var(--cyan), var(--blue)); }
+    .mechanism .card:nth-child(6) .ico { background: linear-gradient(135deg, var(--violet), var(--indigo)); }
+    .mechanism ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 9px;
+    }
+    .mechanism li {
+      display: grid;
+      grid-template-columns: 10px 1fr;
+      gap: 10px;
+      color: var(--ink-2);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .mechanism li::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      margin-top: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+
+    /* Inspiration */
+    .inspiration {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .insp {
+      padding: 20px;
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+    }
+    .insp .brand {
+      display: inline-block;
+      padding: 4px 10px;
+      margin-bottom: 12px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .insp h4 { margin: 0; font-size: 15px; color: var(--dark); }
+    .insp p { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+
+    /* Flow timeline - vertical */
+    .timeline {
+      position: relative;
+      margin: 0 auto;
+      padding: 8px 0 32px 0;
+      max-width: 980px;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 64px;
+      width: 4px;
+      border-radius: 4px;
+      background: linear-gradient(180deg, var(--blue), var(--cyan) 28%, var(--violet) 55%, var(--rose) 78%, var(--mint));
+      opacity: 0.85;
+    }
+    .timeline-step {
+      position: relative;
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 28px;
+      align-items: stretch;
+      padding: 14px 0;
+    }
+    .timeline-node {
+      position: relative;
+      width: 130px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 14px;
+    }
+    .timeline-bullet {
+      position: relative;
+      z-index: 2;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 16px;
+      font-weight: 950;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      box-shadow: 0 14px 30px rgba(79, 70, 229, 0.28), 0 0 0 6px white;
+    }
+    .timeline-step:nth-child(6n+2) .timeline-bullet { background: linear-gradient(135deg, var(--cyan), var(--blue)); }
+    .timeline-step:nth-child(6n+3) .timeline-bullet { background: linear-gradient(135deg, var(--violet), var(--indigo)); }
+    .timeline-step:nth-child(6n+4) .timeline-bullet { background: linear-gradient(135deg, var(--rose), #fb7185); }
+    .timeline-step:nth-child(6n+5) .timeline-bullet { background: linear-gradient(135deg, var(--amber), #f97316); color: #2a1700; }
+    .timeline-step:nth-child(6n) .timeline-bullet { background: linear-gradient(135deg, var(--teal), var(--mint)); }
+    .timeline-card {
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      padding: 22px 24px 24px;
+      position: relative;
+    }
+    .timeline-card::before {
+      content: "";
+      position: absolute;
+      top: 32px;
+      left: -12px;
+      width: 16px;
+      height: 16px;
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+      background: white;
+      transform: rotate(-45deg);
+      border-top-left-radius: 4px;
+    }
+    .timeline-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .timeline-head h3 {
+      font-size: 19px;
+      color: var(--dark);
+    }
+    .timeline-card p.lead-line {
+      color: var(--ink-2);
+      font-size: 14.5px;
+      line-height: 1.65;
+      margin: 0;
+    }
+    .timeline-detail {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .detail-block {
+      padding: 14px;
+      background: rgba(37, 99, 235, 0.05);
+      border: 1px solid rgba(37, 99, 235, 0.10);
+      border-radius: 14px;
+    }
+    .detail-block.control { background: rgba(244, 63, 94, 0.06); border-color: rgba(244, 63, 94, 0.16); }
+    .detail-block.result { background: rgba(16, 185, 129, 0.07); border-color: rgba(16, 185, 129, 0.18); }
+    .detail-block h4 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--blue);
+    }
+    .detail-block.control h4 { color: var(--red); }
+    .detail-block.result h4 { color: var(--teal); }
+    .detail-block ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+    }
+    .detail-block li {
+      display: grid;
+      grid-template-columns: 9px 1fr;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--ink-2);
+      line-height: 1.45;
+    }
+    .detail-block li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      margin-top: 7px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+    .detail-block.control li::before { background: var(--rose); }
+    .detail-block.result li::before { background: var(--mint); }
+    .timeline-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .timeline-tag.crit { background: rgba(244, 63, 94, 0.10); color: var(--red); }
+    .timeline-tag.fiscal { background: rgba(16, 185, 129, 0.10); color: var(--teal); }
+    .timeline-step.final .timeline-card {
+      background: linear-gradient(150deg, #0b1220 0%, #1e1b4b 60%, #312e81 100%);
+      color: white;
+      border-color: rgba(15, 23, 42, 0.6);
+    }
+    .timeline-step.final .timeline-card::before {
+      background: #0b1220;
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .timeline-step.final .timeline-card h3,
+    .timeline-step.final .timeline-card p.lead-line {
+      color: white;
+    }
+    .timeline-step.final .detail-block {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    .timeline-step.final .detail-block h4 { color: rgba(255, 255, 255, 0.72); }
+    .timeline-step.final .detail-block li { color: rgba(255, 255, 255, 0.84); }
+    .timeline-step.final .detail-block li::before { background: rgba(255, 255, 255, 0.6); }
+    .timeline-step.final .timeline-tag {
+      background: rgba(255, 255, 255, 0.10);
+      color: white;
+    }
+
+    /* Prevention grid */
+    .prevention-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    .prevention-card {
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      padding: 22px 22px 20px;
+      display: grid;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .prevention-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--blue), var(--violet));
+    }
+    .prevention-card:nth-child(6n+2)::before { background: linear-gradient(90deg, var(--cyan), var(--blue)); }
+    .prevention-card:nth-child(6n+3)::before { background: linear-gradient(90deg, var(--violet), var(--indigo)); }
+    .prevention-card:nth-child(6n+4)::before { background: linear-gradient(90deg, var(--rose), #fb7185); }
+    .prevention-card:nth-child(6n+5)::before { background: linear-gradient(90deg, var(--amber), #f97316); }
+    .prevention-card:nth-child(6n)::before { background: linear-gradient(90deg, var(--teal), var(--mint)); }
+    .prevention-card header {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .prev-step {
+      flex: 0 0 auto;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--dark);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 950;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+    }
+    .prevention-card header h3 {
+      margin: 0;
+      font-size: 17px;
+      color: var(--dark);
+      line-height: 1.25;
+    }
+    .prev-tag {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.10);
+      color: var(--teal);
+      font-size: 10.5px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .prev-block {
+      padding: 13px 14px;
+      border-radius: 14px;
+      background: rgba(37, 99, 235, 0.05);
+      border: 1px solid rgba(37, 99, 235, 0.10);
+    }
+    .prev-block.blocks {
+      background: rgba(16, 185, 129, 0.07);
+      border-color: rgba(16, 185, 129, 0.18);
+    }
+    .prev-block h4 {
+      margin: 0 0 6px;
+      font-size: 10.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--blue);
+    }
+    .prev-block.blocks h4 { color: var(--teal); }
+    .prev-block p {
+      margin: 0;
+      font-size: 13.5px;
+      color: var(--ink-2);
+      line-height: 1.55;
+    }
+    .prev-impact {
+      font-size: 12.5px;
+      color: var(--muted);
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+      line-height: 1.55;
+    }
+    .prev-impact strong { color: var(--ink); font-weight: 800; }
+    .prevention-summary {
+      margin-top: 24px;
+      padding: 28px 32px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, #0b1220 0%, #1e1b4b 60%, #312e81 100%);
+      color: white;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 32px;
+      align-items: center;
+      box-shadow: var(--shadow-strong);
+    }
+    .prevention-summary h3 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.25;
+      color: white;
+    }
+    .prevention-summary p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+    .prevention-summary .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .prevention-summary .stat-row > div {
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+    }
+    .prevention-summary .stat-row strong {
+      display: block;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+    .prevention-summary .stat-row span {
+      display: block;
+      margin-top: 4px;
+      font-size: 11.5px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.4;
+    }
+
+    /* Dashboard mock */
+    .dashboard {
+      padding: 32px;
+      background: linear-gradient(160deg, #0b1220 0%, #1e1b4b 60%, #312e81 100%);
+      border-radius: 32px;
+      color: white;
+      box-shadow: var(--shadow-strong);
+    }
+    .dashboard-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .dashboard-head h3 { color: white; font-size: 24px; }
+    .dashboard-head .pulse { color: rgba(255, 255, 255, 0.86); }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .tile {
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 18px;
+    }
+    .tile strong {
+      display: block;
+      font-size: 28px;
+      letter-spacing: -0.04em;
+      color: white;
+    }
+    .tile span {
+      display: block;
+      margin-top: 4px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 12.5px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .tile.up strong::before { content: "▲ "; color: var(--mint); }
+    .tile.down strong::before { content: "▼ "; color: var(--rose); }
+    .dashboard-rows {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 18px;
+    }
+    .dash-block {
+      padding: 22px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 22px;
+    }
+    .dash-block h4 {
+      margin: 0 0 14px;
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.72);
+    }
+    .alert-row {
+      display: grid;
+      grid-template-columns: 100px 1fr auto;
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      align-items: center;
+    }
+    .alert-row:first-of-type { border-top: 0; }
+    .alert-row b {
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.86);
+    }
+    .alert-row .tag {
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 950;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .tag.high { background: rgba(244, 63, 94, 0.22); color: #fecdd3; }
+    .tag.medium { background: rgba(245, 158, 11, 0.22); color: #fde68a; }
+    .tag.low { background: rgba(16, 185, 129, 0.22); color: #bbf7d0; }
+    .alert-row p {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.84);
+      font-size: 13px;
+    }
+    .ring {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      margin: 4px auto 0;
+      background:
+        conic-gradient(var(--mint) 0 96%, rgba(255, 255, 255, 0.08) 96% 100%);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .ring::after {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 50%;
+      background: #131635;
+    }
+    .ring strong {
+      position: relative;
+      z-index: 1;
+      font-size: 36px;
+      color: white;
+      letter-spacing: -0.04em;
+    }
+    .ring small {
+      position: absolute;
+      bottom: 40px;
+      z-index: 1;
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.66);
+    }
+
+    /* Estados / cards */
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .risk-card {
+      padding: 22px;
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      border-left: 6px solid var(--blue);
+    }
+    .risk-card:nth-child(3n+2) { border-left-color: var(--cyan); }
+    .risk-card:nth-child(3n) { border-left-color: var(--mint); }
+    .risk-card h4 { margin: 0; font-size: 17px; color: var(--dark); }
+    .risk-card p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .risk-card .meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .risk-card small {
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--blue);
+      font-weight: 850;
+    }
+
+    /* Tone map */
+    .tone-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .tone-card {
+      padding: 22px;
+      background: white;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .tone-card .ref {
+      min-height: 56px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      color: white;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      font-weight: 950;
+      letter-spacing: -0.02em;
+      text-align: center;
+      padding: 8px;
+      font-size: 16px;
+    }
+    .tone-card .meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .tone-card h3 { font-size: 17px; }
+
+    /* Big quote */
+    .quote-card {
+      padding: 44px;
+      border-radius: 32px;
+      color: white;
+      background: linear-gradient(135deg, #0f172a, #312e81 50%, #0d9488);
+      box-shadow: var(--shadow-strong);
+    }
+    .quote-card blockquote {
+      margin: 0;
+      font-size: clamp(26px, 3.6vw, 42px);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      font-weight: 950;
+    }
+    .quote-card p {
+      margin: 22px 0 0;
+      color: rgba(255, 255, 255, 0.74);
+    }
+
+    .cta-band {
+      padding: 56px 40px;
+      border-radius: 32px;
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      color: white;
+      box-shadow: var(--shadow-strong);
+      display: grid;
+      grid-template-columns: 1.4fr auto;
+      gap: 30px;
+      align-items: center;
+    }
+    .cta-band h2 { color: white; max-width: 700px; }
+    .cta-band p { color: rgba(255, 255, 255, 0.86); }
+    .cta-band .button.secondary { color: var(--blue); }
+    .cta-band .button.primary {
+      background: white;
+      color: var(--blue);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.24);
+    }
+    .cta-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Footer */
+    footer.main {
+      padding: 56px 0;
+      background: var(--dark);
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 14px;
+    }
+    footer.main strong { color: white; }
+    footer.main a { color: white; font-weight: 800; }
+
+    @media (max-width: 1080px) {
+      .hero-grid,
+      .problem-grid,
+      .section-head {
+        grid-template-columns: 1fr;
+      }
+      .badge-row { justify-content: flex-start; }
+      .pillars,
+      .inspiration,
+      .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .timeline-detail { grid-template-columns: 1fr; }
+      .mechanism,
+      .risk-grid,
+      .tone-grid,
+      .prevention-grid { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-rows { grid-template-columns: 1fr; }
+      .cta-band { grid-template-columns: 1fr; }
+      .prevention-summary { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 680px) {
+      .menu { display: none; position: absolute; top: var(--nav-h); left: 14px; right: 14px; padding: 16px; flex-direction: column; align-items: stretch; background: white; border-radius: 18px; box-shadow: var(--shadow-strong); }
+      .menu.is-open { display: flex; }
+      .menu-button { display: inline-flex; }
+      section { padding: 64px 0; }
+      .pillars,
+      .inspiration,
+      .dashboard-grid,
+      .mechanism,
+      .risk-grid,
+      .tone-grid,
+      .prevention-grid,
+      .hero-stats { grid-template-columns: 1fr; }
+      .prevention-summary .stat-row { grid-template-columns: 1fr; }
+      .timeline::before { left: 28px; }
+      .timeline-step { grid-template-columns: 64px 1fr; gap: 16px; }
+      .timeline-node { width: 64px; padding-top: 12px; }
+      .timeline-bullet { width: 48px; height: 48px; font-size: 14px; box-shadow: 0 10px 22px rgba(79, 70, 229, 0.28), 0 0 0 5px white; }
+      .timeline-card::before { display: none; }
+      .timeline-card { padding: 18px 18px 20px; }
+      .tone-card { grid-template-columns: 1fr; }
+      .floating { display: none; }
+      .panel.demo { margin: 0; }
+      .alert-row { grid-template-columns: 1fr; }
+      h1 { font-size: 34px; }
+      h2 { font-size: 32px; }
+    }
+
+    /* ===== Modo presentacion: navegacion lateral tipo slides ===== */
+    html.deck-mode { scroll-snap-type: y proximity; }
+    html.deck-mode main section { scroll-snap-align: start; }
+
+    html.deck-mode .topbar .menu,
+    html.deck-mode .topbar .menu-button { display: none !important; }
+
+    .deck-nav {
+      position: fixed;
+      left: 28px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 60;
+      width: 232px;
+      padding: 20px 18px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.66);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      animation: deck-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes deck-in {
+      from { opacity: 0; transform: translate(-16px, -50%); }
+      to { opacity: 1; transform: translate(0, -50%); }
+    }
+
+    .deck-eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 16px 4px;
+      font-size: 10.5px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--blue);
+    }
+    .deck-eyebrow::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.18);
+    }
+
+    .deck-list {
+      display: flex;
+      flex-direction: column;
+    }
+    .deck-dot {
+      appearance: none;
+      border: 0;
+      margin: 0;
+      padding: 7px 6px;
+      background: transparent;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      align-items: center;
+      gap: 13px;
+      position: relative;
+      border-radius: 12px;
+      text-align: left;
+      transition: background 180ms ease;
+    }
+    .deck-dot:hover { background: rgba(37, 99, 235, 0.06); }
+    .deck-dot:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    .deck-dot:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      width: 2px;
+      height: 100%;
+      background: var(--line);
+      z-index: 0;
+      transition: background 240ms ease;
+    }
+    .deck-dot.is-done:not(:last-child)::after {
+      background: linear-gradient(180deg, var(--blue), var(--violet));
+    }
+
+    .deck-node {
+      position: relative;
+      z-index: 1;
+      justify-self: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #cbd5e1;
+      transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), background 240ms ease, border-color 240ms ease, box-shadow 240ms ease;
+    }
+    .deck-dot.is-done .deck-node {
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      border-color: transparent;
+    }
+    .deck-dot.is-active .deck-node {
+      background: linear-gradient(135deg, var(--blue), var(--violet));
+      border-color: transparent;
+      transform: scale(1.35);
+      box-shadow: 0 0 0 5px rgba(79, 70, 229, 0.16), 0 8px 18px rgba(79, 70, 229, 0.4);
+    }
+
+    .deck-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      line-height: 1.1;
+      min-width: 0;
+    }
+    .deck-index {
+      font-size: 9.5px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: color 200ms ease;
+    }
+    .deck-name {
+      font-size: 13.5px;
+      font-weight: 850;
+      letter-spacing: -0.01em;
+      color: var(--ink-2);
+      transition: color 200ms ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .deck-dot:hover .deck-name { color: var(--dark); }
+    .deck-dot.is-active .deck-index { color: var(--blue); }
+    .deck-dot.is-active .deck-name { color: var(--indigo); }
+
+    .deck-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 4px 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+    }
+    .deck-keys {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .deck-keys kbd {
+      display: grid;
+      place-items: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--ink-2);
+      line-height: 1;
+    }
+
+    @media (max-width: 1200px) {
+      .deck-nav { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="logo-space" href="#inicio" aria-label="Agora Marketplace - Inicio">
+        <img src="agora_logo_black.png" alt="Agora">
+        <span class="tagline">Marketplace</span>
+      </a>
+      <button class="menu-button" id="menuButton" type="button" aria-controls="menu" aria-expanded="false">Menu</button>
+      <ul class="menu" id="menu">
+        <li><a href="#tienda">La tienda</a></li>
+        <li><a href="#catalogo">Catálogo</a></li>
+        <li><a href="#checkout">Checkout</a></li>
+        <li><a href="#integraciones">Integraciones</a></li>
+        <li><a href="#operacion">Tu operación</a></li>
+        <li><a href="#flujo">Flujo</a></li>
+        <li><a href="#panel">Panel</a></li>
+        <li><a href="#incluye">Incluye</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="inicio">
+      <div class="container hero-grid">
+        <div>
+          <span class="kicker">Tienda en línea lista para vender</span>
+          <h1>Todo conectado para una operación más simple.</h1>
+          <p class="lead">
+            Agora Marketplace te entrega una tienda en línea funcionando de punta a punta: catálogo cargado desde tu DMS,
+            checkout completo, pagos con Karlo Pay y logística con Skydropx. La sucursal se concentra en una sola cosa:
+            preparar pedidos y entregarlos a la paquetería o en pickup.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#flujo">Ver el flujo completo</a>
+            <a class="button secondary" href="#integraciones">Conocer las integraciones</a>
+          </div>
+          <div class="hero-stats">
+            <div class="stat"><strong>Listo</strong><span>Catálogo inicial ya cargado</span></div>
+            <div class="stat"><strong>1 clic</strong><span>Pago en línea con Karlo Pay</span></div>
+            <div class="stat"><strong>Auto</strong><span>Guías y recolección Skydropx</span></div>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="floating green">Catálogo listo<small>Cargado desde tu DMS</small></div>
+          <div class="floating blue">Pago aprobado<small>Karlo Pay en línea</small></div>
+
+          <div class="panel demo">
+            <div class="demo-head">
+              <h4>Pedidos en vivo</h4>
+              <span class="pulse">Tienda en línea</span>
+            </div>
+            <div class="demo-cards">
+              <div class="demo-card">
+                <b>#</b>
+                <span>Nuevo pedido en tienda en línea</span>
+                <small>Nuevo</small>
+              </div>
+              <div class="demo-card g">
+                <b>$</b>
+                <span>Pago aprobado con Karlo Pay</span>
+                <small>Pagado</small>
+              </div>
+              <div class="demo-card w">
+                <b>P</b>
+                <span>Sucursal preparando el paquete</span>
+                <small>Preparación</small>
+              </div>
+              <div class="demo-card">
+                <b>SK</b>
+                <span>Guía generada en Skydropx</span>
+                <small>Por enviar</small>
+              </div>
+              <div class="demo-card g">
+                <b>OK</b>
+                <span>Recolección confirmada</span>
+                <small>En camino</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tienda">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">La tienda en línea</span>
+            <h2>Una tienda profesional, sin que tú la construyas.</h2>
+            <p class="lead">
+              Agora Marketplace no es solo un escaparate: es un ecosistema de venta completo. Catálogo, carrito, checkout,
+              cobros y entregas operan conectados, para que tu negocio venda en línea desde el primer día.
+            </p>
+          </div>
+          <div class="badge-row">
+            <span class="badge ok">Lista para vender</span>
+            <span class="badge alt">Todo conectado</span>
+          </div>
+        </div>
+
+        <div class="pillars">
+          <article class="pillar">
+            <span class="badge alt">01</span>
+            <h3>Catálogo listo</h3>
+            <p>Tus productos ya cargados desde el DMS, con marca, modelo, año y compatibilidad. La sucursal no captura producto.</p>
+          </article>
+          <article class="pillar">
+            <span class="badge alt">02</span>
+            <h3>Checkout completo</h3>
+            <p>Carrito, datos de envío, cálculo de logística y pago en un solo flujo claro y guiado para el cliente.</p>
+          </article>
+          <article class="pillar">
+            <span class="badge alt">03</span>
+            <h3>Pagos integrados</h3>
+            <p>Cobros en línea con Karlo Pay: el cliente paga seguro y el pedido avanza automáticamente al confirmarse.</p>
+          </article>
+          <article class="pillar">
+            <span class="badge alt">04</span>
+            <h3>Logística conectada</h3>
+            <p>Agora genera la guía y coordina la recolección, o el cliente elige recoger en pickup en tu sucursal.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="catalogo">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Catálogo inicial cargado</span>
+            <h2>Empiezas a vender con tu catálogo ya montado.</h2>
+            <p class="lead">
+              El catálogo no se arma a mano. Agora Marketplace se conecta con tu DMS y publica los productos en la tienda
+              en línea, con su información comercial y de compatibilidad. La sucursal no pierde tiempo capturando.
+            </p>
+          </div>
+          <div class="badge-row">
+            <span class="badge dark">Conectado al DMS</span>
+            <span class="badge ok">Sin captura manual</span>
+          </div>
+        </div>
+
+        <div class="problem-grid">
+          <div class="glass" style="padding: 28px;">
+            <h3>Tu catálogo, publicado y vivo</h3>
+            <p style="margin-top: 8px; color: var(--muted); font-size: 14px;">
+              Los productos llegan desde tu sistema de gestión y quedan listos para vender. Cada artículo conserva su
+              ficha comercial y su compatibilidad por vehículo, para que el cliente compre con confianza.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px;">
+              <div class="prev-block"><h4>Origen</h4><p>Catálogo maestro de tu DMS</p></div>
+              <div class="prev-block"><h4>Ficha</h4><p>Marca, modelo, año y número de parte</p></div>
+              <div class="prev-block"><h4>Estado</h4><p>Disponibilidad y precio por sucursal</p></div>
+            </div>
+            <p style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; line-height: 1.55;">
+              <strong style="color: var(--ink);">En claro:</strong>
+              tú mantienes tu inventario donde siempre lo has hecho; Agora lo refleja en la tienda en línea sin doble captura.
+            </p>
+          </div>
+
+          <div style="display: grid; gap: 16px;">
+            <div class="glass" style="padding: 26px;">
+              <span class="badge alt">Sincronización</span>
+              <h3 style="margin-top: 14px;">El catálogo se actualiza desde tu DMS.</h3>
+              <p style="margin-top: 12px;">
+                Precios, existencias y altas de producto fluyen desde tu sistema hacia la tienda. Menos trabajo
+                administrativo, menos errores y un catálogo siempre consistente con tu operación real.
+              </p>
+            </div>
+            <div class="glass" style="padding: 26px;">
+              <span class="badge ok">Por sucursal</span>
+              <h3 style="margin-top: 14px;">Disponibilidad y precio por punto de venta.</h3>
+              <p style="margin-top: 12px;">
+                Cada sucursal muestra lo que realmente tiene. El cliente ve productos disponibles y compra solo lo que se
+                puede surtir, evitando cancelaciones y pedidos imposibles.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="checkout">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Checkout sin fricción</span>
+            <h2>Del carrito al pago, en pocos pasos claros.</h2>
+            <p class="lead">
+              El checkout de Agora Marketplace guía al cliente de principio a fin: arma su carrito, captura su dirección,
+              elige cómo recibir su pedido y paga en línea. Todo en una experiencia ordenada y confiable.
+            </p>
+          </div>
+          <div class="badge-row"><span class="badge alt">Guiado</span><span class="badge ok">Pago seguro</span></div>
+        </div>
+
+        <div class="mechanism">
+          <article class="card">
+            <header><div class="ico">01</div><h3>Carrito</h3></header>
+            <ul>
+              <li>El cliente agrega productos disponibles de la sucursal.</li>
+              <li>Se valida existencia antes de avanzar.</li>
+              <li>Resumen claro de piezas, cantidades y total.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">02</div><h3>Datos y dirección</h3></header>
+            <ul>
+              <li>Captura de datos del cliente y dirección de entrega.</li>
+              <li>Soporte multi-sucursal según el contexto de la tienda.</li>
+              <li>Validación de información antes del envío.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">03</div><h3>Método de entrega</h3></header>
+            <ul>
+              <li>Envío a domicilio con cotización de Skydropx.</li>
+              <li>Opción de recoger en pickup en la sucursal.</li>
+              <li>El costo de envío se calcula en línea.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">04</div><h3>Pago con Karlo Pay</h3></header>
+            <ul>
+              <li>Cobro en línea seguro al confirmar el pedido.</li>
+              <li>El pago dispara el avance del pedido en automático.</li>
+              <li>Sin pago aprobado, no hay pedido por preparar.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">05</div><h3>Confirmación</h3></header>
+            <ul>
+              <li>Correo de confirmación con el detalle del pedido.</li>
+              <li>El pedido aparece listo para preparar en la sucursal.</li>
+              <li>El cliente puede dar seguimiento a su compra.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">06</div><h3>Seguimiento</h3></header>
+            <ul>
+              <li>Estados claros: pagado, en preparación, enviado, entregado.</li>
+              <li>Guía de Skydropx asociada al pedido.</li>
+              <li>Postventa y atención centralizadas.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="integraciones">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Integraciones</span>
+            <h2>Conectado con lo que tu operación ya necesita.</h2>
+            <p class="lead">
+              Agora Marketplace no te pide cambiar de sistema ni reinventar tu logística. Se integra con tu DMS para el
+              catálogo, con Karlo Pay para los cobros y con Skydropx para los envíos. Tres piezas, un solo flujo.
+            </p>
+          </div>
+          <div class="badge-row"><span class="badge dark">DMS</span><span class="badge alt">Karlo Pay</span><span class="badge ok">Skydropx</span></div>
+        </div>
+
+        <div class="mechanism">
+          <article class="card">
+            <header><div class="ico">$</div><h3>Karlo Pay · Pagos</h3></header>
+            <ul>
+              <li>Procesamiento de cobros en línea dentro del checkout.</li>
+              <li>El pedido avanza automáticamente cuando el pago se aprueba.</li>
+              <li>Experiencia de pago segura y confiable para el cliente.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">SK</div><h3>Skydropx · Logística</h3></header>
+            <ul>
+              <li>Cotización de envío en el checkout según destino.</li>
+              <li>Generación de guías y coordinación de recolección.</li>
+              <li>La sucursal solo entrega el paquete a la paquetería.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <header><div class="ico">DMS</div><h3>Tu DMS · Catálogo</h3></header>
+            <ul>
+              <li>Catálogo inicial cargado desde tu sistema de gestión.</li>
+              <li>Productos, precios y existencias sincronizados.</li>
+              <li>Sin doble captura entre tu DMS y la tienda en línea.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div style="margin-top: 28px;">
+          <div class="section-head">
+            <div>
+              <span class="kicker">Capacidades de apoyo</span>
+              <h2>Todo lo que rodea a la venta, también resuelto.</h2>
+            </div>
+          </div>
+          <div class="inspiration">
+            <article class="insp">
+              <span class="brand">Comunicación</span>
+              <h4>Correos de confirmación</h4>
+              <p>El cliente recibe el detalle de su pedido por correo, con el contexto de tu tienda.</p>
+            </article>
+            <article class="insp">
+              <span class="brand">Multi-tienda</span>
+              <h4>Contexto por sucursal y marca</h4>
+              <p>La tienda opera por contexto global, grupo, sucursal o marca, según tu estructura comercial.</p>
+            </article>
+            <article class="insp">
+              <span class="brand">Entrega flexible</span>
+              <h4>Envío o pickup</h4>
+              <p>El cliente decide recibir a domicilio con Skydropx o recoger en tu sucursal.</p>
+            </article>
+            <article class="insp">
+              <span class="brand">Trazabilidad</span>
+              <h4>Estados del pedido</h4>
+              <p>Cada pedido avanza por estados claros, visibles para la sucursal y para el cliente.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="operacion">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Tu operación, simple</span>
+            <h2>Tu única responsabilidad: preparar y entregar.</h2>
+            <p class="lead">
+              La venta, el cobro y la logística ya están resueltos por la plataforma y sus integraciones. La sucursal se
+              enfoca en lo que sabe hacer bien: armar el paquete correcto y entregarlo a tiempo.
+            </p>
+          </div>
+          <div class="badge-row"><span class="badge ok">Menos carga operativa</span></div>
+        </div>
+
+        <div class="prevention-grid">
+          <article class="prevention-card">
+            <header>
+              <div class="prev-step">01</div>
+              <div>
+                <h3>Preparación del paquete</h3>
+                <span class="prev-tag">En sucursal</span>
+              </div>
+            </header>
+            <div class="prev-block">
+              <h4>Qué haces</h4>
+              <p>Recibes el pedido ya pagado, surtes las piezas del catálogo y armas el paquete listo para envío.</p>
+            </div>
+            <div class="prev-block blocks">
+              <h4>Qué hace Agora por ti</h4>
+              <p>Te muestra el pedido con productos, cantidades y datos del cliente; nada que capturar ni cotizar.</p>
+            </div>
+            <p class="prev-impact"><strong>Resultado:</strong> preparas con claridad y sin pasos administrativos.</p>
+          </article>
+          <article class="prevention-card">
+            <header>
+              <div class="prev-step">02</div>
+              <div>
+                <h3>Entrega a la paquetería</h3>
+                <span class="prev-tag">Skydropx</span>
+              </div>
+            </header>
+            <div class="prev-block">
+              <h4>Qué haces</h4>
+              <p>Imprimes la guía generada y entregas el paquete a la empresa de logística en la recolección.</p>
+            </div>
+            <div class="prev-block blocks">
+              <h4>Qué hace Agora por ti</h4>
+              <p>Genera la guía con Skydropx y coordina la recolección; el envío queda asociado al pedido.</p>
+            </div>
+            <p class="prev-impact"><strong>Resultado:</strong> el paquete sale sin que gestiones la paquetería.</p>
+          </article>
+          <article class="prevention-card">
+            <header>
+              <div class="prev-step">03</div>
+              <div>
+                <h3>Entrega en pickup</h3>
+                <span class="prev-tag">En tienda</span>
+              </div>
+            </header>
+            <div class="prev-block">
+              <h4>Qué haces</h4>
+              <p>Cuando el cliente elige recoger, tienes el paquete listo y lo entregas en mostrador.</p>
+            </div>
+            <div class="prev-block blocks">
+              <h4>Qué hace Agora por ti</h4>
+              <p>Marca el pedido como pickup, notifica al cliente y deja el estado listo para entrega.</p>
+            </div>
+            <p class="prev-impact"><strong>Resultado:</strong> entrega inmediata, sin costo de envío.</p>
+          </article>
+        </div>
+
+        <div class="prevention-summary">
+          <div>
+            <h3>La plataforma vende; tu sucursal entrega.</h3>
+            <p>
+              Agora Marketplace concentra la complejidad —catálogo, checkout, pagos y logística— para que tu equipo dedique
+              su tiempo a lo que genera valor: surtir bien y entregar rápido.
+            </p>
+          </div>
+          <div class="stat-row">
+            <div><strong>Vender</strong><span>Lo hace la tienda en línea</span></div>
+            <div><strong>Cobrar</strong><span>Lo hace Karlo Pay</span></div>
+            <div><strong>Enviar</strong><span>Lo hace Skydropx</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="flujo">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Flujo gráfico</span>
+            <h2>Del clic del cliente a la entrega del paquete.</h2>
+            <p class="lead">
+              Así viaja un pedido dentro de Agora Marketplace. Cada etapa avanza en automático con las integraciones, y la
+              sucursal solo interviene donde realmente aporta: preparar y entregar.
+            </p>
+          </div>
+          <span class="badge dark">Pedido a entrega</span>
+        </div>
+
+        <div class="timeline" aria-label="Linea de tiempo del flujo">
+
+          <article class="timeline-step">
+            <div class="timeline-node"><div class="timeline-bullet">01</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>El cliente compra en la tienda en línea</h3>
+                <span class="timeline-tag">Inicio del pedido</span>
+              </div>
+              <p class="lead-line">El cliente navega tu catálogo, encuentra la pieza compatible con su vehículo y arma su carrito en la tienda en línea.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Productos y cantidades</li><li>Sucursal / contexto de tienda</li><li>Datos del cliente</li></ul>
+                </div>
+                <div class="detail-block">
+                  <h4>En automático</h4>
+                  <ul><li>Validación de disponibilidad</li><li>Cálculo del total</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Carrito listo para checkout</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="timeline-step">
+            <div class="timeline-node"><div class="timeline-bullet">02</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>Elige envío o pickup</h3>
+                <span class="timeline-tag">Checkout</span>
+              </div>
+              <p class="lead-line">En el checkout, el cliente captura su dirección y elige cómo recibir su pedido. Si es envío, Skydropx cotiza el costo en línea.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Dirección de entrega</li><li>Método: envío o pickup</li></ul>
+                </div>
+                <div class="detail-block">
+                  <h4>En automático</h4>
+                  <ul><li>Cotización de Skydropx</li><li>Costo de envío al total</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Pedido listo para pago</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="timeline-step">
+            <div class="timeline-node"><div class="timeline-bullet">03</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>Pago con Karlo Pay</h3>
+                <span class="timeline-tag">Cobro</span>
+                <span class="timeline-tag fiscal">Seguro</span>
+              </div>
+              <p class="lead-line">El cliente paga en línea con Karlo Pay. Solo cuando el pago se aprueba, el pedido avanza para preparación. Sin pago, no hay pedido por surtir.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Pago y método</li><li>Confirmación de la transacción</li></ul>
+                </div>
+                <div class="detail-block">
+                  <h4>En automático</h4>
+                  <ul><li>Validación del cobro</li><li>Avance del estado del pedido</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Pedido pagado y confirmado</li><li>Correo de confirmación al cliente</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="timeline-step">
+            <div class="timeline-node"><div class="timeline-bullet">04</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>La sucursal prepara el paquete</h3>
+                <span class="timeline-tag">En sucursal</span>
+                <span class="timeline-tag crit">Tu intervención</span>
+              </div>
+              <p class="lead-line">El pedido pagado aparece listo para preparar. La sucursal surte las piezas y arma el paquete. Aquí es donde tu equipo aporta valor.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Pedido en preparación</li><li>Responsable que prepara</li></ul>
+                </div>
+                <div class="detail-block control">
+                  <h4>Lo que haces</h4>
+                  <ul><li>Surtir productos del catálogo</li><li>Empacar el pedido</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Paquete listo para envío o pickup</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="timeline-step">
+            <div class="timeline-node"><div class="timeline-bullet">05</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>Guía Skydropx o entrega en pickup</h3>
+                <span class="timeline-tag">Logística</span>
+              </div>
+              <p class="lead-line">Para envío, se genera la guía de Skydropx y se coordina la recolección. Para pickup, el pedido queda listo para entregar en mostrador.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Guía asociada al pedido</li><li>Modalidad de entrega</li></ul>
+                </div>
+                <div class="detail-block">
+                  <h4>En automático</h4>
+                  <ul><li>Generación de guía Skydropx</li><li>Notificación al cliente</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Paquete entregado a la paquetería o listo en tienda</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="timeline-step final">
+            <div class="timeline-node"><div class="timeline-bullet">06</div></div>
+            <div class="timeline-card">
+              <div class="timeline-head">
+                <h3>Pedido entregado</h3>
+                <span class="timeline-tag">Cierre</span>
+              </div>
+              <p class="lead-line">El cliente recibe su pedido a domicilio o lo recoge en sucursal. El pedido cierra con su historia completa y disponible para postventa.</p>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Se registra</h4>
+                  <ul><li>Estado entregado</li><li>Evidencia de entrega</li></ul>
+                </div>
+                <div class="detail-block">
+                  <h4>En automático</h4>
+                  <ul><li>Actualización de seguimiento</li><li>Disponible para postventa</li></ul>
+                </div>
+                <div class="detail-block result">
+                  <h4>Resultado</h4>
+                  <ul><li>Venta completa, cliente satisfecho</li></ul>
+                </div>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <section id="panel">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Panel de pedidos</span>
+            <h2>Tus pedidos, claros y al día.</h2>
+            <p class="lead">
+              La sucursal ve en un solo lugar qué pedidos hay que preparar, cuáles están por enviar y cuáles esperan
+              en pickup. Sin hojas de cálculo ni adivinanzas: la operación se vuelve visible y ordenada.
+            </p>
+          </div>
+          <div class="badge-row">
+            <span class="badge ok">En vivo</span>
+            <span class="badge alt">Por sucursal</span>
+          </div>
+        </div>
+
+        <div class="dashboard">
+          <div class="dashboard-head">
+            <div>
+              <h3>Operación del día · viernes 28 may, 09:14</h3>
+              <p style="color: rgba(255,255,255,0.7); font-size: 13px; margin-top: 4px;">Sucursal Centro · 2 personas preparando · entregas en curso</p>
+            </div>
+            <span class="pulse">Actualizado hace 4s</span>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="tile up"><strong>48</strong><span>Pedidos del día</span></div>
+            <div class="tile"><strong>11</strong><span>Por preparar</span></div>
+            <div class="tile up"><strong>9</strong><span>En tránsito</span></div>
+            <div class="tile"><strong>4</strong><span>Pickup listo</span></div>
+          </div>
+
+          <div class="dashboard-rows">
+            <div class="dash-block">
+              <h4>Pedidos recientes</h4>
+              <div class="alert-row">
+                <b>09:11</b>
+                <p>Pedido #10298 pagado con Karlo Pay · listo para preparar.</p>
+                <span class="tag low">Pagado</span>
+              </div>
+              <div class="alert-row">
+                <b>08:47</b>
+                <p>Pedido #10295 empacado · guía Skydropx generada.</p>
+                <span class="tag medium">Por enviar</span>
+              </div>
+              <div class="alert-row">
+                <b>08:30</b>
+                <p>Pedido #10288 entregado a recolección de paquetería.</p>
+                <span class="tag low">En tránsito</span>
+              </div>
+              <div class="alert-row">
+                <b>08:18</b>
+                <p>Pedido #10284 en pickup · cliente notificado para recoger.</p>
+                <span class="tag medium">Pickup listo</span>
+              </div>
+              <div class="alert-row">
+                <b>07:55</b>
+                <p>Pedido #10280 entregado · venta cerrada.</p>
+                <span class="tag low">Entregado</span>
+              </div>
+            </div>
+
+            <div class="dash-block">
+              <h4>Entregas a tiempo</h4>
+              <div class="ring" aria-label="Cumplimiento de entrega 96 por ciento">
+                <small>Cumplimiento</small>
+                <strong>96%</strong>
+              </div>
+              <div style="display: grid; gap: 8px; margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: rgba(255,255,255,0.7)">Preparados hoy</span><strong style="color: #bbf7d0;">37</strong></div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: rgba(255,255,255,0.7)">Enviados hoy</span><strong style="color: white;">28</strong></div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: rgba(255,255,255,0.7)">Pickup pendientes</span><strong style="color: #fde68a;">4</strong></div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: rgba(255,255,255,0.7)">Tiempo medio de preparación</span><strong style="color: #bbf7d0;">18 min</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="risk-grid" style="margin-top: 28px;">
+          <article class="risk-card">
+            <small>Estado 01</small>
+            <h4>Nuevo</h4>
+            <p>El cliente generó el pedido en la tienda en línea y está pendiente de pago.</p>
+            <div class="meta"><span class="badge dark">Tienda</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 02</small>
+            <h4>Pagado</h4>
+            <p>Karlo Pay confirmó el cobro. El pedido avanza para preparación en la sucursal.</p>
+            <div class="meta"><span class="badge alt">Karlo Pay</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 03</small>
+            <h4>En preparación</h4>
+            <p>La sucursal surte las piezas del catálogo y arma el paquete.</p>
+            <div class="meta"><span class="badge ok">Sucursal</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 04</small>
+            <h4>Listo para envío</h4>
+            <p>El paquete está empacado y a la espera de guía o de la recolección.</p>
+            <div class="meta"><span class="badge ok">Sucursal</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 05</small>
+            <h4>Guía generada</h4>
+            <p>Skydropx emitió la guía y el pedido queda asociado al envío.</p>
+            <div class="meta"><span class="badge alt">Skydropx</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 06</small>
+            <h4>En tránsito</h4>
+            <p>La paquetería recolectó el paquete y va en camino al cliente.</p>
+            <div class="meta"><span class="badge alt">Skydropx</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 07</small>
+            <h4>Pickup listo</h4>
+            <p>El pedido espera en la sucursal para que el cliente lo recoja.</p>
+            <div class="meta"><span class="badge ok">En tienda</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 08</small>
+            <h4>Entregado</h4>
+            <p>El cliente recibió su pedido. La venta se cierra con su historia completa.</p>
+            <div class="meta"><span class="badge ok">Cierre</span></div>
+          </article>
+          <article class="risk-card">
+            <small>Estado 09</small>
+            <h4>Postventa</h4>
+            <p>Seguimiento, atención y soporte centralizados sobre el pedido entregado.</p>
+            <div class="meta"><span class="badge dark">Soporte</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="incluye">
+      <div class="container">
+        <div class="section-head">
+          <div>
+            <span class="kicker">Qué incluye Agora Marketplace</span>
+            <h2>Seis piezas que venden por ti, todos los días.</h2>
+            <p class="lead">
+              Agora Marketplace llega a tu negocio como una tienda en línea completa, organizada por capas que se conectan
+              entre sí: catálogo, compra, cobro y entrega, sin zonas ciegas entre cada paso.
+            </p>
+          </div>
+        </div>
+
+        <div class="tone-grid">
+          <article class="tone-card">
+            <div class="ref">Tienda</div>
+            <div>
+              <h3>Tienda en línea completa</h3>
+              <p>Escaparate, búsqueda y catálogo navegable para que tus clientes compren refacciones desde cualquier dispositivo.</p>
+              <div class="meta"><span class="badge dark">Lista para vender</span></div>
+            </div>
+          </article>
+          <article class="tone-card">
+            <div class="ref">Checkout</div>
+            <div>
+              <h3>Compra guiada de punta a punta</h3>
+              <p>Carrito, dirección, método de entrega y pago en un flujo claro que reduce el abandono y cierra ventas.</p>
+              <div class="meta"><span class="badge alt">Sin fricción</span></div>
+            </div>
+          </article>
+          <article class="tone-card">
+            <div class="ref">Pagos</div>
+            <div>
+              <h3>Cobros con Karlo Pay</h3>
+              <p>El cliente paga seguro en línea y el pedido avanza solo cuando el cobro se confirma.</p>
+              <div class="meta"><span class="badge ok">Pago en línea</span></div>
+            </div>
+          </article>
+          <article class="tone-card">
+            <div class="ref">Logística</div>
+            <div>
+              <h3>Envíos con Skydropx</h3>
+              <p>Cotización, guías y recolección. Tu sucursal solo entrega el paquete a la paquetería o en pickup.</p>
+              <div class="meta"><span class="badge ok">Envío o pickup</span></div>
+            </div>
+          </article>
+          <article class="tone-card">
+            <div class="ref">Catálogo</div>
+            <div>
+              <h3>Catálogo desde tu DMS</h3>
+              <p>Productos cargados y sincronizados con tu sistema de gestión, con compatibilidad por vehículo.</p>
+              <div class="meta"><span class="badge alt">Sin doble captura</span></div>
+            </div>
+          </article>
+          <article class="tone-card">
+            <div class="ref">Panel</div>
+            <div>
+              <h3>Panel de pedidos en vivo</h3>
+              <p>La sucursal ve qué preparar, qué enviar y qué entregar, con estados claros para cada pedido.</p>
+              <div class="meta"><span class="badge ok">Operación visible</span></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="quote-card" style="margin-top: 30px;">
+          <blockquote>El cliente compra y paga en línea; tú solo preparas el paquete y lo entregas.</blockquote>
+          <p>Esa es la promesa de Agora Marketplace. La plataforma se encarga del catálogo, el checkout, el cobro con Karlo Pay y la logística con Skydropx. Tu sucursal se enfoca en surtir bien y entregar a tiempo.</p>
+        </div>
+
+        <div class="cta-band" style="margin-top: 30px;">
+          <div>
+            <h2>¿Listo para vender en línea sin complicarte la operación?</h2>
+            <p>Te montamos la tienda con tu catálogo, conectamos pagos y logística, y tu equipo se concentra en preparar y entregar.</p>
+          </div>
+          <div class="cta-actions">
+            <a class="button secondary" href="#flujo">Ver el flujo otra vez</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      document.documentElement.classList.add("deck-mode");
+
+      const sourceLinks = Array.from(document.querySelectorAll("#menu a"));
+      const sections = Array.from(document.querySelectorAll("main section[id]"));
+      if (!sourceLinks.length || !sections.length) return;
+
+      const nav = document.createElement("nav");
+      nav.className = "deck-nav";
+      nav.setAttribute("aria-label", "Indice de la presentacion");
+
+      const eyebrow = document.createElement("span");
+      eyebrow.className = "deck-eyebrow";
+      eyebrow.textContent = "Recorrido";
+      nav.appendChild(eyebrow);
+
+      const list = document.createElement("div");
+      list.className = "deck-list";
+      nav.appendChild(list);
+
+      const items = sourceLinks.map((link, i) => {
+        const target = link.getAttribute("href");
+        const name = link.textContent.trim();
+
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = "deck-dot";
+        dot.dataset.target = target;
+        dot.setAttribute("aria-label", name);
+
+        const node = document.createElement("span");
+        node.className = "deck-node";
+
+        const text = document.createElement("span");
+        text.className = "deck-text";
+
+        const index = document.createElement("span");
+        index.className = "deck-index";
+        index.textContent = String(i + 1).padStart(2, "0");
+
+        const label = document.createElement("span");
+        label.className = "deck-name";
+        label.textContent = name;
+
+        text.append(index, label);
+        dot.append(node, text);
+        list.appendChild(dot);
+        return { target, dot, section: document.querySelector(target) };
+      });
+
+      const hint = document.createElement("div");
+      hint.className = "deck-hint";
+      hint.innerHTML = '<span class="deck-keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span>Navega entre secciones</span>';
+      nav.appendChild(hint);
+
+      document.body.appendChild(nav);
+
+      const goTo = (el) => {
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+
+      items.forEach((item) => {
+        item.dot.addEventListener("click", () => goTo(item.section));
+      });
+
+      let activeTarget = null;
+      const setActive = (target) => {
+        if (target === activeTarget) return;
+        activeTarget = target;
+        const activeIndex = items.findIndex((item) => item.target === target);
+        items.forEach((item, i) => {
+          const isActive = i === activeIndex;
+          item.dot.classList.toggle("is-active", isActive);
+          item.dot.classList.toggle("is-done", activeIndex >= 0 && i <= activeIndex);
+          if (isActive) {
+            item.dot.setAttribute("aria-current", "true");
+          } else {
+            item.dot.removeAttribute("aria-current");
+          }
+        });
+      };
+
+      const currentIndex = () => {
+        const ref = window.innerHeight * 0.35;
+        let index = 0;
+        sections.forEach((section, i) => {
+          if (section.getBoundingClientRect().top - ref <= 1) index = i;
+        });
+        return index;
+      };
+
+      const refresh = () => setActive("#" + sections[currentIndex()].id);
+
+      let ticking = false;
+      const onScroll = () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          refresh();
+          ticking = false;
+        });
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll);
+
+      const move = (dir) => {
+        const next = Math.min(Math.max(currentIndex() + dir, 0), sections.length - 1);
+        goTo(sections[next]);
+      };
+
+      document.addEventListener("keydown", (event) => {
+        const tag = (event.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || event.target.isContentEditable) return;
+        switch (event.key) {
+          case "ArrowDown":
+          case "ArrowRight":
+          case "PageDown":
+          case " ":
+            event.preventDefault();
+            move(1);
+            break;
+          case "ArrowUp":
+          case "ArrowLeft":
+          case "PageUp":
+            event.preventDefault();
+            move(-1);
+            break;
+          case "Home":
+            event.preventDefault();
+            goTo(sections[0]);
+            break;
+          case "End":
+            event.preventDefault();
+            goTo(sections[sections.length - 1]);
+            break;
+          default:
+            break;
+        }
+      });
+
+      refresh();
+    })();
+  </script>
+</body>
+</html>
