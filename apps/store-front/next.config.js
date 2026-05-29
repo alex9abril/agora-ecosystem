@@ -10,8 +10,9 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // URL limpia para la presentación comercial estática (public/presentacion.html)
+      // URLs limpias para presentaciones comerciales estáticas (public/*.html)
       { source: '/conocenos', destination: '/presentacion.html' },
+      { source: '/proceso-blindado', destination: '/proceso-blindado.html' },
     ]
   },
 }
