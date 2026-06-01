@@ -1332,8 +1332,228 @@
       line-height: 1;
     }
 
-    @media (max-width: 1200px) {
+    /* La nav lateral solo aparece cuando el margen del viewport la aloja sin pisar el contenido */
+    @media (max-width: 1760px) {
       .deck-nav { display: none; }
+    }
+
+    /* ===== Navegacion compacta para tablet y movil (<=1760px) ===== */
+    .deck-bar { display: none; }
+    .deck-sheet { display: none; }
+
+    @media (max-width: 1760px) {
+      html.deck-mode body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+      .deck-bar {
+        display: block;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 70;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: rgba(255, 255, 255, 0.85);
+        border-top: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+      }
+      .deck-bar-progress {
+        height: 3px;
+        background: rgba(37, 99, 235, 0.12);
+      }
+      .deck-bar-progress span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--blue), var(--violet));
+        border-radius: 0 3px 3px 0;
+        transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-bar-inner {
+        display: grid;
+        grid-template-columns: 48px 1fr 48px;
+        align-items: center;
+        gap: 10px;
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 10px 16px;
+      }
+      .deck-bar-btn {
+        appearance: none;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        color: white;
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.30);
+        font-size: 22px;
+        line-height: 1;
+        transition: transform 160ms ease, opacity 160ms ease;
+      }
+      .deck-bar-btn:active { transform: scale(0.94); }
+      .deck-bar-btn[disabled] {
+        opacity: 0.4;
+        background: #cbd5e1;
+        box-shadow: none;
+        cursor: default;
+      }
+      .deck-bar-toggle {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 7px 14px;
+        min-height: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        cursor: pointer;
+        text-align: center;
+        box-shadow: var(--shadow-soft);
+      }
+      .deck-bar-count {
+        font-size: 10.5px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--blue);
+      }
+      .deck-bar-name {
+        font-size: 14px;
+        font-weight: 850;
+        letter-spacing: -0.01em;
+        color: var(--dark);
+        max-width: 56vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Hoja inferior con el indice completo */
+      .deck-sheet {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        pointer-events: none;
+        visibility: hidden;
+      }
+      .deck-sheet.is-open {
+        pointer-events: auto;
+        visibility: visible;
+      }
+      .deck-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(11, 18, 32, 0.45);
+        opacity: 0;
+        transition: opacity 240ms ease;
+      }
+      .deck-sheet.is-open .deck-sheet-backdrop { opacity: 1; }
+      .deck-sheet-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: 78vh;
+        overflow-y: auto;
+        padding: 14px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+        background: #ffffff;
+        border-radius: 24px 24px 0 0;
+        box-shadow: 0 -24px 60px rgba(15, 23, 42, 0.28);
+        transform: translateY(100%);
+        transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-sheet.is-open .deck-sheet-panel { transform: translateY(0); }
+      .deck-sheet-grip {
+        width: 44px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--line);
+        margin: 0 auto 14px;
+      }
+      .deck-sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .deck-sheet-head h4 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .deck-sheet-close {
+        appearance: none;
+        border: 0;
+        background: var(--soft);
+        color: var(--blue);
+        font-size: 20px;
+        font-weight: 900;
+        line-height: 1;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .deck-sheet-item {
+        appearance: none;
+        border: 0;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        align-items: center;
+        gap: 14px;
+        padding: 13px 8px;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+        border-radius: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .deck-sheet-item:last-child { border-bottom: 0; }
+      .deck-sheet-item .num {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--soft);
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--muted);
+      }
+      .deck-sheet-item .nm {
+        font-size: 15.5px;
+        font-weight: 850;
+        color: var(--ink-2);
+      }
+      .deck-sheet-item.is-active { background: rgba(37, 99, 235, 0.06); }
+      .deck-sheet-item.is-active .num {
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        color: #ffffff;
+      }
+      .deck-sheet-item.is-active .nm { color: var(--indigo); }
+
+      /* Hero sin hueco vertical grande al apilarse */
+      .hero { min-height: auto; padding: 48px 0 80px; }
+      .hero-visual { min-height: auto; }
+    }
+
+    @media (max-width: 680px) {
+      .deck-bar-inner { grid-template-columns: 44px 1fr 44px; padding: 8px 12px; }
+      .deck-bar-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; }
+      .deck-bar-name { max-width: 52vw; }
+      .deck-sheet-item .nm { font-size: 15px; }
     }
   </style>
 </head>
@@ -2200,6 +2420,105 @@
 
       document.body.appendChild(nav);
 
+      /* ===== Navegacion compacta para tablet y movil (barra inferior + hoja) ===== */
+      const total = sections.length;
+      const pad2 = (n) => String(n).padStart(2, "0");
+
+      // Etiqueta por seccion: usa el nombre del menu o un respaldo (kicker / "Inicio")
+      const sectionMeta = sections.map((section) => {
+        const id = "#" + section.id;
+        const link = sourceLinks.find((l) => l.getAttribute("href") === id);
+        let name = link ? link.textContent.trim() : "";
+        if (!name) {
+          const kicker = section.querySelector(".kicker");
+          name = kicker ? kicker.textContent.trim() : (section.id === "inicio" ? "Inicio" : section.id);
+        }
+        return { section, name };
+      });
+
+      const bar = document.createElement("div");
+      bar.className = "deck-bar";
+      bar.innerHTML =
+        '<div class="deck-bar-progress" aria-hidden="true"><span></span></div>' +
+        '<div class="deck-bar-inner">' +
+          '<button type="button" class="deck-bar-btn" data-act="prev" aria-label="Seccion anterior">&#8249;</button>' +
+          '<button type="button" class="deck-bar-toggle" aria-haspopup="dialog" aria-expanded="false">' +
+            '<span class="deck-bar-count"></span>' +
+            '<span class="deck-bar-name"></span>' +
+          '</button>' +
+          '<button type="button" class="deck-bar-btn" data-act="next" aria-label="Seccion siguiente">&#8250;</button>' +
+        '</div>';
+      document.body.appendChild(bar);
+
+      const barPrev = bar.querySelector('[data-act="prev"]');
+      const barNext = bar.querySelector('[data-act="next"]');
+      const barToggle = bar.querySelector(".deck-bar-toggle");
+      const barCount = bar.querySelector(".deck-bar-count");
+      const barName = bar.querySelector(".deck-bar-name");
+      const barFill = bar.querySelector(".deck-bar-progress span");
+
+      const sheet = document.createElement("div");
+      sheet.className = "deck-sheet";
+      sheet.setAttribute("role", "dialog");
+      sheet.setAttribute("aria-modal", "true");
+      sheet.setAttribute("aria-label", "Indice de secciones");
+      sheet.innerHTML =
+        '<div class="deck-sheet-backdrop" data-act="close"></div>' +
+        '<div class="deck-sheet-panel">' +
+          '<div class="deck-sheet-grip" aria-hidden="true"></div>' +
+          '<div class="deck-sheet-head">' +
+            '<h4>Secciones</h4>' +
+            '<button type="button" class="deck-sheet-close" data-act="close" aria-label="Cerrar indice">&times;</button>' +
+          '</div>' +
+          '<div class="deck-sheet-list"></div>' +
+        '</div>';
+      document.body.appendChild(sheet);
+
+      const sheetList = sheet.querySelector(".deck-sheet-list");
+      const sheetItems = sectionMeta.map((meta, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "deck-sheet-item";
+        btn.innerHTML = '<span class="num">' + pad2(i + 1) + '</span><span class="nm"></span>';
+        btn.querySelector(".nm").textContent = meta.name;
+        btn.addEventListener("click", () => {
+          closeSheet();
+          goTo(meta.section);
+        });
+        sheetList.appendChild(btn);
+        return btn;
+      });
+
+      const openSheet = () => {
+        sheet.classList.add("is-open");
+        barToggle.setAttribute("aria-expanded", "true");
+        document.body.style.overflow = "hidden";
+      };
+      const closeSheet = () => {
+        sheet.classList.remove("is-open");
+        barToggle.setAttribute("aria-expanded", "false");
+        document.body.style.overflow = "";
+      };
+
+      barToggle.addEventListener("click", () => {
+        if (sheet.classList.contains("is-open")) closeSheet();
+        else openSheet();
+      });
+      sheet.addEventListener("click", (e) => {
+        if (e.target instanceof Element && e.target.closest('[data-act="close"]')) closeSheet();
+      });
+      barPrev.addEventListener("click", () => move(-1));
+      barNext.addEventListener("click", () => move(1));
+
+      const updateBar = (idx) => {
+        barCount.textContent = pad2(idx + 1) + " / " + pad2(total);
+        barName.textContent = sectionMeta[idx] ? sectionMeta[idx].name : "";
+        barFill.style.width = (((idx + 1) / total) * 100).toFixed(2) + "%";
+        barPrev.disabled = idx <= 0;
+        barNext.disabled = idx >= total - 1;
+        sheetItems.forEach((it, i) => it.classList.toggle("is-active", i === idx));
+      };
+
       const goTo = (el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       };
@@ -2234,7 +2553,11 @@
         return index;
       };
 
-      const refresh = () => setActive("#" + sections[currentIndex()].id);
+      const refresh = () => {
+        const idx = currentIndex();
+        setActive("#" + sections[idx].id);
+        updateBar(idx);
+      };
 
       let ticking = false;
       const onScroll = () => {
@@ -2256,6 +2579,13 @@
       document.addEventListener("keydown", (event) => {
         const tag = (event.target.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || event.target.isContentEditable) return;
+        if (sheet.classList.contains("is-open")) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeSheet();
+          }
+          return;
+        }
         switch (event.key) {
           case "ArrowDown":
           case "ArrowRight":
