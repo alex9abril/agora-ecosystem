@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Agora Marketplace | Tu tienda en línea completa</title>
-  <meta name="description" content="Agora Marketplace es una tienda en línea completa: catálogo cargado desde tu DMS, checkout, pagos con Karlo Pay y logística con Skydropx. Tu sucursal solo prepara y entrega.">
+  <meta name="description" content="Agora Marketplace es una tienda en línea completa: catálogo conectado a tu sistema actual, checkout, pasarelas de pago conectadas y logística integrada para envíos. Tu sucursal solo prepara y entrega.">
   <style>
     :root {
       --bg: #f5f8ff;
@@ -1301,19 +1301,41 @@
 
     .deck-hint {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
       margin: 16px 4px 0;
       padding-top: 14px;
       border-top: 1px solid var(--line);
       font-size: 10.5px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: 0.02em;
       color: var(--muted);
+      cursor: default;
+      user-select: none;
+      pointer-events: none;
+    }
+    .deck-hint-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.85;
+    }
+    .deck-hint-detail {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.45;
+      font-weight: 700;
+      color: var(--ink-2);
     }
     .deck-keys {
       display: inline-flex;
-      gap: 4px;
+      gap: 3px;
+      vertical-align: middle;
     }
     .deck-keys kbd {
       display: grid;
@@ -1321,19 +1343,241 @@
       min-width: 18px;
       height: 18px;
       padding: 0 4px;
-      border-radius: 6px;
-      background: #ffffff;
-      border: 1px solid var(--line);
-      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
-      font-family: inherit;
-      font-size: 11px;
-      font-weight: 900;
+      border-radius: 4px;
+      background: #f1f5f9;
+      border: 1px dashed #cbd5e1;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      font-weight: 800;
       color: var(--ink-2);
       line-height: 1;
+      cursor: default;
+      pointer-events: none;
     }
 
-    @media (max-width: 1200px) {
+    /* La nav lateral solo aparece cuando el margen del viewport la aloja sin pisar el contenido */
+    @media (max-width: 1760px) {
       .deck-nav { display: none; }
+    }
+
+    /* ===== Navegacion compacta para tablet y movil (<=1760px) ===== */
+    .deck-bar { display: none; }
+    .deck-sheet { display: none; }
+
+    @media (max-width: 1760px) {
+      html.deck-mode body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+      .deck-bar {
+        display: block;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 70;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: rgba(255, 255, 255, 0.85);
+        border-top: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+      }
+      .deck-bar-progress {
+        height: 3px;
+        background: rgba(37, 99, 235, 0.12);
+      }
+      .deck-bar-progress span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--blue), var(--violet));
+        border-radius: 0 3px 3px 0;
+        transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-bar-inner {
+        display: grid;
+        grid-template-columns: 48px 1fr 48px;
+        align-items: center;
+        gap: 10px;
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 10px 16px;
+      }
+      .deck-bar-btn {
+        appearance: none;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        color: white;
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.30);
+        font-size: 22px;
+        line-height: 1;
+        transition: transform 160ms ease, opacity 160ms ease;
+      }
+      .deck-bar-btn:active { transform: scale(0.94); }
+      .deck-bar-btn[disabled] {
+        opacity: 0.4;
+        background: #cbd5e1;
+        box-shadow: none;
+        cursor: default;
+      }
+      .deck-bar-toggle {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 7px 14px;
+        min-height: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        cursor: pointer;
+        text-align: center;
+        box-shadow: var(--shadow-soft);
+      }
+      .deck-bar-count {
+        font-size: 10.5px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--blue);
+      }
+      .deck-bar-name {
+        font-size: 14px;
+        font-weight: 850;
+        letter-spacing: -0.01em;
+        color: var(--dark);
+        max-width: 56vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Hoja inferior con el indice completo */
+      .deck-sheet {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        pointer-events: none;
+        visibility: hidden;
+      }
+      .deck-sheet.is-open {
+        pointer-events: auto;
+        visibility: visible;
+      }
+      .deck-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(11, 18, 32, 0.45);
+        opacity: 0;
+        transition: opacity 240ms ease;
+      }
+      .deck-sheet.is-open .deck-sheet-backdrop { opacity: 1; }
+      .deck-sheet-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: 78vh;
+        overflow-y: auto;
+        padding: 14px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+        background: #ffffff;
+        border-radius: 24px 24px 0 0;
+        box-shadow: 0 -24px 60px rgba(15, 23, 42, 0.28);
+        transform: translateY(100%);
+        transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-sheet.is-open .deck-sheet-panel { transform: translateY(0); }
+      .deck-sheet-grip {
+        width: 44px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--line);
+        margin: 0 auto 14px;
+      }
+      .deck-sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .deck-sheet-head h4 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .deck-sheet-close {
+        appearance: none;
+        border: 0;
+        background: var(--soft);
+        color: var(--blue);
+        font-size: 20px;
+        font-weight: 900;
+        line-height: 1;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .deck-sheet-item {
+        appearance: none;
+        border: 0;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        align-items: center;
+        gap: 14px;
+        padding: 13px 8px;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+        border-radius: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .deck-sheet-item:last-child { border-bottom: 0; }
+      .deck-sheet-item .num {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--soft);
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--muted);
+      }
+      .deck-sheet-item .nm {
+        font-size: 15.5px;
+        font-weight: 850;
+        color: var(--ink-2);
+      }
+      .deck-sheet-item.is-active { background: rgba(37, 99, 235, 0.06); }
+      .deck-sheet-item.is-active .num {
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        color: #ffffff;
+      }
+      .deck-sheet-item.is-active .nm { color: var(--indigo); }
+
+      /* Hero sin hueco vertical grande al apilarse */
+      .hero { min-height: auto; padding: 48px 0 80px; }
+      .hero-visual { min-height: auto; }
+    }
+
+    @media (max-width: 680px) {
+      .deck-bar-inner { grid-template-columns: 44px 1fr 44px; padding: 8px 12px; }
+      .deck-bar-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; }
+      .deck-bar-name { max-width: 52vw; }
+      .deck-sheet-item .nm { font-size: 15px; }
     }
   </style>
 </head>
@@ -1366,8 +1610,8 @@
           <span class="kicker">Tienda en línea lista para vender</span>
           <h1>Todo conectado para una operación más simple.</h1>
           <p class="lead">
-            Agora Marketplace te entrega una tienda en línea funcionando de punta a punta: catálogo cargado desde tu DMS,
-            checkout completo, pagos con Karlo Pay y logística con Skydropx. La sucursal se concentra en una sola cosa:
+            Agora Marketplace te entrega una tienda en línea funcionando de punta a punta: catálogo conectado a tu sistema actual,
+            checkout completo, pasarelas de pago conectadas y logística integrada para envíos. La sucursal se concentra en una sola cosa:
             preparar pedidos y entregarlos a la paquetería o en pickup.
           </p>
           <div class="hero-actions">
@@ -1376,14 +1620,14 @@
           </div>
           <div class="hero-stats">
             <div class="stat"><strong>Listo</strong><span>Catálogo inicial ya cargado</span></div>
-            <div class="stat"><strong>1 clic</strong><span>Pago en línea con Karlo Pay</span></div>
-            <div class="stat"><strong>Auto</strong><span>Guías y recolección Skydropx</span></div>
+            <div class="stat"><strong>1 clic</strong><span>Pago en línea con pasarela de pagos</span></div>
+            <div class="stat"><strong>Auto</strong><span>Guías y recolección integradas</span></div>
           </div>
         </div>
 
         <div class="hero-visual">
-          <div class="floating green">Catálogo listo<small>Cargado desde tu DMS</small></div>
-          <div class="floating blue">Pago aprobado<small>Karlo Pay en línea</small></div>
+          <div class="floating green">Catálogo listo<small>Conectado a tu sistema</small></div>
+          <div class="floating blue">Pago aprobado<small>Pasarela de pagos en línea</small></div>
 
           <div class="panel demo">
             <div class="demo-head">
@@ -1398,7 +1642,7 @@
               </div>
               <div class="demo-card g">
                 <b>$</b>
-                <span>Pago aprobado con Karlo Pay</span>
+                <span>Pago aprobado en línea</span>
                 <small>Pagado</small>
               </div>
               <div class="demo-card w">
@@ -1407,8 +1651,8 @@
                 <small>Preparación</small>
               </div>
               <div class="demo-card">
-                <b>SK</b>
-                <span>Guía generada en Skydropx</span>
+                <b>L</b>
+                <span>Guía de envío generada</span>
                 <small>Por enviar</small>
               </div>
               <div class="demo-card g">
@@ -1443,7 +1687,7 @@
           <article class="pillar">
             <span class="badge alt">01</span>
             <h3>Catálogo listo</h3>
-            <p>Tus productos ya cargados desde el DMS, con marca, modelo, año y compatibilidad. La sucursal no captura producto.</p>
+            <p>Tus productos ya conectados desde tu sistema actual, con marca, modelo, año y compatibilidad. La sucursal no captura producto.</p>
           </article>
           <article class="pillar">
             <span class="badge alt">02</span>
@@ -1453,7 +1697,7 @@
           <article class="pillar">
             <span class="badge alt">03</span>
             <h3>Pagos integrados</h3>
-            <p>Cobros en línea con Karlo Pay: el cliente paga seguro y el pedido avanza automáticamente al confirmarse.</p>
+            <p>Cobros en línea con pasarela de pagos: el cliente paga seguro y el pedido avanza automáticamente al confirmarse.</p>
           </article>
           <article class="pillar">
             <span class="badge alt">04</span>
@@ -1471,12 +1715,12 @@
             <span class="kicker">Catálogo inicial cargado</span>
             <h2>Empiezas a vender con tu catálogo ya montado.</h2>
             <p class="lead">
-              El catálogo no se arma a mano. Agora Marketplace se conecta con tu DMS y publica los productos en la tienda
-              en línea, con su información comercial y de compatibilidad. La sucursal no pierde tiempo capturando.
+              El catálogo no se arma a mano. Agora Marketplace se conecta con el sistema donde ya tienes tu catálogo de productos
+              y lo publica en la tienda en línea, con su información comercial y de compatibilidad. La sucursal no pierde tiempo capturando.
             </p>
           </div>
           <div class="badge-row">
-            <span class="badge dark">Conectado al DMS</span>
+            <span class="badge dark">Conectado a tu sistema</span>
             <span class="badge ok">Sin captura manual</span>
           </div>
         </div>
@@ -1489,7 +1733,7 @@
               ficha comercial y su compatibilidad por vehículo, para que el cliente compre con confianza.
             </p>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px;">
-              <div class="prev-block"><h4>Origen</h4><p>Catálogo maestro de tu DMS</p></div>
+              <div class="prev-block"><h4>Origen</h4><p>Catálogo maestro de tu sistema</p></div>
               <div class="prev-block"><h4>Ficha</h4><p>Marca, modelo, año y número de parte</p></div>
               <div class="prev-block"><h4>Estado</h4><p>Disponibilidad y precio por sucursal</p></div>
             </div>
@@ -1502,7 +1746,7 @@
           <div style="display: grid; gap: 16px;">
             <div class="glass" style="padding: 26px;">
               <span class="badge alt">Sincronización</span>
-              <h3 style="margin-top: 14px;">El catálogo se actualiza desde tu DMS.</h3>
+              <h3 style="margin-top: 14px;">El catálogo se actualiza desde tu sistema.</h3>
               <p style="margin-top: 12px;">
                 Precios, existencias y altas de producto fluyen desde tu sistema hacia la tienda. Menos trabajo
                 administrativo, menos errores y un catálogo siempre consistente con tu operación real.
@@ -1555,13 +1799,13 @@
           <article class="card">
             <header><div class="ico">03</div><h3>Método de entrega</h3></header>
             <ul>
-              <li>Envío a domicilio con cotización de Skydropx.</li>
+              <li>Envío a domicilio con cotización de logística en línea.</li>
               <li>Opción de recoger en pickup en la sucursal.</li>
               <li>El costo de envío se calcula en línea.</li>
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">04</div><h3>Pago con Karlo Pay</h3></header>
+            <header><div class="ico">04</div><h3>Pago en línea</h3></header>
             <ul>
               <li>Cobro en línea seguro al confirmar el pedido.</li>
               <li>El pago dispara el avance del pedido en automático.</li>
@@ -1580,7 +1824,7 @@
             <header><div class="ico">06</div><h3>Seguimiento</h3></header>
             <ul>
               <li>Estados claros: pagado, en preparación, enviado, entregado.</li>
-              <li>Guía de Skydropx asociada al pedido.</li>
+              <li>Guía de envío asociada al pedido.</li>
               <li>Postventa y atención centralizadas.</li>
             </ul>
           </article>
@@ -1595,36 +1839,38 @@
             <span class="kicker">Integraciones</span>
             <h2>Conectado con lo que tu operación ya necesita.</h2>
             <p class="lead">
-              Agora Marketplace no te pide cambiar de sistema ni reinventar tu logística. Se integra con tu DMS para el
-              catálogo, con Karlo Pay para los cobros y con Skydropx para los envíos. Tres piezas, un solo flujo.
+              Agora Marketplace no te pide cambiar de sistema ni reinventar tu logística. Se conecta con el sistema donde
+              ya tienes tu catálogo de productos, con pasarelas de pago para los cobros y con logística integrada para los envíos. Tres piezas, un solo flujo.
             </p>
           </div>
-          <div class="badge-row"><span class="badge dark">DMS</span><span class="badge alt">Karlo Pay</span><span class="badge ok">Skydropx</span></div>
+          <div class="badge-row"><span class="badge dark">Catálogo</span><span class="badge alt">Pasarelas</span><span class="badge ok">Logística</span></div>
         </div>
 
         <div class="mechanism">
           <article class="card">
-            <header><div class="ico">$</div><h3>Karlo Pay · Pagos</h3></header>
+            <header><div class="ico">$</div><h3>Pasarelas de pago</h3></header>
             <ul>
               <li>Procesamiento de cobros en línea dentro del checkout.</li>
+              <li>Conexión con las principales opciones: KarloPay, Stripe y Mercado Pago.</li>
               <li>El pedido avanza automáticamente cuando el pago se aprueba.</li>
               <li>Experiencia de pago segura y confiable para el cliente.</li>
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">SK</div><h3>Skydropx · Logística</h3></header>
+            <header><div class="ico">L</div><h3>Logística integrada</h3></header>
             <ul>
+              <li>Conexión con operadores de paquetería para el envío de pedidos.</li>
               <li>Cotización de envío en el checkout según destino.</li>
               <li>Generación de guías y coordinación de recolección.</li>
               <li>La sucursal solo entrega el paquete a la paquetería.</li>
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">DMS</div><h3>Tu DMS · Catálogo</h3></header>
+            <header><div class="ico">C</div><h3>Catálogo de productos</h3></header>
             <ul>
-              <li>Catálogo inicial cargado desde tu sistema de gestión.</li>
-              <li>Productos, precios y existencias sincronizados.</li>
-              <li>Sin doble captura entre tu DMS y la tienda en línea.</li>
+              <li>Conexión con el sistema donde ya tienes tu catálogo de productos.</li>
+              <li>Productos, precios y existencias sincronizados con tu operación.</li>
+              <li>Sin doble captura entre tu sistema y la tienda en línea.</li>
             </ul>
           </article>
         </div>
@@ -1650,7 +1896,7 @@
             <article class="insp">
               <span class="brand">Entrega flexible</span>
               <h4>Envío o pickup</h4>
-              <p>El cliente decide recibir a domicilio con Skydropx o recoger en tu sucursal.</p>
+              <p>El cliente decide recibir a domicilio con envío integrado o recoger en tu sucursal.</p>
             </article>
             <article class="insp">
               <span class="brand">Trazabilidad</span>
@@ -1700,7 +1946,7 @@
               <div class="prev-step">02</div>
               <div>
                 <h3>Entrega a la paquetería</h3>
-                <span class="prev-tag">Skydropx</span>
+                <span class="prev-tag">Logística</span>
               </div>
             </header>
             <div class="prev-block">
@@ -1709,7 +1955,7 @@
             </div>
             <div class="prev-block blocks">
               <h4>Qué hace Agora por ti</h4>
-              <p>Genera la guía con Skydropx y coordina la recolección; el envío queda asociado al pedido.</p>
+              <p>Genera la guía de envío y coordina la recolección; el envío queda asociado al pedido.</p>
             </div>
             <p class="prev-impact"><strong>Resultado:</strong> el paquete sale sin que gestiones la paquetería.</p>
           </article>
@@ -1743,8 +1989,8 @@
           </div>
           <div class="stat-row">
             <div><strong>Vender</strong><span>Lo hace la tienda en línea</span></div>
-            <div><strong>Cobrar</strong><span>Lo hace Karlo Pay</span></div>
-            <div><strong>Enviar</strong><span>Lo hace Skydropx</span></div>
+            <div><strong>Cobrar</strong><span>Pasarela de pagos</span></div>
+            <div><strong>Enviar</strong><span>Lo coordina Agora</span></div>
           </div>
         </div>
       </div>
@@ -1798,7 +2044,7 @@
                 <h3>Elige envío o pickup</h3>
                 <span class="timeline-tag">Checkout</span>
               </div>
-              <p class="lead-line">En el checkout, el cliente captura su dirección y elige cómo recibir su pedido. Si es envío, Skydropx cotiza el costo en línea.</p>
+              <p class="lead-line">En el checkout, el cliente captura su dirección y elige cómo recibir su pedido. Si es envío, Agora cotiza el costo de logística en línea.</p>
               <div class="timeline-detail">
                 <div class="detail-block">
                   <h4>Se registra</h4>
@@ -1806,7 +2052,7 @@
                 </div>
                 <div class="detail-block">
                   <h4>En automático</h4>
-                  <ul><li>Cotización de Skydropx</li><li>Costo de envío al total</li></ul>
+                  <ul><li>Cotización de logística</li><li>Costo de envío al total</li></ul>
                 </div>
                 <div class="detail-block result">
                   <h4>Resultado</h4>
@@ -1820,11 +2066,11 @@
             <div class="timeline-node"><div class="timeline-bullet">03</div></div>
             <div class="timeline-card">
               <div class="timeline-head">
-                <h3>Pago con Karlo Pay</h3>
+                <h3>Pago en línea</h3>
                 <span class="timeline-tag">Cobro</span>
                 <span class="timeline-tag fiscal">Seguro</span>
               </div>
-              <p class="lead-line">El cliente paga en línea con Karlo Pay. Solo cuando el pago se aprueba, el pedido avanza para preparación. Sin pago, no hay pedido por surtir.</p>
+              <p class="lead-line">El cliente paga en línea a través de la pasarela de pagos configurada. Solo cuando el pago se aprueba, el pedido avanza para preparación. Sin pago, no hay pedido por surtir.</p>
               <div class="timeline-detail">
                 <div class="detail-block">
                   <h4>Se registra</h4>
@@ -1872,10 +2118,10 @@
             <div class="timeline-node"><div class="timeline-bullet">05</div></div>
             <div class="timeline-card">
               <div class="timeline-head">
-                <h3>Guía Skydropx o entrega en pickup</h3>
+                <h3>Guía de envío o entrega en pickup</h3>
                 <span class="timeline-tag">Logística</span>
               </div>
-              <p class="lead-line">Para envío, se genera la guía de Skydropx y se coordina la recolección. Para pickup, el pedido queda listo para entregar en mostrador.</p>
+              <p class="lead-line">Para envío, Agora genera la guía y coordina la recolección. Para pickup, el pedido queda listo para entregar en mostrador.</p>
               <div class="timeline-detail">
                 <div class="detail-block">
                   <h4>Se registra</h4>
@@ -1883,7 +2129,7 @@
                 </div>
                 <div class="detail-block">
                   <h4>En automático</h4>
-                  <ul><li>Generación de guía Skydropx</li><li>Notificación al cliente</li></ul>
+                  <ul><li>Generación de guía de envío</li><li>Notificación al cliente</li></ul>
                 </div>
                 <div class="detail-block result">
                   <h4>Resultado</h4>
@@ -1960,12 +2206,12 @@
               <h4>Pedidos recientes</h4>
               <div class="alert-row">
                 <b>09:11</b>
-                <p>Pedido #10298 pagado con Karlo Pay · listo para preparar.</p>
+                <p>Pedido #10298 pagado en línea · listo para preparar.</p>
                 <span class="tag low">Pagado</span>
               </div>
               <div class="alert-row">
                 <b>08:47</b>
-                <p>Pedido #10295 empacado · guía Skydropx generada.</p>
+                <p>Pedido #10295 empacado · guía de envío generada.</p>
                 <span class="tag medium">Por enviar</span>
               </div>
               <div class="alert-row">
@@ -2011,8 +2257,8 @@
           <article class="risk-card">
             <small>Estado 02</small>
             <h4>Pagado</h4>
-            <p>Karlo Pay confirmó el cobro. El pedido avanza para preparación en la sucursal.</p>
-            <div class="meta"><span class="badge alt">Karlo Pay</span></div>
+            <p>La pasarela de pagos confirmó el cobro. El pedido avanza para preparación en la sucursal.</p>
+            <div class="meta"><span class="badge alt">Pasarela</span></div>
           </article>
           <article class="risk-card">
             <small>Estado 03</small>
@@ -2029,14 +2275,14 @@
           <article class="risk-card">
             <small>Estado 05</small>
             <h4>Guía generada</h4>
-            <p>Skydropx emitió la guía y el pedido queda asociado al envío.</p>
-            <div class="meta"><span class="badge alt">Skydropx</span></div>
+            <p>Agora generó la guía y el pedido queda asociado al envío.</p>
+            <div class="meta"><span class="badge alt">Logística</span></div>
           </article>
           <article class="risk-card">
             <small>Estado 06</small>
             <h4>En tránsito</h4>
             <p>La paquetería recolectó el paquete y va en camino al cliente.</p>
-            <div class="meta"><span class="badge alt">Skydropx</span></div>
+            <div class="meta"><span class="badge alt">Logística</span></div>
           </article>
           <article class="risk-card">
             <small>Estado 07</small>
@@ -2093,24 +2339,24 @@
           <article class="tone-card">
             <div class="ref">Pagos</div>
             <div>
-              <h3>Cobros con Karlo Pay</h3>
-              <p>El cliente paga seguro en línea y el pedido avanza solo cuando el cobro se confirma.</p>
+              <h3>Pasarela de pagos</h3>
+              <p>El cliente paga seguro en línea y el pedido avanza solo cuando el cobro se confirma. Conexión con KarloPay, Stripe y Mercado Pago.</p>
               <div class="meta"><span class="badge ok">Pago en línea</span></div>
             </div>
           </article>
           <article class="tone-card">
             <div class="ref">Logística</div>
             <div>
-              <h3>Envíos con Skydropx</h3>
-              <p>Cotización, guías y recolección. Tu sucursal solo entrega el paquete a la paquetería o en pickup.</p>
+              <h3>Logística integrada</h3>
+              <p>Cotización, guías y recolección conectadas a operadores de paquetería. Tu sucursal solo entrega el paquete o atiende pickup.</p>
               <div class="meta"><span class="badge ok">Envío o pickup</span></div>
             </div>
           </article>
           <article class="tone-card">
             <div class="ref">Catálogo</div>
             <div>
-              <h3>Catálogo desde tu DMS</h3>
-              <p>Productos cargados y sincronizados con tu sistema de gestión, con compatibilidad por vehículo.</p>
+              <h3>Catálogo desde tu sistema</h3>
+              <p>Productos conectados y sincronizados con el sistema donde ya los administras, con compatibilidad por vehículo.</p>
               <div class="meta"><span class="badge alt">Sin doble captura</span></div>
             </div>
           </article>
@@ -2126,7 +2372,7 @@
 
         <div class="quote-card" style="margin-top: 30px;">
           <blockquote>El cliente compra y paga en línea; tú solo preparas el paquete y lo entregas.</blockquote>
-          <p>Esa es la promesa de Agora Marketplace. La plataforma se encarga del catálogo, el checkout, el cobro con Karlo Pay y la logística con Skydropx. Tu sucursal se enfoca en surtir bien y entregar a tiempo.</p>
+          <p>Esa es la promesa de Agora Marketplace. La plataforma se encarga del catálogo, el checkout, el cobro con pasarelas de pago (KarloPay, Stripe, Mercado Pago) y la logística integrada para envíos. Tu sucursal se enfoca en surtir bien y entregar a tiempo.</p>
         </div>
 
         <div class="cta-band" style="margin-top: 30px;">
@@ -2195,10 +2441,119 @@
 
       const hint = document.createElement("div");
       hint.className = "deck-hint";
-      hint.innerHTML = '<span class="deck-keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span>Navega entre secciones</span>';
+      hint.setAttribute("role", "note");
+      hint.setAttribute(
+        "aria-label",
+        "Atajo de teclado: presiona las flechas arriba o abajo para cambiar de sección. No es un botón en pantalla."
+      );
+      hint.innerHTML =
+        '<span class="deck-hint-label">Atajo de teclado</span>' +
+        '<span class="deck-hint-detail">' +
+          'Presiona <span class="deck-keys" aria-hidden="true"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span> ' +
+          'en tu teclado para cambiar de sección' +
+        '</span>';
       nav.appendChild(hint);
 
       document.body.appendChild(nav);
+
+      /* ===== Navegacion compacta para tablet y movil (barra inferior + hoja) ===== */
+      const total = sections.length;
+      const pad2 = (n) => String(n).padStart(2, "0");
+
+      // Etiqueta por seccion: usa el nombre del menu o un respaldo (kicker / "Inicio")
+      const sectionMeta = sections.map((section) => {
+        const id = "#" + section.id;
+        const link = sourceLinks.find((l) => l.getAttribute("href") === id);
+        let name = link ? link.textContent.trim() : "";
+        if (!name) {
+          const kicker = section.querySelector(".kicker");
+          name = kicker ? kicker.textContent.trim() : (section.id === "inicio" ? "Inicio" : section.id);
+        }
+        return { section, name };
+      });
+
+      const bar = document.createElement("div");
+      bar.className = "deck-bar";
+      bar.innerHTML =
+        '<div class="deck-bar-progress" aria-hidden="true"><span></span></div>' +
+        '<div class="deck-bar-inner">' +
+          '<button type="button" class="deck-bar-btn" data-act="prev" aria-label="Seccion anterior">&#8249;</button>' +
+          '<button type="button" class="deck-bar-toggle" aria-haspopup="dialog" aria-expanded="false">' +
+            '<span class="deck-bar-count"></span>' +
+            '<span class="deck-bar-name"></span>' +
+          '</button>' +
+          '<button type="button" class="deck-bar-btn" data-act="next" aria-label="Seccion siguiente">&#8250;</button>' +
+        '</div>';
+      document.body.appendChild(bar);
+
+      const barPrev = bar.querySelector('[data-act="prev"]');
+      const barNext = bar.querySelector('[data-act="next"]');
+      const barToggle = bar.querySelector(".deck-bar-toggle");
+      const barCount = bar.querySelector(".deck-bar-count");
+      const barName = bar.querySelector(".deck-bar-name");
+      const barFill = bar.querySelector(".deck-bar-progress span");
+
+      const sheet = document.createElement("div");
+      sheet.className = "deck-sheet";
+      sheet.setAttribute("role", "dialog");
+      sheet.setAttribute("aria-modal", "true");
+      sheet.setAttribute("aria-label", "Indice de secciones");
+      sheet.innerHTML =
+        '<div class="deck-sheet-backdrop" data-act="close"></div>' +
+        '<div class="deck-sheet-panel">' +
+          '<div class="deck-sheet-grip" aria-hidden="true"></div>' +
+          '<div class="deck-sheet-head">' +
+            '<h4>Secciones</h4>' +
+            '<button type="button" class="deck-sheet-close" data-act="close" aria-label="Cerrar indice">&times;</button>' +
+          '</div>' +
+          '<div class="deck-sheet-list"></div>' +
+        '</div>';
+      document.body.appendChild(sheet);
+
+      const sheetList = sheet.querySelector(".deck-sheet-list");
+      const sheetItems = sectionMeta.map((meta, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "deck-sheet-item";
+        btn.innerHTML = '<span class="num">' + pad2(i + 1) + '</span><span class="nm"></span>';
+        btn.querySelector(".nm").textContent = meta.name;
+        btn.addEventListener("click", () => {
+          closeSheet();
+          goTo(meta.section);
+        });
+        sheetList.appendChild(btn);
+        return btn;
+      });
+
+      const openSheet = () => {
+        sheet.classList.add("is-open");
+        barToggle.setAttribute("aria-expanded", "true");
+        document.body.style.overflow = "hidden";
+      };
+      const closeSheet = () => {
+        sheet.classList.remove("is-open");
+        barToggle.setAttribute("aria-expanded", "false");
+        document.body.style.overflow = "";
+      };
+
+      barToggle.addEventListener("click", () => {
+        if (sheet.classList.contains("is-open")) closeSheet();
+        else openSheet();
+      });
+      sheet.addEventListener("click", (e) => {
+        if (e.target instanceof Element && e.target.closest('[data-act="close"]')) closeSheet();
+      });
+      barPrev.addEventListener("click", () => move(-1));
+      barNext.addEventListener("click", () => move(1));
+
+      const updateBar = (idx) => {
+        barCount.textContent = pad2(idx + 1) + " / " + pad2(total);
+        barName.textContent = sectionMeta[idx] ? sectionMeta[idx].name : "";
+        barFill.style.width = (((idx + 1) / total) * 100).toFixed(2) + "%";
+        barPrev.disabled = idx <= 0;
+        barNext.disabled = idx >= total - 1;
+        sheetItems.forEach((it, i) => it.classList.toggle("is-active", i === idx));
+      };
 
       const goTo = (el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2234,7 +2589,11 @@
         return index;
       };
 
-      const refresh = () => setActive("#" + sections[currentIndex()].id);
+      const refresh = () => {
+        const idx = currentIndex();
+        setActive("#" + sections[idx].id);
+        updateBar(idx);
+      };
 
       let ticking = false;
       const onScroll = () => {
@@ -2256,6 +2615,13 @@
       document.addEventListener("keydown", (event) => {
         const tag = (event.target.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || event.target.isContentEditable) return;
+        if (sheet.classList.contains("is-open")) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeSheet();
+          }
+          return;
+        }
         switch (event.key) {
           case "ArrowDown":
           case "ArrowRight":
