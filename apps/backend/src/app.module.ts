@@ -36,6 +36,8 @@ import { StoresModule } from './modules/stores/stores.module';
 import { IntegrationCartModule } from './modules/integration-cart/integration-cart.module';
 import { IntegrationWorkflowsModule } from './modules/integration-workflows/integration-workflows.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { AgentTaskDetailModule } from './modules/agent-task-detail/agent-task-detail.module';
+import { StorefrontChatModule } from './modules/storefront-chat/storefront-chat.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -70,13 +72,15 @@ import { ScheduleModule } from '@nestjs/schedule';
     IntegrationCartModule,
     IntegrationWorkflowsModule,
     MessagesModule,
-    // Otros módulos se agregarán aquí
+    AgentTaskDetailModule,
+    StorefrontChatModule,
+    // Otros mÃ³dulos se agregarÃ¡n aquÃ­
     // UsersModule,
     // etc.
   ],
   controllers: [],
   providers: [
-    // Guard global: Todos los endpoints requieren autenticación por defecto
+    // Guard global: Todos los endpoints requieren autenticaciÃ³n por defecto
     {
       provide: APP_GUARD,
       useClass: SupabaseAuthGuard,
@@ -91,7 +95,7 @@ import { ScheduleModule } from '@nestjs/schedule';
       provide: APP_INTERCEPTOR,
       useClass: ApiLoggingInterceptor,
     },
-    // Interceptor global: Loguea el body de los requests antes de la validación (para debugging)
+    // Interceptor global: Loguea el body de los requests antes de la validaciÃ³n (para debugging)
     {
       provide: APP_INTERCEPTOR,
       useClass: RequestLoggingInterceptor,
