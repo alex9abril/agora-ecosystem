@@ -487,6 +487,13 @@
       color: var(--dark);
       letter-spacing: -0.02em;
     }
+    .problem-chart {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: center;
+      margin-top: 18px;
+    }
 
     /* Value pillars */
     .pillars {
@@ -537,6 +544,7 @@
       margin-bottom: 16px;
     }
     .mechanism .ico {
+      flex: 0 0 44px;
       width: 44px;
       height: 44px;
       display: grid;
@@ -545,7 +553,9 @@
       background: linear-gradient(135deg, var(--blue), var(--indigo));
       color: white;
       font-weight: 950;
-      font-size: 17px;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      font-variant-numeric: tabular-nums;
     }
     .mechanism .card:nth-child(2) .ico { background: linear-gradient(135deg, var(--rose), #fb7185); }
     .mechanism .card:nth-child(3) .ico { background: linear-gradient(135deg, var(--teal), var(--mint)); }
@@ -1238,6 +1248,11 @@
       .floating { display: none; }
       .panel.demo { margin: 0; }
       .alert-row { grid-template-columns: 1fr; }
+      .dashboard { padding: 20px 18px; border-radius: 24px; }
+      .dashboard-head h3 { font-size: 20px; }
+      .problem-chart { grid-template-columns: 1fr; }
+      .prevention-summary { padding: 22px 20px; }
+      .container { padding: 0 16px; }
       h1 { font-size: 34px; }
       h2 { font-size: 32px; }
     }
@@ -1383,19 +1398,41 @@
 
     .deck-hint {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
       margin: 16px 4px 0;
       padding-top: 14px;
       border-top: 1px solid var(--line);
       font-size: 10.5px;
-      font-weight: 800;
+      font-weight: 700;
       letter-spacing: 0.02em;
       color: var(--muted);
+      cursor: default;
+      user-select: none;
+      pointer-events: none;
+    }
+    .deck-hint-label {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.85;
+    }
+    .deck-hint-detail {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.45;
+      font-weight: 700;
+      color: var(--ink-2);
     }
     .deck-keys {
       display: inline-flex;
-      gap: 4px;
+      gap: 3px;
+      vertical-align: middle;
     }
     .deck-keys kbd {
       display: grid;
@@ -1403,19 +1440,241 @@
       min-width: 18px;
       height: 18px;
       padding: 0 4px;
-      border-radius: 6px;
-      background: #ffffff;
-      border: 1px solid var(--line);
-      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
-      font-family: inherit;
-      font-size: 11px;
-      font-weight: 900;
+      border-radius: 4px;
+      background: #f1f5f9;
+      border: 1px dashed #cbd5e1;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 10px;
+      font-weight: 800;
       color: var(--ink-2);
       line-height: 1;
+      cursor: default;
+      pointer-events: none;
     }
 
-    @media (max-width: 1200px) {
+    /* La nav lateral solo aparece cuando el margen del viewport la aloja sin pisar el contenido */
+    @media (max-width: 1760px) {
       .deck-nav { display: none; }
+    }
+
+    /* ===== Navegacion compacta para tablet y movil (<=1760px) ===== */
+    .deck-bar { display: none; }
+    .deck-sheet { display: none; }
+
+    @media (max-width: 1760px) {
+      html.deck-mode body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+
+      .deck-bar {
+        display: block;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 70;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        background: rgba(255, 255, 255, 0.85);
+        border-top: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.12);
+        backdrop-filter: blur(16px) saturate(140%);
+        -webkit-backdrop-filter: blur(16px) saturate(140%);
+      }
+      .deck-bar-progress {
+        height: 3px;
+        background: rgba(37, 99, 235, 0.12);
+      }
+      .deck-bar-progress span {
+        display: block;
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--blue), var(--violet));
+        border-radius: 0 3px 3px 0;
+        transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-bar-inner {
+        display: grid;
+        grid-template-columns: 48px 1fr 48px;
+        align-items: center;
+        gap: 10px;
+        max-width: var(--max);
+        margin: 0 auto;
+        padding: 10px 16px;
+      }
+      .deck-bar-btn {
+        appearance: none;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        color: white;
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        box-shadow: 0 10px 24px rgba(79, 70, 229, 0.30);
+        font-size: 22px;
+        line-height: 1;
+        transition: transform 160ms ease, opacity 160ms ease;
+      }
+      .deck-bar-btn:active { transform: scale(0.94); }
+      .deck-bar-btn[disabled] {
+        opacity: 0.4;
+        background: #cbd5e1;
+        box-shadow: none;
+        cursor: default;
+      }
+      .deck-bar-toggle {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 7px 14px;
+        min-height: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        cursor: pointer;
+        text-align: center;
+        box-shadow: var(--shadow-soft);
+      }
+      .deck-bar-count {
+        font-size: 10.5px;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--blue);
+      }
+      .deck-bar-name {
+        font-size: 14px;
+        font-weight: 850;
+        letter-spacing: -0.01em;
+        color: var(--dark);
+        max-width: 56vw;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Hoja inferior con el indice completo */
+      .deck-sheet {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        pointer-events: none;
+        visibility: hidden;
+      }
+      .deck-sheet.is-open {
+        pointer-events: auto;
+        visibility: visible;
+      }
+      .deck-sheet-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(11, 18, 32, 0.45);
+        opacity: 0;
+        transition: opacity 240ms ease;
+      }
+      .deck-sheet.is-open .deck-sheet-backdrop { opacity: 1; }
+      .deck-sheet-panel {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-height: 78vh;
+        overflow-y: auto;
+        padding: 14px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+        background: #ffffff;
+        border-radius: 24px 24px 0 0;
+        box-shadow: 0 -24px 60px rgba(15, 23, 42, 0.28);
+        transform: translateY(100%);
+        transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .deck-sheet.is-open .deck-sheet-panel { transform: translateY(0); }
+      .deck-sheet-grip {
+        width: 44px;
+        height: 5px;
+        border-radius: 999px;
+        background: var(--line);
+        margin: 0 auto 14px;
+      }
+      .deck-sheet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .deck-sheet-head h4 {
+        margin: 0;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .deck-sheet-close {
+        appearance: none;
+        border: 0;
+        background: var(--soft);
+        color: var(--blue);
+        font-size: 20px;
+        font-weight: 900;
+        line-height: 1;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .deck-sheet-item {
+        appearance: none;
+        border: 0;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        align-items: center;
+        gap: 14px;
+        padding: 13px 8px;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+        border-radius: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      .deck-sheet-item:last-child { border-bottom: 0; }
+      .deck-sheet-item .num {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--soft);
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--muted);
+      }
+      .deck-sheet-item .nm {
+        font-size: 15.5px;
+        font-weight: 850;
+        color: var(--ink-2);
+      }
+      .deck-sheet-item.is-active { background: rgba(37, 99, 235, 0.06); }
+      .deck-sheet-item.is-active .num {
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        color: #ffffff;
+      }
+      .deck-sheet-item.is-active .nm { color: var(--indigo); }
+
+      /* Hero sin hueco vertical grande al apilarse */
+      .hero { min-height: auto; padding: 48px 0 80px; }
+      .hero-visual { min-height: auto; }
+    }
+
+    @media (max-width: 680px) {
+      .deck-bar-inner { grid-template-columns: 44px 1fr 44px; padding: 8px 12px; }
+      .deck-bar-btn { width: 44px; height: 44px; border-radius: 12px; font-size: 20px; }
+      .deck-bar-name { max-width: 52vw; }
+      .deck-sheet-item .nm { font-size: 15px; }
     }
   </style>
 </head>
@@ -1428,7 +1687,6 @@
       </a>
       <button class="menu-button" id="menuButton" type="button" aria-controls="menu" aria-expanded="false">Menu</button>
       <ul class="menu" id="menu">
-        <li><a href="#problema">El problema</a></li>
         <li><a href="#propuesta">Propuesta</a></li>
         <li><a href="#mecanismos">Mecanismos</a></li>
         <li><a href="#flujo">Flujo</a></li>
@@ -1488,79 +1746,6 @@
       </div>
     </section>
 
-    <section id="problema">
-      <div class="container">
-        <div class="section-head">
-          <div>
-            <span class="kicker">El problema real</span>
-            <h2>La merma no es robo. Es un proceso que falla en silencio.</h2>
-            <p class="lead">
-              Segun Appriss Retail 2026, el retail global pierde casi 90 mil millones de dolares al año por merma.
-              Lo que mas duele no es el shoplifting, son los procesos internos sin control. Los grandes lo descubrieron
-              antes que nadie y por eso invierten mas en validacion operativa que en camaras.
-            </p>
-          </div>
-          <div class="badge-row">
-            <span class="badge dark">Benchmark 2026</span>
-            <span class="badge warn">73% prevenible</span>
-          </div>
-        </div>
-
-        <div class="problem-grid">
-          <div class="glass" style="padding: 28px;">
-            <h3>Distribucion de la merma en retail</h3>
-            <p style="margin-top: 8px; color: var(--muted); font-size: 14px;">
-              Datos del National Retail Security Survey 2023 (NRF + Loss Prevention Research Council).
-              Cada categoria es una bateria de procesos que Agora Marketplace mitiga.
-            </p>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; margin-top: 18px;">
-              <div style="position: relative;">
-                <div class="donut" aria-hidden="true"></div>
-                <div class="donut-center">
-                  <strong>$112.1B</strong>
-                  <span>merma anual EE.UU.</span>
-                </div>
-              </div>
-              <div class="legend">
-                <div class="legend-item"><span class="swatch" style="background: var(--cyan);"></span><div><h4>Robo externo</h4><p>Robo en piso de venta</p></div><b>36%</b></div>
-                <div class="legend-item"><span class="swatch" style="background: var(--rose);"></span><div><h4>Robo interno / empleado</h4><p>Reembolsos, cancelaciones y entrega a cómplices en caja</p></div><b>29%</b></div>
-                <div class="legend-item"><span class="swatch" style="background: var(--amber);"></span><div><h4>Procesos y errores de control</h4><p>Errores de surtido, conteos, recepciones y etiquetas</p></div><b>27%</b></div>
-                <div class="legend-item"><span class="swatch" style="background: var(--muted);"></span><div><h4>Desconocido</h4><p>Diferencias sin causa identificada</p></div><b>6%</b></div>
-                <div class="legend-item"><span class="swatch" style="background: var(--blue);"></span><div><h4>Otros</h4><p>Proveedor, daño, caducidad y misceláneos</p></div><b>2%</b></div>
-              </div>
-            </div>
-            <p style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 12px; line-height: 1.55;">
-              <strong style="color: var(--text);">Fuente:</strong>
-              NRF National Retail Security Survey 2023 (FY 2022, EE.UU.): tasa promedio de merma 1.6% de ventas = $112.1B en pérdidas.
-              Aparte, el reporte Appriss Retail + Deloitte 2024 reporta $103B adicionales en devoluciones y reclamos fraudulentos
-              (15.14% de las devoluciones totales).
-            </p>
-          </div>
-
-          <div style="display: grid; gap: 16px;">
-            <div class="glass" style="padding: 26px;">
-              <span class="badge alt">Hallazgo clave</span>
-              <h3 style="margin-top: 14px;">El 64% de la merma viene del proceso operativo, no del robo.</h3>
-              <p style="margin-top: 12px;">
-                FMI y The Retail Control Group concluyeron que la mayor parte de las perdidas en cadenas con alta rotacion
-                ocurre por errores de captura, ordenes mal hechas, recepciones mal validadas y rotacion no controlada.
-                Atacando primero el proceso, el negocio recupera margen sin esperar a un evento de seguridad.
-              </p>
-            </div>
-            <div class="glass" style="padding: 26px;">
-              <span class="badge risk">Costo escondido</span>
-              <h3 style="margin-top: 14px;">Sin trazabilidad, cada diferencia se vuelve sospecha sin pruebas.</h3>
-              <p style="margin-top: 12px;">
-                Cuando una unidad desaparece, sin documentos firmados, ubicacion conocida y responsable identificado,
-                el negocio no puede actuar. Con Agora Marketplace dejas de operar por intuicion y empiezas a investigar
-                por rupturas del flujo: quien, cuando, con que documento, con que evidencia.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section id="propuesta">
       <div class="container">
         <div class="section-head">
@@ -1611,7 +1796,7 @@
             <h2>Cada fuga tiene su contramedida especifica.</h2>
             <p class="lead">
               Agora Marketplace combina controles operativos, validaciones automaticas y supervision humana donde aporta valor.
-              Asi se ataca cada porcentaje del pastel de merma con acciones concretas.
+              Asi se ataca cada causa de merma con acciones concretas.
             </p>
           </div>
           <div class="badge-row"><span class="badge ok">Operativo</span><span class="badge risk">Antifraude</span></div>
@@ -1619,7 +1804,7 @@
 
         <div class="mechanism">
           <article class="card">
-            <header><div class="ico">29%</div><h3>Robo interno en caja</h3></header>
+            <header><div class="ico">01</div><h3>Fuga interna en caja</h3></header>
             <ul>
               <li>Permisos por puesto y doble autorizacion para cancelaciones, reembolsos y descuentos altos.</li>
               <li>Bitacora a prueba de borrado por cajero, terminal y turno.</li>
@@ -1628,7 +1813,7 @@
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">21%</div><h3>Errores administrativos</h3></header>
+            <header><div class="ico">02</div><h3>Errores administrativos</h3></header>
             <ul>
               <li>Triple validacion en recepcion: orden de compra vs factura vs producto fisico.</li>
               <li>Etapas encadenadas: no se vende lo que no fue ubicado.</li>
@@ -1637,7 +1822,7 @@
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">20%</div><h3>Devoluciones fraudulentas</h3></header>
+            <header><div class="ico">03</div><h3>Devoluciones fraudulentas</h3></header>
             <ul>
               <li>Toda devolucion ligada al ticket original, metodo de pago y receptor.</li>
               <li>Limites por cliente, monto y categoria.</li>
@@ -1646,7 +1831,7 @@
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">13%</div><h3>Operativos y caducidad</h3></header>
+            <header><div class="ico">04</div><h3>Operativos y caducidad</h3></header>
             <ul>
               <li>Control de lotes con rotacion automatica por antiguedad y caducidad.</li>
               <li>Productos dañados, en cuarentena o vencidos quedan bloqueados para venta.</li>
@@ -1655,7 +1840,7 @@
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">10%</div><h3>Robo externo</h3></header>
+            <header><div class="ico">05</div><h3>Robo externo</h3></header>
             <ul>
               <li>Reglas especiales para productos de alto valor.</li>
               <li>Emparejamiento entre ticket, salida y entrega.</li>
@@ -1664,7 +1849,7 @@
             </ul>
           </article>
           <article class="card">
-            <header><div class="ico">5%</div><h3>Proveedores</h3></header>
+            <header><div class="ico">06</div><h3>Proveedores</h3></header>
             <ul>
               <li>Si la orden de compra y la factura no coinciden, la recepcion solo puede cerrarse con autorizacion del supervisor, motivo documentado y evidencia adjunta.</li>
               <li>Historico por proveedor con desviaciones y tendencias.</li>
@@ -2591,10 +2776,118 @@
 
       const hint = document.createElement("div");
       hint.className = "deck-hint";
-      hint.innerHTML = '<span class="deck-keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span>Navega entre secciones</span>';
+      hint.setAttribute("role", "note");
+      hint.setAttribute(
+        "aria-label",
+        "Atajo de teclado: presiona las flechas arriba o abajo para cambiar de sección. No es un botón en pantalla."
+      );
+      hint.innerHTML =
+        '<span class="deck-hint-label">Atajo de teclado</span>' +
+        '<span class="deck-hint-detail">' +
+          'Presiona <span class="deck-keys" aria-hidden="true"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span> ' +
+          'en tu teclado para cambiar de sección' +
+        '</span>';
       nav.appendChild(hint);
 
       document.body.appendChild(nav);
+
+      /* ===== Navegacion compacta para tablet y movil (barra inferior + hoja) ===== */
+      const total = sections.length;
+      const pad2 = (n) => String(n).padStart(2, "0");
+
+      const sectionMeta = sections.map((section) => {
+        const id = "#" + section.id;
+        const link = sourceLinks.find((l) => l.getAttribute("href") === id);
+        let name = link ? link.textContent.trim() : "";
+        if (!name) {
+          const kicker = section.querySelector(".kicker");
+          name = kicker ? kicker.textContent.trim() : (section.id === "inicio" ? "Inicio" : section.id);
+        }
+        return { section, name };
+      });
+
+      const bar = document.createElement("div");
+      bar.className = "deck-bar";
+      bar.innerHTML =
+        '<div class="deck-bar-progress" aria-hidden="true"><span></span></div>' +
+        '<div class="deck-bar-inner">' +
+          '<button type="button" class="deck-bar-btn" data-act="prev" aria-label="Seccion anterior">&#8249;</button>' +
+          '<button type="button" class="deck-bar-toggle" aria-haspopup="dialog" aria-expanded="false">' +
+            '<span class="deck-bar-count"></span>' +
+            '<span class="deck-bar-name"></span>' +
+          '</button>' +
+          '<button type="button" class="deck-bar-btn" data-act="next" aria-label="Seccion siguiente">&#8250;</button>' +
+        '</div>';
+      document.body.appendChild(bar);
+
+      const barPrev = bar.querySelector('[data-act="prev"]');
+      const barNext = bar.querySelector('[data-act="next"]');
+      const barToggle = bar.querySelector(".deck-bar-toggle");
+      const barCount = bar.querySelector(".deck-bar-count");
+      const barName = bar.querySelector(".deck-bar-name");
+      const barFill = bar.querySelector(".deck-bar-progress span");
+
+      const sheet = document.createElement("div");
+      sheet.className = "deck-sheet";
+      sheet.setAttribute("role", "dialog");
+      sheet.setAttribute("aria-modal", "true");
+      sheet.setAttribute("aria-label", "Indice de secciones");
+      sheet.innerHTML =
+        '<div class="deck-sheet-backdrop" data-act="close"></div>' +
+        '<div class="deck-sheet-panel">' +
+          '<div class="deck-sheet-grip" aria-hidden="true"></div>' +
+          '<div class="deck-sheet-head">' +
+            '<h4>Secciones</h4>' +
+            '<button type="button" class="deck-sheet-close" data-act="close" aria-label="Cerrar indice">&times;</button>' +
+          '</div>' +
+          '<div class="deck-sheet-list"></div>' +
+        '</div>';
+      document.body.appendChild(sheet);
+
+      const sheetList = sheet.querySelector(".deck-sheet-list");
+      const sheetItems = sectionMeta.map((meta, i) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "deck-sheet-item";
+        btn.innerHTML = '<span class="num">' + pad2(i + 1) + '</span><span class="nm"></span>';
+        btn.querySelector(".nm").textContent = meta.name;
+        btn.addEventListener("click", () => {
+          closeSheet();
+          goTo(meta.section);
+        });
+        sheetList.appendChild(btn);
+        return btn;
+      });
+
+      const openSheet = () => {
+        sheet.classList.add("is-open");
+        barToggle.setAttribute("aria-expanded", "true");
+        document.body.style.overflow = "hidden";
+      };
+      const closeSheet = () => {
+        sheet.classList.remove("is-open");
+        barToggle.setAttribute("aria-expanded", "false");
+        document.body.style.overflow = "";
+      };
+
+      barToggle.addEventListener("click", () => {
+        if (sheet.classList.contains("is-open")) closeSheet();
+        else openSheet();
+      });
+      sheet.addEventListener("click", (e) => {
+        if (e.target instanceof Element && e.target.closest('[data-act="close"]')) closeSheet();
+      });
+      barPrev.addEventListener("click", () => move(-1));
+      barNext.addEventListener("click", () => move(1));
+
+      const updateBar = (idx) => {
+        barCount.textContent = pad2(idx + 1) + " / " + pad2(total);
+        barName.textContent = sectionMeta[idx] ? sectionMeta[idx].name : "";
+        barFill.style.width = (((idx + 1) / total) * 100).toFixed(2) + "%";
+        barPrev.disabled = idx <= 0;
+        barNext.disabled = idx >= total - 1;
+        sheetItems.forEach((it, i) => it.classList.toggle("is-active", i === idx));
+      };
 
       const goTo = (el) => {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2621,7 +2914,6 @@
         });
       };
 
-      // Seccion vigente: la ultima cuyo borde superior cruzo la linea de referencia
       const currentIndex = () => {
         const ref = window.innerHeight * 0.35;
         let index = 0;
@@ -2631,7 +2923,11 @@
         return index;
       };
 
-      const refresh = () => setActive("#" + sections[currentIndex()].id);
+      const refresh = () => {
+        const idx = currentIndex();
+        setActive("#" + sections[idx].id);
+        updateBar(idx);
+      };
 
       let ticking = false;
       const onScroll = () => {
@@ -2653,6 +2949,13 @@
       document.addEventListener("keydown", (event) => {
         const tag = (event.target.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || event.target.isContentEditable) return;
+        if (sheet.classList.contains("is-open")) {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeSheet();
+          }
+          return;
+        }
         switch (event.key) {
           case "ArrowDown":
           case "ArrowRight":
