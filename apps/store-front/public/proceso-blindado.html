@@ -883,6 +883,30 @@
       color: var(--ink-2);
       line-height: 1.55;
     }
+    .prev-block ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+    }
+    .prev-block li {
+      display: grid;
+      grid-template-columns: 10px 1fr;
+      gap: 8px;
+      font-size: 13.5px;
+      color: var(--ink-2);
+      line-height: 1.45;
+    }
+    .prev-block li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      margin-top: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+    .prev-block.blocks li::before { background: var(--red); }
     .prev-impact {
       font-size: 12.5px;
       color: var(--muted);
@@ -2270,11 +2294,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Aprobacion en cascada por monto y categoria, proveedor en lista blanca y costo historico congelado por SKU. Toda OC nace con folio unico y trazable.</p>
+              <ul>
+                <li>Aprobacion en cascada por monto y categoria</li>
+                <li>Proveedor en lista blanca, costo historico congelado por SKU</li>
+                <li>Folio unico por OC, trazable desde el origen</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Compras a proveedores ligados al empleado, ordenes infladas en precio, y mercancia comprometida que nunca llega ni se reclama. Cierra la puerta a las "compras fantasma".</p>
+              <ul>
+                <li>Compras a proveedores ligados al empleado</li>
+                <li>Ordenes infladas en precio sin respaldo</li>
+                <li>Mercancia comprometida que nunca llega ni se reclama</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> alerta cuando el costo unitario se desvia &gt;X% del historico pactado del SKU.</p>
           </article>
@@ -2289,11 +2321,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Registro obligatorio de llegada con foto, hora, receptor y referencia de OC antes de que la mercancia pueda tocarse o moverse a piso.</p>
+              <ul>
+                <li>Bloquea la recepcion formal hasta que la llegada este registrada</li>
+                <li>Requiere foto, hora, receptor y numero de OC</li>
+                <li>Sin ese registro, el flujo no avanza</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Faltantes del proveedor que se silencian al integrarse a bodega sin contraste, y entregas a destiempo o con cajas alteradas que pasan inadvertidas y luego aparecen como merma propia.</p>
+              <ul>
+                <li>Faltantes del proveedor que se silencian al entrar a bodega</li>
+                <li>Entregas con cajas alteradas que pasan como merma propia</li>
+                <li>Diferencias que solo se descubren meses despues</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> entregas fuera de horario o sin OC asociada quedan bloqueadas como excepcion.</p>
           </article>
@@ -2308,11 +2348,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Triple match obligatorio entre OC, factura y conteo fisico. Diferencia abre excepcion automatica y requiere autorizacion ejecutiva para cerrarse.</p>
+              <ul>
+                <li>Triple match automatico: OC vs factura vs conteo fisico</li>
+                <li>Diferencia abre excepcion automatica, no se silencia</li>
+                <li>Cierre requiere autorizacion ejecutiva si hay desvio</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Pagar mercancia que no llego completa. Sin esta validacion, el negocio paga 100 piezas, recibe 92, y la diferencia se vuelve merma invisible meses despues durante el inventario anual.</p>
+              <ul>
+                <li>Pagar 100 piezas y recibir 92 sin registro</li>
+                <li>Diferencias que se vuelven merma invisible al inventario anual</li>
+                <li>Proveedores sin historial de cumplimiento documentado</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> puntaje de cumplimiento por proveedor con historial visible para renegociar terminos.</p>
           </article>
@@ -2327,11 +2375,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Toda alta de inventario exige documento origen (OC + recepcion) y usuario responsable. Bloqueo de entradas duplicadas y auditoria firmada para cada ajuste manual.</p>
+              <ul>
+                <li>Alta de inventario solo con documento origen (OC + recepcion)</li>
+                <li>Bloqueo de entradas duplicadas</li>
+                <li>Auditoria firmada para cada ajuste manual</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Que alguien sume piezas "a mano" para cuadrar diferencias previas, o cree inventario que despues vende sin registrar. Acaba con el "ajuste libre" que es el comodin clasico del descuadre.</p>
+              <ul>
+                <li>Sumar piezas "a mano" para cuadrar diferencias previas</li>
+                <li>Inventario creado sin respaldo que luego se vende sin registro</li>
+                <li>El "ajuste libre" como comodin clasico del descuadre</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> cada ajuste manual queda visible con motivo, usuario, evidencia y firma.</p>
           </article>
@@ -2346,11 +2402,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Cada SKU se asigna a una ubicacion fisica especifica (pasillo, estante, vitrina, resguardo). Alto valor exige resguardo. Conteo ciclico priorizado por riesgo y rotacion.</p>
+              <ul>
+                <li>Exige ubicacion asignada antes de activar el producto para venta</li>
+                <li>Alto valor no puede pasar a disponible sin resguardo registrado</li>
+                <li>Prioriza conteo ciclico por nivel de riesgo y rotacion</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Re-compras innecesarias de productos que estan fisicamente pero "no se encuentran", y robos silenciosos en bodega donde nadie nota el faltante porque nadie sabia donde estaba.</p>
+              <ul>
+                <li>Re-compras de productos que estan fisicamente pero no se localizan</li>
+                <li>Robos silenciosos en bodega sin ubicacion conocida</li>
+                <li>SKUs de alto valor sin supervision activa</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> SKUs de alto valor sin resguardo, o con ultima ubicacion sin verificar, suben en prioridad de conteo.</p>
           </article>
@@ -2365,11 +2429,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Compuerta logica: un producto solo es vendible si esta recibido, validado, ubicado y con precio vigente. Inventario negativo prohibido por configuracion.</p>
+              <ul>
+                <li>Solo vende lo recibido, validado, ubicado y con precio vigente</li>
+                <li>Inventario negativo prohibido por configuracion</li>
+                <li>Bloqueo de venta en cuarentena o sin precio activo</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Vender lo que no existe, generando quejas, devoluciones forzadas, fugas de margen y el clasico "sistema dice que hay, fisicamente no" que erosiona la confianza en el inventario.</p>
+              <ul>
+                <li>Vender lo que no existe fisicamente</li>
+                <li>Devoluciones forzadas y quejas por stock irreal</li>
+                <li>El clasico "sistema dice que hay, fisicamente no"</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> intento de venta sobre stock cero queda bloqueado y reportado como anomalia.</p>
           </article>
@@ -2384,11 +2456,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Bitacora de cada accion del carrito (agregar, eliminar, modificar cantidad, descuento). Alerta por eliminaciones masivas, doble autorizacion en descuentos altos y bloqueo de precios fuera de rango.</p>
+              <ul>
+                <li>Bitacora completa de cada accion en el carrito</li>
+                <li>Alerta por eliminaciones masivas en la misma sesion</li>
+                <li>Doble autorizacion en descuentos altos, bloqueo de precios fuera de rango</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>La fuga clasica del POS: cajero arma ticket grande, cobra al cliente en efectivo y antes de cerrar elimina items para apropiarse del fisico. Tambien bloquea descuentos a "amigos" del cajero.</p>
+              <ul>
+                <li>Cajero que cobra en efectivo y elimina items antes de cerrar</li>
+                <li>Descuentos no autorizados a conocidos del cajero</li>
+                <li>Manipulaciones de precio que no dejan rastro</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> cajeros con tasa de eliminaciones o descuentos por encima del promedio del turno se marcan automaticamente.</p>
           </article>
@@ -2403,11 +2483,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Cierre de venta exige comprobante de pago vinculado: efectivo cuadra contra cajon, tarjeta exige autorizacion bancaria, transferencia exige referencia. Sin comprobante, no hay ticket.</p>
+              <ul>
+                <li>Cierre de venta exige comprobante vinculado al metodo de pago</li>
+                <li>Efectivo cuadra contra cajon, tarjeta exige autorizacion bancaria</li>
+                <li>Sin comprobante, no hay ticket</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Cobros en efectivo que nunca entran a caja, aprobaciones manuales falsas de tarjeta, y la practica de "te lo dejo sin ticket por menos" donde el dinero se queda con el empleado y el inventario se sale como merma.</p>
+              <ul>
+                <li>Cobros en efectivo que nunca entran a caja</li>
+                <li>Aprobaciones manuales falsas de tarjeta</li>
+                <li>"Te lo dejo sin ticket por menos" donde el dinero queda con el empleado</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> diferencia entre efectivo declarado y registrado al cierre del turno dispara investigacion inmediata.</p>
           </article>
@@ -2422,11 +2510,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Sello digital criptografico (hash + firma) por ticket que vincula productos, pago, cajero, terminal y hora. Cualquier alteracion posterior rompe el sello y se detecta automaticamente.</p>
+              <ul>
+                <li>Hash criptografico por ticket vincula producto, pago, cajero y hora</li>
+                <li>Cualquier alteracion posterior rompe el sello automaticamente</li>
+                <li>Devolucion sin ticket valido se rechaza sin discrecion del cajero</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Creacion de tickets falsos para sustentar devoluciones abusivas, alteracion de tickets ya emitidos para inflar comisiones o justificar salidas, y impresion paralela de tickets clonados.</p>
+              <ul>
+                <li>Tickets falsos para sustentar devoluciones abusivas</li>
+                <li>Alteracion de tickets emitidos para inflar comisiones</li>
+                <li>Impresion paralela de tickets clonados</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> devoluciones cuyo ticket origen no pasa validacion criptografica se rechazan en piso, sin discrecion del cajero.</p>
           </article>
@@ -2441,11 +2537,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>La salida fisica exige ticket sellado valido y firma de quien entrega. Bloqueo automatico de doble salida con el mismo ticket. Validacion item vs ticket en mostrador y empaque.</p>
+              <ul>
+                <li>No avanza a "entregado" sin confirmacion vinculada al ticket</li>
+                <li>Bloquea un segundo intento de entrega con el mismo ticket</li>
+                <li>Registro de quien despacho y cuando en bitacora permanente</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Que un empleado en mostrador entregue producto sin venta registrada, o que un complice intente retirar mercancia con un ticket ya cobrado. Tambien evita errores honestos: equivocarse de cliente o producto.</p>
+              <ul>
+                <li>Confirmar salidas sin venta registrada en el sistema</li>
+                <li>Retirar mercancia con ticket ya utilizado</li>
+                <li>Entregas duplicadas que generan descuadre de inventario</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> intentos de segunda salida con ticket ya entregado se registran como incidente y abren investigacion.</p>
           </article>
@@ -2460,11 +2564,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Evidencia obligatoria de recepcion: firma, foto o identificacion. En envios, guia vinculada al ticket. Alto valor exige doble validacion del receptor.</p>
+              <ul>
+                <li>Mantiene el pedido en "pendiente" hasta que se registre la evidencia</li>
+                <li>Sin evidencia cargada, no cierra ni avanza a facturacion</li>
+                <li>Alto valor exige doble confirmacion del receptor</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Reclamos abusivos del tipo "no recibi mi pedido" (parte del $103B que Appriss Retail+Deloitte reportan como devoluciones y reclamos fraudulentos en EE.UU., 2024). Sin evidencia, cada disputa se pierde.</p>
+              <ul>
+                <li>Reclamos de "no recibi mi pedido" sin evidencia para refutarlos</li>
+                <li>Disputas que se pierden por falta de documentacion</li>
+                <li>Entregas sin trazabilidad en productos sensibles</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> entregas sin firma o evidencia en SKUs sensibles detienen el siguiente paso del flujo hasta confirmar.</p>
           </article>
@@ -2479,11 +2591,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Factura electronica vinculada obligatoriamente al ticket, pago y entrega. Bloqueo de facturas duplicadas. Cualquier cancelacion fiscal abre investigacion con evidencia de devolucion fisica.</p>
+              <ul>
+                <li>Factura electronica vinculada a ticket, pago y entrega</li>
+                <li>Bloqueo de facturas duplicadas</li>
+                <li>Cancelacion fiscal abre investigacion automatica con evidencia</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Cancelacion de facturas el dia siguiente para "borrar" ventas y quedarse con el efectivo cobrado, y la emision de facturas sin ticket sustento para inflar deducciones o lavar movimientos.</p>
+              <ul>
+                <li>Cancelar facturas para "borrar" ventas y quedarse con el efectivo</li>
+                <li>Emision de facturas sin ticket sustento</li>
+                <li>Cancelaciones sin reingreso fisico de mercancia documentado</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> cancelacion fiscal sin reingreso fisico de mercancia en N horas se eleva a critico automaticamente.</p>
           </article>
@@ -2498,11 +2618,19 @@
             </header>
             <div class="prev-block">
               <h4>Que implementa Agora</h4>
-              <p>Cuadre obligatorio por turno entre venta, caja, inventario y facturacion. Cada excepcion tiene tiempo maximo de atencion y responsable nombrado. Conciliacion cruzada entre sucursales.</p>
+              <ul>
+                <li>Cuadre automatico por turno: venta, caja, inventario y facturacion</li>
+                <li>Cada excepcion tiene tiempo maximo y responsable nombrado</li>
+                <li>Conciliacion cruzada entre sucursales</li>
+              </ul>
             </div>
             <div class="prev-block blocks">
               <h4>Que evita en tu negocio</h4>
-              <p>Que las diferencias chicas se acumulen invisibles durante meses hasta el inventario anual, donde ya no son rastreables a un turno, un empleado o un evento. Convierte cada turno en un punto de cierre auditable.</p>
+              <ul>
+                <li>Diferencias chicas acumuladas invisibles hasta el inventario anual</li>
+                <li>Descuadres ya no rastreables a turno ni empleado</li>
+                <li>Turnos que cierran sin resolver sus excepciones</li>
+              </ul>
             </div>
             <p class="prev-impact"><strong>Senal en tablero:</strong> turnos cerrados con excepciones abiertas escalan al supervisor del siguiente turno.</p>
           </article>
@@ -2651,70 +2779,7 @@
 
     <section id="mapa">
       <div class="container">
-        <div class="section-head">
-          <div>
-            <span class="kicker">Que incluye Agora Marketplace</span>
-            <h2>Seis capas que protegen tu margen todos los dias.</h2>
-            <p class="lead">
-              Agora Marketplace llega a tu operacion como un punto de venta completo, organizado por capas de control.
-              Cada capa cubre una parte del negocio y se conecta con las demas para que no haya zonas ciegas entre
-              compra, venta y entrega.
-            </p>
-          </div>
-        </div>
-
-        <div class="tone-grid">
-          <article class="tone-card">
-            <div class="ref">Vision</div>
-            <div>
-              <h3>Reglas del negocio claras</h3>
-              <p>Tu equipo opera con principios definidos: cada movimiento responde a un por que, un responsable y una evidencia, sin depender de la memoria del cajero o del supervisor.</p>
-              <div class="meta"><span class="badge dark">Base del control</span></div>
-            </div>
-          </article>
-          <article class="tone-card">
-            <div class="ref">Operativo</div>
-            <div>
-              <h3>13 etapas con validacion</h3>
-              <p>Tu mercancia avanza por etapas con reglas duras dentro de Agora Marketplace. Si alguien intenta saltarse un paso, la plataforma lo detiene y deja registro de quien lo intento.</p>
-              <div class="meta"><span class="badge alt">Sin saltos</span></div>
-            </div>
-          </article>
-          <article class="tone-card">
-            <div class="ref">Control</div>
-            <div>
-              <h3>Antifraude y antierror integrado</h3>
-              <p>Cada riesgo conocido del retail (descuentos manipulados, devoluciones falsas, recepciones alteradas) tiene una contramedida activa en el flujo, no en un manual aparte.</p>
-              <div class="meta"><span class="badge risk">Proteccion activa</span></div>
-            </div>
-          </article>
-          <article class="tone-card">
-            <div class="ref">Tecnico</div>
-            <div>
-              <h3>Trazabilidad por unidad</h3>
-              <p>Puedes preguntarle a Agora Marketplace por cualquier producto y obtener su historia completa: origen, recepcion, ubicacion, venta, pago, entrega y factura.</p>
-              <div class="meta"><span class="badge alt">Auditable</span></div>
-            </div>
-          </article>
-          <article class="tone-card">
-            <div class="ref">Anti-merma</div>
-            <div>
-              <h3>Estandar de retail global, a tu medida</h3>
-              <p>Adoptas los mecanismos que las grandes cadenas usan para proteger margen, pero ajustados al tamaño y rotacion de tu negocio, sin proyectos largos ni equipos enormes.</p>
-              <div class="meta"><span class="badge ok">Diferencial</span></div>
-            </div>
-          </article>
-          <article class="tone-card">
-            <div class="ref">Tablero</div>
-            <div>
-              <h3>Decisiones en tiempo real</h3>
-              <p>Tu gerencia ve riesgo, excepciones y KPIs en vivo. Cada alerta lleva a la accion correcta: autorizar, bloquear, investigar o ajustar.</p>
-              <div class="meta"><span class="badge ok">Diferencial</span></div>
-            </div>
-          </article>
-        </div>
-
-        <div class="quote-card" style="margin-top: 30px;">
+        <div class="quote-card">
           <blockquote>Ningun producto entra, se mueve, se vende, sale, se devuelve o se factura sin dejar rastro.</blockquote>
           <p>Esa es la regla que rige Agora Marketplace. Traducida a tu operacion, significa permisos, estados, evidencia y conciliacion en cada paso. Cuando todo deja rastro, la merma deja de ser invisible y empieza a ser controlable.</p>
         </div>
