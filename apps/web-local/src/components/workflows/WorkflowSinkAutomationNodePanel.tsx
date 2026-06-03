@@ -7,7 +7,6 @@ import {
   type DataBridgeWriteColumnRow,
   type DataBridgeWriteTableRow,
 } from '@/lib/integration-workflows';
-import { useSelectedBusiness } from '@/contexts/SelectedBusinessContext';
 import { WorkflowJsonResultViewer } from './WorkflowJsonResultViewer';
 import type { NodeRunExecutionView } from './workflow-run-types';
 
@@ -131,13 +130,8 @@ export function WorkflowSinkAutomationNodePanel({
     fieldMappings?: Record<string, string>;
     clearPreviousRecords?: boolean;
     syncWithStore?: boolean;
-    syncBranchId?: string;
-    syncProductCodeSpec?: string;
-    syncPriceSpec?: string;
-    syncStockSpec?: string;
     notifyAdminByEmail?: boolean;
   };
-  const { availableBusinesses } = useSelectedBusiness();
   const [label, setLabel] = useState(d0.label || 'Guardar en data bridge');
   const [tableName, setTableName] = useState(d0.tableName || '');
   const [arrayPath, setArrayPath] = useState(typeof d0.arrayPath === 'string' ? d0.arrayPath : 'rows');
@@ -145,19 +139,6 @@ export function WorkflowSinkAutomationNodePanel({
     isRecord(d0.fieldMappings) ? { ...(d0.fieldMappings as Record<string, string>) } : {},
   );
   const [clearPreviousRecords, setClearPreviousRecords] = useState(Boolean(d0.clearPreviousRecords));
-  const [syncWithStore, setSyncWithStore] = useState(Boolean(d0.syncWithStore));
-  const [syncBranchId, setSyncBranchId] = useState(
-    typeof d0.syncBranchId === 'string' && d0.syncBranchId.trim() ? d0.syncBranchId : businessId,
-  );
-  const [syncProductCodeSpec, setSyncProductCodeSpec] = useState(
-    typeof d0.syncProductCodeSpec === 'string' ? d0.syncProductCodeSpec : '',
-  );
-  const [syncPriceSpec, setSyncPriceSpec] = useState(
-    typeof d0.syncPriceSpec === 'string' ? d0.syncPriceSpec : '',
-  );
-  const [syncStockSpec, setSyncStockSpec] = useState(
-    typeof d0.syncStockSpec === 'string' ? d0.syncStockSpec : '',
-  );
   const [tables, setTables] = useState<DataBridgeWriteTableRow[]>([]);
   const [columns, setColumns] = useState<DataBridgeWriteColumnRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -175,52 +156,16 @@ export function WorkflowSinkAutomationNodePanel({
       fieldMappings?: Record<string, string>;
       clearPreviousRecords?: boolean;
       syncWithStore?: boolean;
-      syncBranchId?: string;
-      syncProductCodeSpec?: string;
-      syncPriceSpec?: string;
-      syncStockSpec?: string;
       notifyAdminByEmail?: boolean;
     };
-    const nodeFieldMappings = isRecord(nd.fieldMappings)
-      ? { ...(nd.fieldMappings as Record<string, string>) }
-      : {};
-    const inferredProductCodeSpec =
-      typeof nd.syncProductCodeSpec === 'string' && nd.syncProductCodeSpec.trim()
-        ? nd.syncProductCodeSpec.trim()
-        : typeof nodeFieldMappings.product_code === 'string' && nodeFieldMappings.product_code.trim()
-          ? nodeFieldMappings.product_code.trim()
-          : typeof nodeFieldMappings.sku === 'string' && nodeFieldMappings.sku.trim()
-            ? nodeFieldMappings.sku.trim()
-            : '$row.product_code';
-    const inferredPriceSpec =
-      typeof nd.syncPriceSpec === 'string' && nd.syncPriceSpec.trim()
-        ? nd.syncPriceSpec.trim()
-        : typeof nodeFieldMappings.price === 'string' && nodeFieldMappings.price.trim()
-          ? nodeFieldMappings.price.trim()
-          : '$row.price';
-    const inferredStockSpec =
-      typeof nd.syncStockSpec === 'string' && nd.syncStockSpec.trim()
-        ? nd.syncStockSpec.trim()
-        : typeof nodeFieldMappings.stock === 'string' && nodeFieldMappings.stock.trim()
-          ? nodeFieldMappings.stock.trim()
-          : typeof nodeFieldMappings.quantity === 'string' && nodeFieldMappings.quantity.trim()
-            ? nodeFieldMappings.quantity.trim()
-            : '$row.stock';
     setLabel(nd.label || 'Guardar en data bridge');
     setTableName(typeof nd.tableName === 'string' ? nd.tableName : '');
     setArrayPath(typeof nd.arrayPath === 'string' ? nd.arrayPath : 'rows');
-    setFieldMappings(nodeFieldMappings);
+    setFieldMappings(isRecord(nd.fieldMappings) ? { ...(nd.fieldMappings as Record<string, string>) } : {});
     setClearPreviousRecords(Boolean(nd.clearPreviousRecords));
-    setSyncWithStore(Boolean(nd.syncWithStore));
-    setSyncBranchId(
-      typeof nd.syncBranchId === 'string' && nd.syncBranchId.trim() ? nd.syncBranchId.trim() : businessId,
-    );
-    setSyncProductCodeSpec(inferredProductCodeSpec);
-    setSyncPriceSpec(inferredPriceSpec);
-    setSyncStockSpec(inferredStockSpec);
     setMappingOtherMode({});
     setActiveTab('parameters');
-  }, [node.id, node.data, businessId]);
+  }, [node.id, node.data]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -301,29 +246,20 @@ export function WorkflowSinkAutomationNodePanel({
       arrayPath: arrayPath.trim(),
       fieldMappings: clean,
       clearPreviousRecords,
-      syncWithStore,
-      syncBranchId: syncWithStore ? syncBranchId.trim() || businessId : '',
-      syncProductCodeSpec: syncWithStore ? syncProductCodeSpec.trim() : '',
-      syncPriceSpec: syncWithStore ? syncPriceSpec.trim() : '',
-      syncStockSpec: syncWithStore ? syncStockSpec.trim() : '',
+      syncWithStore: false,
       notifyAdminByEmail: false,
     });
     onClose();
   }, [
     arrayPath,
     clearPreviousRecords,
-      fieldMappings,
-      label,
-      node.id,
-      onClose,
-      onSave,
-      syncBranchId,
-      syncPriceSpec,
-      syncProductCodeSpec,
-      syncStockSpec,
-      syncWithStore,
-      tableName,
-    ]);
+    fieldMappings,
+    label,
+    node.id,
+    onClose,
+    onSave,
+    tableName,
+  ]);
 
   const runExec = (node.data as { runExecution?: NodeRunExecutionView } | undefined)?.runExecution;
 
@@ -530,103 +466,22 @@ export function WorkflowSinkAutomationNodePanel({
                 </div>
 
                 <div
-                  className="rounded-md border border-gray-200 px-3 py-2 dark:border-neutral-700"
+                  className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/70 px-3 py-2 opacity-70 dark:border-neutral-700 dark:bg-neutral-900/50"
+                  aria-disabled="true"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 pr-3">
-                      <span className="text-sm text-gray-800 dark:text-gray-200">Sincronizar con tienda</span>
-                      <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-                        Después del INSERT en <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">data_bridge</code>,
-                        actualiza <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">price</code> y{' '}
-                        <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">stock</code> en la sucursal
-                        destino usando el código de producto de cada fila.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={syncWithStore}
-                      onClick={() => {
-                        setSyncWithStore((v) => !v);
-                        if (!syncBranchId.trim()) setSyncBranchId(businessId);
-                      }}
-                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-                        syncWithStore ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-                          syncWithStore ? 'translate-x-5' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
+                  <div className="min-w-0 pr-3">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Sincronizar con tienda</span>
+                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Próximamente.</p>
                   </div>
-                  {syncWithStore && (
-                    <div className="mt-3 space-y-3 border-t border-gray-100 pt-3 dark:border-neutral-800">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                          Sucursal destino
-                        </label>
-                        <select
-                          value={syncBranchId}
-                          onChange={(e) => setSyncBranchId(e.target.value)}
-                          className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-                        >
-                          {availableBusinesses.map((b) => (
-                            <option key={b.business_id} value={b.business_id}>
-                              {b.business_name}
-                              {b.business_id === businessId ? ' (actual)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                            Código / SKU
-                          </label>
-                          <input
-                            type="text"
-                            value={syncProductCodeSpec}
-                            onChange={(e) => setSyncProductCodeSpec(e.target.value)}
-                            placeholder="$row.product_code"
-                            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                            Precio
-                          </label>
-                          <input
-                            type="text"
-                            value={syncPriceSpec}
-                            onChange={(e) => setSyncPriceSpec(e.target.value)}
-                            placeholder="$row.price"
-                            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                            Stock
-                          </label>
-                          <input
-                            type="text"
-                            value={syncStockSpec}
-                            onChange={(e) => setSyncStockSpec(e.target.value)}
-                            placeholder="$row.stock"
-                            className="mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-                        Usa rutas tipo <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$row.sku</code>,{' '}
-                        <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$row.price</code> y{' '}
-                        <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$row.stock</code>. Si el producto
-                        ya existe por SKU/código, se hace upsert en{' '}
-                        <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">catalog.product_branch_availability</code>.
-                      </p>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={false}
+                    disabled
+                    className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                  >
+                    <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
+                  </button>
                 </div>
 
                 <div

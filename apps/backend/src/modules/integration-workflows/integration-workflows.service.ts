@@ -31,8 +31,6 @@ import {
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
-const STORE_SYNC_MIN_PRICE = 5;
-const STORE_SYNC_MIN_STOCK = 0;
 
 /* Cargar mssql vía require: en runtime el default import (import x from 'mssql') a menudo queda
  * undefined; require es el interop fiable con el paquete commonjs en Nest/ts-node. */
@@ -524,7 +522,7 @@ export class IntegrationWorkflowsService {
       };
     }
     if (t === 'sinkAutomation') {
-      return this.executeSinkAutomationNode(node, businessId, userId, _previous, ctx ?? {});
+      return this.executeSinkAutomationNode(node, businessId, _previous, ctx ?? {});
     }
     if (t === 'httpRequest' || t === 'httpPlaceholder') {
       return { nodeId: node.id, type: t, result: { message: 'HTTP request: implementación pendiente' } };
@@ -600,209 +598,9 @@ export class IntegrationWorkflowsService {
     return v;
   }
 
-  private normalizeSyncNumericValue(v: unknown): number | null {
-    if (v === null || v === undefined || v === '') return null;
-    if (typeof v === 'number' && Number.isFinite(v)) return v;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  private normalizeSyncIntegerValue(v: unknown): number | null {
-    const n = this.normalizeSyncNumericValue(v);
-    if (n === null) return null;
-    return Math.trunc(n);
-  }
-
-  private async assertStoreSyncTargetAllowed(
-    sourceBusinessId: string,
-    targetBranchId: string,
-    userId: string | null,
-  ): Promise<void> {
-    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
-    if (userId) {
-      await this.assertUserHasBusinessAccess(userId, targetBranchId);
-    }
-    const { rows } = await dbPool.query(
-      `SELECT id, business_group_id, is_active
-       FROM core.businesses
-       WHERE id = ANY($1::uuid[])`,
-      [[sourceBusinessId, targetBranchId]],
-    );
-    const byId = new Map(
-      rows.map((row: { id: string; business_group_id: string | null; is_active: boolean }) => [row.id, row]),
-    );
-    const source = byId.get(sourceBusinessId);
-    const target = byId.get(targetBranchId);
-    if (!source) {
-      throw new BadRequestException('La sucursal del flujo no existe');
-    }
-    if (!target || !target.is_active) {
-      throw new BadRequestException('La sucursal destino no existe o está inactiva');
-    }
-    if (targetBranchId === sourceBusinessId) return;
-    if (!source.business_group_id || !target.business_group_id || source.business_group_id !== target.business_group_id) {
-      throw new BadRequestException(
-        'La sucursal destino debe ser la actual o pertenecer al mismo grupo empresarial del flujo.',
-      );
-    }
-  }
-
-  private async findCatalogProductIdForStoreSync(
-    sourceBusinessId: string,
-    targetBranchId: string,
-    productCode: string,
-  ): Promise<{ productId: string | null; error?: string }> {
-    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
-    const trimmedCode = productCode.trim();
-    if (!trimmedCode) return { productId: null, error: 'Código de producto vacío' };
-
-    const strategies: Array<{
-      sql: string;
-      params: unknown[];
-      ambiguousMessage: string;
-    }> = [
-      {
-        sql: `SELECT id
-              FROM catalog.products
-              WHERE business_id = $1 AND sku = $2
-              ORDER BY created_at ASC NULLS LAST, id ASC
-              LIMIT 2`,
-        params: [sourceBusinessId, trimmedCode],
-        ambiguousMessage: `SKU ${trimmedCode}: hay múltiples productos del negocio del flujo`,
-      },
-      {
-        sql: `SELECT p.id
-              FROM catalog.products p
-              INNER JOIN catalog.product_branch_availability pba
-                ON pba.product_id = p.id
-               AND pba.branch_id = $1
-               AND COALESCE(pba.is_active, TRUE) = TRUE
-              WHERE p.sku = $2
-              ORDER BY p.created_at ASC NULLS LAST, p.id ASC
-              LIMIT 2`,
-        params: [targetBranchId, trimmedCode],
-        ambiguousMessage: `SKU ${trimmedCode}: hay múltiples productos ya distribuidos a la sucursal destino`,
-      },
-      {
-        sql: `SELECT id
-              FROM catalog.products
-              WHERE business_id = $1 AND sku = $2
-              ORDER BY created_at ASC NULLS LAST, id ASC
-              LIMIT 2`,
-        params: [targetBranchId, trimmedCode],
-        ambiguousMessage: `SKU ${trimmedCode}: hay múltiples productos propios de la sucursal destino`,
-      },
-    ];
-
-    for (const strategy of strategies) {
-      const { rows } = await dbPool.query(strategy.sql, strategy.params);
-      if (rows.length === 1) {
-        return { productId: rows[0].id as string };
-      }
-      if (rows.length > 1) {
-        return { productId: null, error: strategy.ambiguousMessage };
-      }
-    }
-
-    return {
-      productId: null,
-      error: `No se encontró producto con SKU/código "${trimmedCode}" para sincronizar en la sucursal destino`,
-    };
-  }
-
-  private async syncRowsToStoreAvailability(args: {
-    sourceBusinessId: string;
-    targetBranchId: string;
-    rows: Record<string, unknown>[];
-    productCodeSpec: string;
-    priceSpec: string;
-    stockSpec: string;
-    workflowId?: string | null;
-    userId: string | null;
-    executedAt: Date;
-  }): Promise<{ synced: number; failed: number; sampleErrors: string[] }> {
-    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
-    await this.assertStoreSyncTargetAllowed(args.sourceBusinessId, args.targetBranchId, args.userId);
-
-    const syncErrors: string[] = [];
-    let synced = 0;
-    const resolveCtx = {
-      businessId: args.sourceBusinessId,
-      workflowId: args.workflowId ?? null,
-      executedAt: args.executedAt,
-    };
-
-    for (let i = 0; i < args.rows.length; i++) {
-      const row = args.rows[i];
-      const rawProductCode = resolveFieldSpec(row, args.productCodeSpec, resolveCtx);
-      const productCode = rawProductCode == null ? '' : String(rawProductCode).trim();
-      if (!productCode) {
-        syncErrors.push(`Fila ${i}: no se pudo resolver SKU/código con ${args.productCodeSpec}`);
-        continue;
-      }
-
-      const rawPrice = resolveFieldSpec(row, args.priceSpec, resolveCtx);
-      const rawStock = resolveFieldSpec(row, args.stockSpec, resolveCtx);
-      const price = this.normalizeSyncNumericValue(rawPrice);
-      const stock = this.normalizeSyncIntegerValue(rawStock);
-
-      if (price === null || stock === null) {
-        syncErrors.push(
-          `Fila ${i} (${productCode}): se requieren price y stock para sincronizar con tienda`,
-        );
-        continue;
-      }
-
-      if (price <= STORE_SYNC_MIN_PRICE || stock <= STORE_SYNC_MIN_STOCK) {
-        syncErrors.push(
-          `Fila ${i} (${productCode}): omitida por regla interna (price debe ser > ${STORE_SYNC_MIN_PRICE} y stock > ${STORE_SYNC_MIN_STOCK})`,
-        );
-        continue;
-      }
-
-      const productMatch = await this.findCatalogProductIdForStoreSync(
-        args.sourceBusinessId,
-        args.targetBranchId,
-        productCode,
-      );
-      if (!productMatch.productId) {
-        syncErrors.push(`Fila ${i} (${productCode}): ${productMatch.error || 'producto no encontrado'}`);
-        continue;
-      }
-
-      try {
-        await dbPool.query(
-          `INSERT INTO catalog.product_branch_availability (
-             product_id, branch_id, is_enabled, price, stock, is_active, updated_at
-           )
-           VALUES ($1, $2, TRUE, $3, $4, TRUE, CURRENT_TIMESTAMP)
-           ON CONFLICT (product_id, branch_id)
-           DO UPDATE SET
-             is_enabled = TRUE,
-             price = COALESCE(EXCLUDED.price, catalog.product_branch_availability.price),
-             stock = COALESCE(EXCLUDED.stock, catalog.product_branch_availability.stock),
-             is_active = TRUE,
-             updated_at = CURRENT_TIMESTAMP`,
-          [productMatch.productId, args.targetBranchId, price, stock],
-        );
-        synced++;
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        syncErrors.push(`Fila ${i} (${productCode}): ${msg}`);
-      }
-    }
-
-    return {
-      synced,
-      failed: syncErrors.length,
-      sampleErrors: syncErrors.slice(0, 10),
-    };
-  }
-
   private async executeSinkAutomationNode(
     node: FlowNode,
     businessId: string,
-    userId: string | null,
     _previous: unknown,
     ctx: { workflowId?: string },
   ): Promise<{ nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }> {
@@ -810,8 +608,6 @@ export class IntegrationWorkflowsService {
     const data = (node.data || {}) as Record<string, unknown>;
     const tableName = String(data.tableName || '').trim().toLowerCase();
     const clearPreviousRecords = data.clearPreviousRecords === true;
-    const syncWithStore = data.syncWithStore === true;
-    const syncBranchId = String(data.syncBranchId || '').trim() || businessId;
     if (!isValidDataBridgeWriteTableName(tableName)) {
       return { nodeId: node.id, type: t, error: 'Nodo data_bridge: nombre de tabla no válido (solo a-z, números y _).' };
     }
@@ -830,41 +626,6 @@ export class IntegrationWorkflowsService {
     const fieldMappings: Record<string, string> = { ...(rawMappings as Record<string, string>) };
     delete fieldMappings.business_id;
     delete fieldMappings.workflow_id;
-    const syncProductCodeSpec = String(
-      data.syncProductCodeSpec ||
-        fieldMappings.product_code ||
-        fieldMappings.sku ||
-        '$row.product_code',
-    ).trim();
-    const syncPriceSpec = String(data.syncPriceSpec || fieldMappings.price || '$row.price').trim();
-    const syncStockSpec = String(
-      data.syncStockSpec ||
-        fieldMappings.stock ||
-        fieldMappings.quantity ||
-        '$row.stock',
-    ).trim();
-
-    if (syncWithStore) {
-      if (!syncBranchId) {
-        return { nodeId: node.id, type: t, error: 'Nodo data_bridge: elige una sucursal destino para sincronizar con tienda.' };
-      }
-      if (!syncProductCodeSpec || !syncPriceSpec || !syncStockSpec) {
-        return {
-          nodeId: node.id,
-          type: t,
-          error: 'Nodo data_bridge: define rutas para código/SKU, price y stock antes de sincronizar con tienda.',
-        };
-      }
-      try {
-        await this.assertStoreSyncTargetAllowed(businessId, syncBranchId, userId);
-      } catch (e: unknown) {
-        return {
-          nodeId: node.id,
-          type: t,
-          error: e instanceof Error ? e.message : 'La sucursal destino no es válida para sincronización',
-        };
-      }
-    }
 
     const extracted = extractRowsFromPrevious(_previous, arrayPath);
     if (extracted.ok === false) {
@@ -959,7 +720,6 @@ export class IntegrationWorkflowsService {
     let inserted = 0;
     const errors: string[] = [];
     const logs: string[] = [];
-    const insertedSourceRows: Record<string, unknown>[] = [];
 
     if (clearPreviousRecords) {
       try {
@@ -1020,7 +780,6 @@ export class IntegrationWorkflowsService {
         const q = await dbPool.query(sql, vals);
         if ((q.rowCount ?? 0) > 0) {
           inserted++;
-          insertedSourceRows.push(ro);
         } else {
           errors.push(`Fila ${i}: no se insertó (posible trigger o regla de negocio en la tabla)`);
         }
@@ -1046,66 +805,15 @@ export class IntegrationWorkflowsService {
       };
     }
 
-    let storeSyncSummary:
-      | {
-          branchId: string;
-          synced: number;
-          failed: number;
-          sampleErrors: string[];
-        }
-      | null = null;
-
-    if (syncWithStore && insertedSourceRows.length > 0) {
-      try {
-        const syncSummary = await this.syncRowsToStoreAvailability({
-          sourceBusinessId: businessId,
-          targetBranchId: syncBranchId,
-          rows: insertedSourceRows,
-          productCodeSpec: syncProductCodeSpec,
-          priceSpec: syncPriceSpec,
-          stockSpec: syncStockSpec,
-          workflowId: ctx.workflowId ?? null,
-          userId,
-          executedAt: clientCtx.executedAt,
-        });
-        storeSyncSummary = {
-          branchId: syncBranchId,
-          synced: syncSummary.synced,
-          failed: syncSummary.failed,
-          sampleErrors: syncSummary.sampleErrors,
-        };
-        if (syncSummary.failed > 0) {
-          errors.push(...syncSummary.sampleErrors.map((msg) => `Sync tienda: ${msg}`));
-          logs.push(
-            `Sincronización con tienda parcial: ${syncSummary.synced} fila(s) sincronizadas y ${syncSummary.failed} con error.`,
-          );
-        } else {
-          logs.push(
-            `Sincronización con tienda activa: ${syncSummary.synced} fila(s) actualizadas en sucursal ${syncBranchId}.`,
-          );
-        }
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        errors.push(`Sync tienda: ${msg}`);
-        logs.push(`Sincronización con tienda falló: ${msg}`);
-      }
-    }
-
-    const resultSummary = {
-      inserted,
-      failed: errors.length,
-      table: tableName,
-      sampleErrors: errors.slice(0, 10),
-      ...(storeSyncSummary ? { storeSync: storeSyncSummary } : {}),
-    };
-
     return {
       nodeId: node.id,
       type: t,
-      result: resultSummary,
-      ...(errors.length > 0
-        ? { error: errors.slice(0, 3).join(' | ') || 'Error al sincronizar data_bridge' }
-        : {}),
+      result: {
+        inserted,
+        failed: errors.length,
+        table: tableName,
+        sampleErrors: errors.slice(0, 10),
+      },
       logs:
         errors.length > 0
           ? [...logs, `Insertadas ${inserted} fila(s); ${errors.length} error(es) (ver sampleErrors en el resultado).`]
