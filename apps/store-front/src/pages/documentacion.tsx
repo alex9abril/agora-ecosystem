@@ -12,6 +12,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
+import { DocShell } from '../components/documentacion/DocShell';
 
 /* -------------------------------------------------------------------------- */
 /*  Estructura de navegación (menús agrupados, estilo developer docs)         */
@@ -33,6 +35,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Flujo de la plataforma',
     items: [
+      { id: 'proceso-agora', label: 'Procesos e integraciones →' },
       { id: 'flujo-extremo-a-extremo', label: 'Flujo de extremo a extremo' },
       { id: 'actores-roles', label: 'Actores y roles' },
       { id: 'contextos-tienda', label: 'Contextos de tienda' },
@@ -277,6 +280,7 @@ export default function DocumentacionPage() {
 
   const handleNav = (id: string) => {
     setMobileNavOpen(false);
+    if (id === 'proceso-agora') return;
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -291,24 +295,11 @@ export default function DocumentacionPage() {
         <meta name="robots" content="noindex" />
       </Head>
 
-      <div className="min-h-screen bg-white text-slate-800" style={{ fontFamily: 'Source Sans Pro, sans-serif' }}>
-        {/* ---------------------------------------------------------------- */}
-        {/*  Top bar                                                         */}
-        {/* ---------------------------------------------------------------- */}
-        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-4 px-5">
-            <a href="/" className="flex items-center gap-2.5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/agora_logo_black.png" alt="Ágora" className="h-7 w-auto" />
-              <span className="hidden items-center gap-2 sm:flex">
-                <span className="h-5 w-px bg-slate-300" />
-                <span className="font-display text-[15px] font-semibold tracking-tight text-slate-900">
-                  Developers
-                </span>
-              </span>
-            </a>
-
-            <div className="ml-auto hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 md:flex md:w-72">
+      <DocShell
+        active="documentacion"
+        headerExtra={
+          <>
+            <div className="hidden items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 md:flex md:w-72">
               <span className="text-slate-400">⌕</span>
               <input
                 value={query}
@@ -317,14 +308,6 @@ export default function DocumentacionPage() {
                 className="w-full bg-transparent text-[13.5px] text-slate-700 outline-none placeholder:text-slate-400"
               />
             </div>
-
-            <a
-              href="#soporte"
-              className="hidden rounded-lg bg-slate-900 px-3.5 py-2 text-[13.5px] font-semibold text-white transition hover:bg-slate-700 sm:inline-block"
-            >
-              Contactar al equipo
-            </a>
-
             <button
               onClick={() => setMobileNavOpen((v) => !v)}
               className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"
@@ -332,10 +315,10 @@ export default function DocumentacionPage() {
             >
               ☰
             </button>
-          </div>
-        </header>
-
-        <div className="mx-auto flex max-w-[1320px] gap-8 px-5">
+          </>
+        }
+      >
+        <div className="mx-auto flex max-w-[1320px] gap-8 bg-white px-5">
           {/* -------------------------------------------------------------- */}
           {/*  Sidebar de navegación (menús agrupados)                       */}
           {/* -------------------------------------------------------------- */}
@@ -353,18 +336,28 @@ export default function DocumentacionPage() {
                   <ul className="space-y-0.5">
                     {group.items.map((item) => {
                       const isActive = active === item.id;
+                      const isExternal = item.id === 'proceso-agora';
                       return (
                         <li key={item.id}>
-                          <button
-                            onClick={() => handleNav(item.id)}
-                            className={`block w-full rounded-md px-2 py-1.5 text-left text-[13.5px] transition ${
-                              isActive
-                                ? 'bg-red-50 font-semibold text-toyota-red'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            }`}
-                          >
-                            {item.label}
-                          </button>
+                          {isExternal ? (
+                            <Link
+                              href="/documentacion/proceso"
+                              className="block w-full rounded-md px-2 py-1.5 text-left text-[13.5px] font-semibold text-violet-700 transition hover:bg-violet-50 hover:text-violet-900"
+                            >
+                              {item.label}
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={() => handleNav(item.id)}
+                              className={`block w-full rounded-md px-2 py-1.5 text-left text-[13.5px] transition ${
+                                isActive
+                                  ? 'bg-red-50 font-semibold text-toyota-red'
+                                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          )}
                         </li>
                       );
                     })}
@@ -392,7 +385,15 @@ export default function DocumentacionPage() {
                 cómo funciona el ecosistema de extremo a extremo, cómo se conectan las
                 integraciones y qué datos de tus productos necesitamos para llevarlos a la tienda.
               </p>
-              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  href="/documentacion/proceso"
+                  className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-blue-50 px-4 py-3 text-[14px] font-semibold text-violet-800 transition hover:border-violet-300 hover:shadow-sm"
+                >
+                  Ver procesos e integraciones de Agora →
+                </Link>
+              </div>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <ConceptCard title="① Entiende el flujo">
                   De tu catálogo maestro a la venta y la entrega, paso a paso.
                 </ConceptCard>
@@ -941,7 +942,7 @@ export default function DocumentacionPage() {
             </footer>
           </main>
         </div>
-      </div>
+      </DocShell>
     </>
   );
 }
