@@ -11,7 +11,6 @@ export type IntegrationDomain = {
   proceso: string[];
   integracionesAgora: { name: string; detail: string }[];
   puntosIntercambio: { label: string; detail: string }[];
-  enAgora: string[];
 };
 
 export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
@@ -40,13 +39,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Resultado del lote', detail: 'Resumen de sincronización: procesados, actualizados, fallidos y motivo por SKU.' },
       { label: 'Configuración por distribuidor', detail: 'Reglas de normalización, mapeo de sucursales y ajustes de precio aplicados en Agora.' },
     ],
-    enAgora: [
-      'Cruce con catálogo maestro global',
-      'Compatibilidad de vehículos',
-      'Imágenes y ficha comercial',
-      'Datos logísticos (peso y dimensiones)',
-      'Disponibilidad por sucursal en tienda',
-    ],
   },
   {
     id: 'clientes',
@@ -71,12 +63,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Datos del cliente en pedido', detail: 'Nombre, correo, teléfono e identificador interno asociados al checkout.' },
       { label: 'Direcciones', detail: 'Dirección de entrega y, cuando aplica, dirección de facturación capturadas en la venta.' },
       { label: 'Historial de compras', detail: 'Pedidos previos visibles para el cliente dentro del ecosistema Agora.' },
-    ],
-    enAgora: [
-      'Registro y autenticación del cliente final',
-      'Validación de datos en checkout',
-      'Asociación cliente ↔ pedido',
-      'Comunicaciones postventa al comprador',
     ],
   },
   {
@@ -103,12 +89,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Pedido confirmado', detail: 'Identificador, sucursal, líneas, totales, cliente y método de entrega.' },
       { label: 'Cambios de estado', detail: 'Transiciones del ciclo de vida: pagado, en preparación, enviado, entregado, cancelado.' },
       { label: 'Detalle operativo', detail: 'SKUs surtidos, cantidades, notas de entrega y responsable de preparación.' },
-    ],
-    enAgora: [
-      'Creación y agrupación de pedidos',
-      'Máquina de estados y trazabilidad',
-      'Asignación a sucursal que surte',
-      'Comunicación al cliente y supervisores',
     ],
   },
   {
@@ -137,12 +117,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Resultado de pago', detail: 'Estado aprobado/rechazado, referencia de transacción y timestamp.' },
       { label: 'Conciliación', detail: 'Vínculo entre order_group, pedidos individuales y transacción de la pasarela.' },
     ],
-    enAgora: [
-      'Orquestación del checkout de pago',
-      'Recepción y validación de webhooks',
-      'Actualización de payment_status en pedidos',
-      'Bloqueo de surtido sin pago confirmado',
-    ],
   },
   {
     id: 'logistica',
@@ -169,12 +143,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Guía generada', detail: 'Número de rastreo, carrier, PDF y vínculo al pedido.' },
       { label: 'Eventos de tracking', detail: 'Recolección, tránsito y entrega confirmada con timestamps.' },
     ],
-    enAgora: [
-      'Cálculo de costo en checkout',
-      'Generación e impresión de guías',
-      'Asociación guía ↔ pedido',
-      'Actualización de estado del pedido por entrega',
-    ],
   },
   {
     id: 'facturacion',
@@ -199,12 +167,6 @@ export const INTEGRATION_DOMAINS: IntegrationDomain[] = [
       { label: 'Datos fiscales del pedido', detail: 'RFC, razón social, dirección fiscal y desglose de montos.' },
       { label: 'Venta cerrada', detail: 'Pedido entregado con totales, impuestos, líneas y referencia de pago.' },
       { label: 'Evidencia de entrega', detail: 'Estado final, modalidad (envío/pickup) y fecha de cierre.' },
-    ],
-    enAgora: [
-      'Captura de datos fiscales en checkout',
-      'Cálculo de impuestos en la venta',
-      'Asociación fiscal al pedido',
-      'Conservación del historial para postventa',
     ],
   },
 ];

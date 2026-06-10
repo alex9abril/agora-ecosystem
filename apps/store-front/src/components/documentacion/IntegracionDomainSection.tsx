@@ -21,47 +21,6 @@ function DirectionBadge({ direction }: { direction: IntegrationDomain['direction
   );
 }
 
-function MiniList({
-  title,
-  items,
-  variant = 'default',
-}: {
-  title: string;
-  items: string[];
-  variant?: 'default' | 'agora' | 'exchange';
-}) {
-  const titleColor = {
-    default: 'text-slate-500',
-    agora: 'text-teal-700',
-    exchange: 'text-blue-700',
-  }[variant];
-
-  const dotColor = {
-    default: 'bg-slate-400',
-    agora: 'bg-teal-500',
-    exchange: 'bg-blue-500',
-  }[variant];
-
-  return (
-    <div>
-      <h4 className={`mb-2.5 text-[11px] font-bold uppercase tracking-[0.12em] ${titleColor}`}>
-        {title}
-      </h4>
-      <ul className="mt-2 grid gap-2">
-        {items.map((item) => (
-          <li
-            key={item}
-            className="grid grid-cols-[8px_1fr] gap-2 text-[13px] leading-snug text-slate-600"
-          >
-            <span className={`mt-[7px] h-1.5 w-1.5 rounded-full ${dotColor}`} />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export function IntegracionDomainSection({ domain }: { domain: IntegrationDomain }) {
   const colors = COLOR_MAP[domain.color] ?? COLOR_MAP.blue;
 
@@ -106,7 +65,7 @@ export function IntegracionDomainSection({ domain }: { domain: IntegrationDomain
         </ol>
       </div>
 
-      <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
           <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">
             Integraciones que opera Agora
@@ -137,10 +96,6 @@ export function IntegracionDomainSection({ domain }: { domain: IntegrationDomain
               </li>
             ))}
           </ul>
-        </div>
-
-        <div className="rounded-2xl border border-teal-100 bg-teal-50/40 p-4">
-          <MiniList title="Lo que resuelve Agora (no requiere integración)" items={domain.enAgora} variant="agora" />
         </div>
       </div>
     </section>
