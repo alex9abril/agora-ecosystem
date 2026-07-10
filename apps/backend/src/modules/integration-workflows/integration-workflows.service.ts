@@ -28,6 +28,7 @@ import {
   isValidDataBridgeWriteTableName,
   resolveFieldSpec,
 } from './workflow-sink-data-bridge.util';
+import { parseStoreSyncConfig, syncIngestedRowsToStore } from './workflow-store-sync.util';
 
 const MAX_RESULT_ROWS = 1000;
 const MS_TIMEOUT_MS = 30000;
@@ -805,6 +806,29 @@ export class IntegrationWorkflowsService {
       };
     }
 
+    const syncConfig = parseStoreSyncConfig(data);
+    let storeSync: Awaited<ReturnType<typeof syncIngestedRowsToStore>> | undefined;
+    if (syncConfig.syncWithStore && inserted > 0) {
+      const sourceRows = rows.filter(
+        (r): r is Record<string, unknown> => r != null && typeof r === 'object' && !Array.isArray(r),
+      );
+      storeSync = await syncIngestedRowsToStore(dbPool, {
+        branchId: businessId,
+        tableName,
+        workflowId: ctx.workflowId ?? null,
+        config: syncConfig,
+        sourceRows,
+        fieldMappings,
+        ctx: clientCtx,
+      });
+      logs.push(
+        `Sincronización con tienda: ${storeSync.updated} actualizado(s), ${storeSync.inserted} producto(s) nuevo(s) en catálogo, ${storeSync.skipped} omitido(s).`,
+      );
+      if (storeSync.errors.length > 0) {
+        logs.push(`Sincronización con tienda: ${storeSync.errors.length} aviso(s) (ver storeSync.sampleErrors).`);
+      }
+    }
+
     return {
       nodeId: node.id,
       type: t,
@@ -813,6 +837,17 @@ export class IntegrationWorkflowsService {
         failed: errors.length,
         table: tableName,
         sampleErrors: errors.slice(0, 10),
+        ...(storeSync
+          ? {
+              storeSync: {
+                matched: storeSync.matched,
+                updated: storeSync.updated,
+                inserted: storeSync.inserted,
+                skipped: storeSync.skipped,
+                sampleErrors: storeSync.errors.slice(0, 10),
+              },
+            }
+          : {}),
       },
       logs:
         errors.length > 0

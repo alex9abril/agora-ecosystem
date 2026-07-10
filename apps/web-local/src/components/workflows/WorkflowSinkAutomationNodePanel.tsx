@@ -56,6 +56,38 @@ function looksLikeWorkflowStepPayload(v: unknown): boolean {
 
 const CUSTOM_MAPPING_VALUE = '__custom__';
 
+const SYNC_PRODUCT_CODE_CANDIDATES = ['product_code', 'sku', 'codigo', 'code'];
+const SYNC_STOCK_CANDIDATES = ['quantity', 'stock', 'existencia', 'qty', 'cantidad'];
+const SYNC_PRICE_CANDIDATES = ['price', 'precio', 'costo', 'importe'];
+const SYNC_NAME_CANDIDATES = ['name', 'nombre', 'descripcion', 'description', 'titulo'];
+
+function buildSyncColumnSelectOptions(
+  mappableColumns: DataBridgeWriteColumnRow[],
+  currentValue: string,
+  allowEmpty: boolean,
+): Array<{ value: string; label: string }> {
+  const opts: Array<{ value: string; label: string }> = [];
+  if (allowEmpty) opts.push({ value: '', label: '(ninguna)' });
+  const seen = new Set<string>();
+  for (const col of mappableColumns) {
+    if (seen.has(col.columnName)) continue;
+    seen.add(col.columnName);
+    opts.push({ value: col.columnName, label: `${col.columnName} (${col.dataType})` });
+  }
+  const cur = currentValue.trim();
+  if (cur && !seen.has(cur)) {
+    opts.push({ value: cur, label: `${cur} (guardado)` });
+  }
+  return opts;
+}
+
+function pickDefaultSyncColumn(names: Set<string>, candidates: string[]): string | null {
+  for (const c of candidates) {
+    if (names.has(c)) return c;
+  }
+  return null;
+}
+
 function pickSampleRowForMappings(previousOutput: unknown, arrayPath: string): Record<string, unknown> | null {
   const p = (arrayPath ?? '').trim();
   let container: unknown = previousOutput;
@@ -131,6 +163,11 @@ export function WorkflowSinkAutomationNodePanel({
     clearPreviousRecords?: boolean;
     syncWithStore?: boolean;
     notifyAdminByEmail?: boolean;
+    insertMissingProducts?: boolean;
+    syncProductCodeColumn?: string;
+    syncPriceColumn?: string;
+    syncStockColumn?: string;
+    syncNameColumn?: string;
   };
   const [label, setLabel] = useState(d0.label || 'Guardar en data bridge');
   const [tableName, setTableName] = useState(d0.tableName || '');
@@ -139,6 +176,20 @@ export function WorkflowSinkAutomationNodePanel({
     isRecord(d0.fieldMappings) ? { ...(d0.fieldMappings as Record<string, string>) } : {},
   );
   const [clearPreviousRecords, setClearPreviousRecords] = useState(Boolean(d0.clearPreviousRecords));
+  const [syncWithStore, setSyncWithStore] = useState(Boolean(d0.syncWithStore));
+  const [insertMissingProducts, setInsertMissingProducts] = useState(Boolean(d0.insertMissingProducts));
+  const [syncProductCodeColumn, setSyncProductCodeColumn] = useState(
+    typeof d0.syncProductCodeColumn === 'string' ? d0.syncProductCodeColumn : 'product_code',
+  );
+  const [syncPriceColumn, setSyncPriceColumn] = useState(
+    typeof d0.syncPriceColumn === 'string' ? d0.syncPriceColumn : '',
+  );
+  const [syncStockColumn, setSyncStockColumn] = useState(
+    typeof d0.syncStockColumn === 'string' ? d0.syncStockColumn : 'quantity',
+  );
+  const [syncNameColumn, setSyncNameColumn] = useState(
+    typeof d0.syncNameColumn === 'string' ? d0.syncNameColumn : '',
+  );
   const [tables, setTables] = useState<DataBridgeWriteTableRow[]>([]);
   const [columns, setColumns] = useState<DataBridgeWriteColumnRow[]>([]);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -157,12 +208,23 @@ export function WorkflowSinkAutomationNodePanel({
       clearPreviousRecords?: boolean;
       syncWithStore?: boolean;
       notifyAdminByEmail?: boolean;
+      insertMissingProducts?: boolean;
+      syncProductCodeColumn?: string;
+      syncPriceColumn?: string;
+      syncStockColumn?: string;
+      syncNameColumn?: string;
     };
     setLabel(nd.label || 'Guardar en data bridge');
     setTableName(typeof nd.tableName === 'string' ? nd.tableName : '');
     setArrayPath(typeof nd.arrayPath === 'string' ? nd.arrayPath : 'rows');
     setFieldMappings(isRecord(nd.fieldMappings) ? { ...(nd.fieldMappings as Record<string, string>) } : {});
     setClearPreviousRecords(Boolean(nd.clearPreviousRecords));
+    setSyncWithStore(Boolean(nd.syncWithStore));
+    setInsertMissingProducts(Boolean(nd.insertMissingProducts));
+    setSyncProductCodeColumn(typeof nd.syncProductCodeColumn === 'string' ? nd.syncProductCodeColumn : 'product_code');
+    setSyncPriceColumn(typeof nd.syncPriceColumn === 'string' ? nd.syncPriceColumn : '');
+    setSyncStockColumn(typeof nd.syncStockColumn === 'string' ? nd.syncStockColumn : 'quantity');
+    setSyncNameColumn(typeof nd.syncNameColumn === 'string' ? nd.syncNameColumn : '');
     setMappingOtherMode({});
     setActiveTab('parameters');
   }, [node.id, node.data]);
@@ -246,7 +308,12 @@ export function WorkflowSinkAutomationNodePanel({
       arrayPath: arrayPath.trim(),
       fieldMappings: clean,
       clearPreviousRecords,
-      syncWithStore: false,
+      syncWithStore,
+      insertMissingProducts: syncWithStore ? insertMissingProducts : false,
+      syncProductCodeColumn: syncProductCodeColumn.trim() || 'product_code',
+      syncPriceColumn: syncPriceColumn.trim() || undefined,
+      syncStockColumn: syncStockColumn.trim() || 'quantity',
+      syncNameColumn: syncNameColumn.trim() || undefined,
       notifyAdminByEmail: false,
     });
     onClose();
@@ -254,10 +321,16 @@ export function WorkflowSinkAutomationNodePanel({
     arrayPath,
     clearPreviousRecords,
     fieldMappings,
+    insertMissingProducts,
     label,
     node.id,
     onClose,
     onSave,
+    syncNameColumn,
+    syncPriceColumn,
+    syncProductCodeColumn,
+    syncStockColumn,
+    syncWithStore,
     tableName,
   ]);
 
@@ -337,6 +410,55 @@ export function WorkflowSinkAutomationNodePanel({
     () => columns.filter((c) => !SERVER_COLUMNS.has(c.columnName)),
     [columns],
   );
+
+  const mappableColumnNames = useMemo(
+    () => new Set(mappableColumns.map((c) => c.columnName)),
+    [mappableColumns],
+  );
+
+  const syncProductCodeOptions = useMemo(
+    () => buildSyncColumnSelectOptions(mappableColumns, syncProductCodeColumn, false),
+    [mappableColumns, syncProductCodeColumn],
+  );
+  const syncStockOptions = useMemo(
+    () => buildSyncColumnSelectOptions(mappableColumns, syncStockColumn, false),
+    [mappableColumns, syncStockColumn],
+  );
+  const syncPriceOptions = useMemo(
+    () => buildSyncColumnSelectOptions(mappableColumns, syncPriceColumn, true),
+    [mappableColumns, syncPriceColumn],
+  );
+  const syncNameOptions = useMemo(
+    () => buildSyncColumnSelectOptions(mappableColumns, syncNameColumn, true),
+    [mappableColumns, syncNameColumn],
+  );
+
+  useEffect(() => {
+    if (!syncWithStore || mappableColumnNames.size === 0) return;
+    if (!mappableColumnNames.has(syncProductCodeColumn.trim())) {
+      const d = pickDefaultSyncColumn(mappableColumnNames, SYNC_PRODUCT_CODE_CANDIDATES);
+      if (d) setSyncProductCodeColumn(d);
+    }
+    if (!mappableColumnNames.has(syncStockColumn.trim())) {
+      const d = pickDefaultSyncColumn(mappableColumnNames, SYNC_STOCK_CANDIDATES);
+      if (d) setSyncStockColumn(d);
+    }
+    if (syncPriceColumn.trim() && !mappableColumnNames.has(syncPriceColumn.trim())) {
+      const d = pickDefaultSyncColumn(mappableColumnNames, SYNC_PRICE_CANDIDATES);
+      setSyncPriceColumn(d ?? '');
+    }
+    if (syncNameColumn.trim() && !mappableColumnNames.has(syncNameColumn.trim())) {
+      const d = pickDefaultSyncColumn(mappableColumnNames, SYNC_NAME_CANDIDATES);
+      setSyncNameColumn(d ?? '');
+    }
+  }, [
+    syncWithStore,
+    mappableColumnNames,
+    syncProductCodeColumn,
+    syncStockColumn,
+    syncPriceColumn,
+    syncNameColumn,
+  ]);
 
   const optionsForColumn = useCallback(
     (columnName: string) => {
@@ -465,24 +587,142 @@ export function WorkflowSinkAutomationNodePanel({
                   </button>
                 </div>
 
-                <div
-                  className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/70 px-3 py-2 opacity-70 dark:border-neutral-700 dark:bg-neutral-900/50"
-                  aria-disabled="true"
-                >
+                <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2 dark:border-neutral-700">
                   <div className="min-w-0 pr-3">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Sincronizar con tienda</span>
-                    <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Próximamente.</p>
+                    <span className="text-sm text-gray-800 dark:text-gray-200">Sincronizar con tienda</span>
+                    <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      Tras guardar en data bridge, cruza por SKU con el catálogo y actualiza precio y stock en la
+                      sucursal del flujo.
+                    </p>
                   </div>
                   <button
                     type="button"
                     role="switch"
-                    aria-checked={false}
-                    disabled
-                    className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-gray-300 dark:bg-neutral-700"
+                    aria-checked={syncWithStore}
+                    onClick={() => setSyncWithStore((v) => !v)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                      syncWithStore ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
+                    }`}
                   >
-                    <span className="inline-block h-5 w-5 translate-x-1 rounded-full bg-white" />
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                        syncWithStore ? 'translate-x-5' : 'translate-x-1'
+                      }`}
+                    />
                   </button>
                 </div>
+
+                {syncWithStore ? (
+                  <div className="space-y-3 rounded-md border border-cyan-200/80 bg-cyan-50/40 p-3 dark:border-cyan-800/60 dark:bg-cyan-950/20">
+                    <div className="flex items-center justify-between rounded-md border border-gray-200 bg-white/80 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900/60">
+                      <div className="min-w-0 pr-3">
+                        <span className="text-sm text-gray-800 dark:text-gray-200">
+                          Insertar productos ausentes en catálogo
+                        </span>
+                        <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                          Si un SKU del DMS no existe en el catálogo global, créalo con fuente data bridge y habilítalo
+                          en esta sucursal.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={insertMissingProducts}
+                        onClick={() => setInsertMissingProducts((v) => !v)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          insertMissingProducts ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                            insertMissingProducts ? 'translate-x-5' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] font-medium text-gray-700 dark:text-gray-300">Columnas para sincronizar</p>
+                    <p className="text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+                      Elige columnas de la tabla <span className="font-mono">{tableName || '—'}</span> configurada en
+                      Parameters. El código se compara con{' '}
+                      <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">catalog.products.sku</code>.
+                    </p>
+                    {!tableName.trim() ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
+                        Selecciona primero la tabla en la pestaña Parameters.
+                      </p>
+                    ) : busyCols ? (
+                      <p className="text-[11px] text-gray-500">Cargando columnas de la tabla…</p>
+                    ) : mappableColumns.length === 0 ? (
+                      <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
+                        No hay columnas mapeables en esta tabla (solo columnas del servidor).
+                      </p>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">
+                          Código / SKU
+                          <select
+                            value={syncProductCodeColumn}
+                            onChange={(e) => setSyncProductCodeColumn(e.target.value)}
+                            className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+                            aria-label="Columna código o SKU"
+                          >
+                            {syncProductCodeOptions.map((o) => (
+                              <option key={o.value || '__empty__'} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">
+                          Stock
+                          <select
+                            value={syncStockColumn}
+                            onChange={(e) => setSyncStockColumn(e.target.value)}
+                            className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+                            aria-label="Columna stock"
+                          >
+                            {syncStockOptions.map((o) => (
+                              <option key={o.value || '__empty__'} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">
+                          Precio (opcional)
+                          <select
+                            value={syncPriceColumn}
+                            onChange={(e) => setSyncPriceColumn(e.target.value)}
+                            className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+                            aria-label="Columna precio"
+                          >
+                            {syncPriceOptions.map((o) => (
+                              <option key={o.value || '__none__'} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-[11px] text-gray-600 dark:text-gray-400">
+                          Nombre para altas (opcional)
+                          <select
+                            value={syncNameColumn}
+                            onChange={(e) => setSyncNameColumn(e.target.value)}
+                            className="mt-0.5 w-full rounded border border-gray-300 bg-white px-2 py-1 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-900 dark:text-gray-100"
+                            aria-label="Columna nombre para altas"
+                          >
+                            {syncNameOptions.map((o) => (
+                              <option key={o.value || '__none__'} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
 
                 <div
                   className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/70 px-3 py-2 opacity-70 dark:border-neutral-700 dark:bg-neutral-900/50"

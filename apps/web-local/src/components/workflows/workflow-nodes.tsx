@@ -288,7 +288,12 @@ export function SinkLogNode(props: NodeProps) {
 
 export function SinkAutomationNode(props: NodeProps) {
   const { readOnly } = useContext(WorkflowCanvasEditContext);
-  const d = (props.data || {}) as { label?: string; tableName?: string; arrayPath?: string };
+  const d = (props.data || {}) as {
+    label?: string;
+    tableName?: string;
+    arrayPath?: string;
+    syncWithStore?: boolean;
+  };
   const pData = props.data as Record<string, unknown> | undefined;
   const table = typeof d.tableName === 'string' && d.tableName.trim() ? d.tableName : '—';
   const path = typeof d.arrayPath === 'string' && d.arrayPath.trim() ? d.arrayPath : '(raíz = arreglo)';
@@ -313,6 +318,9 @@ export function SinkAutomationNode(props: NodeProps) {
             <div className="text-[10px] text-cyan-800/85 dark:text-cyan-200/85 mt-0.5 font-mono truncate" title={`${table} · ${path}`}>
               {table} · {path}
             </div>
+            {d.syncWithStore ? (
+              <div className="text-[9px] text-emerald-700 dark:text-emerald-400 mt-0.5">+ sync tienda</div>
+            ) : null}
             {!readOnly && (
               <p className="text-[9px] text-cyan-600/80 dark:text-cyan-400/80 mt-0.5">Clic para configurar</p>
             )}
