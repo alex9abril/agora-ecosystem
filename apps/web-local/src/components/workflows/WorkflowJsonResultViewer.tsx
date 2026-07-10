@@ -47,7 +47,7 @@ export function WorkflowJsonResultViewer({ data, fillContainer }: Props) {
     let rowHint: string | null = null;
     if (data && typeof data === 'object' && data !== null && 'rows' in data && Array.isArray((data as { rows: unknown }).rows)) {
       const n = (data as { rows: unknown[] }).rows.length;
-      rowHint = `${n} fila${n === 1 ? '' : 's'} en sample`;
+      rowHint = `${n} fila${n === 1 ? '' : 's'}`;
     }
     return { lines, sizeKb, rowHint };
   }, [data, text]);

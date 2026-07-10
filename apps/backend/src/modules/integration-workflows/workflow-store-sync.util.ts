@@ -57,15 +57,29 @@ function getColumnValue(
   columnName: string,
   fieldMappings: Record<string, string>,
   ctx: DataBridgeFieldResolveCtx,
+  aliases: string[] = [],
 ): unknown {
-  const col = columnName.trim();
-  if (!col) return undefined;
-  const spec = fieldMappings[col];
-  if (spec) {
-    const mapped = resolveFieldSpec(row, spec, ctx);
-    if (mapped !== undefined && mapped !== null && mapped !== '') return mapped;
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  for (const c of [columnName, ...aliases]) {
+    const key = c.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(key);
   }
-  if (col in row) return row[col];
+
+  for (const col of candidates) {
+    const spec = fieldMappings[col];
+    if (spec) {
+      const mapped = resolveFieldSpec(row, spec, ctx);
+      if (mapped !== undefined && mapped !== null && mapped !== '') return mapped;
+    }
+    if (col in row) {
+      const direct = row[col];
+      if (direct !== undefined && direct !== null && direct !== '') return direct;
+    }
+  }
+
   return undefined;
 }
 
@@ -83,12 +97,25 @@ function toStockInteger(v: unknown): number | null {
 }
 
 function pickNameFromPayload(payload: Record<string, unknown>): string | null {
-  for (const key of ['nombre', 'name', 'descripcion', 'description', 'titulo', 'title']) {
+  for (const key of [
+    'Descripcion',
+    'descripcion',
+    'nombre',
+    'name',
+    'description',
+    'titulo',
+    'title',
+  ]) {
     const v = payload[key];
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
   return null;
 }
+
+const PRODUCT_CODE_ALIASES = ['product', 'product_code', 'sku', 'codigo', 'code'];
+const STOCK_ALIASES = ['inventario', 'quantity', 'stock', 'existencia', 'qty', 'cantidad'];
+const PRICE_ALIASES = ['sale_price', 'price', 'precio', 'costo', 'importe'];
+const NAME_ALIASES = ['Descripcion', 'descripcion', 'nombre', 'name', 'description', 'titulo'];
 
 export function extractStoreSyncRow(
   row: Record<string, unknown>,
@@ -96,18 +123,24 @@ export function extractStoreSyncRow(
   fieldMappings: Record<string, string>,
   ctx: DataBridgeFieldResolveCtx,
 ): StoreSyncRow | null {
-  const rawCode = getColumnValue(row, config.productCodeColumn, fieldMappings, ctx);
+  const rawCode = getColumnValue(
+    row,
+    config.productCodeColumn,
+    fieldMappings,
+    ctx,
+    PRODUCT_CODE_ALIASES,
+  );
   const productCode = rawCode == null ? '' : String(rawCode).trim();
   if (!productCode) return null;
 
   const priceRaw = config.priceColumn
-    ? getColumnValue(row, config.priceColumn, fieldMappings, ctx)
-    : undefined;
-  const stockRaw = getColumnValue(row, config.stockColumn, fieldMappings, ctx);
+    ? getColumnValue(row, config.priceColumn, fieldMappings, ctx, PRICE_ALIASES)
+    : getColumnValue(row, '', fieldMappings, ctx, PRICE_ALIASES);
+  const stockRaw = getColumnValue(row, config.stockColumn, fieldMappings, ctx, STOCK_ALIASES);
 
   let name: string | null = null;
   if (config.nameColumn) {
-    const nameRaw = getColumnValue(row, config.nameColumn, fieldMappings, ctx);
+    const nameRaw = getColumnValue(row, config.nameColumn, fieldMappings, ctx, NAME_ALIASES);
     if (nameRaw != null && String(nameRaw).trim()) name = String(nameRaw).trim();
   }
   if (!name) {

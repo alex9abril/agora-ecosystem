@@ -83,4 +83,25 @@ describe('extractStoreSyncRow', () => {
     const item = extractStoreSyncRow(row, baseConfig, {}, ctx);
     expect(item?.name).toBe('Pastillas de freno');
   });
+
+  it('resolves SKU from product when config says product_code (Alden / DMS)', () => {
+    const row = {
+      product: '697218407485',
+      Descripcion: 'SILLA CAMP',
+      sale_price: 0,
+      inventario: 2,
+    };
+    const mappings = {
+      product: '$row.product',
+      inventario: '$row.inventario',
+      sale_price: '$row.sale_price',
+    };
+    const item = extractStoreSyncRow(row, baseConfig, mappings, ctx);
+    expect(item).toEqual({
+      productCode: '697218407485',
+      price: 0,
+      stock: 2,
+      name: 'SILLA CAMP',
+    });
+  });
 });

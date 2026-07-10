@@ -1,5 +1,5 @@
 /** Límite de filas por ejecución del nodo sinkAutomation → data_bridge. */
-export const MAX_DATA_BRIDGE_INSERT_ROWS = 500;
+export const MAX_DATA_BRIDGE_INSERT_ROWS = 10_000;
 
 /** Solo identificadores en minúsculas snake_case (nombres de tabla en data_bridge). */
 export const DATA_BRIDGE_TABLE_NAME_RE = /^[a-z][a-z0-9_]*$/;

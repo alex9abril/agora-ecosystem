@@ -56,10 +56,10 @@ function looksLikeWorkflowStepPayload(v: unknown): boolean {
 
 const CUSTOM_MAPPING_VALUE = '__custom__';
 
-const SYNC_PRODUCT_CODE_CANDIDATES = ['product_code', 'sku', 'codigo', 'code'];
-const SYNC_STOCK_CANDIDATES = ['quantity', 'stock', 'existencia', 'qty', 'cantidad'];
-const SYNC_PRICE_CANDIDATES = ['price', 'precio', 'costo', 'importe'];
-const SYNC_NAME_CANDIDATES = ['name', 'nombre', 'descripcion', 'description', 'titulo'];
+const SYNC_PRODUCT_CODE_CANDIDATES = ['product', 'product_code', 'sku', 'codigo', 'code'];
+const SYNC_STOCK_CANDIDATES = ['inventario', 'quantity', 'stock', 'existencia', 'qty', 'cantidad'];
+const SYNC_PRICE_CANDIDATES = ['sale_price', 'price', 'precio', 'costo', 'importe'];
+const SYNC_NAME_CANDIDATES = ['Descripcion', 'descripcion', 'name', 'nombre', 'description', 'titulo'];
 
 function buildSyncColumnSelectOptions(
   mappableColumns: DataBridgeWriteColumnRow[],
@@ -76,7 +76,7 @@ function buildSyncColumnSelectOptions(
   }
   const cur = currentValue.trim();
   if (cur && !seen.has(cur)) {
-    opts.push({ value: cur, label: `${cur} (guardado)` });
+    opts.unshift({ value: cur, label: `${cur} (no existe en tabla — elige otra)` });
   }
   return opts;
 }

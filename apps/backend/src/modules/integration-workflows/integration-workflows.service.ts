@@ -30,7 +30,7 @@ import {
 } from './workflow-sink-data-bridge.util';
 import { parseStoreSyncConfig, syncIngestedRowsToStore } from './workflow-store-sync.util';
 
-const MAX_RESULT_ROWS = 1000;
+const MAX_RESULT_ROWS = 10_000;
 const MS_TIMEOUT_MS = 30000;
 
 /* Cargar mssql vía require: en runtime el default import (import x from 'mssql') a menudo queda
@@ -500,8 +500,19 @@ export class IntegrationWorkflowsService {
       }
       try {
         const rows = await this.queryMssql(userId, businessId, connectorId, queryText);
-        const { usedConnection: _u, ...result } = rows as { usedConnection?: unknown; rows: unknown; truncated?: boolean; total?: number };
-        return { nodeId: node.id, type: t, result };
+        const { usedConnection: _u, ...result } = rows as {
+          usedConnection?: unknown;
+          rows: unknown;
+          truncated?: boolean;
+          total?: number;
+        };
+        const logs: string[] = [];
+        if (result.truncated && typeof result.total === 'number') {
+          logs.push(
+            `MSSQL devolvió ${result.total} fila(s); se procesaron ${(result.rows as unknown[]).length} (límite ${MAX_RESULT_ROWS}).`,
+          );
+        }
+        return { nodeId: node.id, type: t, result, ...(logs.length > 0 ? { logs } : {}) };
       } catch (e: unknown) {
         return { nodeId: node.id, type: t, error: this.nodeErrorMessage(e) };
       }
