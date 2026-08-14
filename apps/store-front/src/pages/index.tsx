@@ -135,7 +135,7 @@ export default function HomePage() {
           slides={globalSliders}
           autoPlay={true}
           autoPlayInterval={5000}
-          height="650px"
+          height="min(820px, calc(100dvh - 11rem))"
         />
 
         {/* Carrusel de Colecciones */}

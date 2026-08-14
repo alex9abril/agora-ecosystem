@@ -62,7 +62,7 @@ export default function PromotionalSlider({
   autoPlayInterval = 5000,
   showDots = true,
   showArrows = true,
-  height = '400px',
+  height = 'min(820px, calc(100dvh - 11rem))',
   className = '',
 }: PromotionalSliderProps) {
   const { branding } = useBranding();
@@ -71,6 +71,7 @@ export default function PromotionalSlider({
   const [isPaused, setIsPaused] = useState(false);
 
   // Variante compacta y estilizada cuando la tienda está embebida (iframe)
+  // Altura amplia relativa al viewport (menos header); tope 820px para no cortarse en pantallas bajas
   const effectiveHeight = embedMode ? '440px' : height;
   const wrapperClass = embedMode
     ? 'relative w-full overflow-hidden rounded-2xl shadow-lg border border-gray-200/50'
@@ -125,7 +126,7 @@ export default function PromotionalSlider({
   return (
     <div
       className={wrapperClass}
-      style={{ height: effectiveHeight }}
+      style={{ height: effectiveHeight, minHeight: embedMode ? undefined : '360px' }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
@@ -142,7 +143,7 @@ export default function PromotionalSlider({
           <img
             src={currentSlide.imageUrl}
             alt={currentSlide.imageAlt || `Slide ${currentIndex + 1}`}
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover object-center"
           />
         ) : (
           // Si no hay imagen, mostrar gradiente o color de fondo
