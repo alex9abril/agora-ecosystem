@@ -42,8 +42,19 @@ describe('parseStoreSyncConfig', () => {
   it('defaults columns when omitted', () => {
     const cfg = parseStoreSyncConfig({});
     expect(cfg.syncWithStore).toBe(false);
+    expect(cfg.insertMissingProducts).toBe(false);
     expect(cfg.productCodeColumn).toBe('product_code');
     expect(cfg.stockColumn).toBe('quantity');
+  });
+
+  it('creates missing catalog products by default when store sync is on', () => {
+    const cfg = parseStoreSyncConfig({ syncWithStore: true });
+    expect(cfg.insertMissingProducts).toBe(true);
+  });
+
+  it('keeps insertMissingProducts off when explicitly disabled', () => {
+    const cfg = parseStoreSyncConfig({ syncWithStore: true, insertMissingProducts: false });
+    expect(cfg.insertMissingProducts).toBe(false);
   });
 });
 

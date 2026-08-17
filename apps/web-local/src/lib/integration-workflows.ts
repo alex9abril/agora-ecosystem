@@ -151,6 +151,92 @@ export function testMssqlConnectionForConnector(
   });
 }
 
+export type HttpRestConnectionPublic = {
+  connectorId?: string;
+  baseUrl: string;
+  authHeaderName: string;
+  healthPath: string;
+  healthMethod: string;
+  healthUrl: string;
+};
+
+export type HttpRestTestResult =
+  | { success: true; statusCode: number; usedConnection: HttpRestConnectionPublic }
+  | {
+      success: false;
+      message: string;
+      statusCode?: number;
+      usedConnection: HttpRestConnectionPublic;
+    };
+
+export function testHttpRestConnectionNew(
+  businessId: string,
+  body: {
+    baseUrl: string;
+    authHeaderName: string;
+    apiKey: string;
+    healthPath?: string;
+    healthMethod?: 'GET' | 'HEAD';
+  },
+) {
+  return apiRequest<HttpRestTestResult>(`${base(businessId)}/connectors/http-rest/test`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function testHttpRestConnectionForConnector(
+  businessId: string,
+  connectorId: string,
+  body?: {
+    baseUrl?: string;
+    authHeaderName?: string;
+    apiKey?: string;
+    healthPath?: string;
+    healthMethod?: 'GET' | 'HEAD';
+  },
+) {
+  return apiRequest<HttpRestTestResult>(`${base(businessId)}/connectors/${connectorId}/http-rest/test`, {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+export type HttpKvPair = {
+  key: string;
+  value: string;
+  enabled: boolean;
+};
+
+export type HttpRestBodyMode = 'none' | 'urlencoded' | 'json';
+
+export type HttpRestPreviewResult = {
+  statusCode: number;
+  url: string;
+  method: string;
+  connectorName: string;
+  body: unknown;
+};
+
+export function previewHttpRestRequest(
+  businessId: string,
+  connectorId: string,
+  body: {
+    method?: string;
+    path?: string;
+    queryParams?: HttpKvPair[];
+    headers?: HttpKvPair[];
+    bodyMode?: HttpRestBodyMode;
+    bodyParams?: HttpKvPair[];
+    bodyJson?: string;
+  },
+) {
+  return apiRequest<HttpRestPreviewResult>(`${base(businessId)}/connectors/${connectorId}/http-rest/preview`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export type MssqlPreviewResult = {
   rows: unknown[];
   truncated?: boolean;

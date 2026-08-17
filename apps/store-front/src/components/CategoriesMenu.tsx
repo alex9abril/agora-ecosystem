@@ -1,14 +1,15 @@
 /**
- * Componente de menú de categorías
- * Panel flotante lateral izquierdo moderno estilo Toyota
- * Muestra categorías principales y subcategorías al hacer hover/clic
+ * Menú de categorías — panel lateral estilo Parts Center Online (megamenu).
+ * Drill-down de categorías + bloque Popular con tiles de imagen.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { useStoreContext } from '@/contexts/StoreContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ProductCategory, categoriesService } from '@/lib/categories';
 import { collectionsService, StoreCollection } from '@/lib/collections';
+import { productsService } from '@/lib/products';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { store } from '@/store';
 import {
@@ -19,81 +20,73 @@ import {
   fetchSubcategories,
 } from '@/store/slices/categoriesSlice';
 import ContextualLink from './ContextualLink';
-import CategoryIcon from '@mui/icons-material/Category';
-import MenuIcon from '@mui/icons-material/Menu';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { getCategoryIconFromData } from '@/lib/category-icons';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 
 interface CategoriesMenuProps {
   className?: string;
-  onCategoryClick?: () => void; // Callback para cerrar el menú cuando se hace clic en una categoría
-  isOpen?: boolean; // Control de apertura/cierre del panel
-  onClose?: () => void; // Callback para cerrar el panel
+  onCategoryClick?: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 interface CategoryWithChildren extends ProductCategory {
   children?: CategoryWithChildren[];
 }
 
-export default function CategoriesMenu({ className = '', onCategoryClick, isOpen = true, onClose }: CategoriesMenuProps) {
+interface PopularTile {
+  id: string;
+  name: string;
+  link: string;
+  imageUrl?: string | null;
+}
+
+const STORAGE_KEY = 'recent_categories';
+
+export default function CategoriesMenu({
+  className = '',
+  onCategoryClick,
+  isOpen = true,
+  onClose,
+}: CategoriesMenuProps) {
   const router = useRouter();
-  const { contextType, getContextualUrl, branchId } = useStoreContext();
+  const { contextType, getContextualUrl, branchId, groupId, brandId } = useStoreContext();
+  const { isAuthenticated } = useAuth();
   const dispatch = useAppDispatch();
-  
-  // Obtener categorías desde Redux
+
   const rootCategoriesFromRedux = useAppSelector(selectRootCategories);
   const categoriesLoading = useAppSelector(selectCategoriesLoading);
   const categoriesInitialized = useAppSelector(selectCategoriesInitialized);
   const subcategoriesByParent = useAppSelector((state) => state.categories.subcategoriesByParent);
-  
+
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | null>(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState<ProductCategory | null>(null);
   const [subSubcategories, setSubSubcategories] = useState<Record<string, ProductCategory[]>>({});
-  const [loadingSubSubcategories, setLoadingSubSubcategories] = useState<Record<string, boolean>>({});
   const [recentCategories, setRecentCategories] = useState<ProductCategory[]>([]);
   const [collections, setCollections] = useState<StoreCollection[]>([]);
-  const [loadingCollections, setLoadingCollections] = useState(false);
+  const [popularTiles, setPopularTiles] = useState<PopularTile[]>([]);
+  const [loadingPopular, setLoadingPopular] = useState(false);
 
-  // Convertir categorías de Redux al formato con children
-  const rootCategories: CategoryWithChildren[] = useMemo(() => 
-    rootCategoriesFromRedux.map(cat => ({
-      ...cat,
-      children: [],
-    })), [rootCategoriesFromRedux]
+  const rootCategories: CategoryWithChildren[] = useMemo(
+    () => rootCategoriesFromRedux.map((cat) => ({ ...cat, children: [] })),
+    [rootCategoriesFromRedux],
   );
 
-  // Obtener subcategorías desde Redux
-  const subcategories = useAppSelector((state) => 
-    selectedCategory ? selectSubcategories(state, selectedCategory.id) : []
+  const subcategories = useAppSelector((state) =>
+    selectedCategory ? selectSubcategories(state, selectedCategory.id) : [],
   );
-
-  // No seleccionar automáticamente - el usuario debe hacer clic
-
-  // Funciones para manejar categorías recientes en localStorage
-  const STORAGE_KEY = 'recent_categories';
 
   const saveRecentCategory = (category: ProductCategory) => {
     if (typeof window === 'undefined') return;
-    
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       let recent: ProductCategory[] = stored ? JSON.parse(stored) : [];
-      
-      // Remover la categoría si ya existe (para evitar duplicados)
-      recent = recent.filter(cat => cat.id !== category.id);
-      
-      // Agregar la nueva categoría al inicio
+      recent = recent.filter((cat) => cat.id !== category.id);
       recent.unshift(category);
-      
-      // Mantener solo las últimas 5
       recent = recent.slice(0, 5);
-      
-      // Guardar en localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(recent));
-      
-      // Actualizar el estado
       setRecentCategories(recent);
     } catch (error) {
       console.error('Error guardando categoría reciente:', error);
@@ -102,474 +95,486 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
 
   const loadRecentCategories = () => {
     if (typeof window === 'undefined') return;
-    
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const recent: ProductCategory[] = JSON.parse(stored);
-        setRecentCategories(recent);
-      }
+      if (stored) setRecentCategories(JSON.parse(stored));
     } catch (error) {
       console.error('Error cargando categorías recientes:', error);
     }
   };
 
-  // Cargar categorías recientes al montar el componente
   useEffect(() => {
     loadRecentCategories();
   }, []);
 
-  // Detectar categoryId en la URL y guardar como categoría reciente
   useEffect(() => {
     if (!router.isReady) return;
-    
     const { categoryId } = router.query;
-    
     if (categoryId && typeof categoryId === 'string') {
-      // Cargar la categoría y guardarla como reciente
-      const loadAndSaveCategory = async () => {
-        try {
-          const category = await categoriesService.getCategoryById(categoryId);
-          saveRecentCategory(category);
-        } catch (error) {
-          console.error('Error cargando categoría desde URL:', error);
-        }
-      };
-      
-      loadAndSaveCategory();
+      categoriesService
+        .getCategoryById(categoryId)
+        .then(saveRecentCategory)
+        .catch((error) => console.error('Error cargando categoría desde URL:', error));
     }
   }, [router.isReady, router.query.categoryId]);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
     if (contextType !== 'sucursal' || !branchId) {
       setCollections([]);
       return;
     }
-    let isActive = true;
-    const loadCollections = async () => {
-      try {
-        setLoadingCollections(true);
-        const response = await collectionsService.list(branchId);
-        if (!isActive) return;
-        setCollections(response.data || []);
-      } catch (error) {
-        console.error('Error cargando colecciones:', error);
-        if (!isActive) return;
-        setCollections([]);
-      } finally {
-        if (isActive) {
-          setLoadingCollections(false);
-        }
-      }
-    };
-    loadCollections();
+    let active = true;
+    collectionsService
+      .list(branchId)
+      .then((response) => {
+        if (active) setCollections(response.data || []);
+      })
+      .catch(() => {
+        if (active) setCollections([]);
+      });
     return () => {
-      isActive = false;
+      active = false;
     };
   }, [isOpen, contextType, branchId]);
 
-  // Cargar subcategorías cuando se selecciona una categoría
+  // Popular: hasta 4 tiles con imagen de producto (recientes o primeras categorías)
+  useEffect(() => {
+    if (!isOpen || !categoriesInitialized) return;
+    const sources =
+      recentCategories.length > 0
+        ? recentCategories.slice(0, 4)
+        : rootCategories.slice(0, 4);
+    if (sources.length === 0) {
+      setPopularTiles([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPopular(true);
+
+    Promise.all(
+      sources.map(async (cat) => {
+        try {
+          const res = await productsService.getProducts({
+            categoryId: cat.id,
+            branchId: branchId || undefined,
+            groupId: groupId || undefined,
+            brandId: brandId || undefined,
+            limit: 1,
+            page: 1,
+            isAvailable: true,
+          });
+          const product = res.data?.[0];
+          return {
+            id: cat.id,
+            name: cat.name,
+            link: `/products?categoryId=${cat.id}`,
+            imageUrl: product?.primary_image_url || product?.image_url || cat.icon_url || null,
+          } as PopularTile;
+        } catch {
+          return {
+            id: cat.id,
+            name: cat.name,
+            link: `/products?categoryId=${cat.id}`,
+            imageUrl: cat.icon_url || null,
+          } as PopularTile;
+        }
+      }),
+    ).then((tiles) => {
+      if (!cancelled) {
+        setPopularTiles(tiles);
+        setLoadingPopular(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isOpen,
+    categoriesInitialized,
+    recentCategories,
+    rootCategories,
+    branchId,
+    groupId,
+    brandId,
+  ]);
+
   useEffect(() => {
     if (selectedCategory && categoriesInitialized) {
-      // Verificar si ya tenemos las subcategorías en Redux
       const state = store.getState();
-      const currentSubcategories = selectSubcategories(state, selectedCategory.id);
-      
-      if (currentSubcategories.length === 0) {
-        dispatch(fetchSubcategories(selectedCategory.id));
-      }
+      const current = selectSubcategories(state, selectedCategory.id);
+      if (current.length === 0) dispatch(fetchSubcategories(selectedCategory.id));
     } else {
       setSubSubcategories({});
     }
   }, [selectedCategory, categoriesInitialized, dispatch]);
 
-  // Cargar sub-subcategorías cuando cambian las subcategorías
   useEffect(() => {
-    if (subcategories.length > 0) {
-      const loadSubSubcategories = async () => {
-        const subSubcats: Record<string, ProductCategory[]> = {};
-        
-        for (const subcat of subcategories) {
-          try {
-            // Verificar si ya tenemos las sub-subcategorías en Redux
-            const state = store.getState();
-            const existing = selectSubcategories(state, subcat.id);
-            
-            if (existing.length > 0) {
-              subSubcats[subcat.id] = existing;
-            } else {
-              // Cargar desde Redux (que hará la petición si no están en cache)
-              await dispatch(fetchSubcategories(subcat.id));
-              const updatedState = store.getState();
-              const loaded = selectSubcategories(updatedState, subcat.id);
-              if (loaded.length > 0) {
-                subSubcats[subcat.id] = loaded;
-              }
-            }
-          } catch (err) {
-            console.error('Error cargando sub-subcategorías:', err);
+    if (subcategories.length === 0) return;
+    const load = async () => {
+      const map: Record<string, ProductCategory[]> = {};
+      for (const subcat of subcategories) {
+        try {
+          const state = store.getState();
+          const existing = selectSubcategories(state, subcat.id);
+          if (existing.length > 0) {
+            map[subcat.id] = existing;
+          } else {
+            await dispatch(fetchSubcategories(subcat.id));
+            const loaded = selectSubcategories(store.getState(), subcat.id);
+            if (loaded.length > 0) map[subcat.id] = loaded;
           }
+        } catch (err) {
+          console.error('Error cargando sub-subcategorías:', err);
         }
-        
-        setSubSubcategories(subSubcats);
-      };
-      
-      loadSubSubcategories();
-    }
+      }
+      setSubSubcategories(map);
+    };
+    load();
   }, [subcategories, dispatch]);
 
-  const handleCategoryHover = (category: ProductCategory) => {
-    setSelectedCategory(category);
-  };
-
-  const handleCategoryLeave = () => {
-    // No limpiar inmediatamente para mejor UX
-  };
+  // Reset drill-down al cerrar
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedCategory(null);
+      setSelectedSubcategory(null);
+    }
+  }, [isOpen]);
 
   const handleCategoryClick = (category: ProductCategory, event?: React.MouseEvent) => {
-    // Prevenir la navegación - solo seleccionar la categoría
-    if (event) {
-      event.preventDefault();
-    }
-    
-    // NO guardar en categorías recientes aquí - solo se guarda cuando se accede por URL
-    // Las categorías recientes son solo para accesos directos desde URL
-    
-    // Seleccionar la categoría para mostrar subcategorías
+    if (event) event.preventDefault();
     setSelectedCategory(category);
-    setSelectedSubcategory(null); // Resetear subcategoría seleccionada
+    setSelectedSubcategory(null);
   };
 
   const handleSubcategoryClick = (subcategory: ProductCategory, event?: React.MouseEvent) => {
-    // Si tiene sub-subcategorías, mostrar vista de sub-subcategorías
-    // Si no, navegar directamente
     const subSubcats = subSubcategories[subcategory.id] || [];
-    
     if (subSubcats.length > 0 && event) {
       event.preventDefault();
       setSelectedSubcategory(subcategory);
     } else {
-      // Navegar directamente si no hay sub-subcategorías
-      handleSubcategoryNavigation(subcategory);
+      navigateToCategory(subcategory);
     }
   };
 
-  const handleSubcategoryNavigation = (category: ProductCategory) => {
-    // Construir la URL completa con query params usando getContextualUrl
+  const navigateToCategory = (category: ProductCategory) => {
     const url = getContextualUrl(`/products?categoryId=${category.id}`);
-    
-    // Parsear la URL para separar pathname y query
     const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const pathname = urlObj.pathname;
     const queryParams: Record<string, string> = {};
     urlObj.searchParams.forEach((value, key) => {
       queryParams[key] = value;
     });
-    
-    // Usar router.push con pathname y query explícitos
-    router.push({
-      pathname,
-      query: queryParams,
-    }, undefined, { shallow: false });
-    
-    // Cerrar el panel al navegar
-    if (onCategoryClick) {
-      onCategoryClick();
-    }
+    router.push({ pathname: urlObj.pathname, query: queryParams }, undefined, { shallow: false });
+    onCategoryClick?.();
   };
 
-
-  // Mostrar loading solo si no hay categorías y están cargando
-  if (categoriesLoading && rootCategories.length === 0) {
-    return (
-      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 ${className}`}>
-        <div className="p-4">
-          <p className="text-gray-500 text-center">Cargando categorías...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Función para obtener un ícono basado en el nombre de la categoría
-  // Usar el sistema dinámico de iconos
-  const getCategoryIcon = (category: ProductCategory) => {
-    return getCategoryIconFromData({
-      name: category.name,
-      icon_url: category.icon_url || undefined,
-      mui_icon_name: undefined, // Se puede agregar al modelo de categoría si es necesario
-    });
-  };
+  const closeAfterNav = () => onCategoryClick?.();
 
   if (!isOpen) return null;
 
+  const rowClass =
+    'w-full flex items-center justify-between gap-3 px-5 py-3.5 text-[15px] text-neutral-900 hover:bg-[#f6f6f6] transition-colors text-left';
+
   return (
     <>
-      {/* Overlay oscuro de fondo */}
-      <div
-        className="fixed inset-0 bg-black/50 z-40 transition-opacity"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/40 z-40 transition-opacity" onClick={onClose} />
 
-      {/* Panel flotante lateral izquierdo */}
-      <div className={`fixed left-0 top-0 bottom-0 w-96 bg-white shadow-2xl z-50 overflow-hidden flex flex-col transform transition-transform duration-300 ease-in-out ${className}`}>
-        {/* Header del panel */}
-        <div className="px-6 py-4 bg-white border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <MenuIcon className="w-6 h-6 text-gray-700" />
-            <h2 className="text-base font-semibold text-gray-900">Partes y Accesorios</h2>
+      <div
+        className={`fixed left-0 top-0 bottom-0 w-[min(100vw,420px)] bg-white shadow-2xl z-50 overflow-hidden flex flex-col ${className}`}
+        role="dialog"
+        aria-label="Menú de categorías"
+      >
+        {/* Header sticky estilo megamenu */}
+        <div className="flex-shrink-0 border-b border-neutral-200 bg-white">
+          <div className="flex items-start justify-between px-5 pt-5 pb-2">
+            <div className="min-w-0 flex-1 pr-3">
+              {!isAuthenticated && (
+                <ContextualLink
+                  href="/auth/login"
+                  onClick={closeAfterNav}
+                  className="inline-flex items-center gap-1.5 text-[15px] text-neutral-900 underline underline-offset-2 hover:no-underline mb-4"
+                >
+                  <PersonOutlineIcon className="w-4 h-4" />
+                  Inicia sesión o crea una cuenta
+                </ContextualLink>
+              )}
+              <h2 className="font-display text-[28px] md:text-[32px] font-semibold text-neutral-900 leading-tight tracking-tight">
+                Partes y Accesorios
+              </h2>
+              <ContextualLink
+                href="/products"
+                onClick={closeAfterNav}
+                className="inline-block mt-1 text-[15px] text-neutral-700 underline underline-offset-2 hover:no-underline"
+              >
+                Comprar todas las partes y accesorios
+              </ContextualLink>
+            </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 -mr-1 -mt-1 rounded-full hover:bg-neutral-100 transition-colors"
+                aria-label="Cerrar menú"
+              >
+                <CloseIcon className="w-5 h-5 text-neutral-800" />
+              </button>
+            )}
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
-              aria-label="Cerrar menú"
-            >
-              <CloseIcon className="w-5 h-5 text-gray-600" />
-            </button>
-          )}
         </div>
 
-        {/* Subtítulo - Solo mostrar si no hay categoría seleccionada */}
-        {!selectedCategory && !selectedSubcategory && (
-          <div className="px-6 py-2 bg-gray-50 border-b border-gray-200">
-            <p className="text-sm text-gray-600">Comprar todas las partes y accesorios</p>
-          </div>
-        )}
-
-        {/* Contenido con navegación tipo páginas */}
         <div className="flex-1 overflow-hidden relative">
-          {/* Vista de categorías principales */}
-          <div 
+          {/* Vista raíz */}
+          <div
             className={`absolute inset-0 overflow-y-auto transition-transform duration-300 ease-in-out ${
               selectedCategory ? '-translate-x-full' : 'translate-x-0'
             }`}
             style={{ zIndex: selectedCategory ? 1 : 10 }}
           >
-            <nav className="py-2">
-              {categoriesLoading && rootCategories.length === 0 ? (
-                <div className="px-6 py-8 text-center">
-                  <p className="text-sm text-gray-500">Cargando categorías...</p>
-                </div>
-              ) : (
-                <>
-                  {/* Sección Recientemente */}
-                  {recentCategories.length > 0 && (
-                    <>
-                      <div className="px-6 py-3">
-                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Recientemente</h3>
+            {categoriesLoading && rootCategories.length === 0 ? (
+              <div className="px-5 py-10 text-center text-sm text-neutral-500">
+                Cargando categorías...
+              </div>
+            ) : (
+              <nav className="pb-8" aria-label="Menú principal">
+                {/* Popular */}
+                {(loadingPopular || popularTiles.length > 0) && (
+                  <div className="px-5 pt-5 pb-2">
+                    <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-neutral-500 mb-3">
+                      Popular
+                    </h3>
+                    {loadingPopular && popularTiles.length === 0 ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                          <div key={i} className="aspect-[5/4] bg-[#f3f3f3] rounded-lg animate-pulse" />
+                        ))}
                       </div>
-                      {recentCategories.map((category) => {
-                        return (
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {popularTiles.map((tile) => (
                           <ContextualLink
-                            key={`recent-${category.id}`}
-                            href={`/products?categoryId=${category.id}`}
-                            onClick={() => {
-                              // Cerrar el menú al hacer clic en una categoría reciente
-                              if (onCategoryClick) {
-                                onCategoryClick();
-                              }
-                            }}
-                            className="w-full flex items-center gap-3 px-6 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
+                            key={tile.id}
+                            href={tile.link}
+                            onClick={closeAfterNav}
+                            className="group block"
                           >
-                            <span className="flex-1 font-medium">{category.name}</span>
-                            <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div className="aspect-[5/4] bg-[#f3f3f3] rounded-lg overflow-hidden flex items-center justify-center p-3">
+                              {tile.imageUrl ? (
+                                <img
+                                  src={tile.imageUrl}
+                                  alt=""
+                                  className="max-h-full max-w-full object-contain group-hover:scale-[1.03] transition-transform"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <span className="text-xs text-neutral-400">Sin imagen</span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-[14px] font-semibold text-neutral-900 leading-snug group-hover:underline">
+                              {tile.name}
+                            </p>
                           </ContextualLink>
-                        );
-                      })}
-                    </>
-                  )}
-
-                  {/* Sección Partes y accesorios */}
-                  <div className="px-6 py-3 border-t border-gray-200 mt-2">
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Partes y accesorios</h3>
-                  </div>
-
-                  {/* Todas las categorías */}
-                  {rootCategories.map((category) => (
-                    <button
-                      key={category.id}
-                      onClick={(e) => handleCategoryClick(category, e)}
-                      className="w-full flex items-center gap-3 px-6 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
-                    >
-                      <span className="flex-1 font-medium">{category.name}</span>
-                      {(
-                        // Mostrar flecha solo si la categoría tiene subcategorías
-                        categoriesInitialized
-                          ? (subcategoriesByParent?.[category.id]?.length ?? 0) > 0
-                          : true // Mientras inicializa, mantenemos el comportamiento anterior
-                      ) && (
-                        <ChevronRightIcon className="w-4 h-4 text-gray-400" />
-                      )}
-                    </button>
-                  ))}
-
-                  {loadingCollections ? (
-                    <div className="px-6 py-3 text-sm text-gray-500">Cargando colecciones...</div>
-                  ) : collections.length > 0 ? (
-                    <>
-                      <div className="px-6 py-3 border-t border-gray-200 mt-2">
-                        <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Colecciones</h3>
+                        ))}
                       </div>
-                      {collections.map((collection) => (
-                        <ContextualLink
-                          key={`collection-${collection.id}`}
-                          href={`/products?collectionId=${collection.id}`}
-                          onClick={() => {
-                            if (onCategoryClick) {
-                              onCategoryClick();
-                            }
-                          }}
-                          className="w-full flex items-center gap-3 px-6 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors group text-left"
+                    )}
+                  </div>
+                )}
+
+                {/* Shop Categories */}
+                <div className="px-5 pt-6 pb-2">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-neutral-500">
+                    Comprar categorías
+                  </h3>
+                </div>
+                <ul className="border-t border-neutral-100">
+                  {rootCategories.map((category) => {
+                    const hasChildren = categoriesInitialized
+                      ? (subcategoriesByParent?.[category.id]?.length ?? 0) > 0
+                      : true;
+                    return (
+                      <li key={category.id} className="border-b border-neutral-100">
+                        <button
+                          type="button"
+                          onClick={(e) => handleCategoryClick(category, e)}
+                          className={rowClass}
                         >
-                          <span className="flex-1 font-medium">{collection.name}</span>
-                          <ChevronRightIcon className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </ContextualLink>
+                          <span className="font-medium">{category.name}</span>
+                          {hasChildren && (
+                            <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Colecciones */}
+                {collections.length > 0 && (
+                  <>
+                    <div className="px-5 pt-6 pb-2">
+                      <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-neutral-500">
+                        Colecciones destacadas
+                      </h3>
+                    </div>
+                    <ul className="border-t border-neutral-100">
+                      {collections.map((collection) => (
+                        <li key={collection.id} className="border-b border-neutral-100">
+                          <ContextualLink
+                            href={`/products?collectionId=${collection.id}`}
+                            onClick={closeAfterNav}
+                            className={rowClass}
+                          >
+                            <span className="font-medium">{collection.name}</span>
+                            <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                          </ContextualLink>
+                        </li>
                       ))}
-                    </>
-                  ) : null}
-                </>
-              )}
-            </nav>
+                    </ul>
+                  </>
+                )}
+
+                {/* Ayuda */}
+                <div className="px-5 pt-6 pb-2">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-neutral-500">
+                    Ayuda y soporte
+                  </h3>
+                </div>
+                <ul className="border-t border-neutral-100">
+                  <li className="border-b border-neutral-100">
+                    <ContextualLink href="/orders" onClick={closeAfterNav} className={rowClass}>
+                      <span>Seguir un pedido</span>
+                    </ContextualLink>
+                  </li>
+                  <li className="border-b border-neutral-100">
+                    <ContextualLink href="/profile" onClick={closeAfterNav} className={rowClass}>
+                      <span>Mi cuenta</span>
+                    </ContextualLink>
+                  </li>
+                </ul>
+              </nav>
+            )}
           </div>
 
-          {/* Vista de subcategorías */}
+          {/* Subcategorías */}
           {selectedCategory && !selectedSubcategory && (
-            <div 
-              className={`absolute inset-0 overflow-y-auto transition-transform duration-300 ease-in-out ${
-                selectedCategory ? 'translate-x-0' : 'translate-x-full'
-              }`}
+            <div
+              className="absolute inset-0 overflow-y-auto translate-x-0 bg-white"
               style={{ zIndex: 20 }}
             >
-              {/* Header con botón Back */}
-              <div className="px-6 py-3 border-b border-gray-200 bg-white sticky top-0 z-10">
+              <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 px-5 py-4">
                 <button
+                  type="button"
                   onClick={() => {
                     setSelectedCategory(null);
                     setSelectedSubcategory(null);
                   }}
-                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-3"
+                  className="inline-flex items-center gap-1.5 text-[15px] text-neutral-900 underline underline-offset-2 hover:no-underline mb-3"
                 >
-                  <ArrowBackIcon className="w-5 h-5" />
-                  <span>Atrás</span>
+                  <ArrowBackIcon className="w-4 h-4" />
+                  Atrás
                 </button>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900">{selectedCategory.name}</h2>
+                <div className="flex items-end justify-between gap-3">
+                  <h2 className="font-display text-2xl font-semibold text-neutral-900 leading-tight">
+                    {selectedCategory.name}
+                  </h2>
                   <ContextualLink
                     href={`/products?categoryId=${selectedCategory.id}`}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    onClick={onCategoryClick}
+                    className="text-[13px] font-medium text-neutral-700 underline underline-offset-2 hover:no-underline whitespace-nowrap"
+                    onClick={closeAfterNav}
                   >
-                    Ver Todo →
+                    Ver todo
                   </ContextualLink>
                 </div>
-                {selectedCategory.description && (
-                  <p className="text-sm text-gray-600 mt-1">{selectedCategory.description}</p>
-                )}
               </div>
 
-              {/* Lista de subcategorías */}
-              <div className="py-2">
+              <div className="py-1">
                 {subcategories.length === 0 ? (
-                  <div className="px-6 py-8 text-center">
-                    <p className="text-sm text-gray-500">Cargando subcategorías...</p>
+                  <div className="px-5 py-10 text-center text-sm text-neutral-500">
+                    Cargando subcategorías...
                   </div>
                 ) : (
-                  <div className="px-6 py-1.5">
-                    {/* Opción "Todo [Nombre de Categoría]" */}
-                    <button
-                      onClick={() => handleSubcategoryNavigation(selectedCategory)}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
-                    >
-                      <span className="flex-1">Todo {selectedCategory.name}</span>
-                    </button>
-
+                  <ul>
+                    <li className="border-b border-neutral-100">
+                      <button
+                        type="button"
+                        onClick={() => navigateToCategory(selectedCategory)}
+                        className={rowClass}
+                      >
+                        <span className="font-semibold">Todo {selectedCategory.name}</span>
+                      </button>
+                    </li>
                     {subcategories.map((subcategory) => {
-                      const subSubcats = subSubcategories[subcategory.id] || [];
-                      const hasSubSubcategories = subSubcats.length > 0;
-                      
+                      const hasSub = (subSubcategories[subcategory.id] || []).length > 0;
                       return (
-                        <div key={subcategory.id} className="mb-1.5">
-                          {/* Nivel 2: Subcategoría */}
+                        <li key={subcategory.id} className="border-b border-neutral-100">
                           <button
+                            type="button"
                             onClick={(e) => handleSubcategoryClick(subcategory, e)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left"
+                            className={rowClass}
                           >
-                            <span className="flex-1">{subcategory.name}</span>
-                            {hasSubSubcategories && (
-                              <ChevronRightIcon className="w-4 h-4 text-gray-400" />
+                            <span className="font-medium">{subcategory.name}</span>
+                            {hasSub && (
+                              <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
                             )}
                           </button>
-                        </div>
+                        </li>
                       );
                     })}
-                  </div>
+                  </ul>
                 )}
               </div>
             </div>
           )}
 
-          {/* Vista de sub-subcategorías (nivel 3) */}
+          {/* Nivel 3 */}
           {selectedSubcategory && (
-            <div 
-              className={`absolute inset-0 overflow-y-auto transition-transform duration-300 ease-in-out translate-x-0`}
-              style={{ zIndex: 30 }}
-            >
-              {/* Header con botón Back */}
-              <div className="px-6 py-3 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <div className="absolute inset-0 overflow-y-auto translate-x-0 bg-white" style={{ zIndex: 30 }}>
+              <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 px-5 py-4">
                 <button
+                  type="button"
                   onClick={() => setSelectedSubcategory(null)}
-                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors mb-3"
+                  className="inline-flex items-center gap-1.5 text-[15px] text-neutral-900 underline underline-offset-2 hover:no-underline mb-3"
                 >
-                  <ArrowBackIcon className="w-5 h-5" />
-                  <span>Atrás</span>
+                  <ArrowBackIcon className="w-4 h-4" />
+                  Atrás
                 </button>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900">{selectedSubcategory.name}</h2>
+                <div className="flex items-end justify-between gap-3">
+                  <h2 className="font-display text-2xl font-semibold text-neutral-900 leading-tight">
+                    {selectedSubcategory.name}
+                  </h2>
                   <ContextualLink
                     href={`/products?categoryId=${selectedSubcategory.id}`}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    onClick={onCategoryClick}
+                    className="text-[13px] font-medium text-neutral-700 underline underline-offset-2 hover:no-underline whitespace-nowrap"
+                    onClick={closeAfterNav}
                   >
-                    Ver Todo →
+                    Ver todo
                   </ContextualLink>
                 </div>
-                {selectedSubcategory.description && (
-                  <p className="text-sm text-gray-600 mt-1">{selectedSubcategory.description}</p>
-                )}
               </div>
 
-              {/* Lista de sub-subcategorías */}
-              <div className="py-2">
-                {(() => {
-                  const subSubcats = subSubcategories[selectedSubcategory.id] || [];
-                  return subSubcats.length === 0 ? (
-                    <div className="px-6 py-8 text-center">
-                      <p className="text-sm text-gray-500">Cargando subcategorías...</p>
-                    </div>
-                  ) : (
-                    <div className="px-6 py-1.5">
-                      <button
-                        onClick={() => handleSubcategoryNavigation(selectedSubcategory)}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
-                      >
-                        <span className="flex-1">Todo {selectedSubcategory.name}</span>
-                      </button>
-                      {subSubcats.map((subSubcat) => (
-                        <button
-                          key={subSubcat.id}
-                          onClick={() => handleSubcategoryNavigation(subSubcat)}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors group text-left mb-1.5"
-                        >
-                          <span className="flex-1">{subSubcat.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
+              <ul className="py-1">
+                <li className="border-b border-neutral-100">
+                  <button
+                    type="button"
+                    onClick={() => navigateToCategory(selectedSubcategory)}
+                    className={rowClass}
+                  >
+                    <span className="font-semibold">Todo {selectedSubcategory.name}</span>
+                  </button>
+                </li>
+                {(subSubcategories[selectedSubcategory.id] || []).map((subSubcat) => (
+                  <li key={subSubcat.id} className="border-b border-neutral-100">
+                    <button
+                      type="button"
+                      onClick={() => navigateToCategory(subSubcat)}
+                      className={rowClass}
+                    >
+                      <span className="font-medium">{subSubcat.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
@@ -577,4 +582,3 @@ export default function CategoriesMenu({ className = '', onCategoryClick, isOpen
     </>
   );
 }
-

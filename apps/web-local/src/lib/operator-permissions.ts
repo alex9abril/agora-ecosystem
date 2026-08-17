@@ -30,6 +30,7 @@ export const SETTINGS_KEYS = [
   'users',
   'permissions_groups',
   'channel_stores',
+  'categories',
 ] as const;
 
 export type SettingsKey = (typeof SETTINGS_KEYS)[number];
@@ -81,6 +82,7 @@ const emptySettings: Record<SettingsKey, boolean> = {
   users: false,
   permissions_groups: false,
   channel_stores: false,
+  categories: false,
 };
 
 const emptyTiendas: Record<TiendasKey, boolean> = {
@@ -145,6 +147,7 @@ export const SETTINGS_LABELS: Record<SettingsKey, string> = {
   users: 'Usuarios y permisos',
   permissions_groups: 'Grupos de permisos',
   channel_stores: 'Tiendas por grupo/marca',
+  categories: 'Categorías',
 };
 
 /** Descripciones cortas para cada área de configuración */
@@ -162,6 +165,7 @@ export const SETTINGS_DESCRIPTIONS: Record<SettingsKey, string> = {
   users: 'Invitar usuarios y asignar permisos por tienda/sucursal.',
   permissions_groups: 'Crear y editar grupos de permisos.',
   channel_stores: 'Gestionar tiendas por grupo o por marca.',
+  categories: 'Gestionar categorías del catálogo y su imagen.',
 };
 
 /** Labels para UI (tiendas - pestañas dentro del módulo Tiendas) */

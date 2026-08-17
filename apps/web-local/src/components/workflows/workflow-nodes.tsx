@@ -367,10 +367,34 @@ export function CodeBlockNode(props: NodeProps) {
 }
 
 export function HttpRequestNode(props: NodeProps) {
-  const d = (props.data || {}) as { label?: string };
+  const { readOnly } = useContext(WorkflowCanvasEditContext);
+  const d = (props.data || {}) as {
+    label?: string;
+    method?: string;
+    path?: string;
+    connectorId?: string;
+    queryParams?: Array<{ key?: string; value?: string; enabled?: boolean }>;
+    pagination?: { enabled?: boolean };
+  };
   const pData = props.data as Record<string, unknown> | undefined;
+  const method = String(d.method || 'GET').toUpperCase();
+  const paginated = d.pagination?.enabled === true;
+  const path = typeof d.path === 'string' && d.path.trim() ? d.path.trim() : '(URL base)';
+  const qs = Array.isArray(d.queryParams)
+    ? d.queryParams
+        .filter((r) => r && r.enabled !== false && String(r.key || '').trim())
+        .map((r) => `${String(r.key).trim()}=${String(r.value ?? '')}`)
+        .join('&')
+    : '';
+  const pathLine = qs ? `${path}?${qs}` : path;
   return (
-    <div className={withRunExecClass(`${box} group overflow-visible border-violet-200/80 dark:border-violet-600/45`, pData)}>
+    <div
+      className={withRunExecClass(
+        `${box} group overflow-visible border-violet-200/80 dark:border-violet-600/45 ${!readOnly ? 'cursor-pointer' : ''}`,
+        pData,
+      )}
+      title={readOnly ? undefined : 'Clic para configurar petición HTTP'}
+    >
       <NodeDeleteButton id={props.id} />
       <Handle type="target" position={Position.Left} className="!h-2 !w-2 !bg-violet-500" />
       <Handle type="source" position={Position.Right} className="!h-2 !w-2 !bg-violet-500" />
@@ -380,9 +404,20 @@ export function HttpRequestNode(props: NodeProps) {
             <IconHttp />
           </IconBadge>
           <div className="min-w-0 flex-1">
-            <div className={title}>HTTP request</div>
+            <div className="flex items-center gap-1.5">
+              <span className={title}>HTTP request</span>
+              <span className="text-[8px] uppercase font-semibold text-violet-500 dark:text-violet-400">{method}</span>
+              {paginated && (
+                <span className="text-[8px] uppercase font-semibold text-emerald-600 dark:text-emerald-400">páginas</span>
+              )}
+            </div>
             <div className={label}>{d.label || 'Request'}</div>
-            <div className="text-[10px] text-violet-600/90 dark:text-violet-300/90 mt-0.5">Configuración en siguientes versiones</div>
+            <div className="text-[10px] text-violet-700/90 dark:text-violet-300/90 mt-0.5 font-mono truncate" title={pathLine}>
+              {pathLine}
+            </div>
+            {!readOnly && (
+              <p className="text-[9px] text-violet-600/80 dark:text-violet-400/80 mt-0.5">Clic para configurar</p>
+            )}
           </div>
         </div>
         <NodeRunSuccessMarker data={pData} />

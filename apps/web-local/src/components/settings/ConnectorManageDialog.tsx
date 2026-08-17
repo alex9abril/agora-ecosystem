@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   createConnector,
   deleteConnector,
+  testHttpRestConnectionForConnector,
+  testHttpRestConnectionNew,
   testMssqlConnectionForConnector,
   testMssqlConnectionNew,
   type ConnectorTypeRow,
@@ -39,20 +41,18 @@ function formatDt(iso?: string) {
 }
 
 type PanelTab = 'connection' | 'sharing' | 'details';
-
 type CreateStep = 'selectType' | 'mssql' | 'http';
+type FormKind = 'mssql' | 'http';
 
 export type ConnectorManageDialogProps = {
   open: boolean;
   onClose: () => void;
   businessId: string;
   mode: 'create' | 'edit';
-  /** En edición, el conector (lista ya lo tiene). */
   connector: ConnectorRow | null;
   connectorTypes: ConnectorTypeRow[];
   onSaved: () => void;
   onDeleted: () => void;
-  /** Tras probar conexión con éxito (sólo aplica a edición con id). */
   onTestSuccess?: (connectorId: string) => void;
 };
 
@@ -82,12 +82,33 @@ export default function ConnectorManageDialog({
   const [err, setErr] = useState<string | null>(null);
   const [testMsg, setTestMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
+  // MSSQL
   const [name, setName] = useState('');
   const [server, setServer] = useState('');
   const [port, setPort] = useState(1433);
   const [database, setDatabase] = useState('');
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+
+  // HTTP / REST
+  const [baseUrl, setBaseUrl] = useState('');
+  const [authHeaderName, setAuthHeaderName] = useState('Ocp-Apim-Subscription-Key');
+  const [apiKey, setApiKey] = useState('');
+  const [healthPath, setHealthPath] = useState('');
+  const [healthMethod, setHealthMethod] = useState<'GET' | 'HEAD'>('GET');
+
+  const formKind: FormKind | null =
+    mode === 'edit'
+      ? connector?.connectorTypeId === 'http_rest'
+        ? 'http'
+        : connector?.connectorTypeId === 'mssql'
+          ? 'mssql'
+          : null
+      : createStep === 'http'
+        ? 'http'
+        : createStep === 'mssql'
+          ? 'mssql'
+          : null;
 
   const resetMssqlForm = useCallback((c: ConnectorRow | null) => {
     if (c) {
@@ -107,19 +128,45 @@ export default function ConnectorManageDialog({
     }
   }, []);
 
+  const resetHttpForm = useCallback((c: ConnectorRow | null) => {
+    if (c) {
+      setName(c.name);
+      setBaseUrl((c.config?.baseUrl as string) || '');
+      setAuthHeaderName((c.config?.authHeaderName as string) || 'Ocp-Apim-Subscription-Key');
+      setHealthPath((c.config?.healthPath as string) || '');
+      setHealthMethod(
+        String(c.config?.healthMethod || 'GET').toUpperCase() === 'HEAD' ? 'HEAD' : 'GET',
+      );
+      setApiKey('');
+    } else {
+      setName('');
+      setBaseUrl('');
+      setAuthHeaderName('Ocp-Apim-Subscription-Key');
+      setHealthPath('');
+      setHealthMethod('GET');
+      setApiKey('');
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setErr(null);
     setTestMsg(null);
     setPanel('connection');
     if (mode === 'edit' && connector) {
-      setCreateStep('mssql');
-      resetMssqlForm(connector);
+      if (connector.connectorTypeId === 'http_rest') {
+        setCreateStep('http');
+        resetHttpForm(connector);
+      } else {
+        setCreateStep('mssql');
+        resetMssqlForm(connector);
+      }
     } else {
       setCreateStep('selectType');
       resetMssqlForm(null);
+      resetHttpForm(null);
     }
-  }, [open, mode, connector, resetMssqlForm]);
+  }, [open, mode, connector, resetMssqlForm, resetHttpForm]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,11 +178,57 @@ export default function ConnectorManageDialog({
   }, [open, onClose]);
 
   const handleTest = async () => {
-    if (!businessId) return;
+    if (!businessId || !formKind) return;
     setErr(null);
     setTesting(true);
     setTestMsg(null);
     try {
+      if (formKind === 'http') {
+        if (mode === 'create' || (mode === 'edit' && apiKey)) {
+          if (!apiKey && mode === 'create') {
+            setTestMsg({ kind: 'err', text: 'Indica la API key para probar la conexión.' });
+            return;
+          }
+        }
+        if (mode === 'create') {
+          const r = await testHttpRestConnectionNew(businessId, {
+            baseUrl,
+            authHeaderName,
+            apiKey,
+            healthPath: healthPath || undefined,
+            healthMethod,
+          });
+          if (r.success) {
+            setTestMsg({
+              kind: 'ok',
+              text: `Conexión correcta (HTTP ${r.statusCode}). Health: ${r.usedConnection.healthUrl}`,
+            });
+          } else {
+            setTestMsg({ kind: 'err', text: r.message || 'No se pudo validar el API.' });
+          }
+          return;
+        }
+        if (!connector) return;
+        const r = await testHttpRestConnectionForConnector(businessId, connector.id, {
+          baseUrl: baseUrl || undefined,
+          authHeaderName: authHeaderName || undefined,
+          apiKey: apiKey || undefined,
+          healthPath: healthPath || undefined,
+          healthMethod,
+        });
+        if (r.success) {
+          setTestMsg({
+            kind: 'ok',
+            text: `Conexión correcta (HTTP ${r.statusCode}). Health: ${r.usedConnection.healthUrl}`,
+          });
+          onTestSuccess?.(connector.id);
+        } else {
+          setTestMsg({ kind: 'err', text: r.message || 'No se pudo validar el API.' });
+        }
+        return;
+      }
+
+      // MSSQL
       if (mode === 'create') {
         if (!password) {
           setTestMsg({ kind: 'err', text: 'Indica la contraseña para probar la conexión.' });
@@ -179,11 +272,11 @@ export default function ConnectorManageDialog({
   };
 
   const handleSave = async () => {
-    if (!businessId) return;
+    if (!businessId || !formKind) return;
     setErr(null);
     setSaving(true);
     try {
-      if (mode === 'create' && createStep === 'mssql') {
+      if (mode === 'create' && formKind === 'mssql') {
         if (!mssqlType || !mssqlActive) {
           setErr('MSSQL no está disponible');
           return;
@@ -205,7 +298,34 @@ export default function ConnectorManageDialog({
         onClose();
         return;
       }
-      if (mode === 'edit' && connector) {
+
+      if (mode === 'create' && formKind === 'http') {
+        if (!httpType || !httpActive) {
+          setErr('HTTP / REST no está disponible');
+          return;
+        }
+        if (!apiKey) {
+          setErr('Indica la API key (valor del header)');
+          return;
+        }
+        await createConnector(businessId, {
+          name: name || 'API HTTP',
+          connectorTypeId: 'http_rest',
+          isEnabled: true,
+          config: {
+            baseUrl: baseUrl.trim(),
+            authHeaderName: authHeaderName.trim(),
+            healthPath: healthPath.trim(),
+            healthMethod,
+          },
+          password: apiKey,
+        });
+        onSaved();
+        onClose();
+        return;
+      }
+
+      if (mode === 'edit' && connector && formKind === 'mssql') {
         const body: Parameters<typeof updateConnector>[2] = {
           name: name || connector.name,
           config: {
@@ -216,9 +336,24 @@ export default function ConnectorManageDialog({
             options: { encrypt: true },
           },
         };
-        if (password) {
-          body.password = password;
-        }
+        if (password) body.password = password;
+        await updateConnector(businessId, connector.id, body);
+        onSaved();
+        onClose();
+        return;
+      }
+
+      if (mode === 'edit' && connector && formKind === 'http') {
+        const body: Parameters<typeof updateConnector>[2] = {
+          name: name || connector.name,
+          config: {
+            baseUrl: baseUrl.trim(),
+            authHeaderName: authHeaderName.trim(),
+            healthPath: healthPath.trim(),
+            healthMethod,
+          },
+        };
+        if (apiKey) body.password = apiKey;
         await updateConnector(businessId, connector.id, body);
         onSaved();
         onClose();
@@ -250,12 +385,24 @@ export default function ConnectorManageDialog({
 
   if (!open) return null;
 
-  const typeLabel = mssqlType?.label ?? 'Microsoft SQL Server';
-  const showMssqlForm = mode === 'edit' || (mode === 'create' && createStep === 'mssql');
+  const typeLabel =
+    formKind === 'http'
+      ? httpType?.label ?? 'HTTP / REST'
+      : mssqlType?.label ?? 'Microsoft SQL Server';
+  const showForm = formKind === 'mssql' || formKind === 'http';
+
+  const healthPreview = (() => {
+    const b = baseUrl.trim().replace(/\/+$/, '');
+    const p = healthPath.trim();
+    if (!b) return '—';
+    if (!p) return b;
+    if (/^https?:\/\//i.test(p)) return p;
+    return `${b}/${p.replace(/^\/+/, '')}`;
+  })();
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60"
+      className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-black/50 dark:bg-black/60"
       role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -268,16 +415,32 @@ export default function ConnectorManageDialog({
         aria-modal
         aria-labelledby="connector-dialog-title"
       >
-        {showMssqlForm ? (
+        {showForm ? (
           <>
             <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-4 py-3 dark:border-neutral-700">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200">
-                  <IconMssql className="h-5 w-5" />
+                <span
+                  className={[
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                    formKind === 'http'
+                      ? 'bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-200'
+                      : 'bg-cyan-50 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200',
+                  ].join(' ')}
+                >
+                  {formKind === 'http' ? (
+                    <IconHttpRest className="h-5 w-5" />
+                  ) : (
+                    <IconMssql className="h-5 w-5" />
+                  )}
                 </span>
                 <div className="min-w-0">
                   <h2 id="connector-dialog-title" className="truncate text-base font-medium text-gray-900 dark:text-gray-100">
-                    {name || (mode === 'create' ? 'Nuevo conector MSSQL' : connector?.name || 'Conector')}
+                    {name ||
+                      (mode === 'create'
+                        ? formKind === 'http'
+                          ? 'Nuevo conector HTTP'
+                          : 'Nuevo conector MSSQL'
+                        : connector?.name || 'Conector')}
                   </h2>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{typeLabel}</p>
                 </div>
@@ -339,7 +502,9 @@ export default function ConnectorManageDialog({
                 {panel === 'connection' && (
                   <div className="space-y-3">
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      ¿Dudas con estos campos? Revisa la documentación de integración o contacta a soporte.
+                      {formKind === 'http'
+                        ? 'URL del API, nombre del header y valor (API key). Usa “Probar conexión” para un health check.'
+                        : '¿Dudas con estos campos? Revisa la documentación de integración o contacta a soporte.'}
                     </p>
                     {testMsg && (
                       <div
@@ -351,7 +516,7 @@ export default function ConnectorManageDialog({
                         ].join(' ')}
                         role="status"
                       >
-                        <span>{testMsg.text}</span>
+                        <span className="break-all">{testMsg.text}</span>
                         {testMsg.kind === 'err' && (
                           <button
                             type="button"
@@ -369,49 +534,123 @@ export default function ConnectorManageDialog({
                         {err}
                       </div>
                     )}
+
                     <div>
                       <label className="text-xs text-gray-500">Nombre</label>
                       <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required />
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Servidor / host</label>
-                      <input className={inputClass} value={server} onChange={(e) => setServer(e.target.value)} required />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-xs text-gray-500">Puerto</label>
-                        <input
-                          type="number"
-                          className={inputClass}
-                          value={port}
-                          onChange={(e) => setPort(parseInt(e.target.value, 10) || 1433)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500">Base de datos</label>
-                        <input
-                          className={inputClass}
-                          value={database}
-                          onChange={(e) => setDatabase(e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Usuario (solo lectura recomendado)</label>
-                      <input className={inputClass} value={user} onChange={(e) => setUser(e.target.value)} required />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500">Contraseña</label>
-                      <input
-                        type="password"
-                        className={inputClass}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="new-password"
-                        placeholder={mode === 'edit' && connector?.hasPassword ? 'Dejar vacío para no cambiar' : ''}
-                      />
-                    </div>
+
+                    {formKind === 'http' ? (
+                      <>
+                        <div>
+                          <label className="text-xs text-gray-500">URL base del API</label>
+                          <input
+                            className={inputClass}
+                            value={baseUrl}
+                            onChange={(e) => setBaseUrl(e.target.value)}
+                            placeholder="https://ejemplo.azure-api.net/.../api/v1/agora"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Nombre del header</label>
+                          <input
+                            className={inputClass}
+                            value={authHeaderName}
+                            onChange={(e) => setAuthHeaderName(e.target.value)}
+                            placeholder="Ocp-Apim-Subscription-Key"
+                            required
+                          />
+                          <p className="mt-0.5 text-[11px] text-gray-400">
+                            Header que envía la API key (p. ej. Azure APIM).
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">API key (valor del header)</label>
+                          <input
+                            type="password"
+                            className={inputClass}
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            autoComplete="new-password"
+                            placeholder={
+                              mode === 'edit' && connector?.hasPassword
+                                ? 'Dejar vacío para no cambiar'
+                                : 'Subscription key'
+                            }
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">Ruta health (opcional)</label>
+                            <input
+                              className={inputClass}
+                              value={healthPath}
+                              onChange={(e) => setHealthPath(e.target.value)}
+                              placeholder="/health o vacío"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Método health</label>
+                            <select
+                              className={inputClass}
+                              value={healthMethod}
+                              onChange={(e) => setHealthMethod(e.target.value === 'HEAD' ? 'HEAD' : 'GET')}
+                            >
+                              <option value="GET">GET</option>
+                              <option value="HEAD">HEAD</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-gray-300">
+                          <span className="font-medium text-gray-700 dark:text-gray-200">URL de prueba: </span>
+                          <span className="break-all font-mono">{healthPreview}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="text-xs text-gray-500">Servidor / host</label>
+                          <input className={inputClass} value={server} onChange={(e) => setServer(e.target.value)} required />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">Puerto</label>
+                            <input
+                              type="number"
+                              className={inputClass}
+                              value={port}
+                              onChange={(e) => setPort(parseInt(e.target.value, 10) || 1433)}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Base de datos</label>
+                            <input
+                              className={inputClass}
+                              value={database}
+                              onChange={(e) => setDatabase(e.target.value)}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Usuario (solo lectura recomendado)</label>
+                          <input className={inputClass} value={user} onChange={(e) => setUser(e.target.value)} required />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500">Contraseña</label>
+                          <input
+                            type="password"
+                            className={inputClass}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="new-password"
+                            placeholder={mode === 'edit' && connector?.hasPassword ? 'Dejar vacío para no cambiar' : ''}
+                          />
+                        </div>
+                      </>
+                    )}
+
                     <div className="flex flex-wrap gap-2 pt-1">
                       <button
                         type="button"
@@ -419,7 +658,7 @@ export default function ConnectorManageDialog({
                         disabled={testing}
                         className="rounded-md border border-gray-300 px-3 py-1.5 text-sm dark:border-neutral-600"
                       >
-                        {testing ? 'Probando…' : 'Probar conexión'}
+                        {testing ? 'Probando…' : formKind === 'http' ? 'Probar health check' : 'Probar conexión'}
                       </button>
                     </div>
                   </div>
@@ -432,6 +671,10 @@ export default function ConnectorManageDialog({
                       <dd className="font-mono text-xs break-all text-gray-800 dark:text-gray-200">{connector.id}</dd>
                     </div>
                     <div>
+                      <dt className="text-xs text-gray-500">Tipo</dt>
+                      <dd className="text-gray-800 dark:text-gray-200">{connector.connectorTypeId}</dd>
+                    </div>
+                    <div>
                       <dt className="text-xs text-gray-500">Creado</dt>
                       <dd className="text-gray-800 dark:text-gray-200">{formatDt(connector.createdAt)}</dd>
                     </div>
@@ -442,7 +685,11 @@ export default function ConnectorManageDialog({
                     <div>
                       <dt className="text-xs text-gray-500">Credencial</dt>
                       <dd className="text-gray-800 dark:text-gray-200">
-                        {connector.hasPassword ? 'Almacenada (cifrada en servidor)' : 'No configurada'}
+                        {connector.hasPassword
+                          ? formKind === 'http'
+                            ? 'API key almacenada (cifrada en servidor)'
+                            : 'Almacenada (cifrada en servidor)'
+                          : 'No configurada'}
                       </dd>
                     </div>
                   </dl>
@@ -464,7 +711,7 @@ export default function ConnectorManageDialog({
               >
                 Cancelar
               </button>
-              {createStep === 'mssql' && mode === 'create' && (
+              {mode === 'create' && (createStep === 'mssql' || createStep === 'http') && (
                 <button
                   type="button"
                   onClick={() => {
@@ -487,30 +734,6 @@ export default function ConnectorManageDialog({
               </button>
             </div>
           </>
-        ) : createStep === 'http' ? (
-          <div className="p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-medium text-gray-900 dark:text-gray-100">API HTTP (REST)</h2>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-800"
-                aria-label="Cerrar"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">Disponible en una versión futura.</p>
-            <button
-              type="button"
-              onClick={() => setCreateStep('selectType')}
-              className="mt-4 text-sm text-gray-600 underline dark:text-gray-300"
-            >
-              Volver
-            </button>
-          </div>
         ) : (
           <div className="p-6">
             <div className="flex items-center justify-between">
@@ -557,10 +780,12 @@ export default function ConnectorManageDialog({
                 </span>
                 <span>
                   <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {httpType?.label ?? 'API HTTP (REST)'}
+                    {httpType?.label ?? 'HTTP / REST'}
                   </span>
                   <span className="text-xs text-gray-500">
-                    {httpActive ? 'Endpoint y autenticación.' : 'Próximamente.'}
+                    {httpActive
+                      ? 'URL, header de API key y health check.'
+                      : 'Próximamente.'}
                   </span>
                 </span>
               </button>

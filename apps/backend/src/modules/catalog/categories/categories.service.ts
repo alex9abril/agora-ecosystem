@@ -313,7 +313,7 @@ export class CategoriesService {
 
     if (updateCategoryDto.icon_url !== undefined) {
       updateFields.push(`icon_url = $${paramIndex}`);
-      updateValues.push(updateCategoryDto.icon_url);
+      updateValues.push(updateCategoryDto.icon_url || null);
       paramIndex++;
     }
 

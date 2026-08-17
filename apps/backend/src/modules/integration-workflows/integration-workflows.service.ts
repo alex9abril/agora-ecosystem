@@ -29,9 +29,30 @@ import {
   resolveFieldSpec,
 } from './workflow-sink-data-bridge.util';
 import { parseStoreSyncConfig, syncIngestedRowsToStore } from './workflow-store-sync.util';
+import {
+  applyHttpPaginationQueryParams,
+  httpPaginationItemCount,
+  httpPaginationShouldStop,
+  httpPaginationTotal,
+  parseHttpPaginationConfig,
+  slimHttpResultForLog,
+  slimUnknownForLog,
+} from './workflow-http-pagination.util';
 
 const MAX_RESULT_ROWS = 10_000;
 const MS_TIMEOUT_MS = 30000;
+
+type HttpKvPairInput = { key?: string; value?: string; enabled?: boolean };
+type HttpRestBodyMode = 'none' | 'urlencoded' | 'json';
+type HttpRestNodeRequestOpts = {
+  method?: string;
+  path?: string;
+  queryParams?: HttpKvPairInput[];
+  headers?: HttpKvPairInput[];
+  bodyMode?: HttpRestBodyMode;
+  bodyParams?: HttpKvPairInput[];
+  bodyJson?: unknown;
+};
 
 /* Cargar mssql vía require: en runtime el default import (import x from 'mssql') a menudo queda
  * undefined; require es el interop fiable con el paquete commonjs en Nest/ts-node. */
@@ -67,7 +88,17 @@ export class IntegrationWorkflowsService {
        FROM integration.connector_types
        ORDER BY sort_order, id`,
     );
-    return rows;
+    // http_rest ya implementado: normalizar catálogo aunque el seed aún diga "planned"
+    return rows.map((row: any) => {
+      if (row.id === 'http_rest') {
+        return {
+          ...row,
+          label: 'HTTP / REST',
+          implementationStatus: 'active',
+        };
+      }
+      return row;
+    });
   }
 
   // --- Connectors ---
@@ -127,11 +158,22 @@ export class IntegrationWorkflowsService {
     if (trows.length === 0) {
       throw new BadRequestException('Tipo de conector desconocido');
     }
-    if ((trows[0] as { implementation_status: string }).implementation_status !== 'active') {
-      throw new BadRequestException('Este tipo de conector aún no está disponible (solo implementación MSSQL en v1)');
+    const typeStatus = (trows[0] as { implementation_status: string }).implementation_status;
+    const isHttpRest = dto.connectorTypeId === 'http_rest';
+    const isMssql = dto.connectorTypeId === 'mssql';
+    if (!isMssql && !isHttpRest) {
+      throw new BadRequestException(`Tipo de conector no implementado: ${dto.connectorTypeId}`);
     }
-    if (dto.connectorTypeId !== 'mssql') {
-      throw new BadRequestException('Solo el conector mssql está implementado en el backend');
+    // http_rest puede seguir "planned" en BD hasta aplicar script 014; el backend ya lo soporta
+    if (typeStatus !== 'active' && !isHttpRest) {
+      throw new BadRequestException('Este tipo de conector aún no está disponible');
+    }
+
+    if (isHttpRest) {
+      this.assertHttpRestConfig(dto.config || {});
+      if (dto.password == null || dto.password === '') {
+        throw new BadRequestException('Indica la API key (valor del header de autenticación)');
+      }
     }
 
     let enc: string | null = null;
@@ -176,6 +218,10 @@ export class IntegrationWorkflowsService {
       params.push(dto.isEnabled);
     }
     if (dto.config != null) {
+      const existing = await this.fetchConnectorRow(businessId, id);
+      if (existing.connectorTypeId === 'http_rest') {
+        this.assertHttpRestConfig({ ...(existing.config || {}), ...dto.config });
+      }
       sets.push(`config = $${p++}::jsonb`);
       params.push(JSON.stringify(dto.config));
     }
@@ -433,8 +479,28 @@ export class IntegrationWorkflowsService {
 
     try {
       const order = getLinearExecutionOrder(def, { entry: linearEntry });
-      for (const node of order) {
-        const r = await this.executeNode(node, businessId, userId, steps[steps.length - 1]?.result, {
+      let previous: unknown;
+      for (let i = 0; i < order.length; i++) {
+        const node = order[i];
+        const pagination = parseHttpPaginationConfig((node.data || {}) as Record<string, unknown>);
+        const isHttp = node.type === 'httpRequest' || node.type === 'httpPlaceholder';
+        if (isHttp && pagination) {
+          const rest = order.slice(i + 1);
+          const loop = await this.executePaginatedHttpChain(
+            node,
+            rest,
+            businessId,
+            userId,
+            previous,
+            { workflowId, scheduled: scheduledTriggerContext },
+          );
+          steps.push(...loop.steps);
+          if (loop.error) {
+            finalError = loop.error;
+          }
+          break;
+        }
+        const r = await this.executeNode(node, businessId, userId, previous, {
           workflowId,
           scheduled: scheduledTriggerContext,
         });
@@ -443,6 +509,7 @@ export class IntegrationWorkflowsService {
           finalError = r.error;
           break;
         }
+        previous = r.result;
       }
     } catch (e: any) {
       finalError = e?.message || 'Error desconocido al ejecutar el flujo';
@@ -460,6 +527,119 @@ export class IntegrationWorkflowsService {
       return { runId, status: 'failed', error: finalError, steps };
     }
     return { runId, status: 'success', steps };
+  }
+
+  private async executePaginatedHttpChain(
+    httpNode: FlowNode,
+    rest: FlowNode[],
+    businessId: string,
+    userId: string | null,
+    previousBeforeHttp: unknown,
+    ctx: { workflowId?: string; scheduled?: boolean },
+  ): Promise<{
+    steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[];
+    error?: string;
+  }> {
+    const data = (httpNode.data || {}) as Record<string, unknown>;
+    const cfg = parseHttpPaginationConfig(data);
+    if (!cfg) {
+      return { steps: [], error: 'Paginación HTTP: configuración inválida' };
+    }
+    const steps: { nodeId: string; type: string; result?: unknown; error?: string; logs?: string[] }[] = [];
+    let pagesDone = 0;
+    let itemsDone = 0;
+    let page = cfg.startPage;
+
+    while (pagesDone < cfg.maxPages) {
+      const queryParams = applyHttpPaginationQueryParams(
+        Array.isArray(data.queryParams) ? (data.queryParams as HttpKvPairInput[]) : [],
+        cfg,
+        page,
+      );
+      const oneShot: FlowNode = {
+        ...httpNode,
+        data: { ...data, queryParams, pagination: { enabled: false } },
+      };
+      const httpStep = await this.executeNode(oneShot, businessId, userId, previousBeforeHttp, ctx);
+      const fullResult =
+        httpStep.result && typeof httpStep.result === 'object' && !Array.isArray(httpStep.result)
+          ? (httpStep.result as Record<string, unknown>)
+          : {};
+      const apiBody = fullResult.body;
+      const itemCount = httpPaginationItemCount(apiBody, cfg.itemsPath);
+      const total = httpPaginationTotal(apiBody, cfg.totalPath);
+      const meta = { page, pageSize: cfg.pageSize, itemCount, total };
+
+      if (httpStep.error) {
+        steps.push({
+          ...httpStep,
+          logs: [...(httpStep.logs || []), `Paginación: error en página ${page}`],
+        });
+        return { steps, error: `Página ${page}: ${httpStep.error}` };
+      }
+
+      if (itemCount === 0) {
+        steps.push({
+          ...httpStep,
+          result: slimHttpResultForLog(fullResult, meta),
+          logs: [
+            ...(httpStep.logs || []),
+            pagesDone === 0
+              ? `Paginación: página ${page} sin ítems. Nada que procesar.`
+              : `Paginación terminada en página ${page} (sin ítems). Páginas escritas: ${pagesDone}. Ítems: ${itemsDone}.`,
+          ],
+        });
+        return { steps };
+      }
+
+      const isLastPage = httpPaginationShouldStop({
+        page,
+        pageSize: cfg.pageSize,
+        itemCount,
+        total,
+      });
+      steps.push({
+        ...httpStep,
+        result: isLastPage ? fullResult : slimHttpResultForLog(fullResult, meta),
+        logs: [
+          ...(httpStep.logs || []),
+          `Página ${page}: ${itemCount} ítem(s)` + (total != null ? ` / total ${total}` : ''),
+        ],
+      });
+
+      let prev: unknown = fullResult;
+      for (const restNode of rest) {
+        const r = await this.executeNode(restNode, businessId, userId, prev, ctx);
+        steps.push({
+          ...r,
+          result: isLastPage ? r.result : slimUnknownForLog(r.result),
+        });
+        if (r.error) {
+          return { steps, error: `Página ${page}: ${r.error}` };
+        }
+        prev = r.result;
+      }
+
+      pagesDone += 1;
+      itemsDone += itemCount;
+      if (isLastPage) {
+        steps.push({
+          nodeId: httpNode.id,
+          type: httpNode.type || 'httpRequest',
+          result: { pagination: { done: true, pages: pagesDone, items: itemsDone, total, lastPage: page } },
+          logs: [
+            `Paginación completa: ${pagesDone} página(s), ${itemsDone} ítem(s). Code y data_bridge se ejecutaron por página.`,
+          ],
+        });
+        return { steps };
+      }
+      page += 1;
+    }
+
+    return {
+      steps,
+      error: `Paginación: se alcanzó el máximo de ${cfg.maxPages} páginas (${itemsDone} ítems). Sube maxPages o revisa el corte.`,
+    };
   }
 
   private async executeNode(
@@ -537,7 +717,26 @@ export class IntegrationWorkflowsService {
       return this.executeSinkAutomationNode(node, businessId, _previous, ctx ?? {});
     }
     if (t === 'httpRequest' || t === 'httpPlaceholder') {
-      return { nodeId: node.id, type: t, result: { message: 'HTTP request: implementación pendiente' } };
+      const connectorId = (data.connectorId as string) || '';
+      if (!connectorId) {
+        return { nodeId: node.id, type: t, error: 'Nodo HTTP: falta connectorId (elige un conector)' };
+      }
+      const method = String(data.method || 'GET').toUpperCase();
+      const path = typeof data.path === 'string' ? data.path : '';
+      try {
+        const result = await this.executeHttpRestNodeRequest(userId, businessId, connectorId, {
+          method,
+          path,
+          queryParams: Array.isArray(data.queryParams) ? (data.queryParams as HttpKvPairInput[]) : [],
+          headers: Array.isArray(data.headers) ? (data.headers as HttpKvPairInput[]) : [],
+          bodyMode: data.bodyMode as HttpRestBodyMode | undefined,
+          bodyParams: Array.isArray(data.bodyParams) ? (data.bodyParams as HttpKvPairInput[]) : [],
+          bodyJson: data.bodyJson,
+        });
+        return { nodeId: node.id, type: t, result };
+      } catch (e: unknown) {
+        return { nodeId: node.id, type: t, error: this.nodeErrorMessage(e) };
+      }
     }
     return { nodeId: node.id, type: t, error: `Tipo de nodo no soportado aún: ${t}` };
   }
@@ -704,12 +903,15 @@ export class IntegrationWorkflowsService {
 
     const skipInsert = new Set(['id', 'created_at']);
     const insertCols = new Set<string>();
+    const unknownMappingCols: string[] = [];
     if (colMeta.has('business_id')) insertCols.add('business_id');
     if (colMeta.has('workflow_id')) insertCols.add('workflow_id');
     for (const k of Object.keys(fieldMappings)) {
       if (typeof fieldMappings[k] !== 'string' || !fieldMappings[k].trim()) continue;
       if (!colMeta.has(k)) {
-        return { nodeId: node.id, type: t, error: `Columna desconocida en la tabla: ${k}` };
+        unknownMappingCols.push(k);
+        delete fieldMappings[k];
+        continue;
       }
       if (skipInsert.has(k)) continue;
       insertCols.add(k);
@@ -732,6 +934,11 @@ export class IntegrationWorkflowsService {
     let inserted = 0;
     const errors: string[] = [];
     const logs: string[] = [];
+    if (unknownMappingCols.length > 0) {
+      logs.push(
+        `Se omitieron mapeos a columnas que no existen en ${tableName}: ${unknownMappingCols.join(', ')}.`,
+      );
+    }
 
     if (clearPreviousRecords) {
       try {
@@ -879,6 +1086,499 @@ export class IntegrationWorkflowsService {
     }
     if (e instanceof Error) return e.message;
     return 'Error en consulta MSSQL';
+  }
+
+  // --- HTTP / REST connectors ---
+
+  private assertHttpRestConfig(config: Record<string, unknown>) {
+    const baseUrl = String(config.baseUrl || '').trim();
+    const authHeaderName = String(config.authHeaderName || '').trim();
+    if (!baseUrl) {
+      throw new BadRequestException('Indica la URL base del API (baseUrl)');
+    }
+    try {
+      const u = new URL(baseUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        throw new Error('protocol');
+      }
+    } catch {
+      throw new BadRequestException('baseUrl debe ser una URL http(s) válida');
+    }
+    if (!authHeaderName) {
+      throw new BadRequestException('Indica el nombre del header de autenticación (authHeaderName)');
+    }
+    const method = String(config.healthMethod || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      throw new BadRequestException('healthMethod debe ser GET o HEAD');
+    }
+  }
+
+  private buildHttpHealthUrl(baseUrl: string, healthPath?: string | null): string {
+    const base = baseUrl.trim().replace(/\/+$/, '');
+    const path = (healthPath || '').trim();
+    if (!path) return base;
+    if (/^https?:\/\//i.test(path)) return path;
+    return `${base}/${path.replace(/^\/+/, '')}`;
+  }
+
+  private httpRestPublicView(args: {
+    connectorId?: string;
+    baseUrl: string;
+    authHeaderName: string;
+    healthPath?: string;
+    healthMethod?: string;
+    healthUrl?: string;
+  }) {
+    return {
+      connectorId: args.connectorId,
+      baseUrl: args.baseUrl,
+      authHeaderName: args.authHeaderName,
+      healthPath: args.healthPath || '',
+      healthMethod: (args.healthMethod || 'GET').toUpperCase(),
+      healthUrl: args.healthUrl || this.buildHttpHealthUrl(args.baseUrl, args.healthPath),
+    };
+  }
+
+  /**
+   * Health check: GET/HEAD a baseUrl[+healthPath] con el header de API key.
+   * Éxito: 2xx o 404 (API alcanzada; 404 suele ser path sin recurso).
+   * Fallo: 401/403 (auth), 5xx o error de red.
+   */
+  async probeHttpRestConnection(
+    conf: {
+      baseUrl: string;
+      authHeaderName: string;
+      healthPath?: string;
+      healthMethod?: 'GET' | 'HEAD';
+    },
+    apiKey: string,
+    meta?: { connectorId?: string },
+  ): Promise<
+    | {
+        success: true;
+        statusCode: number;
+        usedConnection: ReturnType<IntegrationWorkflowsService['httpRestPublicView']>;
+      }
+    | {
+        success: false;
+        message: string;
+        statusCode?: number;
+        usedConnection: ReturnType<IntegrationWorkflowsService['httpRestPublicView']>;
+      }
+  > {
+    const baseUrl = String(conf.baseUrl || '').trim();
+    const authHeaderName = String(conf.authHeaderName || '').trim();
+    const healthPath = conf.healthPath != null ? String(conf.healthPath) : '';
+    const healthMethod = (conf.healthMethod || 'GET').toUpperCase() as 'GET' | 'HEAD';
+    const healthUrl = this.buildHttpHealthUrl(baseUrl, healthPath);
+    const usedConnection = this.httpRestPublicView({
+      connectorId: meta?.connectorId,
+      baseUrl,
+      authHeaderName,
+      healthPath,
+      healthMethod,
+      healthUrl,
+    });
+
+    if (!apiKey) {
+      return { success: false, message: 'Indica la API key para probar la conexión', usedConnection };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(healthUrl, {
+        method: healthMethod,
+        headers: {
+          [authHeaderName]: apiKey,
+          Accept: 'application/json, text/plain, */*',
+        },
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+      const statusCode = res.status;
+      if (statusCode === 401 || statusCode === 403) {
+        return {
+          success: false,
+          message: `Autenticación rechazada (HTTP ${statusCode}). Revisa el header y la API key.`,
+          statusCode,
+          usedConnection,
+        };
+      }
+      if (statusCode >= 500) {
+        return {
+          success: false,
+          message: `El API respondió con error de servidor (HTTP ${statusCode}).`,
+          statusCode,
+          usedConnection,
+        };
+      }
+      // 2xx, 3xx, 404 → conexión + auth OK para health
+      if (statusCode >= 200 && statusCode < 500) {
+        return { success: true, statusCode, usedConnection };
+      }
+      return {
+        success: false,
+        message: `Respuesta inesperada (HTTP ${statusCode}).`,
+        statusCode,
+        usedConnection,
+      };
+    } catch (e: any) {
+      const aborted = e?.name === 'AbortError';
+      return {
+        success: false,
+        message: aborted
+          ? 'Tiempo de espera agotado al contactar el API (15s).'
+          : e?.message || 'No se pudo alcanzar el API (red / DNS / TLS).',
+        usedConnection,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async testHttpRestWithPayload(
+    userId: string,
+    businessId: string,
+    payload: {
+      baseUrl: string;
+      authHeaderName: string;
+      apiKey: string;
+      healthPath?: string;
+      healthMethod?: 'GET' | 'HEAD';
+    },
+  ) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    this.assertHttpRestConfig({
+      baseUrl: payload.baseUrl,
+      authHeaderName: payload.authHeaderName,
+      healthPath: payload.healthPath || '',
+      healthMethod: payload.healthMethod || 'GET',
+    });
+    return this.probeHttpRestConnection(
+      {
+        baseUrl: payload.baseUrl,
+        authHeaderName: payload.authHeaderName,
+        healthPath: payload.healthPath,
+        healthMethod: payload.healthMethod,
+      },
+      payload.apiKey,
+    );
+  }
+
+  async testHttpRestForConnector(
+    userId: string,
+    businessId: string,
+    connectorId: string,
+    override: {
+      baseUrl?: string;
+      authHeaderName?: string;
+      apiKey?: string;
+      healthPath?: string;
+      healthMethod?: 'GET' | 'HEAD';
+    } = {},
+  ) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    const { rows } = await dbPool.query(
+      `SELECT password_ciphertext, config, connector_type_id, is_enabled
+       FROM integration.connectors
+       WHERE id = $1 AND business_id = $2`,
+      [connectorId, businessId],
+    );
+    if (rows.length === 0) throw new NotFoundException('Conector no encontrado');
+    const row = rows[0] as {
+      password_ciphertext: string | null;
+      config: Record<string, unknown>;
+      connector_type_id: string;
+      is_enabled: boolean;
+    };
+    if (row.connector_type_id !== 'http_rest') {
+      throw new BadRequestException('Este endpoint solo aplica a conectores HTTP / REST');
+    }
+
+    const conf = { ...(row.config || {}) };
+    if (override.baseUrl != null) conf.baseUrl = override.baseUrl;
+    if (override.authHeaderName != null) conf.authHeaderName = override.authHeaderName;
+    if (override.healthPath != null) conf.healthPath = override.healthPath;
+    if (override.healthMethod != null) conf.healthMethod = override.healthMethod;
+
+    this.assertHttpRestConfig(conf);
+
+    let apiKey = override.apiKey || '';
+    if (!apiKey) {
+      if (!row.password_ciphertext) {
+        return {
+          success: false as const,
+          message: 'No hay API key guardada; indícala en el formulario para probar.',
+          usedConnection: this.httpRestPublicView({
+            connectorId,
+            baseUrl: String(conf.baseUrl || ''),
+            authHeaderName: String(conf.authHeaderName || ''),
+            healthPath: String(conf.healthPath || ''),
+            healthMethod: String(conf.healthMethod || 'GET'),
+          }),
+        };
+      }
+      try {
+        apiKey = decryptSecret(row.password_ciphertext);
+      } catch {
+        return {
+          success: false as const,
+          message: 'No se pudo descifrar el secreto del conector. Verifique WORKFLOW_CONNECTOR_ENCRYPTION_KEY.',
+          usedConnection: this.httpRestPublicView({
+            connectorId,
+            baseUrl: String(conf.baseUrl || ''),
+            authHeaderName: String(conf.authHeaderName || ''),
+            healthPath: String(conf.healthPath || ''),
+            healthMethod: String(conf.healthMethod || 'GET'),
+          }),
+        };
+      }
+    }
+
+    return this.probeHttpRestConnection(
+      {
+        baseUrl: String(conf.baseUrl || ''),
+        authHeaderName: String(conf.authHeaderName || ''),
+        healthPath: conf.healthPath != null ? String(conf.healthPath) : '',
+        healthMethod: (String(conf.healthMethod || 'GET').toUpperCase() as 'GET' | 'HEAD') || 'GET',
+      },
+      apiKey,
+      { connectorId },
+    );
+  }
+
+  /**
+   * Ejecuta una petición HTTP usando un conector http_rest (nodo de workflow).
+   * Inyecta el header de API key; path relativo se concatena a baseUrl.
+   * Query params, headers extra y body (POST) se toman del nodo / preview.
+   */
+  async executeHttpRestNodeRequest(
+    userId: string | null,
+    businessId: string,
+    connectorId: string,
+    opts: HttpRestNodeRequestOpts,
+  ) {
+    if (userId) {
+      await this.assertUserHasBusinessAccess(userId, businessId);
+    }
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    const { rows } = await dbPool.query(
+      `SELECT password_ciphertext, config, connector_type_id, is_enabled, name
+       FROM integration.connectors
+       WHERE id = $1 AND business_id = $2`,
+      [connectorId, businessId],
+    );
+    if (rows.length === 0) throw new NotFoundException('Conector no encontrado');
+    const row = rows[0] as {
+      password_ciphertext: string | null;
+      config: Record<string, unknown>;
+      connector_type_id: string;
+      is_enabled: boolean;
+      name: string;
+    };
+    if (row.connector_type_id !== 'http_rest') {
+      throw new BadRequestException('El nodo HTTP requiere un conector http_rest');
+    }
+    if (!row.is_enabled) throw new BadRequestException('Conector desactivado');
+    if (!row.password_ciphertext) {
+      throw new BadRequestException('El conector no tiene API key configurada');
+    }
+
+    this.assertHttpRestConfig(row.config || {});
+    let apiKey: string;
+    try {
+      apiKey = decryptSecret(row.password_ciphertext);
+    } catch {
+      throw new BadRequestException('No se pudo descifrar el secreto del conector');
+    }
+
+    const baseUrl = String(row.config.baseUrl || '').trim();
+    const authHeaderName = String(row.config.authHeaderName || '').trim();
+    const method = String(opts.method || 'GET').toUpperCase();
+    const allowed = new Set(['GET', 'POST']);
+    if (!allowed.has(method)) {
+      throw new BadRequestException('Método HTTP no permitido. Usa GET o POST.');
+    }
+    const url = this.buildHttpRequestUrl(baseUrl, opts.path || '', opts.queryParams);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json, text/plain, */*',
+      };
+      this.mergeHttpExtraHeaders(headers, opts.headers, authHeaderName);
+      headers[authHeaderName] = apiKey;
+
+      const init: RequestInit = {
+        method,
+        headers,
+        signal: controller.signal,
+        redirect: 'follow',
+      };
+
+      if (method === 'POST') {
+        const body = this.buildHttpRequestBody(opts);
+        if (body) {
+          if (body.contentType && !this.hasHeader(headers, 'content-type')) {
+            headers['Content-Type'] = body.contentType;
+          }
+          init.body = body.payload;
+        }
+      }
+
+      const res = await fetch(url, init);
+      const statusCode = res.status;
+      const contentType = res.headers.get('content-type') || '';
+      const text = await res.text();
+      let body: unknown = text;
+      if (contentType.includes('application/json') && text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = text;
+        }
+      }
+
+      if (statusCode === 401 || statusCode === 403) {
+        throw new BadRequestException(
+          `HTTP ${statusCode}: autenticación rechazada. Revisa la API key del conector.`,
+        );
+      }
+      if (statusCode >= 400) {
+        const snippet =
+          typeof body === 'string'
+            ? body.slice(0, 300)
+            : JSON.stringify(body).slice(0, 300);
+        throw new BadRequestException(`HTTP ${statusCode} en ${url}: ${snippet || res.statusText}`);
+      }
+
+      return {
+        statusCode,
+        url,
+        method,
+        connectorName: row.name,
+        body,
+      };
+    } catch (e: any) {
+      if (e instanceof BadRequestException || e instanceof NotFoundException) throw e;
+      if (e?.name === 'AbortError') {
+        throw new BadRequestException('Tiempo de espera agotado al llamar el API (30s)');
+      }
+      throw new BadRequestException(e?.message || 'Error de red al llamar el API');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private enabledHttpKvPairs(rows?: HttpKvPairInput[] | null): Array<{ key: string; value: string }> {
+    if (!Array.isArray(rows)) return [];
+    if (rows.length > 50) {
+      throw new BadRequestException('Máximo 50 pares clave/valor');
+    }
+    const out: Array<{ key: string; value: string }> = [];
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      if (row.enabled === false) continue;
+      const key = String(row.key ?? '').trim();
+      if (!key) continue;
+      if (key.length > 256) {
+        throw new BadRequestException(`Clave demasiado larga: ${key.slice(0, 40)}…`);
+      }
+      out.push({ key, value: String(row.value ?? '') });
+    }
+    return out;
+  }
+
+  private buildHttpRequestUrl(
+    baseUrl: string,
+    path: string,
+    queryParams?: HttpKvPairInput[] | null,
+  ): string {
+    const joined = this.buildHttpHealthUrl(baseUrl, path);
+    let parsed: URL;
+    try {
+      parsed = new URL(joined);
+    } catch {
+      throw new BadRequestException('URL de la petición no es válida');
+    }
+    const table = this.enabledHttpKvPairs(queryParams);
+    if (table.length > 0) {
+      parsed.search = '';
+      for (const { key, value } of table) {
+        parsed.searchParams.append(key, value);
+      }
+    }
+    return parsed.toString();
+  }
+
+  private hasHeader(headers: Record<string, string>, name: string): boolean {
+    const n = name.toLowerCase();
+    return Object.keys(headers).some((k) => k.toLowerCase() === n);
+  }
+
+  private mergeHttpExtraHeaders(
+    headers: Record<string, string>,
+    extra?: HttpKvPairInput[] | null,
+    authHeaderName?: string,
+  ) {
+    const blocked = new Set([
+      'host',
+      'content-length',
+      'transfer-encoding',
+      'connection',
+      'cookie',
+    ]);
+    const auth = (authHeaderName || '').trim().toLowerCase();
+    for (const { key, value } of this.enabledHttpKvPairs(extra)) {
+      const lower = key.toLowerCase();
+      if (blocked.has(lower)) continue;
+      if (auth && lower === auth) continue;
+      headers[key] = value;
+    }
+  }
+
+  private buildHttpRequestBody(
+    opts: HttpRestNodeRequestOpts,
+  ): { payload: string; contentType: string } | null {
+    const mode = opts.bodyMode || 'none';
+    if (mode === 'none' || !mode) return null;
+    if (mode === 'urlencoded') {
+      const params = new URLSearchParams();
+      for (const { key, value } of this.enabledHttpKvPairs(opts.bodyParams)) {
+        params.append(key, value);
+      }
+      return {
+        payload: params.toString(),
+        contentType: 'application/x-www-form-urlencoded',
+      };
+    }
+    if (mode === 'json') {
+      const raw = opts.bodyJson;
+      if (raw == null || raw === '') return null;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+        if (trimmed.length > 262144) {
+          throw new BadRequestException('El JSON del body supera el límite (256 KB)');
+        }
+        try {
+          JSON.parse(trimmed);
+        } catch {
+          throw new BadRequestException('El body JSON no es válido');
+        }
+        return { payload: trimmed, contentType: 'application/json' };
+      }
+      if (typeof raw === 'object') {
+        return { payload: JSON.stringify(raw), contentType: 'application/json' };
+      }
+      throw new BadRequestException('bodyJson debe ser un objeto o un string JSON');
+    }
+    throw new BadRequestException('bodyMode debe ser none, urlencoded o json');
   }
 
   /**

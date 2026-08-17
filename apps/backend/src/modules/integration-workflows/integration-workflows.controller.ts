@@ -17,6 +17,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { IntegrationWorkflowsService } from './integration-workflows.service';
 import { CreateConnectorDto } from './dto/create-connector.dto';
 import { TestMssqlOverrideDto, TestMssqlPayloadDto } from './dto/test-mssql-connection.dto';
+import { TestHttpRestOverrideDto, TestHttpRestPayloadDto, PreviewHttpRestDto } from './dto/test-http-rest-connection.dto';
 import { UpdateConnectorDto } from './dto/update-connector.dto';
 import { MssqlPreviewQueryDto } from './dto/mssql-preview-query.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
@@ -59,7 +60,7 @@ export class IntegrationWorkflowsController {
 
   @Post('connectors')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Crear conector (MSSQL en v1)' })
+  @ApiOperation({ summary: 'Crear conector (MSSQL o HTTP/REST)' })
   createConnector(
     @CurrentUser() user: User,
     @Param('businessId', ParseUUIDPipe) businessId: string,
@@ -79,6 +80,17 @@ export class IntegrationWorkflowsController {
     return this.integrationWorkflowsService.testMssqlWithPayload(user.id, businessId, dto);
   }
 
+  @Post('connectors/http-rest/test')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Probar health check HTTP/REST (antes de guardar)' })
+  testHttpRestPayload(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: TestHttpRestPayloadDto,
+  ) {
+    return this.integrationWorkflowsService.testHttpRestWithPayload(user.id, businessId, dto);
+  }
+
   @Post('connectors/:connectorId/mssql/test')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Probar conexión de un conector (opcional: sobrescribir campos del formulario)' })
@@ -89,6 +101,38 @@ export class IntegrationWorkflowsController {
     @Body() dto: TestMssqlOverrideDto,
   ) {
     return this.integrationWorkflowsService.testMssqlForConnector(user.id, businessId, connectorId, dto ?? {});
+  }
+
+  @Post('connectors/:connectorId/http-rest/test')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Probar health check de un conector HTTP/REST' })
+  testHttpRestForConnector(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('connectorId', ParseUUIDPipe) connectorId: string,
+    @Body() dto: TestHttpRestOverrideDto,
+  ) {
+    return this.integrationWorkflowsService.testHttpRestForConnector(user.id, businessId, connectorId, dto ?? {});
+  }
+
+  @Post('connectors/:connectorId/http-rest/preview')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Vista previa: ejecutar petición HTTP con el conector' })
+  previewHttpRest(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('connectorId', ParseUUIDPipe) connectorId: string,
+    @Body() dto: PreviewHttpRestDto,
+  ) {
+    return this.integrationWorkflowsService.executeHttpRestNodeRequest(user.id, businessId, connectorId, {
+      method: dto?.method || 'GET',
+      path: dto?.path || '',
+      queryParams: dto?.queryParams,
+      headers: dto?.headers,
+      bodyMode: dto?.bodyMode,
+      bodyParams: dto?.bodyParams,
+      bodyJson: dto?.bodyJson,
+    });
   }
 
   @Post('connectors/:connectorId/mssql/preview')

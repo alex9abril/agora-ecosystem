@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import { ApiError } from '@/lib/api';
 import {
@@ -131,6 +131,27 @@ function buildBaseMappingOptions(sampleRow: Record<string, unknown> | null): Set
   return s;
 }
 
+function findSampleRowKey(sampleRow: Record<string, unknown> | null, columnName: string): string | null {
+  if (!sampleRow) return null;
+  if (Object.prototype.hasOwnProperty.call(sampleRow, columnName)) return columnName;
+  const lower = columnName.toLowerCase();
+  for (const k of Object.keys(sampleRow)) {
+    if (k.toLowerCase() === lower) return k;
+  }
+  return null;
+}
+
+function suggestExpressionForColumn(
+  columnName: string,
+  sampleRow: Record<string, unknown> | null,
+): string {
+  if (columnName === 'fecha_importacion' || columnName === 'imported_at') return '$now';
+  const sampleKey = findSampleRowKey(sampleRow, columnName);
+  if (sampleKey) return `$row.${sampleKey}`;
+  if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) return `$row.${columnName}`;
+  return '';
+}
+
 function sortMappingSelectOptions(opts: string[]): string[] {
   const rank = (x: string) =>
     x === ''
@@ -177,7 +198,9 @@ export function WorkflowSinkAutomationNodePanel({
   );
   const [clearPreviousRecords, setClearPreviousRecords] = useState(Boolean(d0.clearPreviousRecords));
   const [syncWithStore, setSyncWithStore] = useState(Boolean(d0.syncWithStore));
-  const [insertMissingProducts, setInsertMissingProducts] = useState(Boolean(d0.insertMissingProducts));
+  const [insertMissingProducts, setInsertMissingProducts] = useState(
+    d0.syncWithStore ? d0.insertMissingProducts !== false : Boolean(d0.insertMissingProducts),
+  );
   const [syncProductCodeColumn, setSyncProductCodeColumn] = useState(
     typeof d0.syncProductCodeColumn === 'string' ? d0.syncProductCodeColumn : 'product_code',
   );
@@ -198,6 +221,7 @@ export function WorkflowSinkAutomationNodePanel({
   const [mappingOtherMode, setMappingOtherMode] = useState<Record<string, boolean>>({});
   const [copyState, setCopyState] = useState<'idle' | 'ok' | 'err'>('idle');
   const [activeTab, setActiveTab] = useState<'parameters' | 'settings'>('parameters');
+  const autoMappedForRef = useRef('');
 
   useEffect(() => {
     const nd = (node.data || {}) as {
@@ -220,13 +244,16 @@ export function WorkflowSinkAutomationNodePanel({
     setFieldMappings(isRecord(nd.fieldMappings) ? { ...(nd.fieldMappings as Record<string, string>) } : {});
     setClearPreviousRecords(Boolean(nd.clearPreviousRecords));
     setSyncWithStore(Boolean(nd.syncWithStore));
-    setInsertMissingProducts(Boolean(nd.insertMissingProducts));
+    setInsertMissingProducts(
+      nd.syncWithStore ? nd.insertMissingProducts !== false : Boolean(nd.insertMissingProducts),
+    );
     setSyncProductCodeColumn(typeof nd.syncProductCodeColumn === 'string' ? nd.syncProductCodeColumn : 'product_code');
     setSyncPriceColumn(typeof nd.syncPriceColumn === 'string' ? nd.syncPriceColumn : '');
     setSyncStockColumn(typeof nd.syncStockColumn === 'string' ? nd.syncStockColumn : 'quantity');
     setSyncNameColumn(typeof nd.syncNameColumn === 'string' ? nd.syncNameColumn : '');
     setMappingOtherMode({});
     setActiveTab('parameters');
+    autoMappedForRef.current = '';
   }, [node.id, node.data]);
 
   useEffect(() => {
@@ -296,6 +323,20 @@ export function WorkflowSinkAutomationNodePanel({
       return next;
     });
   }, []);
+
+  const knownColumnNames = useMemo(() => new Set(columns.map((c) => c.columnName)), [columns]);
+
+  const staleMappingCols = useMemo(
+    () =>
+      Object.keys(fieldMappings).filter(
+        (k) =>
+          Boolean(fieldMappings[k]?.trim()) &&
+          knownColumnNames.size > 0 &&
+          !knownColumnNames.has(k) &&
+          !SERVER_COLUMNS.has(k),
+      ),
+    [fieldMappings, knownColumnNames],
+  );
 
   const onApply = useCallback(() => {
     const clean: Record<string, string> = {};
@@ -460,6 +501,34 @@ export function WorkflowSinkAutomationNodePanel({
     syncNameColumn,
   ]);
 
+  const applySuggestedMappings = useCallback(
+    (onlyEmpty: boolean) => {
+      if (mappableColumns.length === 0) return;
+      setFieldMappings((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        for (const c of mappableColumns) {
+          const current = (next[c.columnName] ?? '').trim();
+          if (onlyEmpty && current) continue;
+          const suggested = suggestExpressionForColumn(c.columnName, sampleRowForMappings);
+          if (!suggested || suggested === current) continue;
+          next[c.columnName] = suggested;
+          changed = true;
+        }
+        return changed ? next : prev;
+      });
+    },
+    [mappableColumns, sampleRowForMappings],
+  );
+
+  useEffect(() => {
+    if (mappableColumns.length === 0) return;
+    const signature = `${node.id}:${tableName}:${mappableColumns.map((c) => c.columnName).join(',')}`;
+    if (autoMappedForRef.current === signature) return;
+    autoMappedForRef.current = signature;
+    applySuggestedMappings(true);
+  }, [applySuggestedMappings, mappableColumns, node.id, tableName]);
+
   const optionsForColumn = useCallback(
     (columnName: string) => {
       const cur = (fieldMappings[columnName] ?? '').trim();
@@ -591,15 +660,21 @@ export function WorkflowSinkAutomationNodePanel({
                   <div className="min-w-0 pr-3">
                     <span className="text-sm text-gray-800 dark:text-gray-200">Sincronizar con tienda</span>
                     <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-                      Tras guardar en data bridge, cruza por SKU con el catálogo y actualiza precio y stock en la
-                      sucursal del flujo.
+                      Tras guardar en data bridge, cruza por SKU con el catálogo. Si no existe, lo crea; si ya está,
+                      actualiza precio y stock en la sucursal del flujo.
                     </p>
                   </div>
                   <button
                     type="button"
                     role="switch"
                     aria-checked={syncWithStore}
-                    onClick={() => setSyncWithStore((v) => !v)}
+                    onClick={() =>
+                      setSyncWithStore((v) => {
+                        const next = !v;
+                        if (next) setInsertMissingProducts(true);
+                        return next;
+                      })
+                    }
                     className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                       syncWithStore ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-neutral-700'
                     }`}
@@ -620,8 +695,8 @@ export function WorkflowSinkAutomationNodePanel({
                           Insertar productos ausentes en catálogo
                         </span>
                         <p className="mt-0.5 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
-                          Si un SKU del DMS no existe en el catálogo global, créalo con fuente data bridge y habilítalo
-                          en esta sucursal.
+                          Activo por defecto. Si el SKU no está en el catálogo, crea el producto y lo habilita en esta
+                          sucursal.
                         </p>
                       </div>
                       <button
@@ -779,7 +854,16 @@ export function WorkflowSinkAutomationNodePanel({
                 Vacío: se espera que la salida del paso anterior sea directamente un arreglo de objetos.
               </p>
 
-              <p className="mt-4 text-xs font-medium text-gray-800 dark:text-gray-200">Mapeo de columnas</p>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Mapeo de columnas</p>
+                <button
+                  type="button"
+                  onClick={() => applySuggestedMappings(false)}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-800 hover:bg-gray-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-gray-100 dark:hover:bg-neutral-700"
+                >
+                  Autocompletar coincidencias
+                </button>
+              </div>
               <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">
                 Rutas inferidas desde la <strong>entrada</strong> (columna izquierda), según la ruta al arreglo. También{' '}
                 <code className="rounded bg-gray-100 px-0.5 dark:bg-neutral-800">$businessId</code>,{' '}
@@ -795,6 +879,14 @@ export function WorkflowSinkAutomationNodePanel({
                 <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
                   No se detectó una fila de ejemplo: revisa la ruta al arreglo o ejecuta el flujo para poblar el
                   desplegable.
+                </p>
+              )}
+
+              {staleMappingCols.length > 0 && (
+                <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100">
+                  Estos mapeos no existen en <span className="font-mono">{tableName || 'la tabla'}</span> y se
+                  omitirán al guardar o ejecutar:{' '}
+                  <span className="font-mono">{staleMappingCols.join(', ')}</span>.
                 </p>
               )}
 

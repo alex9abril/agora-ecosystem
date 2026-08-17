@@ -37,9 +37,13 @@ export function parseStoreSyncConfig(nodeData: Record<string, unknown>): StoreSy
     const v = nodeData[key];
     return typeof v === 'string' && v.trim() ? v.trim() : null;
   };
+  const syncWithStore = nodeData.syncWithStore === true;
   return {
-    syncWithStore: nodeData.syncWithStore === true,
-    insertMissingProducts: nodeData.insertMissingProducts === true,
+    syncWithStore,
+    // Si sincroniza con tienda y no se desactivó explícitamente, crea el producto ausente.
+    insertMissingProducts: syncWithStore
+      ? nodeData.insertMissingProducts !== false
+      : nodeData.insertMissingProducts === true,
     productCodeColumn: str('syncProductCodeColumn') ?? DEFAULT_PRODUCT_CODE_COLUMN,
     priceColumn: str('syncPriceColumn'),
     stockColumn: str('syncStockColumn') ?? DEFAULT_STOCK_COLUMN,

@@ -14,7 +14,7 @@ function newNodeId() {
 export function WorkflowAddNodeUi({ connectors, readOnly }: Props) {
   const { getNodes, setNodes } = useReactFlow();
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<'menu' | 'connectors'>('menu');
+  const [step, setStep] = useState<'menu' | 'connectors' | 'httpConnectors'>('menu');
 
   const placePosition = useCallback((): { x: number; y: number } => {
     const nodes = getNodes();
@@ -57,6 +57,38 @@ export function WorkflowAddNodeUi({ connectors, readOnly }: Props) {
     [placePosition, pushNode],
   );
 
+  const onAddHttp = useCallback(
+    (c: ConnectorRow) => {
+      pushNode({
+        id: newNodeId(),
+        type: 'httpRequest',
+        position: placePosition(),
+        data: {
+          label: c.name,
+          connectorId: c.id,
+          method: 'GET',
+          path: '',
+          queryParams: [],
+          headers: [],
+          bodyMode: 'none',
+          bodyParams: [],
+          bodyJson: '',
+          pagination: {
+            enabled: false,
+            pageParam: 'page',
+            startPage: 1,
+            pageSizeParam: 'pageSize',
+            pageSize: 100,
+            itemsPath: 'items',
+            totalPath: 'total',
+            maxPages: 500,
+          },
+        },
+      } as Node);
+    },
+    [placePosition, pushNode],
+  );
+
   const onAddCode = useCallback(() => {
     pushNode({
       id: newNodeId(),
@@ -69,15 +101,6 @@ return $input.first().json;
 `,
         testInputJson: JSON.stringify({ message: 'ok' }, null, 2),
       },
-    } as Node);
-  }, [placePosition, pushNode]);
-
-  const onAddHttp = useCallback(() => {
-    pushNode({
-      id: newNodeId(),
-      type: 'httpRequest',
-      position: placePosition(),
-      data: { label: 'HTTP request' },
     } as Node);
   }, [placePosition, pushNode]);
 
@@ -110,6 +133,7 @@ return $input.first().json;
   if (readOnly) return null;
 
   const mssqlConnectors = connectors.filter((c) => c.connectorTypeId === 'mssql' && c.isEnabled);
+  const httpConnectors = connectors.filter((c) => c.connectorTypeId === 'http_rest' && c.isEnabled);
 
   return (
     <>
@@ -145,7 +169,7 @@ return $input.first().json;
             aria-label="Agregar nodo"
           >
             <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5 dark:border-neutral-800">
-              {step === 'connectors' ? (
+              {step === 'connectors' || step === 'httpConnectors' ? (
                 <button
                   type="button"
                   className="text-sm text-sky-600 dark:text-sky-400"
@@ -200,7 +224,7 @@ return $input.first().json;
                   </button>
                   <button
                     type="button"
-                    onClick={onAddHttp}
+                    onClick={() => setStep('httpConnectors')}
                     className="flex w-full items-start gap-3 rounded-lg border border-violet-200 bg-violet-50/80 p-3 text-left transition hover:border-violet-300 dark:border-violet-800 dark:bg-violet-950/40 dark:hover:bg-violet-900/30"
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-violet-200/80 text-violet-800 dark:bg-violet-500/30 dark:text-violet-100">
@@ -208,7 +232,7 @@ return $input.first().json;
                     </span>
                     <span>
                       <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">HTTP request</span>
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Llamada HTTP (configuración próximamente)</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">Conector HTTP/REST (API key + ruta)</span>
                     </span>
                   </button>
                   <button
@@ -245,6 +269,35 @@ return $input.first().json;
                             className="w-full rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2 text-left text-sm text-gray-900 hover:border-sky-300 hover:bg-sky-50/50 dark:border-neutral-600 dark:bg-neutral-800/80 dark:text-gray-100 dark:hover:border-sky-600"
                           >
                             {c.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {step === 'httpConnectors' && (
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Conectores HTTP / REST activos</p>
+                  {httpConnectors.length === 0 ? (
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      No hay conectores HTTP activos. Crea uno en Integraciones → Conectores.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {httpConnectors.map((c) => (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            onClick={() => onAddHttp(c)}
+                            className="w-full rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2 text-left text-sm text-gray-900 hover:border-violet-300 hover:bg-violet-50/50 dark:border-neutral-600 dark:bg-neutral-800/80 dark:text-gray-100 dark:hover:border-violet-600"
+                          >
+                            <span className="block font-medium">{c.name}</span>
+                            {typeof c.config?.baseUrl === 'string' && c.config.baseUrl && (
+                              <span className="mt-0.5 block truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                                {c.config.baseUrl}
+                              </span>
+                            )}
                           </button>
                         </li>
                       ))}

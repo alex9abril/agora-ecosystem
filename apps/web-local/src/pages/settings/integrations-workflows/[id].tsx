@@ -448,7 +448,7 @@ export default function IntegrationsWorkflowEditorPage() {
                   <div
                     className={
                       viewMode === 'executions'
-                        ? 'flex h-[min(70vh,640px)] w-full min-h-0 overflow-hidden rounded-lg border border-gray-200 dark:border-neutral-700'
+                        ? 'flex h-[400px] w-full min-h-0 overflow-hidden rounded-lg border border-gray-200 dark:border-neutral-700'
                         : 'w-full min-h-0'
                     }
                   >

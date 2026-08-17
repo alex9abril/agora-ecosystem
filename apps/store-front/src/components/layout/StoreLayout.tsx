@@ -15,6 +15,7 @@ import TwitterIcon from '@mui/icons-material/Twitter';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import BrandingLoader from '../BrandingLoader';
 import BrandingFavicon from '../BrandingFavicon';
+import PromoBar from '../PromoBar';
 import { BrandingProvider } from '@/contexts/BrandingContext';
 
 interface StoreLayoutProps {
@@ -221,7 +222,9 @@ export default function StoreLayout({ children }: StoreLayoutProps) {
         }}
       >
         <div className={branding?.embed_layout === 'contained' ? 'max-w-7xl mx-auto w-full px-4 sm:px-6' : undefined}>
-        {/* Header principal con diseño AutoZone */}
+        {/* Promo bar estilo Parts Center Online (oculta en embed) */}
+        {!branding?.embed_mode && <PromoBar />}
+        {/* Header principal */}
         <Header />
 
 

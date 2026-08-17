@@ -27,10 +27,10 @@ VALUES
   ),
   (
     'http_rest',
-    'HTTP / REST (próximamente)',
-    'planned',
+    'HTTP / REST',
+    'active',
     2,
-    $${"icon":"globe","doc":"Llamadas HTTP con auth configurable (no implementado aún)."}$$::jsonb
+    $${"icon":"globe","doc":"Llamadas HTTP con URL base, header de API key y ruta de health check."}$$::jsonb
   )
 ON CONFLICT (id) DO UPDATE SET
   label = EXCLUDED.label,

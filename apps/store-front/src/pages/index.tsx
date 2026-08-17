@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import StoreLayout from '@/components/layout/StoreLayout';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
+import SelectVehicleBanner from '@/components/SelectVehicleBanner';
+import TopCategoriesSection from '@/components/TopCategoriesSection';
 import CollectionsCarousel from '@/components/CollectionsCarousel';
 import BrandsCarousel from '@/components/BrandsCarousel';
 import RecentlyViewedProducts from '@/components/RecentlyViewedProducts';
@@ -137,6 +139,9 @@ export default function HomePage() {
           autoPlayInterval={5000}
           height="min(820px, calc(100dvh - 11rem))"
         />
+
+        <TopCategoriesSection />
+        <SelectVehicleBanner />
 
         {/* Carrusel de Colecciones */}
         <CollectionsCarousel collections={collections} />

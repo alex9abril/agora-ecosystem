@@ -9,8 +9,8 @@ import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
 import ProductGrid from '@/components/ProductGrid';
 import PromotionalSlider, { SlideContent } from '@/components/PromotionalSlider';
-import CategoryCardsSlider from '@/components/CategoryCardsSlider';
-import SmartCategoryCards from '@/components/SmartCategoryCards';
+import SelectVehicleBanner from '@/components/SelectVehicleBanner';
+import TopCategoriesSection from '@/components/TopCategoriesSection';
 import RecentlyViewedProducts from '@/components/RecentlyViewedProducts';
 import CollectionsCarousel from '@/components/CollectionsCarousel';
 import { useStoreContext } from '@/contexts/StoreContext';
@@ -201,9 +201,8 @@ export default function StoreHomePage() {
               />
             )}
 
-            {/* Tarjetas Inteligentes */}
-            {/* TODO: Rehabilitar SmartCategoryCards cuando se requiera */}
-            {false && <SmartCategoryCards />}
+            <TopCategoriesSection />
+            <SelectVehicleBanner />
 
             {/* Contenido con contenedor */}
             <div className="max-w-7xl mx-auto px-4 py-6">

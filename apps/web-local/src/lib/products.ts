@@ -13,6 +13,7 @@ export interface ProductCategory {
   id: string;
   name: string;
   description?: string;
+  icon_url?: string | null;
   parent_category_id?: string;
   attributes?: Record<string, any>;
   display_order: number;

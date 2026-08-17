@@ -8,15 +8,20 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
+import { CategoryImagesService } from './category-images.service';
 import { ListCategoriesDto } from './dto/list-categories.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
@@ -27,7 +32,10 @@ import { Public } from '../../../common/decorators/public.decorator';
 @Controller('catalog/categories')
 @UseGuards(SupabaseAuthGuard)
 export class CategoriesController {
-  constructor(private readonly categoriesService: CategoriesService) {}
+  constructor(
+    private readonly categoriesService: CategoriesService,
+    private readonly categoryImagesService: CategoryImagesService,
+  ) {}
 
   @Get()
   @Public()
@@ -71,6 +79,20 @@ export class CategoriesController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto) {
     return this.categoriesService.update(id, updateCategoryDto);
+  }
+
+  @Post(':id/upload-image')
+  @ApiBearerAuth('JWT-auth')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Subir imagen de categoría (una por categoría, se guarda en icon_url)' })
+  @ApiParam({ name: 'id', description: 'ID de la categoría (UUID)' })
+  @ApiResponse({ status: 201, description: 'Imagen subida exitosamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido' })
+  @ApiResponse({ status: 404, description: 'Categoría no encontrada' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async uploadImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    return this.categoryImagesService.uploadImage(id, file);
   }
 
   @Delete(':id')

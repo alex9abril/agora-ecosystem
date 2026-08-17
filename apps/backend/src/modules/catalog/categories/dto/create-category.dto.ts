@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean, IsInt, IsUUID, IsUrl, Min, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsUUID, IsUrl, Min, MaxLength, ValidateIf } from 'class-validator';
 
 export class CreateCategoryDto {
   @ApiPropertyOptional({ description: 'ID del negocio (NULL para categoría global)', example: '11111111-1111-1111-1111-111111111111' })
@@ -17,10 +17,11 @@ export class CreateCategoryDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'URL del icono', example: 'https://example.com/icon.png' })
+  @ApiPropertyOptional({ description: 'URL del icono / imagen de la categoría', example: 'https://example.com/icon.png' })
   @IsOptional()
+  @ValidateIf((_, v) => v !== '' && v != null)
   @IsUrl()
-  icon_url?: string;
+  icon_url?: string | null;
 
   @ApiPropertyOptional({ description: 'ID de la categoría padre (para subcategorías)', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()

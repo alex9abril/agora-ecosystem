@@ -36,6 +36,7 @@ import { WorkflowPlayOverlay } from './WorkflowPlayOverlay';
 import { WorkflowTriggerModal } from './WorkflowTriggerModal';
 import { workflowNodeTypes, toFlowElements, isTriggerNodeType } from './workflow-nodes';
 import { WorkflowMssqlNodePanel } from './WorkflowMssqlNodePanel';
+import { WorkflowHttpNodePanel } from './WorkflowHttpNodePanel';
 import { WorkflowCodeNodePanel } from './WorkflowCodeNodePanel';
 import { WorkflowSinkAutomationNodePanel } from './WorkflowSinkAutomationNodePanel';
 import { WorkflowCanvasEditContext } from './workflow-canvas-context';
@@ -250,6 +251,7 @@ function FlowSurface({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initial.edges);
   const [triggerModal, setTriggerModal] = useState<Node | null>(null);
   const [mssqlPanelId, setMssqlPanelId] = useState<string | null>(null);
+  const [httpPanelId, setHttpPanelId] = useState<string | null>(null);
   const [codePanelId, setCodePanelId] = useState<string | null>(null);
   const [automationPanelId, setAutomationPanelId] = useState<string | null>(null);
   const [internalMaximized, setInternalMaximized] = useState(false);
@@ -282,6 +284,7 @@ function FlowSurface({
   }, [canvasMaximized]);
 
   const mssqlNode = mssqlPanelId ? nodes.find((n) => n.id === mssqlPanelId) : null;
+  const httpNode = httpPanelId ? nodes.find((n) => n.id === httpPanelId) : null;
   const codeNode = codePanelId ? nodes.find((n) => n.id === codePanelId) : null;
   const automationNode = automationPanelId ? nodes.find((n) => n.id === automationPanelId) : null;
 
@@ -291,6 +294,13 @@ function FlowSurface({
     if (!e) return null;
     return nodes.find((n) => n.id === e.source) ?? null;
   }, [mssqlPanelId, edges, nodes]);
+
+  const httpPreviousNode = useMemo(() => {
+    if (!httpPanelId) return null;
+    const e = edges.find((ed) => ed.target === httpPanelId);
+    if (!e) return null;
+    return nodes.find((n) => n.id === e.source) ?? null;
+  }, [httpPanelId, edges, nodes]);
 
   const codePreviousNode = useMemo(() => {
     if (!codePanelId) return null;
@@ -309,6 +319,10 @@ function FlowSurface({
   useEffect(() => {
     if (mssqlPanelId && !mssqlNode) setMssqlPanelId(null);
   }, [mssqlPanelId, mssqlNode]);
+
+  useEffect(() => {
+    if (httpPanelId && !httpNode) setHttpPanelId(null);
+  }, [httpPanelId, httpNode]);
 
   useEffect(() => {
     if (codePanelId && !codeNode) setCodePanelId(null);
@@ -333,7 +347,12 @@ function FlowSurface({
     const { steps, highlightNodeId } = runExecution;
     setNodes((ns) =>
       ns.map((n) => {
-        const idx = steps.findIndex((s) => s.nodeId === n.id);
+        const idx = (() => {
+          for (let i = steps.length - 1; i >= 0; i--) {
+            if (steps[i].nodeId === n.id) return i;
+          }
+          return -1;
+        })();
         const step = idx >= 0 ? steps[idx] : null;
         const d = { ...((n.data || {}) as Record<string, unknown>) };
         if (step) {
@@ -375,6 +394,13 @@ function FlowSurface({
     [setNodes],
   );
 
+  const onSaveHttpNode = useCallback(
+    (nodeId: string, data: Record<string, unknown>) => {
+      setNodes((ns) => ns.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n)));
+    },
+    [setNodes],
+  );
+
   const onSaveCodeNode = useCallback(
     (nodeId: string, data: Record<string, unknown>) => {
       setNodes((ns) => ns.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n)));
@@ -395,6 +421,14 @@ function FlowSurface({
       if (readOnly) return;
       if (node.type === 'connectorMssql') {
         setMssqlPanelId(node.id);
+        setHttpPanelId(null);
+        setCodePanelId(null);
+        setAutomationPanelId(null);
+        return;
+      }
+      if (node.type === 'httpRequest' || node.type === 'httpPlaceholder') {
+        setHttpPanelId(node.id);
+        setMssqlPanelId(null);
         setCodePanelId(null);
         setAutomationPanelId(null);
         return;
@@ -402,17 +436,20 @@ function FlowSurface({
       if (node.type === 'code') {
         setCodePanelId(node.id);
         setMssqlPanelId(null);
+        setHttpPanelId(null);
         setAutomationPanelId(null);
         return;
       }
       if (node.type === 'sinkAutomation') {
         setAutomationPanelId(node.id);
         setMssqlPanelId(null);
+        setHttpPanelId(null);
         setCodePanelId(null);
         return;
       }
       if (isTriggerNodeType(node.type)) {
         setMssqlPanelId(null);
+        setHttpPanelId(null);
         setCodePanelId(null);
         setAutomationPanelId(null);
         setTriggerModal(node);
@@ -458,7 +495,7 @@ function FlowSurface({
     '[--flow-canvas-bg:#ffffff] dark:[--flow-canvas-bg:rgb(23_23_23)] [--flow-dots:#cbd5e1] dark:[--flow-dots:#525252]';
   const shellClassName = canvasMaximized
     ? `fixed left-0 right-0 top-0 z-[200] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-[var(--flow-canvas-bg)] shadow-2xl ${flowThemeVars}`
-    : `flex h-[min(70vh,640px)] w-full min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 dark:border-neutral-700 ${flowThemeVars}`;
+    : `flex h-[400px] w-full min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 dark:border-neutral-700 ${flowThemeVars}`;
 
   const showFlowTabs = onFlowViewModeChange != null && flowViewMode != null;
   const showMaxExecutionsSplit =
@@ -550,6 +587,16 @@ function FlowSurface({
           onSave={(id, d) => {
             onSaveMssqlNode(id, d);
           }}
+        />
+      )}
+      {businessId && httpNode && !readOnly && (
+        <WorkflowHttpNodePanel
+          businessId={businessId}
+          node={httpNode}
+          previousNode={httpPreviousNode}
+          connectors={connectors}
+          onClose={() => setHttpPanelId(null)}
+          onSave={(id, d) => onSaveHttpNode(id, d)}
         />
       )}
       {businessId && codeNode && !readOnly && (

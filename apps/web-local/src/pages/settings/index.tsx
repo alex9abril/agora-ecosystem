@@ -29,6 +29,7 @@ const CARD_ID_TO_SETTINGS_KEY: Record<string, SettingsKey> = {
   users: 'users',
   permissions: 'permissions_groups',
   emails: 'emails',
+  categories: 'categories',
 };
 
 export default function SettingsPage() {
@@ -197,6 +198,19 @@ export default function SettingsPage() {
       category: 'Configuración de Tienda',
     },
     {
+      id: 'categories',
+      title: 'Categorías',
+      description: 'Gestiona las categorías del catálogo y sube una imagen por categoría',
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6h.008v.008H6V6z" />
+        </svg>
+      ),
+      href: '/settings/categories',
+      category: 'Configuración de Tienda',
+    },
+    {
       id: 'users',
       title: 'Usuarios y Permisos',
       description: 'Administra a tus empleados y sus permisos de acceso',
@@ -356,6 +370,22 @@ export default function SettingsPage() {
               </svg>
             ),
             href: '/settings/integrations-workflows',
+          },
+        ]
+      : []),
+    ...(canShowCard('categories')
+      ? [
+          {
+            id: 'categories',
+            name: 'Categorías',
+            description: 'Gestiona las categorías del catálogo y su imagen',
+            icon: (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 6h.008v.008H6V6z" />
+              </svg>
+            ),
+            href: '/settings/categories',
           },
         ]
       : []),
