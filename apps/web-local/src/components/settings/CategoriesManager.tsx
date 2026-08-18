@@ -61,13 +61,14 @@ function filterTree(
   nodes: ProductCategory[],
   keep: (node: ProductCategory) => boolean,
 ): ProductCategory[] {
-  return nodes
-    .map((node) => {
-      const children = filterTree(node.children || [], keep);
-      if (!keep(node) && children.length === 0) return null;
-      return { ...node, children };
-    })
-    .filter((node): node is ProductCategory => node != null);
+  const result: ProductCategory[] = [];
+  for (const node of nodes) {
+    const children = filterTree(node.children || [], keep);
+    if (keep(node) || children.length > 0) {
+      result.push({ ...node, children });
+    }
+  }
+  return result;
 }
 
 function collectMatchAncestorIds(nodes: ProductCategory[], query: string): Record<string, boolean> {
