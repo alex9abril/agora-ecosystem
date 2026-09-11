@@ -24,6 +24,8 @@ import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { RunWorkflowDto } from './dto/run-workflow.dto';
 import { UpdateWorkflowDto } from './dto/update-workflow.dto';
 import { PreviewWorkflowCodeDto } from './dto/preview-workflow-code.dto';
+import { UploadDataBridgeTestExportDto } from './dto/upload-data-bridge-test-export.dto';
+import { MergeDataBridgeTestExportsDto } from './dto/merge-data-bridge-test-exports.dto';
 
 @ApiTags('integration-workflows')
 @Controller('businesses/:businessId/integration')
@@ -37,6 +39,13 @@ export class IntegrationWorkflowsController {
   @ApiOperation({ summary: 'Listar catálogo de tipos de conector' })
   listConnectorTypes(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
     return this.integrationWorkflowsService.listConnectorTypes(user.id, businessId);
+  }
+
+  @Get('businesses')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Listar sucursales con acceso para automatizacion' })
+  listIntegrationBusinesses(@CurrentUser() user: User) {
+    return this.integrationWorkflowsService.listIntegrationBusinesses(user.id);
   }
 
   @Get('connectors')
@@ -263,6 +272,42 @@ export class IntegrationWorkflowsController {
     @Param('tableName') tableName: string,
   ) {
     return this.integrationWorkflowsService.getDataBridgeWriteTableColumns(user.id, businessId, tableName);
+  }
+
+  @Post('data-bridge/test-exports/upload-rows')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Subir filas a tablas staging de prueba data_bridge' })
+  uploadDataBridgeTestExportRows(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: UploadDataBridgeTestExportDto,
+  ) {
+    return this.integrationWorkflowsService.uploadDataBridgeTestExportRows(user.id, businessId, dto);
+  }
+
+  @Post('data-bridge/test-exports/merge')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Fusionar inventario y precios de prueba por SKU normalizado' })
+  mergeDataBridgeTestExports(
+    @CurrentUser() user: User,
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: MergeDataBridgeTestExportsDto,
+  ) {
+    return this.integrationWorkflowsService.mergeDataBridgeTestExports(user.id, businessId, dto);
+  }
+
+  @Post('data-bridge/test-exports/publish')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Publicar filas fusionadas a integration_alden_satelite' })
+  publishDataBridgeTestExports(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
+    return this.integrationWorkflowsService.publishDataBridgeTestExports(user.id, businessId);
+  }
+
+  @Post('data-bridge/test-exports/publish-to-store')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Publicar integration_alden_satelite en la tienda Toyota Satelite' })
+  publishAldenSateliteToStore(@CurrentUser() user: User, @Param('businessId', ParseUUIDPipe) businessId: string) {
+    return this.integrationWorkflowsService.publishAldenSateliteToStore(user.id, businessId);
   }
 
   @Post('workflows/:workflowId/run')

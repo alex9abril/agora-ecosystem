@@ -345,6 +345,89 @@ export function fetchDataBridgeWriteTableColumns(businessId: string, tableName: 
   return apiRequest<DataBridgeWriteColumnRow[]>(`${base(businessId)}/data-bridge/tables/${t}/columns`);
 }
 
+export type DataBridgeTestExportTableName =
+  | 'prueba_inventory_export'
+  | 'prueba_mex_insurance_prices_export';
+
+export type UploadDataBridgeTestExportResult = {
+  tableName: string;
+  importBatchId: string;
+  inserted: number;
+  failed: number;
+  cleared: number;
+  sampleErrors: string[];
+};
+
+export type MergeDataBridgeTestExportsResult = {
+  tableName: 'prueba_inventory_prices_merged_export';
+  mergeBatchId: string;
+  inserted: number;
+  expectedRows: number;
+  batches: number;
+  batchSize: number;
+  cleared: number;
+  failedBatches: number;
+  sampleErrors: string[];
+};
+
+export type PublishDataBridgeTestExportsResult = {
+  tableName: 'integration_alden_satelite';
+  sourceRows: number;
+  updated: number;
+  inserted: number;
+  published: number;
+};
+
+export type PublishAldenSateliteToStoreResult = {
+  script: string;
+  storeId: string;
+  storeName: string;
+  branchId: string;
+  branchName: string;
+  sourceSkus: number;
+  matchedExistingProducts: number;
+  insertedProducts: number;
+  visibleInStoreCandidates: number;
+  stillHiddenDueToZeroPrice: number;
+};
+
+export function uploadDataBridgeTestExportRows(
+  businessId: string,
+  body: {
+    tableName: DataBridgeTestExportTableName;
+    sourceFileName: string;
+    importBatchId?: string;
+    clearExisting?: boolean;
+    rows: unknown[];
+  },
+) {
+  return apiRequest<UploadDataBridgeTestExportResult>(`${base(businessId)}/data-bridge/test-exports/upload-rows`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function mergeDataBridgeTestExports(businessId: string) {
+  return apiRequest<MergeDataBridgeTestExportsResult>(`${base(businessId)}/data-bridge/test-exports/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ clearExisting: true }),
+  });
+}
+
+export function publishDataBridgeTestExports(businessId: string) {
+  return apiRequest<PublishDataBridgeTestExportsResult>(`${base(businessId)}/data-bridge/test-exports/publish`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export function publishAldenSateliteToStore(businessId: string) {
+  return apiRequest<PublishAldenSateliteToStoreResult>(`${base(businessId)}/data-bridge/test-exports/publish-to-store`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export const defaultWorkflowDefinition = (): Record<string, unknown> => ({
   nodes: [
     {

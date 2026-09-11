@@ -21,15 +21,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+    const fallbackStatus = this.statusFromUnknownError(exception);
+    const status = exception instanceof HttpException ? exception.getStatus() : fallbackStatus;
 
     const message =
       exception instanceof HttpException
         ? exception.getResponse()
-        : 'Error interno del servidor';
+        : this.messageFromUnknownError(exception, status);
 
     // Ignorar errores de Socket.IO si no está configurado (404, 401, 403)
     // Algo (navegador, extensión o cliente) intenta conectar a /socket.io/ pero el backend no tiene Socket.IO.
@@ -89,6 +87,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
     };
 
     response.status(status).json(errorResponse);
+  }
+
+  private statusFromUnknownError(exception: unknown): number {
+    if (!exception || typeof exception !== 'object') return HttpStatus.INTERNAL_SERVER_ERROR;
+    const candidate = (exception as { status?: unknown; statusCode?: unknown }).status ?? (exception as { statusCode?: unknown }).statusCode;
+    const n = Number(candidate);
+    return Number.isInteger(n) && n >= 400 && n < 600 ? n : HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+
+  private messageFromUnknownError(exception: unknown, status: number): string {
+    if (!exception || typeof exception !== 'object') return 'Error interno del servidor';
+    const body = (exception as { body?: unknown }).body;
+    if (body && typeof body === 'object' && 'message' in body) {
+      const m = (body as { message?: unknown }).message;
+      if (Array.isArray(m)) return String(m[0] ?? 'Solicitud invalida');
+      if (m !== undefined && m !== null) return String(m);
+    }
+    const message = (exception as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+    if (status === HttpStatus.PAYLOAD_TOO_LARGE) return 'El lote es demasiado grande para el servidor';
+    return 'Error interno del servidor';
   }
 }
 

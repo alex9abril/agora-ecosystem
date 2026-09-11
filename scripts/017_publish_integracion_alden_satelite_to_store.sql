@@ -16,7 +16,8 @@
 --      - sets branch price and stock from Alden
 --
 -- Expected Alden columns:
---   product, descripcion, sale_price, inventario, fecha_importacion
+--   product, descripcion, inventario, and either sale_price or price
+--   fecha_importacion is optional
 --
 -- Source table detection:
 --   1) data_bridge.integration_alden_satelite
@@ -76,6 +77,8 @@ CREATE TEMP TABLE tmp_alden_satelite_source (
 DO $$
 DECLARE
   v_source_table regclass;
+  v_price_column text;
+  v_fecha_expr text;
 BEGIN
   v_source_table := COALESCE(
     to_regclass('data_bridge.integration_alden_satelite'),
@@ -87,6 +90,23 @@ BEGIN
       'No se encontro tabla Alden Satelite en data_bridge. Revisa con: SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = ''data_bridge'' AND table_name ILIKE ''%%alden%%'';';
   END IF;
 
+  SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_source_table AND attname = 'sale_price' AND NOT attisdropped) THEN 'sale_price'
+    WHEN EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_source_table AND attname = 'price' AND NOT attisdropped) THEN 'price'
+    ELSE NULL
+  END
+  INTO v_price_column;
+
+  IF v_price_column IS NULL THEN
+    RAISE EXCEPTION 'La tabla % no tiene columna sale_price ni price.', v_source_table::text;
+  END IF;
+
+  v_fecha_expr := CASE
+    WHEN EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = v_source_table AND attname = 'fecha_importacion' AND NOT attisdropped)
+      THEN 'fecha_importacion'
+    ELSE 'NULL::timestamptz'
+  END;
+
   EXECUTE format($sql$
     INSERT INTO tmp_alden_satelite_source (sku, name, price, stock, fecha_importacion, source_table)
     WITH raw AS (
@@ -94,13 +114,13 @@ BEGIN
         BTRIM(product::text) AS sku,
         NULLIF(BTRIM(COALESCE(descripcion::text, '')), '') AS name,
         CASE
-          WHEN sale_price IS NULL THEN NULL
-          WHEN sale_price::numeric > 0 THEN sale_price::numeric(10, 2)
+          WHEN %1$I IS NULL THEN NULL
+          WHEN %1$I::numeric > 0 THEN %1$I::numeric(10, 2)
           ELSE NULL
         END AS price,
         GREATEST(COALESCE(FLOOR(inventario::numeric)::integer, 0), 0) AS stock,
-        fecha_importacion
-      FROM %s
+        %2$s AS fecha_importacion
+      FROM %3$s
       WHERE product IS NOT NULL
         AND BTRIM(product::text) <> ''
     ),
@@ -120,9 +140,9 @@ BEGIN
       price,
       stock,
       fecha_importacion,
-      %L AS source_table
+      %4$L AS source_table
     FROM deduped
-  $sql$, v_source_table, v_source_table::text);
+  $sql$, v_price_column, v_fecha_expr, v_source_table, v_source_table::text);
 END $$;
 
 -- Existing products matched globally by SKU. If the same SKU exists in more than

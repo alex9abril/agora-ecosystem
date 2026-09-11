@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import LocalLayout from '@/components/layout/LocalLayout';
 import ConnectorManageDialog from '@/components/settings/ConnectorManageDialog';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,18 +15,214 @@ import {
   fetchConnectors,
   fetchConnectorTypes,
   fetchWorkflows,
+  mergeDataBridgeTestExports,
+  publishAldenSateliteToStore,
+  publishDataBridgeTestExports,
   type ConnectorTypeRow,
   type ConnectorRow,
+  type MergeDataBridgeTestExportsResult,
+  type PublishAldenSateliteToStoreResult,
+  type PublishDataBridgeTestExportsResult,
+  type UploadDataBridgeTestExportResult,
   type WorkflowRow,
   updateConnector,
   updateWorkflow,
+  uploadDataBridgeTestExportRows,
 } from '@/lib/integration-workflows';
 import { isOperatorRole, normalizeOperatorPermissions } from '@/lib/operator-permissions';
 import SettingsSidebar from '@/components/settings/SettingsSidebar';
 
-type Tab = 'workflows' | 'connectors';
+type Tab = 'workflows' | 'connectors' | 'uploads';
 
 type ConnectorDialogState = null | { mode: 'create' } | { mode: 'edit'; row: ConnectorRow };
+
+const INVENTORY_BATCH_SIZE = 100;
+const PRICES_BATCH_SIZE = 1000;
+
+type ParsedInventoryRow = {
+  no_parte: string;
+  descripcion: string | null;
+  ubica: string | null;
+  exist: number | null;
+  cells: Record<string, unknown>;
+  source_row_number: number;
+};
+
+type ParsedPriceRow = {
+  ADJSTCLAIM: string;
+  ADJSTMNT: string | null;
+  'WARR.': string | null;
+  CLAIM: number | null;
+  cells: Record<string, unknown>;
+  source_row_number: number;
+};
+
+type UploadState = {
+  fileName: string;
+  totalRows: number;
+  uploadedRows: number;
+  batches: number;
+  inserted: number;
+  failed: number;
+  cleared: number;
+  importBatchId?: string;
+  sampleErrors: string[];
+};
+
+function randomId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeHeader(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function cellValue(sheet: XLSX.WorkSheet, row: number, col: number): unknown {
+  const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+  return cell?.v ?? null;
+}
+
+function toCleanString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text === '' ? null : text;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const text = String(value ?? '').replace(/[$,\s]/g, '').trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function parseInventoryFile(file: File): Promise<ParsedInventoryRow[]> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: false });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error('El archivo no contiene hojas');
+  const sheet = workbook.Sheets[sheetName];
+  const ref = sheet['!ref'];
+  if (!ref) return [];
+
+  const range = XLSX.utils.decode_range(ref);
+  let headerRow = -1;
+  let noParteCol = -1;
+  let descripcionCol = -1;
+  let ubicaCol = -1;
+  let existCol = -1;
+  const headerLabels = new Map<number, string>();
+
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    const normalizedByCol = new Map<number, string>();
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const raw = cellValue(sheet, row, col);
+      const normalized = normalizeHeader(raw);
+      if (normalized) {
+        normalizedByCol.set(col, normalized);
+        headerLabels.set(col, String(raw ?? '').trim());
+      }
+    }
+    const headerEntries = Array.from(normalizedByCol.entries());
+    const foundNoParte = headerEntries.find(([, value]) => value === 'noparte');
+    const foundExist = headerEntries.find(([, value]) => value === 'exist');
+    if (foundNoParte && foundExist) {
+      headerRow = row;
+      noParteCol = foundNoParte[0];
+      existCol = foundExist[0];
+      descripcionCol = headerEntries.find(([, value]) => value.startsWith('descripcion'))?.[0] ?? -1;
+      ubicaCol = headerEntries.find(([, value]) => value === 'ubica')?.[0] ?? -1;
+      break;
+    }
+  }
+
+  if (headerRow < 0) throw new Error('No se encontro encabezado con No. Parte y Exist');
+
+  const rows: ParsedInventoryRow[] = [];
+  for (let row = headerRow + 1; row <= range.e.r; row += 1) {
+    const cells: Record<string, unknown> = {};
+    let hasAnyValue = false;
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const value = cellValue(sheet, row, col);
+      if (value !== null && value !== undefined && String(value).trim() !== '') hasAnyValue = true;
+      cells[headerLabels.get(col) || `col_${col + 1}`] = value;
+    }
+    if (!hasAnyValue) continue;
+    const noParte = toCleanString(cellValue(sheet, row, noParteCol));
+    if (!noParte) continue;
+    rows.push({
+      no_parte: noParte,
+      descripcion: descripcionCol >= 0 ? toCleanString(cellValue(sheet, row, descripcionCol)) : null,
+      ubica: ubicaCol >= 0 ? toCleanString(cellValue(sheet, row, ubicaCol)) : null,
+      exist: toNumber(cellValue(sheet, row, existCol)),
+      cells,
+      source_row_number: row + 1,
+    });
+  }
+
+  const invalidRow = rows.find((row) => Array.isArray(row) || !row.no_parte);
+  if (invalidRow) throw new Error('El inventario produjo una fila invalida sin no_parte');
+  return rows;
+}
+
+async function parsePricesFile(file: File): Promise<ParsedPriceRow[]> {
+  const text = await file.text();
+  const rows: ParsedPriceRow[] = [];
+  const lines = text.split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    if (!line.trim()) return;
+    const sku = line.slice(0, 15).trim();
+    if (!sku || /^ADJSTCLAIM$/i.test(sku)) return;
+
+    const rest = line.slice(15).trim();
+    const priceMatch = rest.match(/(-?\$?\s*\d[\d,]*(?:\.\d{1,4})?)\s*$/);
+    const claim = priceMatch ? toNumber(priceMatch[1]) : null;
+    const middle = priceMatch ? rest.slice(0, priceMatch.index).trim() : rest;
+    const chunks = middle.split(/\t+|\s{2,}/).map((chunk) => chunk.trim()).filter(Boolean);
+    let adjstmnt: string | null = null;
+    let warr: string | null = null;
+
+    if (chunks.length >= 2) {
+      warr = chunks[chunks.length - 1];
+      adjstmnt = chunks.slice(0, -1).join(' ');
+    } else {
+      const tokens = middle.split(/\s+/).filter(Boolean);
+      warr = tokens.length > 1 ? tokens[tokens.length - 1] : null;
+      adjstmnt = tokens.length > 1 ? tokens.slice(0, -1).join(' ') : middle || null;
+    }
+
+    rows.push({
+      ADJSTCLAIM: sku,
+      ADJSTMNT: adjstmnt,
+      'WARR.': warr,
+      CLAIM: claim,
+      cells: { raw: line },
+      source_row_number: index + 1,
+    });
+  });
+
+  return rows;
+}
+
+function ResultStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-md border border-gray-200 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900/40">
+      <div className="text-[11px] text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">{value}</div>
+    </div>
+  );
+}
+
+function withoutCells<T extends { cells?: Record<string, unknown> }>(row: T): Omit<T, 'cells'> {
+  const { cells: _cells, ...rest } = row;
+  return rest;
+}
 
 function formatShortDate(iso?: string) {
   if (!iso) return '—';
@@ -135,6 +332,16 @@ export default function IntegrationsWorkflowsIndexPage() {
   const [connectorDialog, setConnectorDialog] = useState<ConnectorDialogState>(null);
   const [connectorMenuId, setConnectorMenuId] = useState<string | null>(null);
   const [testOkById, setTestOkById] = useState<Record<string, true>>({});
+  const [replaceExisting, setReplaceExisting] = useState(true);
+  const [inventoryState, setInventoryState] = useState<UploadState | null>(null);
+  const [pricesState, setPricesState] = useState<UploadState | null>(null);
+  const [uploading, setUploading] = useState<'inventory' | 'prices' | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [storePublishing, setStorePublishing] = useState(false);
+  const [mergeState, setMergeState] = useState<MergeDataBridgeTestExportsResult | null>(null);
+  const [publishState, setPublishState] = useState<PublishDataBridgeTestExportsResult | null>(null);
+  const [storePublishState, setStorePublishState] = useState<PublishAldenSateliteToStoreResult | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const businessId = selectedBusiness?.business_id;
@@ -204,6 +411,8 @@ export default function IntegrationsWorkflowsIndexPage() {
     return () => document.removeEventListener('mousedown', down);
   }, [connectorMenuId]);
 
+  const importBusy = uploading !== null || merging || publishing || storePublishing;
+
   const onCreateWorkflow = async () => {
     if (!businessId) return;
     setSaving(true);
@@ -270,6 +479,131 @@ export default function IntegrationsWorkflowsIndexPage() {
       setLoadErr(e?.message || 'Error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadRows = async (
+    kind: 'inventory' | 'prices',
+    file: File,
+    rows: ParsedInventoryRow[] | ParsedPriceRow[],
+    batchSize: number,
+  ) => {
+    if (!businessId) throw new Error('Selecciona una sucursal');
+    const importBatchId = randomId();
+    const batches = Math.ceil(rows.length / batchSize);
+    const nextState: UploadState = {
+      fileName: file.name,
+      totalRows: rows.length,
+      uploadedRows: 0,
+      batches,
+      inserted: 0,
+      failed: 0,
+      cleared: 0,
+      importBatchId,
+      sampleErrors: [],
+    };
+
+    if (kind === 'inventory') setInventoryState(nextState);
+    else setPricesState(nextState);
+
+    for (let offset = 0; offset < rows.length; offset += batchSize) {
+      const batch = rows.slice(offset, offset + batchSize);
+      const result: UploadDataBridgeTestExportResult = await uploadDataBridgeTestExportRows(businessId, {
+        tableName: kind === 'inventory' ? 'prueba_inventory_export' : 'prueba_mex_insurance_prices_export',
+        sourceFileName: file.name,
+        importBatchId,
+        clearExisting: replaceExisting && offset === 0,
+        rows: batch.map(withoutCells),
+      });
+
+      nextState.uploadedRows = Math.min(rows.length, offset + batch.length);
+      nextState.inserted += result.inserted;
+      nextState.failed += result.failed;
+      nextState.cleared += result.cleared;
+      nextState.sampleErrors = [...nextState.sampleErrors, ...(result.sampleErrors || [])].slice(0, 10);
+
+      if (kind === 'inventory') setInventoryState({ ...nextState });
+      else setPricesState({ ...nextState });
+    }
+  };
+
+  const handleInventoryFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploading('inventory');
+    setLoadErr(null);
+    setMergeState(null);
+    setPublishState(null);
+    setStorePublishState(null);
+    try {
+      const rows = await parseInventoryFile(file);
+      await uploadRows('inventory', file, rows, INVENTORY_BATCH_SIZE);
+    } catch (e: any) {
+      setLoadErr(e?.message || 'No se pudo subir inventario');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handlePricesFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploading('prices');
+    setLoadErr(null);
+    setMergeState(null);
+    setPublishState(null);
+    setStorePublishState(null);
+    try {
+      const rows = await parsePricesFile(file);
+      await uploadRows('prices', file, rows, PRICES_BATCH_SIZE);
+    } catch (e: any) {
+      setLoadErr(e?.message || 'No se pudo subir precios');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleMergeExports = async () => {
+    if (!businessId) return;
+    setMerging(true);
+    setLoadErr(null);
+    setPublishState(null);
+    setStorePublishState(null);
+    try {
+      setMergeState(await mergeDataBridgeTestExports(businessId));
+    } catch (e: any) {
+      setLoadErr(e?.message || 'No se pudo fusionar');
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const handlePublishExports = async () => {
+    if (!businessId) return;
+    setPublishing(true);
+    setLoadErr(null);
+    setStorePublishState(null);
+    try {
+      setPublishState(await publishDataBridgeTestExports(businessId));
+    } catch (e: any) {
+      setLoadErr(e?.message || 'No se pudo publicar');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handlePublishToStore = async () => {
+    if (!businessId) return;
+    setStorePublishing(true);
+    setLoadErr(null);
+    try {
+      setStorePublishState(await publishAldenSateliteToStore(businessId));
+    } catch (e: any) {
+      setLoadErr(e?.message || 'No se pudo publicar en tienda');
+    } finally {
+      setStorePublishing(false);
     }
   };
 
@@ -346,7 +680,7 @@ export default function IntegrationsWorkflowsIndexPage() {
             )}
 
             <div className="mt-6 flex gap-2 border-b border-gray-200 dark:border-neutral-700">
-              {(['workflows', 'connectors'] as const).map((t) => (
+              {(['workflows', 'connectors', 'uploads'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -357,7 +691,7 @@ export default function IntegrationsWorkflowsIndexPage() {
                       : 'border-transparent text-gray-500'
                   }`}
                 >
-                  {t === 'workflows' ? 'Flujos' : 'Conectores'}
+                  {t === 'workflows' ? 'Flujos' : t === 'connectors' ? 'Conectores' : 'Subir y publicar'}
                 </button>
               ))}
             </div>
@@ -561,6 +895,182 @@ export default function IntegrationsWorkflowsIndexPage() {
                     </button>
                   </div>
                 </div>
+            )}
+
+            {tab === 'uploads' && (
+              <div className="mt-6 space-y-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-base font-medium text-gray-900 dark:text-gray-100">Subir y publicar</h2>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      Carga inventario y precios, fusiona por SKU y publica a la tabla satelite.
+                    </p>
+                  </div>
+                  <label className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 bg-white px-3 text-xs text-gray-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={replaceExisting}
+                      onChange={(event) => setReplaceExisting(event.target.checked)}
+                      disabled={importBusy}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    Reemplazar datos previos
+                  </label>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Subir inventario</h3>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">XLS, XLSX o CSV en lotes de {INVENTORY_BATCH_SIZE}</p>
+                      </div>
+                      <label className="inline-flex h-9 cursor-pointer items-center rounded-md bg-black px-4 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50">
+                        {uploading === 'inventory' ? 'Subiendo...' : 'Elegir archivo'}
+                        <input
+                          type="file"
+                          accept=".xls,.xlsx,.csv"
+                          className="hidden"
+                          disabled={importBusy}
+                          onChange={handleInventoryFile}
+                        />
+                      </label>
+                    </div>
+                    {inventoryState && (
+                      <>
+                        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                          <ResultStat label="Filas" value={inventoryState.totalRows} />
+                          <ResultStat label="Subidas" value={inventoryState.uploadedRows} />
+                          <ResultStat label="Insertadas" value={inventoryState.inserted} />
+                          <ResultStat label="Fallidas" value={inventoryState.failed} />
+                        </div>
+                        <p className="mt-3 truncate text-[11px] text-gray-500 dark:text-gray-400">
+                          {inventoryState.fileName} · Batch: {inventoryState.importBatchId}
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Subir precios</h3>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">TXT en lotes de {PRICES_BATCH_SIZE}</p>
+                      </div>
+                      <label className="inline-flex h-9 cursor-pointer items-center rounded-md bg-black px-4 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50">
+                        {uploading === 'prices' ? 'Subiendo...' : 'Elegir archivo'}
+                        <input
+                          type="file"
+                          accept=".txt"
+                          className="hidden"
+                          disabled={importBusy}
+                          onChange={handlePricesFile}
+                        />
+                      </label>
+                    </div>
+                    {pricesState && (
+                      <>
+                        <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                          <ResultStat label="Filas" value={pricesState.totalRows} />
+                          <ResultStat label="Subidas" value={pricesState.uploadedRows} />
+                          <ResultStat label="Insertadas" value={pricesState.inserted} />
+                          <ResultStat label="Fallidas" value={pricesState.failed} />
+                        </div>
+                        <p className="mt-3 truncate text-[11px] text-gray-500 dark:text-gray-400">
+                          {pricesState.fileName} · Batch: {pricesState.importBatchId}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Fusionar tablas de prueba</h3>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Cruza inventario y precios por SKU normalizado.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMergeExports}
+                      disabled={importBusy}
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-black px-4 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                      {merging ? 'Fusionando...' : 'Fusionar'}
+                    </button>
+                  </div>
+                  {mergeState && (
+                    <>
+                      <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+                        <ResultStat label="Insertadas" value={mergeState.inserted} />
+                        <ResultStat label="Esperadas" value={mergeState.expectedRows} />
+                        <ResultStat label="Lotes" value={mergeState.batches} />
+                        <ResultStat label="Limpiadas" value={mergeState.cleared} />
+                        <ResultStat label="Fallos" value={mergeState.failedBatches} />
+                      </div>
+                      <p className="mt-3 truncate text-[11px] text-gray-500 dark:text-gray-400">
+                        Merge batch: {mergeState.mergeBatchId}
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Publicar</h3>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Actualiza e inserta en integration_alden_satelite.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePublishExports}
+                      disabled={importBusy}
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-black px-4 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                      {publishing ? 'Publicando...' : 'Publicar'}
+                    </button>
+                  </div>
+                  {publishState && (
+                    <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                      <ResultStat label="Origen" value={publishState.sourceRows} />
+                      <ResultStat label="Actualizadas" value={publishState.updated} />
+                      <ResultStat label="Insertadas" value={publishState.inserted} />
+                      <ResultStat label="Publicadas" value={publishState.published} />
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-gray-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900/40">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Publicar en tienda</h3>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Ejecuta scripts/017_publish_integracion_alden_satelite_to_store.sql.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePublishToStore}
+                      disabled={importBusy}
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-black px-4 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                      {storePublishing ? 'Publicando...' : 'Publicar en tienda'}
+                    </button>
+                  </div>
+                  {storePublishState && (
+                    <>
+                      <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+                        <ResultStat label="SKUs origen" value={storePublishState.sourceSkus} />
+                        <ResultStat label="Existentes" value={storePublishState.matchedExistingProducts} />
+                        <ResultStat label="Creados" value={storePublishState.insertedProducts} />
+                        <ResultStat label="Visibles" value={storePublishState.visibleInStoreCandidates} />
+                        <ResultStat label="Precio cero" value={storePublishState.stillHiddenDueToZeroPrice} />
+                      </div>
+                      <p className="mt-3 truncate text-[11px] text-gray-500 dark:text-gray-400">
+                        {storePublishState.storeName} - {storePublishState.branchName}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
             )}
             </div>
           </div>

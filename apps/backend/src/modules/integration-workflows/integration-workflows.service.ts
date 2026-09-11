@@ -6,6 +6,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
 import { dbPool } from '../../config/database.config';
 import { User } from '@supabase/supabase-js';
 import type { config as MssqlConfig } from 'mssql';
@@ -38,9 +41,20 @@ import {
   slimHttpResultForLog,
   slimUnknownForLog,
 } from './workflow-http-pagination.util';
+import {
+  UploadDataBridgeTestExportDto,
+  DataBridgeTestExportTableName,
+} from './dto/upload-data-bridge-test-export.dto';
+import { MergeDataBridgeTestExportsDto } from './dto/merge-data-bridge-test-exports.dto';
 
 const MAX_RESULT_ROWS = 10_000;
 const MS_TIMEOUT_MS = 30000;
+const DATA_BRIDGE_TEST_EXPORT_BATCH_SIZE: Record<DataBridgeTestExportTableName, number> = {
+  prueba_inventory_export: 100,
+  prueba_mex_insurance_prices_export: 1000,
+};
+const DATA_BRIDGE_TEST_EXPORT_MERGE_BATCH_SIZE = 1000;
+const ALDEN_SATELITE_STORE_PUBLISH_SCRIPT = '017_publish_integracion_alden_satelite_to_store.sql';
 
 type HttpKvPairInput = { key?: string; value?: string; enabled?: boolean };
 type HttpRestBodyMode = 'none' | 'urlencoded' | 'json';
@@ -99,6 +113,25 @@ export class IntegrationWorkflowsService {
       }
       return row;
     });
+  }
+
+  async listIntegrationBusinesses(userId: string) {
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+    const { rows } = await dbPool.query(
+      `SELECT
+         b.id,
+         b.name,
+         b.slug,
+         bu.role
+       FROM core.business_users bu
+       INNER JOIN core.businesses b ON b.id = bu.business_id
+       WHERE bu.user_id = $1
+         AND bu.is_active = TRUE
+         AND COALESCE(b.archived_at IS NULL, TRUE)
+       ORDER BY b.name`,
+      [userId],
+    );
+    return rows;
   }
 
   // --- Connectors ---
@@ -781,6 +814,523 @@ export class IntegrationWorkflowsService {
       [n],
     );
     return rows;
+  }
+
+  private asPlainObject(row: unknown): Record<string, unknown> | null {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+    return row as Record<string, unknown>;
+  }
+
+  private firstStringValue(row: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = row[key];
+      if (value === null || value === undefined) continue;
+      const s = String(value).trim();
+      if (s !== '') return s;
+    }
+    return null;
+  }
+
+  private numericValue(row: Record<string, unknown>, keys: string[]): number | null {
+    for (const key of keys) {
+      const value = row[key];
+      if (value === null || value === undefined || value === '') continue;
+      if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+      const normalized = String(value).replace(/[$,\s]/g, '').trim();
+      if (!normalized) continue;
+      const n = Number(normalized);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  }
+
+  private sourceRowNumber(row: Record<string, unknown>, fallback: number): number {
+    const n = Number(row.source_row_number ?? row.sourceRowNumber ?? fallback);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : fallback;
+  }
+
+  private throwDataBridgeTestExportDbError(error: any): never {
+    if (error?.code === '42P01') {
+      throw new BadRequestException(
+        'Faltan tablas de data_bridge para subir/merge. Ejecuta database/migrations/migration_data_bridge_prueba_export_tables.sql en la base conectada al backend.',
+      );
+    }
+    if (error?.code === '42703') {
+      throw new BadRequestException(
+        `Las columnas de data_bridge no coinciden con el flujo esperado. Revisa la migracion de prueba. Detalle: ${error?.message || 'columna no encontrada'}`,
+      );
+    }
+    if (error?.code === '28P01') {
+      throw new BadRequestException(
+        'La conexion PostgreSQL del backend fallo por autenticacion. Revisa DATABASE_URL/SUPABASE_DB_URL en el servidor API.',
+      );
+    }
+    if (error?.code === '23503') {
+      throw new BadRequestException(
+        'La sucursal seleccionada no existe en core.businesses para insertar staging. Revisa el business_id seleccionado.',
+      );
+    }
+    if (error?.code === '23502') {
+      throw new BadRequestException(
+        `Falta un valor requerido para guardar staging. Detalle: ${error?.message || 'valor requerido nulo'}`,
+      );
+    }
+    if (error?.code === '22P02') {
+      throw new BadRequestException(
+        `Un valor no tiene el formato esperado para PostgreSQL. Detalle: ${error?.message || 'formato invalido'}`,
+      );
+    }
+    if (error?.code === '42501') {
+      throw new BadRequestException(
+        'La conexion actual no tiene permisos sobre las tablas data_bridge. Revisa los GRANT de la migracion.',
+      );
+    }
+    if (error?.code === '3F000') {
+      throw new BadRequestException(
+        'Falta el schema data_bridge en la base conectada al backend. Ejecuta la migracion de tablas de prueba.',
+      );
+    }
+    if (error?.code === 'P0001') {
+      throw new BadRequestException(error?.message || 'El script de publicacion a tienda fallo');
+    }
+    throw error;
+  }
+
+  private resolveAldenSateliteStorePublishScriptPath(): string {
+    const candidates = [
+      path.resolve(process.cwd(), 'scripts', ALDEN_SATELITE_STORE_PUBLISH_SCRIPT),
+      path.resolve(process.cwd(), '..', '..', 'scripts', ALDEN_SATELITE_STORE_PUBLISH_SCRIPT),
+      path.resolve(process.cwd(), '..', 'scripts', ALDEN_SATELITE_STORE_PUBLISH_SCRIPT),
+      path.resolve(__dirname, '..', '..', '..', '..', '..', 'scripts', ALDEN_SATELITE_STORE_PUBLISH_SCRIPT),
+    ];
+    const found = candidates.find((candidate) => existsSync(candidate));
+    if (!found) {
+      throw new BadRequestException(
+        `No se encontro el script ${ALDEN_SATELITE_STORE_PUBLISH_SCRIPT} para publicar en tienda.`,
+      );
+    }
+    return found;
+  }
+
+  async uploadDataBridgeTestExportRows(
+    userId: string,
+    businessId: string,
+    dto: UploadDataBridgeTestExportDto,
+  ) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    const batchSize = DATA_BRIDGE_TEST_EXPORT_BATCH_SIZE[dto.tableName];
+    if (!batchSize) throw new BadRequestException('Tabla staging no permitida');
+    if (dto.rows.length > batchSize) {
+      throw new BadRequestException(`Demasiadas filas para ${dto.tableName}; maximo ${batchSize} por lote`);
+    }
+
+    const importBatchId = dto.importBatchId || randomUUID();
+    let cleared = 0;
+    if (dto.clearExisting === true) {
+      try {
+        const deleted = await dbPool.query(`DELETE FROM data_bridge.${dto.tableName} WHERE business_id = $1`, [businessId]);
+        cleared = deleted.rowCount ?? 0;
+      } catch (e: any) {
+        this.throwDataBridgeTestExportDbError(e);
+      }
+    }
+
+    const sampleErrors: string[] = [];
+    const values: unknown[] = [];
+    const placeholders: string[] = [];
+    let failed = 0;
+
+    const addError = (message: string) => {
+      failed += 1;
+      if (sampleErrors.length < 10) sampleErrors.push(message);
+    };
+
+    dto.rows.forEach((rawRow, index) => {
+      const row = this.asPlainObject(rawRow);
+      if (!row) {
+        addError(`Fila ${index + 1}: no es un objeto valido`);
+        return;
+      }
+
+      if (dto.tableName === 'prueba_inventory_export') {
+        const noParte = this.firstStringValue(row, ['no_parte', 'No. Parte', 'No Parte', 'NoParte']);
+        if (!noParte) {
+          addError(`Fila ${this.sourceRowNumber(row, index + 1)}: falta No. Parte`);
+          return;
+        }
+        const descripcion = this.firstStringValue(row, ['descripcion', 'DescripciÃ³n', 'Descripcion', 'Descripción']);
+        const ubica = this.firstStringValue(row, ['ubica', 'Ubica']);
+        const exist = this.numericValue(row, ['exist', 'Exist']);
+        const p = values.length;
+        placeholders.push(`($${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5}, $${p + 6}, $${p + 7}, $${p + 8})`);
+        values.push(
+          businessId,
+          noParte,
+          descripcion,
+          ubica,
+          exist,
+          dto.sourceFileName,
+          this.sourceRowNumber(row, index + 1),
+          importBatchId,
+        );
+        return;
+      }
+
+      const adjstclaim = this.firstStringValue(row, ['ADJSTCLAIM', 'adjstclaim']);
+      if (!adjstclaim) {
+        addError(`Fila ${this.sourceRowNumber(row, index + 1)}: falta ADJSTCLAIM`);
+        return;
+      }
+      const adjstmnt = this.firstStringValue(row, ['ADJSTMNT', 'adjstmnt']);
+      const warr = this.firstStringValue(row, ['WARR.', 'warr', 'WARR']);
+      const claim = this.numericValue(row, ['CLAIM', 'claim']);
+      const p = values.length;
+      placeholders.push(`($${p + 1}, $${p + 2}, $${p + 3}, $${p + 4}, $${p + 5}, $${p + 6}, $${p + 7}, $${p + 8})`);
+      values.push(
+        businessId,
+        adjstclaim,
+        adjstmnt,
+        warr,
+        claim,
+        dto.sourceFileName,
+        this.sourceRowNumber(row, index + 1),
+        importBatchId,
+      );
+    });
+
+    if (placeholders.length === 0) {
+      return {
+        tableName: dto.tableName,
+        importBatchId,
+        inserted: 0,
+        failed,
+        cleared,
+        sampleErrors,
+      };
+    }
+
+    const sql =
+      dto.tableName === 'prueba_inventory_export'
+        ? `INSERT INTO data_bridge.prueba_inventory_export
+             (business_id, "No. Parte", "Descripción", "Ubica", "Exist", source_file_name, source_row_number, import_batch_id)
+           VALUES ${placeholders.join(', ')}`
+        : `INSERT INTO data_bridge.prueba_mex_insurance_prices_export
+             (business_id, "ADJSTCLAIM", "ADJSTMNT", "WARR.", "CLAIM", source_file_name, source_row_number, import_batch_id)
+           VALUES ${placeholders.join(', ')}`;
+
+    let inserted;
+    try {
+      inserted = await dbPool.query(sql, values);
+    } catch (e: any) {
+      this.throwDataBridgeTestExportDbError(e);
+    }
+    return {
+      tableName: dto.tableName,
+      importBatchId,
+      inserted: inserted?.rowCount ?? 0,
+      failed,
+      cleared,
+      sampleErrors,
+    };
+  }
+
+  async mergeDataBridgeTestExports(userId: string, businessId: string, dto: MergeDataBridgeTestExportsDto) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    const mergeBatchId = dto.mergeBatchId || randomUUID();
+    let expected;
+    try {
+      expected = await dbPool.query(
+        `WITH inv AS (
+         SELECT DISTINCT NULLIF(REGEXP_REPLACE(UPPER(BTRIM("No. Parte")), '[^A-Z0-9]+', '', 'g'), '') AS sku
+         FROM data_bridge.prueba_inventory_export
+         WHERE business_id = $1 AND COALESCE("Exist", 0) > 0
+       ),
+       prices AS (
+         SELECT DISTINCT NULLIF(REGEXP_REPLACE(UPPER(BTRIM("ADJSTCLAIM")), '[^A-Z0-9]+', '', 'g'), '') AS sku
+         FROM data_bridge.prueba_mex_insurance_prices_export
+         WHERE business_id = $1 AND COALESCE("CLAIM", 0) > 0
+       )
+       SELECT COUNT(*)::int AS count
+       FROM inv
+       INNER JOIN prices USING (sku)
+       WHERE inv.sku IS NOT NULL`,
+        [businessId],
+      );
+    } catch (e: any) {
+      this.throwDataBridgeTestExportDbError(e);
+    }
+    const expectedRows = Number(expected.rows[0]?.count ?? 0);
+
+    let cleared = 0;
+    if (dto.clearExisting !== false) {
+      try {
+        const deleted = await dbPool.query(
+          `DELETE FROM data_bridge.prueba_inventory_prices_merged_export WHERE business_id = $1`,
+          [businessId],
+        );
+        cleared = deleted.rowCount ?? 0;
+      } catch (e: any) {
+        this.throwDataBridgeTestExportDbError(e);
+      }
+    }
+
+    let inserted = 0;
+    let failedBatches = 0;
+    const sampleErrors: string[] = [];
+    const batches = expectedRows === 0 ? 0 : Math.ceil(expectedRows / DATA_BRIDGE_TEST_EXPORT_MERGE_BATCH_SIZE);
+
+    for (let batch = 0; batch < batches; batch += 1) {
+      const start = batch * DATA_BRIDGE_TEST_EXPORT_MERGE_BATCH_SIZE + 1;
+      const end = (batch + 1) * DATA_BRIDGE_TEST_EXPORT_MERGE_BATCH_SIZE;
+      try {
+        const result = await dbPool.query(
+          `WITH inv_raw AS (
+             SELECT
+               NULLIF(REGEXP_REPLACE(UPPER(BTRIM("No. Parte")), '[^A-Z0-9]+', '', 'g'), '') AS sku,
+               "Descripción" AS descripcion,
+               NULLIF(REGEXP_REPLACE(BTRIM(COALESCE("Ubica", '')), '^[^[:alnum:]]+', ''), '') AS ubicacion,
+               "Exist" AS existencias,
+               source_row_number
+             FROM data_bridge.prueba_inventory_export
+             WHERE business_id = $1 AND COALESCE("Exist", 0) > 0
+           ),
+           inv AS (
+             SELECT DISTINCT ON (sku) sku, descripcion, ubicacion, existencias
+             FROM inv_raw
+             WHERE sku IS NOT NULL
+             ORDER BY sku, source_row_number
+           ),
+           prices_raw AS (
+             SELECT
+               NULLIF(REGEXP_REPLACE(UPPER(BTRIM("ADJSTCLAIM")), '[^A-Z0-9]+', '', 'g'), '') AS sku,
+               NULLIF(BTRIM(CONCAT_WS(' ', NULLIF("ADJSTMNT", ''), NULLIF("WARR.", ''))), '') AS nombres,
+               "CLAIM" AS price,
+               source_row_number
+             FROM data_bridge.prueba_mex_insurance_prices_export
+             WHERE business_id = $1 AND COALESCE("CLAIM", 0) > 0
+           ),
+           prices AS (
+             SELECT DISTINCT ON (sku) sku, nombres, price
+             FROM prices_raw
+             WHERE sku IS NOT NULL
+             ORDER BY sku, source_row_number
+           ),
+           matched AS (
+             SELECT
+               inv.sku,
+               inv.descripcion,
+               inv.ubicacion,
+               inv.existencias,
+               prices.nombres,
+               prices.price,
+               ROW_NUMBER() OVER (ORDER BY inv.sku) AS rn
+             FROM inv
+             INNER JOIN prices USING (sku)
+           )
+           INSERT INTO data_bridge.prueba_inventory_prices_merged_export
+             (business_id, sku, descripcion, ubicacion, existencias, nombres, price, merge_batch_id)
+           SELECT $1, sku, descripcion, ubicacion, existencias, nombres, price, $2
+           FROM matched
+           WHERE rn BETWEEN $3 AND $4
+           ON CONFLICT (business_id, sku) DO UPDATE SET
+             descripcion = EXCLUDED.descripcion,
+             ubicacion = EXCLUDED.ubicacion,
+             existencias = EXCLUDED.existencias,
+             nombres = EXCLUDED.nombres,
+             price = EXCLUDED.price,
+             merge_batch_id = EXCLUDED.merge_batch_id,
+             updated_at = CURRENT_TIMESTAMP`,
+          [businessId, mergeBatchId, start, end],
+        );
+        inserted += result.rowCount ?? 0;
+      } catch (e: any) {
+        if (['42P01', '42703', '28P01', '23503'].includes(String(e?.code || ''))) {
+          this.throwDataBridgeTestExportDbError(e);
+        }
+        failedBatches += 1;
+        if (sampleErrors.length < 10) sampleErrors.push(e?.message || `Lote ${batch + 1} fallido`);
+      }
+    }
+
+    return {
+      tableName: 'prueba_inventory_prices_merged_export',
+      mergeBatchId,
+      inserted,
+      expectedRows,
+      batches,
+      batchSize: DATA_BRIDGE_TEST_EXPORT_MERGE_BATCH_SIZE,
+      cleared,
+      failedBatches,
+      sampleErrors,
+    };
+  }
+
+  async publishDataBridgeTestExports(userId: string, businessId: string) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    let source;
+    try {
+      source = await dbPool.query(
+        `SELECT COUNT(*)::int AS count
+       FROM data_bridge.prueba_inventory_prices_merged_export
+       WHERE business_id = $1
+         AND COALESCE(existencias, 0) > 0
+         AND COALESCE(price, 0) > 0`,
+        [businessId],
+      );
+    } catch (e: any) {
+      this.throwDataBridgeTestExportDbError(e);
+    }
+    const sourceRows = Number(source.rows[0]?.count ?? 0);
+
+    let updateResult;
+    try {
+      updateResult = await dbPool.query(
+        `WITH source_raw AS (
+         SELECT
+           NULLIF(REGEXP_REPLACE(UPPER(BTRIM(sku)), '[^A-Z0-9]+', '', 'g'), '') AS normalized_sku,
+           sku,
+           descripcion,
+           ubicacion,
+           existencias,
+           price,
+           updated_at
+         FROM data_bridge.prueba_inventory_prices_merged_export
+         WHERE business_id = $1
+           AND COALESCE(existencias, 0) > 0
+           AND COALESCE(price, 0) > 0
+       ),
+       source_deduped AS (
+         SELECT DISTINCT ON (normalized_sku)
+           normalized_sku,
+           sku,
+           descripcion,
+           ubicacion,
+           existencias,
+           price
+         FROM source_raw
+         WHERE normalized_sku IS NOT NULL
+         ORDER BY normalized_sku, updated_at DESC
+       )
+       UPDATE data_bridge.integration_alden_satelite target
+       SET
+         localizacion = source_deduped.ubicacion,
+         descripcion = source_deduped.descripcion,
+         price = source_deduped.price,
+         inventario = GREATEST(0, ROUND(source_deduped.existencias)::int)
+       FROM source_deduped
+       WHERE NULLIF(REGEXP_REPLACE(UPPER(BTRIM(target.product)), '[^A-Z0-9]+', '', 'g'), '') = source_deduped.normalized_sku`,
+        [businessId],
+      );
+    } catch (e: any) {
+      this.throwDataBridgeTestExportDbError(e);
+    }
+
+    let insertResult;
+    try {
+      insertResult = await dbPool.query(
+        `WITH source_raw AS (
+         SELECT
+           NULLIF(REGEXP_REPLACE(UPPER(BTRIM(sku)), '[^A-Z0-9]+', '', 'g'), '') AS normalized_sku,
+           sku,
+           descripcion,
+           ubicacion,
+           existencias,
+           price,
+           updated_at
+         FROM data_bridge.prueba_inventory_prices_merged_export
+         WHERE business_id = $1
+           AND COALESCE(existencias, 0) > 0
+           AND COALESCE(price, 0) > 0
+       ),
+       source_deduped AS (
+         SELECT DISTINCT ON (normalized_sku)
+           normalized_sku,
+           sku,
+           descripcion,
+           ubicacion,
+           existencias,
+           price
+         FROM source_raw
+         WHERE normalized_sku IS NOT NULL
+         ORDER BY normalized_sku, updated_at DESC
+       )
+       INSERT INTO data_bridge.integration_alden_satelite
+         (product, localizacion, descripcion, price, inventario)
+       SELECT
+         source_deduped.sku,
+         source_deduped.ubicacion,
+         source_deduped.descripcion,
+         source_deduped.price,
+         GREATEST(0, ROUND(source_deduped.existencias)::int)
+       FROM source_deduped
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM data_bridge.integration_alden_satelite target
+         WHERE NULLIF(REGEXP_REPLACE(UPPER(BTRIM(target.product)), '[^A-Z0-9]+', '', 'g'), '') = source_deduped.normalized_sku
+       )`,
+        [businessId],
+      );
+    } catch (e: any) {
+      this.throwDataBridgeTestExportDbError(e);
+    }
+
+    const updated = updateResult?.rowCount ?? 0;
+    const inserted = insertResult?.rowCount ?? 0;
+    return {
+      tableName: 'integration_alden_satelite',
+      sourceRows,
+      updated,
+      inserted,
+      published: updated + inserted,
+    };
+  }
+
+  async publishAldenSateliteToStore(userId: string, businessId: string) {
+    await this.assertUserHasBusinessAccess(userId, businessId);
+    if (!dbPool) throw new BadRequestException('Base de datos no configurada');
+
+    const scriptPath = this.resolveAldenSateliteStorePublishScriptPath();
+    const sql = readFileSync(scriptPath, 'utf8');
+    const client = await dbPool.connect();
+    try {
+      const result = await client.query(sql);
+      const results = Array.isArray(result) ? result : [result];
+      const summary = results
+        .flatMap((r: any) => (Array.isArray(r?.rows) ? r.rows : []))
+        .find((row: Record<string, unknown>) => row && 'source_skus' in row && 'visible_in_store_candidates' in row);
+
+      if (!summary) {
+        throw new BadRequestException('El script de publicacion a tienda no devolvio resumen de verificacion.');
+      }
+
+      return {
+        script: `scripts/${ALDEN_SATELITE_STORE_PUBLISH_SCRIPT}`,
+        storeId: summary.store_id,
+        storeName: summary.store_name,
+        branchId: summary.branch_id,
+        branchName: summary.branch_name,
+        sourceSkus: Number(summary.source_skus ?? 0),
+        matchedExistingProducts: Number(summary.matched_existing_products ?? 0),
+        insertedProducts: Number(summary.inserted_products ?? 0),
+        visibleInStoreCandidates: Number(summary.visible_in_store_candidates ?? 0),
+        stillHiddenDueToZeroPrice: Number(summary.still_hidden_due_to_zero_price ?? 0),
+      };
+    } catch (e: any) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // The script may already have committed or rolled back.
+      }
+      this.throwDataBridgeTestExportDbError(e);
+    } finally {
+      client.release();
+    }
   }
 
   private normalizeDataBridgeInsertValue(dataType: string | undefined, v: unknown): unknown {
