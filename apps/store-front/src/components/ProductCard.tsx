@@ -9,15 +9,17 @@ import { Product } from '@/lib/products';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { formatPrice } from '@/lib/format';
+import CompatibleBadge from './CompatibleBadge';
 
 interface ProductCardProps {
   product: Product;
   onAddToCart?: (product: Product) => void;
   overridePrice?: number;
   pricePending?: boolean;
+  isCompatible?: boolean;
 }
 
-export default function ProductCard({ product, onAddToCart, overridePrice, pricePending }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, overridePrice, pricePending, isCompatible }: ProductCardProps) {
   const { contextType, branchData } = useStoreContext();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(product.id);
@@ -63,6 +65,11 @@ export default function ProductCard({ product, onAddToCart, overridePrice, price
     <ContextualLink href={`/products/${product.id}`} className="h-full block">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-all duration-200 cursor-pointer group h-full flex flex-col">
         <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden flex items-center justify-center">
+          {isCompatible && (
+            <div className="absolute top-3 left-3 z-10">
+              <CompatibleBadge />
+            </div>
+          )}
           <button
             type="button"
             className={`absolute top-3 right-3 z-10 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center transition-colors ${
@@ -119,12 +126,18 @@ export default function ProductCard({ product, onAddToCart, overridePrice, price
             Agregar al carrito
           </button>
 
-          <div className="flex items-center justify-between text-xs text-gray-600 border-b border-gray-200 pb-3 mb-3">
+          <div className={`flex items-center justify-between text-xs border-b border-gray-200 pb-3 mb-3 ${
+            isCompatible ? 'text-green-700' : 'text-gray-600'
+          }`}>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-700 text-[10px] font-semibold">
+              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-semibold ${
+                isCompatible ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+              }`}>
                 ✓
               </span>
-              <span>Revisa compatibilidad con tu vehículo</span>
+              <span>
+                {isCompatible ? 'Compatible con tu vehículo' : 'Revisa compatibilidad con tu vehículo'}
+              </span>
             </div>
             <span className="text-gray-400">›</span>
           </div>

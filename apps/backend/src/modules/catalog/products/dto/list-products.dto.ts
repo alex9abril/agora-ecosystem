@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, Min, Max, ValidatorConstraint, ValidatorConstraintInterface, Validate } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsBoolean, IsInt, IsUUID, IsNumber, IsArray, Min, Max, ValidatorConstraint, ValidatorConstraintInterface, Validate } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 // Validador personalizado para UUID
 @ValidatorConstraint({ name: 'isValidUuid', async: false })
@@ -39,6 +39,24 @@ export class ListProductsDto {
   @Max(100)
   limit?: number = 20;
 
+  @ApiPropertyOptional({
+    description: 'Filtrar por IDs de producto (CSV o lista)',
+    example: '00000001-0000-0000-0000-000000000001,00000002-0000-0000-0000-000000000002',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const list = Array.isArray(value)
+      ? value
+      : typeof value === 'string'
+        ? value.split(',')
+        : [];
+    return list.map((item) => String(item).trim()).filter((item) => uuidRegex.test(item));
+  })
+  @IsArray()
+  @IsString({ each: true })
+  ids?: string[];
+
   @ApiPropertyOptional({ description: 'Filtrar por negocio (UUID)', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
   @Validate(IsValidUuidConstraint)
@@ -58,6 +76,12 @@ export class ListProductsDto {
   @IsOptional()
   @Validate(IsValidUuidConstraint)
   categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Solo productos sin categoría asignada', example: false })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  uncategorized?: boolean;
 
   @ApiPropertyOptional({ description: 'Filtrar por colección', example: '11111111-1111-1111-1111-111111111111' })
   @IsOptional()
@@ -84,6 +108,11 @@ export class ListProductsDto {
   @Validate(IsValidUuidConstraint)
   vehicleSpecId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por compatibilidad - ID de variante de vehículo', example: '11111111-1111-1111-1111-111111111111' })
+  @IsOptional()
+  @Validate(IsValidUuidConstraint)
+  vehicleVariantId?: string;
+
   @ApiPropertyOptional({ description: 'Filtrar por disponible', example: true })
   @IsOptional()
   @Type(() => Boolean)
@@ -96,12 +125,48 @@ export class ListProductsDto {
   @IsBoolean()
   isFeatured?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'Filtrar productos con compatibilidad universal activa',
+    example: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
+  @IsBoolean()
+  compatibilityUniversal?: boolean;
+
   @ApiPropertyOptional({ description: 'Buscar por nombre o descripción', example: 'Hamburguesa' })
   @IsOptional()
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Ordenar por', example: 'display_order', enum: ['display_order', 'name', 'price', 'created_at'] })
+  @ApiPropertyOptional({ description: 'Filtrar por tipo de producto', example: 'refaccion' })
+  @IsOptional()
+  @IsString()
+  productType?: string;
+
+  @ApiPropertyOptional({ description: 'Precio mínimo', example: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  priceMin?: number;
+
+  @ApiPropertyOptional({ description: 'Precio máximo', example: 99999 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  priceMax?: number;
+
+  @ApiPropertyOptional({
+    description: 'Ordenar por',
+    example: 'display_order',
+    enum: ['display_order', 'name', 'sku', 'price', 'created_at', 'updated_at', 'product_type', 'is_available', 'category', 'business', 'description'],
+  })
   @IsOptional()
   @IsString()
   sortBy?: string = 'display_order';

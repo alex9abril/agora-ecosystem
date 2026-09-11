@@ -2,11 +2,13 @@
  * Grid de productos con filtros por contexto
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { productsService, Product } from '@/lib/products';
 import { taxesService } from '@/lib/taxes';
 import { branchesService, BranchTaxSettings } from '@/lib/branches';
+import { getSelectedVehicle, getVehicleVariantId, getVehicleMakeModelYear } from '@/lib/vehicle-storage';
+import { getVehicleVariants } from '@/lib/vehicle-variants';
 import { useStoreContext } from '@/contexts/StoreContext';
 import ProductCard from './ProductCard';
 import ProductListItem from './ProductListItem';
@@ -14,6 +16,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import { checkProductCompatibility } from '@/lib/product-compatibility';
 
 const DEFAULT_BRANCH_TAX_SETTINGS: BranchTaxSettings = {
   included_in_price: false,
@@ -26,16 +29,28 @@ type ViewMode = 'grid' | 'list';
 interface ProductGridProps {
   filters?: {
     categoryId?: string;
+    uncategorized?: boolean;
     collectionId?: string;
     search?: string;
     isFeatured?: boolean;
+    productType?: string;
+    priceMin?: number;
+    priceMax?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    vehicleBrandId?: string;
+    vehicleModelId?: string;
+    vehicleYearId?: string;
+    vehicleSpecId?: string;
+    compatible?: boolean;
   };
   onProductClick?: (product: Product) => void;
   className?: string;
   defaultView?: ViewMode;
+  showPagination?: boolean;
 }
 
-export default function ProductGrid({ filters, onProductClick, className = '', defaultView = 'list' }: ProductGridProps) {
+export default function ProductGrid({ filters, onProductClick, className = '', defaultView = 'list', showPagination = false }: ProductGridProps) {
   const router = useRouter();
   const { contextType, groupId, branchId, brandId } = useStoreContext();
   const { addItem } = useCart();
@@ -43,11 +58,35 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView);
   const [branchTaxSettings, setBranchTaxSettings] = useState<BranchTaxSettings | null>(null);
   const [taxSettingsByBusiness, setTaxSettingsByBusiness] = useState<Record<string, BranchTaxSettings>>({});
   const [taxSettingsLoaded, setTaxSettingsLoaded] = useState(false);
   const [finalPrices, setFinalPrices] = useState<Record<string, number>>({});
+  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
+  const [vehicleReady, setVehicleReady] = useState(false);
+
+  useEffect(() => {
+    const syncVehicle = () => {
+      setSelectedVehicle(getSelectedVehicle());
+      setVehicleReady(true);
+    };
+    syncVehicle();
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === 'user_vehicle_selected' || event.key === 'user_vehicle') {
+        syncVehicle();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('vehicle-selected', syncVehicle);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('vehicle-selected', syncVehicle);
+    };
+  }, []);
+  const [compatibleById, setCompatibleById] = useState<Record<string, boolean>>({});
+  const [vehicleKey, setVehicleKey] = useState('');
 
   // Guardar preferencia de vista en localStorage
   useEffect(() => {
@@ -72,10 +111,42 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
     return JSON.stringify(filters || {});
   }, [filters]);
 
+  const page = useMemo(() => {
+    if (!showPagination || !router.isReady) return 1;
+    const raw = router.query.page;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const parsed = value ? parseInt(value, 10) : 1;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  }, [showPagination, router.isReady, router.query.page]);
+
+  const goToPage = (nextPage: number) => {
+    if (!showPagination || !router.isReady) return;
+    const next = Math.max(1, nextPage);
+    if (next === page) return;
+    const query = { ...router.query };
+    if (next <= 1) {
+      delete query.page;
+    } else {
+      query.page = String(next);
+    }
+    router.push({ pathname: router.pathname, query }, undefined, { shallow: true });
+  };
+
+  const prevFiltersKey = useRef(filtersKey);
+
   useEffect(() => {
+    if (showPagination && !router.isReady) return;
+    if (!vehicleReady) return;
+    if (prevFiltersKey.current !== filtersKey) {
+      prevFiltersKey.current = filtersKey;
+      if (showPagination && page !== 1) {
+        goToPage(1);
+        return;
+      }
+    }
     loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contextType, groupId, branchId, brandId, filtersKey]);
+  }, [contextType, groupId, branchId, brandId, filtersKey, page, showPagination, router.isReady, selectedVehicle, vehicleReady]);
 
   // Cargar configuracion de impuestos de la sucursal (solo contexto sucursal)
   useEffect(() => {
@@ -151,9 +222,13 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       setError(null);
       setFinalPrices({});
 
+      const { compatible, ...restFilters } = filters || {};
+      const filterCompatible = compatible === true && Boolean(selectedVehicle);
       const params: any = {
         isAvailable: true,
-        ...filters,
+        ...restFilters,
+        page: showPagination ? page : 1,
+        limit: showPagination ? 24 : 20,
       };
 
       // Filtrar según contexto
@@ -161,8 +236,31 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
         params.groupId = groupId;
       } else if (contextType === 'sucursal' && branchId) {
         params.branchId = branchId;
-      } else if (contextType === 'brand' && brandId) {
+      } else if (contextType === 'brand' && brandId && !filterCompatible) {
         params.vehicleBrandId = brandId;
+      }
+
+      if (filterCompatible && selectedVehicle) {
+        let variantId = getVehicleVariantId(selectedVehicle);
+        if (!variantId) {
+          const identity = getVehicleMakeModelYear(selectedVehicle);
+          if (identity) {
+            const variants = await getVehicleVariants({
+              make: identity.make,
+              model: identity.model,
+              year: identity.year,
+              limit: 1,
+            });
+            variantId = variants[0]?.id;
+          }
+        }
+        if (!variantId) {
+          setProducts([]);
+          setPagination({ page: 1, limit: showPagination ? 24 : 20, total: 0, totalPages: 1 });
+          setLoading(false);
+          return;
+        }
+        params.vehicleVariantId = variantId;
       }
 
       console.log('🔍 [ProductGrid] Loading products with params:', {
@@ -186,6 +284,10 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
         })) || [],
       });
       setProducts(response.data || []);
+      setPagination(response.pagination || { page: 1, limit: 20, total: 0, totalPages: 1 });
+      if (showPagination && typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } catch (err: any) {
       console.error('Error cargando productos:', err);
       setError(err.message || 'Error al cargar productos');
@@ -210,6 +312,83 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
       alert(error.message || 'Error al agregar producto al carrito');
     }
   };
+
+  useEffect(() => {
+    const readVehicleKey = () => {
+      const vehicle = getSelectedVehicle();
+      if (!vehicle) return '';
+      return [
+        vehicle.vehicle_variant_id,
+        vehicle.vehicle_brand_id,
+        vehicle.vehicle_model_id,
+        vehicle.vehicle_year_id,
+        vehicle.vehicle_spec_id,
+      ]
+        .filter(Boolean)
+        .join(':');
+    };
+
+    const syncVehicle = () => setVehicleKey(readVehicleKey());
+    syncVehicle();
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'user_vehicle_selected' || event.key === 'user_vehicle') {
+        syncVehicle();
+      }
+    };
+
+    window.addEventListener('vehicle-selected', syncVehicle);
+    window.addEventListener('auth:vehicles-synced', syncVehicle);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('vehicle-selected', syncVehicle);
+      window.removeEventListener('auth:vehicles-synced', syncVehicle);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!vehicleKey || products.length === 0) {
+      setCompatibleById({});
+      return;
+    }
+
+    const vehicle = getSelectedVehicle();
+    if (!vehicle) {
+      setCompatibleById({});
+      return;
+    }
+
+    let cancelled = false;
+    const check = async () => {
+      const entries = await Promise.all(
+        products.map(async (product) => {
+          if (product.product_type === 'food' || product.product_type === 'medicine') {
+            return [product.id, false] as const;
+          }
+          const compatible = await checkProductCompatibility(product.id, {
+            vehicleVariantId: vehicle.vehicle_variant_id || undefined,
+            brandId: vehicle.vehicle_brand_id || undefined,
+            modelId: vehicle.vehicle_model_id || undefined,
+            yearId: vehicle.vehicle_year_id || undefined,
+            specId: vehicle.vehicle_spec_id || undefined,
+          });
+          return [product.id, compatible] as const;
+        }),
+      );
+      if (cancelled) return;
+      const next: Record<string, boolean> = {};
+      entries.forEach(([id, compatible]) => {
+        if (compatible) next[id] = true;
+      });
+      setCompatibleById(next);
+    };
+
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [products, vehicleKey]);
 
   // Calcular precios finales (incluyendo impuestos si aplica) por producto
   useEffect(() => {
@@ -388,6 +567,7 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
               overridePrice={finalPrices[product.id]}
               pricePending={finalPrices[product.id] === undefined}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
+              isCompatible={compatibleById[product.id] === true}
             />
           ))}
         </div>
@@ -400,8 +580,35 @@ export default function ProductGrid({ filters, onProductClick, className = '', d
               overridePrice={finalPrices[product.id]}
               pricePending={finalPrices[product.id] === undefined}
               onAddToCart={onProductClick ? undefined : handleAddToCart}
+              isCompatible={compatibleById[product.id] === true}
             />
           ))}
+        </div>
+      )}
+
+      {showPagination && pagination.totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-8">
+          <p className="text-sm text-gray-600">
+            {pagination.total} productos · Página {pagination.page} de {pagination.totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => goToPage(page - 1)}
+              disabled={page <= 1}
+              className="px-4 py-2 text-sm font-medium rounded-md bg-black text-white disabled:bg-neutral-300 disabled:text-neutral-500 disabled:cursor-not-allowed"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= pagination.totalPages}
+              className="px-4 py-2 text-sm font-medium rounded-md bg-black text-white disabled:bg-neutral-300 disabled:text-neutral-500 disabled:cursor-not-allowed"
+            >
+              Siguiente
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -106,6 +106,120 @@ export class ProductsService {
       throw new ServiceUnavailableException(`Error al procesar imagen: ${error.message}`);
     }
   }
+
+  /**
+   * Sube una o más fotos a Storage y las registra en catalog.product_images.
+   * La primera queda como principal y también actualiza products.image_url.
+   */
+  async attachGalleryImages(productId: string, imageUris: string[]): Promise<string | null> {
+    if (!dbPool) {
+      throw new ServiceUnavailableException('Conexión a base de datos no configurada');
+    }
+
+    const uris = Array.from(new Set(imageUris.map((uri) => uri?.trim()).filter(Boolean))) as string[];
+    if (uris.length === 0) return null;
+
+    const maxOrderResult = await dbPool.query(
+      `SELECT COALESCE(MAX(display_order), -1) as max_order
+       FROM catalog.product_images
+       WHERE product_id = $1`,
+      [productId],
+    );
+    let nextOrder = Number(maxOrderResult.rows[0]?.max_order ?? -1) + 1;
+    let primaryUrl: string | null = null;
+
+    for (let index = 0; index < uris.length; index += 1) {
+      const uri = uris[index];
+      let publicUrl = uri;
+      let filePath: string | null = null;
+      let fileName = `imagen-${index + 1}`;
+      let mimeType = 'image/jpeg';
+      let fileSize: number | null = null;
+
+      if (this.isDataUri(uri)) {
+        const parsed = this.parseDataUri(uri);
+        if (!parsed) continue;
+        if (!supabaseAdmin) {
+          throw new ServiceUnavailableException('Supabase Storage no está configurado');
+        }
+        const imageBuffer = Buffer.from(parsed.base64Data, 'base64');
+        const ext = parsed.mimeType.split('/')[1] || 'png';
+        fileName = `gallery-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+        filePath = `${productId}/${fileName}`;
+        mimeType = parsed.mimeType;
+        fileSize = imageBuffer.length;
+
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from(this.BUCKET_NAME)
+          .upload(filePath, imageBuffer, {
+            contentType: parsed.mimeType,
+            upsert: false,
+          });
+        if (uploadError) {
+          console.error('❌ Error subiendo imagen de galería:', uploadError);
+          throw new ServiceUnavailableException(`Error al subir imagen: ${uploadError.message}`);
+        }
+        const { data: urlData } = supabaseAdmin.storage.from(this.BUCKET_NAME).getPublicUrl(filePath);
+        publicUrl = urlData.publicUrl;
+      } else if (/^https?:\/\//i.test(uri)) {
+        const storageMatch = uri.match(/\/storage\/v1\/object\/public\/products\/(.+)$/i);
+        if (storageMatch?.[1]) {
+          filePath = decodeURIComponent(storageMatch[1]);
+          fileName = filePath.split('/').pop() || fileName;
+        } else if (index === 0) {
+          primaryUrl = uri;
+          continue;
+        } else {
+          continue;
+        }
+      } else {
+        continue;
+      }
+
+      if (!filePath) continue;
+
+      const isPrimary = index === 0;
+      if (isPrimary) {
+        await dbPool.query(
+          `UPDATE catalog.product_images
+           SET is_primary = FALSE, updated_at = CURRENT_TIMESTAMP
+           WHERE product_id = $1 AND is_primary = TRUE`,
+          [productId],
+        );
+      }
+
+      await dbPool.query(
+        `INSERT INTO catalog.product_images (
+          product_id, file_path, file_name, file_size, mime_type,
+          alt_text, display_order, is_primary, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)`,
+        [
+          productId,
+          filePath,
+          fileName,
+          fileSize,
+          mimeType,
+          isPrimary ? 'Imagen principal' : `Imagen ${index + 1}`,
+          nextOrder,
+          isPrimary,
+        ],
+      );
+      nextOrder += 1;
+      if (isPrimary) primaryUrl = publicUrl;
+    }
+
+    if (primaryUrl) {
+      await dbPool.query(
+        `UPDATE catalog.products
+         SET image_url = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [productId, primaryUrl],
+      );
+    }
+
+    return primaryUrl;
+  }
+
   /**
    * Obtener configuración de campos por tipo de producto
    */
@@ -249,17 +363,24 @@ export class ProductsService {
       groupId,
       branchId,
       categoryId,
+      uncategorized,
       collectionId,
       isAvailable,
       isFeatured,
       search,
+      productType,
+      priceMin,
+      priceMax,
       sortBy = 'display_order',
       sortOrder = 'asc',
       vehicleBrandId,
       vehicleModelId,
       vehicleYearId,
       vehicleSpecId,
+      vehicleVariantId,
       includeZeroPrice,
+      ids,
+      compatibilityUniversal,
     } = query;
 
     const offset = (page - 1) * limit;
@@ -272,6 +393,12 @@ export class ProductsService {
     let businessJoin = '';
     let branchJoin = '';
     let collectionJoin = '';
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      whereConditions.push(`p.id = ANY($${paramIndex}::uuid[])`);
+      queryParams.push(ids.slice(0, 100));
+      paramIndex++;
+    }
 
     // Si se filtra por grupo, buscar productos disponibles en sucursales del grupo
     // IMPORTANTE: No filtrar por business_id del producto, sino por disponibilidad en sucursales del grupo
@@ -336,6 +463,9 @@ export class ProductsService {
     // Filtro por categoría: incluir la categoría y todas sus subcategorías recursivamente
     let categoryCTE = '';
     let categoryWhere = '';
+    if (uncategorized && !categoryId) {
+      whereConditions.push('p.category_id IS NULL');
+    }
     if (categoryId) {
       // CTE recursiva para obtener todas las subcategorías (hijos, nietos, etc.)
       categoryCTE = `
@@ -372,6 +502,24 @@ export class ProductsService {
       paramIndex++;
     }
 
+    if (compatibilityUniversal === true) {
+      whereConditions.push(`EXISTS (
+        SELECT 1
+        FROM catalog.product_vehicle_compatibility pvc_universal
+        WHERE pvc_universal.product_id = p.id
+          AND pvc_universal.is_active = TRUE
+          AND pvc_universal.is_universal = TRUE
+      )`);
+    } else if (compatibilityUniversal === false) {
+      whereConditions.push(`NOT EXISTS (
+        SELECT 1
+        FROM catalog.product_vehicle_compatibility pvc_universal
+        WHERE pvc_universal.product_id = p.id
+          AND pvc_universal.is_active = TRUE
+          AND pvc_universal.is_universal = TRUE
+      )`);
+    }
+
     if (search) {
       // Buscar por nombre, descripción o SKU (número de parte)
       const searchParam = `%${search}%`;
@@ -380,40 +528,85 @@ export class ProductsService {
       paramIndex++;
     }
 
-    // Filtrado por compatibilidad de vehículos
+    if (productType) {
+      whereConditions.push(`p.product_type = $${paramIndex}`);
+      queryParams.push(productType);
+      paramIndex++;
+    }
+
+    if (priceMin !== undefined && priceMin !== null && !Number.isNaN(Number(priceMin))) {
+      whereConditions.push(`p.price >= $${paramIndex}`);
+      queryParams.push(Number(priceMin));
+      paramIndex++;
+    }
+
+    if (priceMax !== undefined && priceMax !== null && !Number.isNaN(Number(priceMax))) {
+      whereConditions.push(`p.price <= $${paramIndex}`);
+      queryParams.push(Number(priceMax));
+      paramIndex++;
+    }
+
+    // Filtrado por compatibilidad: unidad indicada + universales (o marca/modelo legacy)
     let compatibilityJoin = '';
     let compatibilityWhere = '';
-    if (vehicleBrandId || vehicleModelId || vehicleYearId || vehicleSpecId) {
-      // Solo filtrar productos de tipo refaccion o accesorio
+    if (vehicleVariantId || vehicleBrandId || vehicleModelId || vehicleYearId || vehicleSpecId) {
       whereConditions.push(`p.product_type IN ('refaccion', 'accesorio')`);
-      
-      // Agregar JOIN con tabla de compatibilidad
       compatibilityJoin = `INNER JOIN catalog.product_vehicle_compatibility pvc ON pvc.product_id = p.id`;
-      
-      // Agregar condición de compatibilidad usando la función SQL
-      const brandParam = paramIndex++;
-      const modelParam = paramIndex++;
-      const yearParam = paramIndex++;
-      const specParam = paramIndex++;
-      
-      compatibilityWhere = `AND pvc.is_active = TRUE
-        AND (
-          pvc.is_universal = TRUE
-          OR catalog.check_product_vehicle_compatibility(
-            p.id,
-            $${brandParam}::UUID,
-            $${modelParam}::UUID,
-            $${yearParam}::UUID,
-            $${specParam}::UUID
-          ) = TRUE
-        )`;
-      
-      queryParams.push(
-        vehicleBrandId || null,
-        vehicleModelId || null,
-        vehicleYearId || null,
-        vehicleSpecId || null
-      );
+
+      if (vehicleVariantId) {
+        const variantParam = paramIndex++;
+        compatibilityWhere = `AND pvc.is_active = TRUE
+          AND (
+            pvc.is_universal = TRUE
+            OR pvc.vehicle_variant_id = $${variantParam}::UUID
+          )`;
+        queryParams.push(vehicleVariantId);
+      } else {
+        const brandParam = paramIndex++;
+        const modelParam = paramIndex++;
+        const yearParam = paramIndex++;
+        const specParam = paramIndex++;
+        compatibilityWhere = `AND pvc.is_active = TRUE
+          AND (
+            pvc.is_universal = TRUE
+            OR EXISTS (
+              SELECT 1
+              FROM catalog.vehicle_variants vv
+              LEFT JOIN catalog.vehicle_brands vb
+                ON LOWER(TRIM(vv.make)) = LOWER(TRIM(vb.name))
+               AND vb.is_active = TRUE
+              LEFT JOIN catalog.vehicle_models vm
+                ON vm.brand_id = vb.id
+               AND LOWER(regexp_replace(TRIM(vv.model), '[^a-z0-9]', '', 'gi'))
+                 = LOWER(regexp_replace(TRIM(vm.name), '[^a-z0-9]', '', 'gi'))
+               AND vm.is_active = TRUE
+              LEFT JOIN catalog.vehicle_years vy
+                ON vy.model_id = vm.id
+               AND vy.is_active = TRUE
+               AND vv.year BETWEEN vy.year_start AND COALESCE(vy.year_end, vy.year_start)
+              WHERE vv.id = pvc.vehicle_variant_id
+                AND ($${brandParam}::UUID IS NULL OR vb.id = $${brandParam}::UUID)
+                AND ($${modelParam}::UUID IS NULL OR vm.id = $${modelParam}::UUID)
+                AND ($${yearParam}::UUID IS NULL OR vy.id = $${yearParam}::UUID)
+                AND (
+                  $${specParam}::UUID IS NULL
+                  OR EXISTS (
+                    SELECT 1
+                    FROM catalog.vehicle_specs vs
+                    WHERE vs.id = $${specParam}::UUID
+                      AND vs.is_active = TRUE
+                      AND vs.year_id = vy.id
+                  )
+                )
+            )
+          )`;
+        queryParams.push(
+          vehicleBrandId || null,
+          vehicleModelId || null,
+          vehicleYearId || null,
+          vehicleSpecId || null
+        );
+      }
     }
 
     // Construir WHERE clause combinando todas las condiciones
@@ -456,10 +649,21 @@ export class ProductsService {
     const sortByMap: { [key: string]: string } = {
       'display_order': 'p.display_order',
       'name': 'p.name',
+      'sku': 'p.sku',
       'price': 'p.price',
       'created_at': 'p.created_at',
+      'updated_at': 'p.updated_at',
+      'product_type': 'p.product_type',
+      'is_available': 'p.is_available',
+      'category': 'pc.name',
+      'business': 'b.name',
+      'description': 'p.description',
     };
     const orderByColumn = sortByMap[orderBy] || 'p.display_order';
+    const usesCustomSort = orderBy !== 'display_order' && Boolean(sortByMap[orderBy]);
+    const orderClause = usesCustomSort
+      ? `ORDER BY ${orderByColumn} ${orderDirection} NULLS LAST, p.name ASC`
+      : `ORDER BY COALESCE(pc.display_order, 999) ASC, ${orderByColumn} ${orderDirection}`;
     
     // Agregar limit y offset al final para la query principal
     // Usar los índices correctos para LIMIT y OFFSET
@@ -528,7 +732,7 @@ export class ProductsService {
                p.allergens, p.requires_prescription, p.age_restriction, p.max_quantity_per_order,
                p.requires_pharmacist_validation, p.display_order, p.metadata, p.created_at, p.updated_at,
                b.name, pc.name, pc.business_id, pc.display_order
-      ORDER BY COALESCE(pc.display_order, 999) ASC, ${orderByColumn} ${orderDirection}
+      ${orderClause}
       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
     `;
 

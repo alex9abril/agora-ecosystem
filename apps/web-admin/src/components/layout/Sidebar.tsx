@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLayoutShell } from './layout-shell';
 
 interface MenuItem {
   name: string;
@@ -162,6 +163,8 @@ const menuItems: MenuItem[] = [
 export default function Sidebar() {
   const router = useRouter();
   const { user } = useAuth();
+  const { leftOpen, setLeftOpen, leftCollapsed, setLeftCollapsed } = useLayoutShell();
+  const compact = leftCollapsed && !leftOpen;
 
   const getUserInitials = () => {
     if (user?.first_name && user?.last_name) {
@@ -178,59 +181,96 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">
-      {/* Logo */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-sm font-normal text-gray-900">LOCALIA Dashboard</h2>
-      </div>
+    <>
+      {leftOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          onClick={() => setLeftOpen(false)}
+        />
+      )}
 
-      {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto py-4">
-        <ul className="space-y-1 px-3">
-          {menuItems.map((item) => {
-            const isActive =
-              item.href === '/settings'
-                ? router.pathname === '/settings'
-                : router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href + '/'));
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-200 lg:static lg:z-auto ${
+          leftOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${compact ? 'w-16' : 'w-64 lg:w-56'}`}
+      >
+        <div className={`border-b border-gray-200 flex items-center ${compact ? 'p-2 justify-center' : 'p-3 justify-between'}`}>
+          {!compact && <h2 className="text-sm font-normal text-gray-900 truncate">LOCALIA</h2>}
+          <button
+            type="button"
+            onClick={() => {
+              if (leftOpen && window.innerWidth < 1024) {
+                setLeftOpen(false);
+                return;
+              }
+              setLeftCollapsed(!compact);
+            }}
+            className="p-1.5 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            title={compact ? 'Expandir menú' : 'Minimizar menú'}
+            aria-label={compact ? 'Expandir menú' : 'Minimizar menú'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {compact ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              )}
+            </svg>
+          </button>
+        </div>
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-normal transition-colors ${
-                    isActive
-                      ? 'bg-black text-white'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  {item.icon}
-                  <span className="flex-1">{item.name}</span>
-                  {item.badge && (
-                    <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+        <nav className="flex-1 overflow-y-auto py-3">
+          <ul className={`space-y-1 ${compact ? 'px-1.5' : 'px-2'}`}>
+            {menuItems.map((item) => {
+              const isActive =
+                item.href === '/settings'
+                  ? router.pathname === '/settings'
+                  : router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href + '/'));
 
-      {/* Usuario en la parte inferior */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-normal">
-            {getUserInitials()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-normal text-gray-900 truncate">
-              {getUserEmail()}
-            </p>
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    title={item.name}
+                    onClick={() => setLeftOpen(false)}
+                    className={`flex items-center rounded-md text-xs font-normal transition-colors ${
+                      compact ? 'justify-center px-2 py-2.5' : 'space-x-3 px-2.5 py-2'
+                    } ${
+                      isActive
+                        ? 'bg-black text-white'
+                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    {item.icon}
+                    {!compact && <span className="flex-1 truncate">{item.name}</span>}
+                    {!compact && item.badge && (
+                      <span className="bg-gray-200 text-gray-700 text-xs font-normal px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className={`border-t border-gray-200 ${compact ? 'p-2' : 'p-3'}`}>
+          <div className={`flex items-center ${compact ? 'justify-center' : 'space-x-3'}`} title={getUserEmail()}>
+            <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white text-xs font-normal shrink-0">
+              {getUserInitials()}
+            </div>
+            {!compact && (
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-normal text-gray-900 truncate">{getUserEmail()}</p>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

@@ -78,10 +78,18 @@ export interface ListProductsParams {
   brandId?: string;      // Filtro por marca de vehículo (alias para vehicleBrandId)
   vehicleBrandId?: string; // Filtro por marca de vehículo
   categoryId?: string;
+  uncategorized?: boolean;
   collectionId?: string;
   isAvailable?: boolean;
   isFeatured?: boolean;
   search?: string;
+  productType?: string;
+  priceMin?: number;
+  priceMax?: number;
+  vehicleModelId?: string;
+  vehicleYearId?: string;
+  vehicleSpecId?: string;
+  vehicleVariantId?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -133,10 +141,18 @@ export const productsService = {
     if (params.vehicleBrandId) queryParams.append('vehicleBrandId', params.vehicleBrandId);
     if (params.brandId) queryParams.append('vehicleBrandId', params.brandId); // Alias para brandId
     if (params.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params.uncategorized) queryParams.append('uncategorized', 'true');
     if (params.collectionId) queryParams.append('collectionId', params.collectionId);
     if (params.isAvailable !== undefined) queryParams.append('isAvailable', params.isAvailable.toString());
     if (params.isFeatured !== undefined) queryParams.append('isFeatured', params.isFeatured.toString());
     if (params.search) queryParams.append('search', params.search);
+    if (params.productType) queryParams.append('productType', params.productType);
+    if (params.priceMin != null) queryParams.append('priceMin', String(params.priceMin));
+    if (params.priceMax != null) queryParams.append('priceMax', String(params.priceMax));
+    if (params.vehicleModelId) queryParams.append('vehicleModelId', params.vehicleModelId);
+    if (params.vehicleYearId) queryParams.append('vehicleYearId', params.vehicleYearId);
+    if (params.vehicleSpecId) queryParams.append('vehicleSpecId', params.vehicleSpecId);
+    if (params.vehicleVariantId) queryParams.append('vehicleVariantId', params.vehicleVariantId);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 

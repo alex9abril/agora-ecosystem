@@ -39,33 +39,17 @@ export default function CategoryBreadcrumbs({ categoryId }: CategoryBreadcrumbsP
   const loadBreadcrumbs = async () => {
     try {
       setLoading(true);
-      const crumbs: BreadcrumbItem[] = [];
-      
-      // Agregar "Inicio"
-      crumbs.push({
-        id: 'home',
-        name: 'Inicio',
-        url: getContextualUrl('/'),
-      });
-
-      // Cargar la categoría actual y construir la jerarquía hacia arriba
+      const hierarchy: BreadcrumbItem[] = [];
       let currentCategoryId: string | null = categoryId;
-      const categoryMap = new Map<string, ProductCategory>();
 
-      // Cargar todas las categorías en la jerarquía
       while (currentCategoryId) {
         try {
           const category = await categoriesService.getCategoryById(currentCategoryId);
-          categoryMap.set(category.id, category);
-          
-          // Agregar al breadcrumb
-          crumbs.push({
+          hierarchy.push({
             id: category.id,
             name: category.name,
             url: getContextualUrl(`/products?categoryId=${category.id}`),
           });
-
-          // Mover al padre
           currentCategoryId = category.parent_category_id || null;
         } catch (error) {
           console.error('Error cargando categoría:', error);
@@ -73,8 +57,21 @@ export default function CategoryBreadcrumbs({ categoryId }: CategoryBreadcrumbsP
         }
       }
 
-      // Invertir para mostrar desde la raíz hasta la actual
-      setBreadcrumbs(crumbs.reverse());
+      hierarchy.reverse();
+
+      setBreadcrumbs([
+        {
+          id: 'home',
+          name: 'Inicio',
+          url: getContextualUrl('/'),
+        },
+        {
+          id: 'products',
+          name: 'Productos',
+          url: getContextualUrl('/products'),
+        },
+        ...hierarchy,
+      ]);
     } catch (error) {
       console.error('Error cargando breadcrumbs:', error);
     } finally {

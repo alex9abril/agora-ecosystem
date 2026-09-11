@@ -16,6 +16,7 @@ import CollectionsCarousel from '@/components/CollectionsCarousel';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { landingSlidersService, LandingSlider } from '@/lib/landing-sliders';
 import ContextualLink from '@/components/ContextualLink';
+import ViewAllProductsCta from '@/components/ViewAllProductsCta';
 import { collectionsService, StoreCollection } from '@/lib/collections';
 
 export default function StoreHomePage() {
@@ -215,9 +216,18 @@ export default function StoreHomePage() {
 
             {/* Todos los Productos */}
             <section>
-              <h2 className="text-2xl font-semibold mb-6">Todos los Productos</h2>
+              <div className="flex items-end justify-between gap-4 mb-6">
+                <h2 className="text-2xl font-semibold">Todos los Productos</h2>
+                <ContextualLink
+                  href="/products"
+                  className="text-sm font-medium text-neutral-800 underline underline-offset-2 hover:no-underline whitespace-nowrap"
+                >
+                  Ver catálogo completo
+                </ContextualLink>
+              </div>
               <ProductGrid />
             </section>
+            <ViewAllProductsCta />
             </div>
           </>
         )}

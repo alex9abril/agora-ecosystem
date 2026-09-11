@@ -2,7 +2,7 @@
  * Página de detalle de producto - Contexto Global
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
@@ -33,7 +33,12 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import { Snackbar, Alert } from '@mui/material';
 import { getSelectedVehicle } from '@/lib/vehicle-storage';
-import { checkProductCompatibility, getProductCompatibilities, ProductCompatibilityItem } from '@/lib/product-compatibility';
+import {
+  checkProductCompatibility,
+  getProductCompatibilities,
+  groupCompatibilitiesForDisplay,
+  ProductCompatibilityItem,
+} from '@/lib/product-compatibility';
 import SimilarProductsCarousel from '@/components/SimilarProductsCarousel';
 
 export default function ProductDetailPage() {
@@ -72,6 +77,10 @@ export default function ProductDetailPage() {
   const [similarProducts, setSimilarProducts] = useState<Product[]>([]);
   const shouldCheckCompatibility =
     !!product && product.product_type !== 'food' && product.product_type !== 'medicine';
+  const groupedCompatibilities = useMemo(
+    () => groupCompatibilitiesForDisplay(productCompatibilities),
+    [productCompatibilities],
+  );
   const RECENTLY_VIEWED_KEY = 'recently_viewed_products';
 
   // Cargar sucursal guardada en localStorage
@@ -1452,7 +1461,7 @@ export default function ProductDetailPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {productCompatibilities.map((c) =>
+                              {groupedCompatibilities.map((c) =>
                                 c.is_universal ? (
                                   <tr key={c.id} className="border-t border-gray-200/60 bg-white">
                                     <td colSpan={4} className="py-2.5 px-3 text-gray-500 italic">
@@ -1463,7 +1472,7 @@ export default function ProductDetailPage() {
                                   <tr key={c.id} className="border-t border-gray-200/60 bg-white hover:bg-gray-50/80 transition-colors">
                                     <td className="py-2.5 px-3 font-medium text-gray-800 align-top">{c.make ?? '—'}</td>
                                     <td className="py-2.5 px-3 font-medium text-gray-800 align-top">{c.model ?? '—'}</td>
-                                    <td className="py-2.5 px-3 text-gray-700 align-top whitespace-nowrap">{c.year ?? '—'}</td>
+                                    <td className="py-2.5 px-3 text-gray-700 align-top whitespace-nowrap">{c.year_label}</td>
                                     <td className="py-2.5 px-3 align-top">
                                       {(() => {
                                         const trims = (c.body_trim ?? '')

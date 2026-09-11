@@ -23,9 +23,11 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { ProductImagesService } from './product-images.service';
+import { ProductEnrichmentService } from './product-enrichment.service';
 import { ListProductsDto } from './dto/list-products.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ApplyEnrichedProductsDto, EnrichProductDto } from './dto/enrich-product.dto';
 import { BulkUpdateProductBranchAvailabilityDto } from './dto/product-branch-availability.dto';
 import { UpdateProductImageDto } from './dto/update-product-image.dto';
 import { SupabaseAuthGuard } from '../../../common/guards/supabase-auth.guard';
@@ -39,6 +41,7 @@ export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly productImagesService: ProductImagesService,
+    private readonly productEnrichmentService: ProductEnrichmentService,
   ) {}
 
   @Get('field-config/:productType')
@@ -59,6 +62,20 @@ export class ProductsController {
   @ApiResponse({ status: 503, description: 'Servicio no disponible' })
   async findAll(@Query() query: ListProductsDto) {
     return this.productsService.findAll(query);
+  }
+
+  @Post('enrich')
+  @ApiOperation({ summary: 'Enriquecer un producto con IA (nombre, descripción, categoría, envío, compatibilidad, foto)' })
+  @ApiResponse({ status: 200, description: 'Datos complementarios generados' })
+  async enrichProduct(@Body() dto: EnrichProductDto) {
+    return this.productEnrichmentService.enrichOne(dto);
+  }
+
+  @Post('enrich/apply')
+  @ApiOperation({ summary: 'Guardar datos complementarios revisados en catálogo' })
+  @ApiResponse({ status: 200, description: 'Productos actualizados' })
+  async applyEnrichedProducts(@Body() dto: ApplyEnrichedProductsDto) {
+    return this.productEnrichmentService.apply(dto);
   }
 
   // IMPORTANTE: Las rutas específicas deben ir ANTES de las rutas genéricas con parámetros
