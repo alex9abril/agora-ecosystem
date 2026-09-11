@@ -2,20 +2,18 @@
  * Página de catálogo de productos - Contexto Global
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
 import ProductGrid from '@/components/ProductGrid';
 import CategoryBreadcrumbs from '@/components/CategoryBreadcrumbs';
 import CategoryInfo from '@/components/CategoryInfo';
-import { productsService } from '@/lib/products';
 import { collectionsService } from '@/lib/collections';
-import { useStoreContext } from '@/contexts/StoreContext';
+import { parseCatalogFilters } from '@/lib/catalog-filters';
 
 export default function ProductsPage() {
   const router = useRouter();
-  const { contextType } = useStoreContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [collectionFilter, setCollectionFilter] = useState<string>('');
@@ -23,43 +21,28 @@ export default function ProductsPage() {
   const [categoryDescription, setCategoryDescription] = useState<string>('');
   const [collectionName, setCollectionName] = useState<string>('');
   const [collectionDescription, setCollectionDescription] = useState<string>('');
-  const [filters, setFilters] = useState<any>({
-    isAvailable: true,
-  });
+  const catalogFilters = useMemo(
+    () => (router.isReady ? parseCatalogFilters(router.query) : {}),
+    [router.isReady, router.query],
+  );
+  const filters = useMemo(
+    () => ({
+      isAvailable: true,
+      ...catalogFilters,
+    }),
+    [catalogFilters],
+  );
 
   useEffect(() => {
     if (!router.isReady) return;
-    
-    const { search, categoryId, collectionId } = router.query;
-    const newFilters: any = {
-      isAvailable: true,
-    };
-    
-    if (search) {
-      setSearchQuery(search as string);
-      newFilters.search = search as string;
-    } else {
-      setSearchQuery('');
+    setSearchQuery(catalogFilters.search || '');
+    setCategoryFilter(catalogFilters.categoryId || '');
+    if (!catalogFilters.categoryId) {
+      setCategoryName('');
+      setCategoryDescription('');
     }
-    
-    if (categoryId && typeof categoryId === 'string') {
-      setCategoryFilter(categoryId);
-      newFilters.categoryId = categoryId;
-    } else {
-      setCategoryFilter('');
-      delete newFilters.categoryId;
-    }
-
-    if (collectionId && typeof collectionId === 'string') {
-      setCollectionFilter(collectionId);
-      newFilters.collectionId = collectionId;
-    } else {
-      setCollectionFilter('');
-      delete newFilters.collectionId;
-    }
-    
-    setFilters(newFilters);
-  }, [router.isReady, router.query]);
+    setCollectionFilter(catalogFilters.collectionId || '');
+  }, [router.isReady, catalogFilters]);
 
   useEffect(() => {
     if (!collectionFilter) {
@@ -87,17 +70,6 @@ export default function ProductsPage() {
     };
   }, [collectionFilter]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newFilters = { ...filters };
-    if (searchQuery.trim()) {
-      newFilters.search = searchQuery.trim();
-    } else {
-      delete newFilters.search;
-    }
-    setFilters(newFilters);
-  };
-
   return (
     <>
       <Head>
@@ -112,39 +84,46 @@ export default function ProductsPage() {
               <CategoryBreadcrumbs categoryId={categoryFilter} />
             )}
 
+            {!categoryFilter && !collectionFilter && (
+              <div className="text-sm text-gray-500 mb-4">
+                <span className="text-gray-900">Productos</span>
+              </div>
+            )}
+
             {/* Título con nombre y descripción de categoría/colección */}
             <div className="mb-6">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
                 {collectionFilter
                   ? (collectionName || 'Colección')
-                  : categoryName || (categoryFilter ? 'Productos' : contextType === 'global' ? 'Todos los Productos' : contextType === 'grupo' ? 'Productos del Grupo' : contextType === 'sucursal' ? 'Productos de la Sucursal' : 'Productos')}
+                  : categoryName || (categoryFilter ? 'Productos' : 'Todos los productos')}
               </h1>
               {(collectionFilter ? collectionDescription : categoryDescription) && (
                 <p className="text-gray-600 text-base max-w-2xl">
                   {collectionFilter ? collectionDescription : categoryDescription}
                 </p>
               )}
+              {!categoryFilter && !collectionFilter && !categoryDescription && (
+                <p className="text-gray-600 text-base max-w-2xl">
+                  Catálogo completo, incluidas las partes aún sin categoría. Usa el menú de la izquierda para filtrar.
+                </p>
+              )}
             </div>
 
             {/* Layout: Panel lateral izquierdo + Productos en el centro */}
             <div className="flex gap-6">
-              {/* Panel lateral izquierdo - Información de categoría */}
-              {categoryFilter && (
-                <aside className="w-64 flex-shrink-0">
-                  <CategoryInfo 
-                    categoryId={categoryFilter} 
-                    onCategoryLoaded={(name, description) => {
-                      setCategoryName(name);
-                      setCategoryDescription(description || '');
-                    }}
-                  />
-                </aside>
-              )}
+              <aside className="w-full md:w-72 flex-shrink-0">
+                <CategoryInfo
+                  categoryId={categoryFilter || undefined}
+                  onCategoryLoaded={(name, description) => {
+                    setCategoryName(name);
+                    setCategoryDescription(description || '');
+                  }}
+                />
+              </aside>
 
               {/* Contenido principal - Productos */}
               <div className="flex-1 min-w-0">
-                {/* Grid de productos */}
-                <ProductGrid filters={filters} />
+                <ProductGrid filters={filters} showPagination />
               </div>
             </div>
           </div>

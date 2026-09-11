@@ -1,16 +1,238 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { saveProductMetadataSelection } from '@/lib/product-metadata-selection';
+
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+type SortOrder = 'asc' | 'desc';
+
+interface ProductListFilters {
+  page: number;
+  limit: number;
+  businessId: string;
+  categoryId: string;
+  isAvailable: boolean | undefined;
+  isFeatured: boolean | undefined;
+  compatibilityUniversal: boolean | undefined;
+  search: string;
+  productType: string;
+  priceMin: string;
+  priceMax: string;
+  sortBy: string;
+  sortOrder: SortOrder;
+}
+
+const INITIAL_FILTERS: ProductListFilters = {
+  page: 1,
+  limit: 20,
+  businessId: '',
+  categoryId: '',
+  isAvailable: undefined,
+  isFeatured: undefined,
+  compatibilityUniversal: undefined,
+  search: '',
+  productType: '',
+  priceMin: '',
+  priceMax: '',
+  sortBy: 'name',
+  sortOrder: 'asc',
+};
+
+const TABLE_STATE_STORAGE_KEY = 'web-admin.products-manager.table';
+const ALLOWED_SORT_BY = [
+  'display_order',
+  'name',
+  'sku',
+  'price',
+  'created_at',
+  'updated_at',
+  'product_type',
+  'is_available',
+  'category',
+  'business',
+  'description',
+];
+
+interface StoredTableState {
+  filters: ProductListFilters;
+  selectedProductIds: string[];
+  selectedSnapshots: Record<string, Product>;
+  showSelectedOnly?: boolean;
+}
+
+function asOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === true || value === false) return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
+function sanitizeFilters(value: unknown): ProductListFilters {
+  const raw = value && typeof value === 'object' ? (value as Partial<ProductListFilters>) : {};
+  const limit = PAGE_SIZE_OPTIONS.includes(Number(raw.limit)) ? Number(raw.limit) : INITIAL_FILTERS.limit;
+  const page = Number.isInteger(Number(raw.page)) && Number(raw.page) > 0 ? Number(raw.page) : 1;
+  const sortBy = ALLOWED_SORT_BY.includes(String(raw.sortBy || '')) ? String(raw.sortBy) : INITIAL_FILTERS.sortBy;
+  const sortOrder: SortOrder = raw.sortOrder === 'desc' ? 'desc' : 'asc';
+
+  return {
+    page,
+    limit,
+    businessId: typeof raw.businessId === 'string' ? raw.businessId : '',
+    categoryId: typeof raw.categoryId === 'string' ? raw.categoryId : '',
+    isAvailable: asOptionalBoolean(raw.isAvailable),
+    isFeatured: asOptionalBoolean(raw.isFeatured),
+    compatibilityUniversal: asOptionalBoolean(raw.compatibilityUniversal),
+    search: typeof raw.search === 'string' ? raw.search : '',
+    productType: typeof raw.productType === 'string' ? raw.productType : '',
+    priceMin: typeof raw.priceMin === 'string' ? raw.priceMin : raw.priceMin != null ? String(raw.priceMin) : '',
+    priceMax: typeof raw.priceMax === 'string' ? raw.priceMax : raw.priceMax != null ? String(raw.priceMax) : '',
+    sortBy,
+    sortOrder,
+  };
+}
+
+function sanitizeSnapshots(value: unknown): Record<string, Product> {
+  if (!value || typeof value !== 'object') return {};
+  const next: Record<string, Product> = {};
+  Object.entries(value as Record<string, Product>).forEach(([id, product]) => {
+    if (product && typeof product === 'object' && typeof product.id === 'string') {
+      next[id] = product;
+    }
+  });
+  return next;
+}
+
+function readStoredTableState(): StoredTableState | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(TABLE_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const selectedProductIds = Array.isArray(parsed?.selectedProductIds)
+      ? parsed.selectedProductIds.filter((id: unknown) => typeof id === 'string')
+      : [];
+    return {
+      filters: sanitizeFilters(parsed?.filters),
+      selectedProductIds,
+      selectedSnapshots: sanitizeSnapshots(parsed?.selectedSnapshots),
+      showSelectedOnly: Boolean(parsed?.showSelectedOnly),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredTableState(state: StoredTableState) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(TABLE_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error('No se pudo guardar el estado de la tabla de productos:', error);
+  }
+}
+
+function buildProductQueryParams(filters: ProductListFilters) {
+  const params = new URLSearchParams();
+  params.append('page', filters.page.toString());
+  params.append('limit', filters.limit.toString());
+  params.append('includeZeroPrice', 'true');
+  if (filters.businessId) params.append('businessId', filters.businessId);
+  if (filters.categoryId === 'uncategorized') {
+    params.append('uncategorized', 'true');
+  } else if (filters.categoryId) {
+    params.append('categoryId', filters.categoryId);
+  }
+  if (filters.isAvailable !== undefined) {
+    params.append('isAvailable', filters.isAvailable.toString());
+  }
+  if (filters.isFeatured !== undefined) {
+    params.append('isFeatured', filters.isFeatured.toString());
+  }
+  if (filters.compatibilityUniversal !== undefined) {
+    params.append('compatibilityUniversal', filters.compatibilityUniversal.toString());
+  }
+  if (filters.search) params.append('search', filters.search);
+  if (filters.productType) params.append('productType', filters.productType);
+  if (filters.priceMin !== '') params.append('priceMin', filters.priceMin);
+  if (filters.priceMax !== '') params.append('priceMax', filters.priceMax);
+  if (filters.sortBy) params.append('sortBy', filters.sortBy);
+  if (filters.sortOrder) params.append('sortOrder', filters.sortOrder);
+  return params;
+}
+
+function getVisiblePages(current: number, total: number): Array<number | 'ellipsis'> {
+  if (total <= 0) return [];
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const pages: Array<number | 'ellipsis'> = [1];
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  if (start > 2) pages.push('ellipsis');
+  for (let i = start; i <= end; i += 1) pages.push(i);
+  if (end < total - 1) pages.push('ellipsis');
+  if (total > 1) pages.push(total);
+  return pages;
+}
+
+function SortableHeader({
+  label,
+  column,
+  sortBy,
+  sortOrder,
+  onSort,
+}: {
+  label: string;
+  column: string;
+  sortBy: string;
+  sortOrder: SortOrder;
+  onSort: (column: string) => void;
+}) {
+  const active = sortBy === column;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(column)}
+      className={`group inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider ${
+        active ? 'text-gray-900' : 'text-gray-500 hover:text-gray-800'
+      }`}
+    >
+      {label}
+      <span
+        className={`inline-flex flex-col ${active ? 'text-gray-900' : 'text-gray-300 group-hover:text-gray-400'}`}
+        aria-hidden
+      >
+        <svg
+          className={`h-2 w-2 ${active && sortOrder === 'asc' ? 'text-black' : ''}`}
+          viewBox="0 0 10 6"
+          fill="currentColor"
+        >
+          <path d="M5 0L10 6H0L5 0Z" />
+        </svg>
+        <svg
+          className={`h-2 w-2 -mt-px ${active && sortOrder === 'desc' ? 'text-black' : ''}`}
+          viewBox="0 0 10 6"
+          fill="currentColor"
+        >
+          <path d="M5 6L0 0H10L5 6Z" />
+        </svg>
+      </span>
+    </button>
+  );
+}
 
 interface Product {
   id: string;
   business_id: string;
   business_name?: string;
   name: string;
+  sku?: string | null;
   description?: string;
   image_url?: string;
   primary_image_url?: string;
   price: number;
+  product_type?: string;
   category_id?: string;
   category_name?: string;
   is_available: boolean;
@@ -46,6 +268,7 @@ interface Category {
 }
 
 export default function ProductsManager() {
+  const router = useRouter();
   const { token } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -53,15 +276,12 @@ export default function ProductsManager() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [filters, setFilters] = useState({
-    page: 1,
-    limit: 20,
-    businessId: '',
-    categoryId: '',
-    isAvailable: undefined as boolean | undefined,
-    isFeatured: undefined as boolean | undefined,
-    search: '',
-  });
+  const [filters, setFilters] = useState<ProductListFilters>(INITIAL_FILTERS);
+  const [searchInput, setSearchInput] = useState('');
+  const [priceMinInput, setPriceMinInput] = useState('');
+  const [priceMaxInput, setPriceMaxInput] = useState('');
+  const [pageInput, setPageInput] = useState('1');
+  const [tableReady, setTableReady] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -71,6 +291,7 @@ export default function ProductsManager() {
   const [formData, setFormData] = useState({
     business_id: '',
     name: '',
+    sku: '',
     description: '',
     image_url: '',
     price: 0,
@@ -84,6 +305,57 @@ export default function ProductsManager() {
   });
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
+  const [selectedSnapshots, setSelectedSnapshots] = useState<Record<string, Product>>({});
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const selectedProductIdsRef = useRef<Set<string>>(selectedProductIds);
+  selectedProductIdsRef.current = selectedProductIds;
+
+  useEffect(() => {
+    const stored = readStoredTableState();
+    if (stored) {
+      const onlySelected = Boolean(stored.showSelectedOnly) && stored.selectedProductIds.length > 0;
+      const nextFilters = onlySelected
+        ? { ...INITIAL_FILTERS, limit: stored.filters.limit }
+        : stored.filters;
+      setFilters(nextFilters);
+      setSearchInput(nextFilters.search);
+      setPriceMinInput(nextFilters.priceMin);
+      setPriceMaxInput(nextFilters.priceMax);
+      setPageInput(String(nextFilters.page));
+      setSelectedProductIds(new Set(stored.selectedProductIds));
+      setSelectedSnapshots(stored.selectedSnapshots);
+      setShowSelectedOnly(onlySelected);
+    }
+    setTableReady(true);
+  }, []);
+
+  useEffect(() => {
+    setSelectedSnapshots((prev) => {
+      const next = { ...prev };
+      products.forEach((product) => {
+        if (selectedProductIds.has(product.id)) {
+          next[product.id] = product;
+        }
+      });
+      Object.keys(next).forEach((id) => {
+        if (!selectedProductIds.has(id)) {
+          delete next[id];
+        }
+      });
+      return next;
+    });
+  }, [products, selectedProductIds]);
+
+  useEffect(() => {
+    if (!tableReady) return;
+    writeStoredTableState({
+      filters,
+      selectedProductIds: Array.from(selectedProductIds),
+      selectedSnapshots,
+      showSelectedOnly,
+    });
+  }, [tableReady, filters, selectedProductIds, selectedSnapshots, showSelectedOnly]);
 
   // Cargar negocios
   useEffect(() => {
@@ -120,36 +392,24 @@ export default function ProductsManager() {
   // Cargar productos
   useEffect(() => {
     const loadProducts = async () => {
-      if (!token) return;
+      if (!token || !tableReady) return;
+      if (showSelectedOnly) return;
 
       setLoading(true);
       try {
-        const params = new URLSearchParams();
-        params.append('page', filters.page.toString());
-        params.append('limit', filters.limit.toString());
-        if (filters.businessId) {
-          params.append('businessId', filters.businessId);
-        }
-        if (filters.categoryId) {
-          params.append('categoryId', filters.categoryId);
-        }
-        if (filters.isAvailable !== undefined) {
-          params.append('isAvailable', filters.isAvailable.toString());
-        }
-        if (filters.isFeatured !== undefined) {
-          params.append('isFeatured', filters.isFeatured.toString());
-        }
-        if (filters.search) {
-          params.append('search', filters.search);
-        }
-
         const response = await apiRequest<ProductsResponse>(
-          `/catalog/products?${params.toString()}`,
+          `/catalog/products?${buildProductQueryParams(filters).toString()}`,
           { method: 'GET' }
         );
 
         setProducts(response.data);
         setPagination(response.pagination);
+        if (
+          response.pagination.totalPages > 0 &&
+          filters.page > response.pagination.totalPages
+        ) {
+          setFilters((prev) => ({ ...prev, page: response.pagination.totalPages }));
+        }
       } catch (error) {
         console.error('Error cargando productos:', error);
       } finally {
@@ -158,15 +418,171 @@ export default function ProductsManager() {
     };
 
     loadProducts();
-  }, [token, filters]);
+  }, [token, filters, tableReady, showSelectedOnly]);
 
-  const handleFilterChange = (key: string, value: any) => {
+  useEffect(() => {
+    if (!tableReady) return;
+    const timeout = setTimeout(() => {
+      setFilters((prev) => {
+        if (prev.search === searchInput) return prev;
+        setShowSelectedOnly(false);
+        return { ...prev, search: searchInput, page: 1 };
+      });
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [searchInput, tableReady]);
+
+  useEffect(() => {
+    if (!tableReady) return;
+    const timeout = setTimeout(() => {
+      setFilters((prev) => {
+        if (prev.priceMin === priceMinInput && prev.priceMax === priceMaxInput) return prev;
+        setShowSelectedOnly(false);
+        return { ...prev, priceMin: priceMinInput, priceMax: priceMaxInput, page: 1 };
+      });
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [priceMinInput, priceMaxInput, tableReady]);
+
+  useEffect(() => {
+    setPageInput(String(pagination.page || filters.page));
+  }, [pagination.page, filters.page]);
+
+  const handleFilterChange = (key: keyof ProductListFilters, value: any) => {
+    setShowSelectedOnly(false);
     setFilters((prev) => ({
       ...prev,
       [key]: value,
       page: 1,
     }));
   };
+
+  const handleSort = (column: string) => {
+    setShowSelectedOnly(false);
+    setFilters((prev) => {
+      if (prev.sortBy === column) {
+        return { ...prev, sortOrder: prev.sortOrder === 'asc' ? 'desc' : 'asc', page: 1 };
+      }
+      return { ...prev, sortBy: column, sortOrder: 'asc', page: 1 };
+    });
+  };
+
+  const handlePageChange = (page: number) => {
+    if (showSelectedOnly) return;
+    const nextPage = Math.min(Math.max(page, 1), Math.max(pagination.totalPages, 1));
+    setFilters((prev) => ({ ...prev, page: nextPage }));
+  };
+
+  const handleGoToPage = () => {
+    const parsed = parseInt(pageInput, 10);
+    if (Number.isNaN(parsed)) {
+      setPageInput(String(pagination.page));
+      return;
+    }
+    handlePageChange(parsed);
+  };
+
+  const clearFilters = () => {
+    setShowSelectedOnly(false);
+    setSearchInput('');
+    setPriceMinInput('');
+    setPriceMaxInput('');
+    setFilters((prev) => ({
+      ...INITIAL_FILTERS,
+      limit: prev.limit,
+    }));
+  };
+
+  const handleShowSelected = () => {
+    setSearchInput('');
+    setPriceMinInput('');
+    setPriceMaxInput('');
+    setFilters((prev) => ({
+      ...INITIAL_FILTERS,
+      limit: prev.limit,
+    }));
+    setShowSelectedOnly(true);
+  };
+
+  const clearSelection = () => {
+    setSelectedProductIds(new Set());
+    setSelectedSnapshots({});
+    setShowSelectedOnly(false);
+  };
+
+  useEffect(() => {
+    if (!showSelectedOnly || !token || !tableReady) return;
+    const ids = Array.from(selectedProductIdsRef.current);
+    if (ids.length === 0) {
+      setShowSelectedOnly(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadSelected = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('ids', ids.join(','));
+        params.set('includeZeroPrice', 'true');
+        params.set('page', '1');
+        params.set('limit', String(Math.min(Math.max(ids.length, 1), 100)));
+        const response = await apiRequest<ProductsResponse>(`/catalog/products?${params.toString()}`, {
+          method: 'GET',
+        });
+        if (cancelled) return;
+        const rows = response.data || [];
+        const foundIds = new Set(rows.map((product) => product.id));
+        if (rows.length === 0) {
+          setSelectedProductIds(new Set());
+          setSelectedSnapshots({});
+          setShowSelectedOnly(false);
+          setProducts([]);
+          return;
+        }
+        setProducts(rows);
+        setPagination({
+          page: 1,
+          limit: Math.max(rows.length, 1),
+          total: rows.length,
+          totalPages: 1,
+        });
+        setSelectedProductIds(new Set(ids.filter((id) => foundIds.has(id))));
+        setSelectedSnapshots((prev) => {
+          const next: Record<string, Product> = {};
+          rows.forEach((product) => {
+            next[product.id] = product;
+          });
+          Object.entries(prev).forEach(([id, product]) => {
+            if (foundIds.has(id)) next[id] = next[id] || product;
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error('Error cargando productos seleccionados:', error);
+        if (!cancelled) setProducts([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadSelected();
+    return () => {
+      cancelled = true;
+    };
+  }, [showSelectedOnly, token, tableReady]);
+
+  const activeFilterCount = [
+    Boolean(filters.search),
+    Boolean(filters.businessId),
+    Boolean(filters.categoryId),
+    filters.isAvailable !== undefined,
+    filters.isFeatured !== undefined,
+    filters.compatibilityUniversal !== undefined,
+    Boolean(filters.productType),
+    filters.priceMin !== '',
+    filters.priceMax !== '',
+  ].filter(Boolean).length;
 
   // Filtrar categorías por negocio seleccionado
   const filteredCategories = filters.businessId
@@ -178,6 +594,7 @@ export default function ProductsManager() {
     setFormData({
       business_id: product.business_id,
       name: product.name,
+      sku: product.sku || '',
       description: product.description || '',
       image_url: product.image_url || '',
       price: product.price,
@@ -198,6 +615,7 @@ export default function ProductsManager() {
     setFormData({
       business_id: filters.businessId || '',
       name: '',
+      sku: '',
       description: '',
       image_url: '',
       price: 0,
@@ -225,6 +643,7 @@ export default function ProductsManager() {
       const payload: any = {
         business_id: formData.business_id,
         name: formData.name,
+        sku: formData.sku.trim(),
         description: formData.description || undefined,
         image_url: formData.image_url || undefined,
         price: parseFloat(formData.price.toString()),
@@ -275,18 +694,8 @@ export default function ProductsManager() {
 
       setShowForm(false);
       setSelectedProduct(null);
-      // Recargar productos
-      const params = new URLSearchParams();
-      params.append('page', filters.page.toString());
-      params.append('limit', filters.limit.toString());
-      if (filters.businessId) params.append('businessId', filters.businessId);
-      if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.isAvailable !== undefined) params.append('isAvailable', filters.isAvailable.toString());
-      if (filters.isFeatured !== undefined) params.append('isFeatured', filters.isFeatured.toString());
-      if (filters.search) params.append('search', filters.search);
-
       const response = await apiRequest<ProductsResponse>(
-        `/catalog/products?${params.toString()}`,
+        `/catalog/products?${buildProductQueryParams(filters).toString()}`,
         { method: 'GET' }
       );
       setProducts(response.data);
@@ -307,18 +716,8 @@ export default function ProductsManager() {
       await apiRequest(`/catalog/products/${id}`, {
         method: 'DELETE',
       });
-      // Recargar productos
-      const params = new URLSearchParams();
-      params.append('page', filters.page.toString());
-      params.append('limit', filters.limit.toString());
-      if (filters.businessId) params.append('businessId', filters.businessId);
-      if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.isAvailable !== undefined) params.append('isAvailable', filters.isAvailable.toString());
-      if (filters.isFeatured !== undefined) params.append('isFeatured', filters.isFeatured.toString());
-      if (filters.search) params.append('search', filters.search);
-
       const response = await apiRequest<ProductsResponse>(
-        `/catalog/products?${params.toString()}`,
+        `/catalog/products?${buildProductQueryParams(filters).toString()}`,
         { method: 'GET' }
       );
       setProducts(response.data);
@@ -340,22 +739,119 @@ export default function ProductsManager() {
     }).format(amount);
   };
 
+  const productTypeLabels: Record<string, { label: string; color: string }> = {
+    food: { label: 'Alimento', color: 'bg-blue-100 text-blue-800' },
+    beverage: { label: 'Bebida', color: 'bg-cyan-100 text-cyan-800' },
+    medicine: { label: 'Medicamento', color: 'bg-red-100 text-red-800' },
+    grocery: { label: 'Abarrotes', color: 'bg-yellow-100 text-yellow-800' },
+    non_food: { label: 'No alimenticio', color: 'bg-gray-100 text-gray-800' },
+    refaccion: { label: 'Refacción', color: 'bg-slate-100 text-slate-800' },
+    accesorio: { label: 'Accesorio', color: 'bg-violet-100 text-violet-800' },
+    servicio_instalacion: { label: 'Instalación', color: 'bg-orange-100 text-orange-800' },
+    servicio_mantenimiento: { label: 'Mantenimiento', color: 'bg-amber-100 text-amber-800' },
+    fluido: { label: 'Fluido', color: 'bg-sky-100 text-sky-800' },
+  };
+
   return (
     <div className="space-y-4">
       {/* Filtros y acciones */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2 flex-1 flex-wrap">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex gap-2 flex-1 flex-wrap items-center">
           <input
             type="text"
-            placeholder="Buscar productos..."
-            value={filters.search}
-            onChange={(e) => handleFilterChange('search', e.target.value)}
-            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 flex-1 max-w-xs"
+            placeholder="Buscar por nombre, SKU o descripción..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 flex-1 max-w-sm"
           />
+          <select
+            value={filters.isFeatured === undefined ? '' : filters.isFeatured.toString()}
+            onChange={(e) =>
+              handleFilterChange('isFeatured', e.target.value === '' ? undefined : e.target.value === 'true')
+            }
+            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+          >
+            <option value="">Destacados: todos</option>
+            <option value="true">Solo destacados</option>
+            <option value="false">No destacados</option>
+          </select>
+          <select
+            value={filters.compatibilityUniversal === undefined ? '' : filters.compatibilityUniversal.toString()}
+            onChange={(e) =>
+              handleFilterChange(
+                'compatibilityUniversal',
+                e.target.value === '' ? undefined : e.target.value === 'true',
+              )
+            }
+            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+          >
+            <option value="">Compatibilidad: todas</option>
+            <option value="true">Solo universales</option>
+            <option value="false">Sin universal</option>
+          </select>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-2 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Limpiar filtros ({activeFilterCount})
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {selectedProductIds.size > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={handleShowSelected}
+                className={`px-4 py-2 text-xs rounded border transition-colors ${
+                  showSelectedOnly
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Mostrar seleccionados ({selectedProductIds.size})
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="px-4 py-2 text-xs rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Quitar selección
+              </button>
+            </>
+          )}
+          {selectedProductIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                saveProductMetadataSelection(
+                  Object.values(selectedSnapshots).map((product) => ({
+                    id: product.id,
+                    name: product.name,
+                    sku: product.sku,
+                    description: product.description,
+                    image_url: product.image_url,
+                    primary_image_url: product.primary_image_url,
+                    price: product.price,
+                    product_type: product.product_type,
+                    category_id: product.category_id,
+                    category_name: product.category_name,
+                    business_name: product.business_name,
+                  })),
+                );
+                router.push('/products/completar-metadatos');
+              }}
+              className="px-4 py-2 text-xs bg-black text-white rounded hover:bg-gray-900 transition-colors"
+            >
+              Completar metadatos ({selectedProductIds.size})
+            </button>
+          )}
           <select
             value={filters.businessId}
             onChange={(e) => handleFilterChange('businessId', e.target.value)}
-            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
           >
             <option value="">Todos los negocios</option>
             {businesses.map((business) => (
@@ -364,157 +860,390 @@ export default function ProductsManager() {
               </option>
             ))}
           </select>
-          <select
-            value={filters.categoryId}
-            onChange={(e) => handleFilterChange('categoryId', e.target.value)}
-            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          <button
+            onClick={handleNewProduct}
+            disabled={!filters.businessId}
+            className="px-4 py-2 text-xs bg-black text-white rounded hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={!filters.businessId ? 'Selecciona un negocio primero' : ''}
           >
-            <option value="">Todas las categorías</option>
-            {filteredCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name} {category.business_name ? `(${category.business_name})` : '(Global)'}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filters.isAvailable === undefined ? '' : filters.isAvailable.toString()}
-            onChange={(e) =>
-              handleFilterChange('isAvailable', e.target.value === '' ? undefined : e.target.value === 'true')
-            }
-            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="">Todos</option>
-            <option value="true">Disponibles</option>
-            <option value="false">No Disponibles</option>
-          </select>
-          <select
-            value={filters.isFeatured === undefined ? '' : filters.isFeatured.toString()}
-            onChange={(e) =>
-              handleFilterChange('isFeatured', e.target.value === '' ? undefined : e.target.value === 'true')
-            }
-            className="px-3 py-2 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="">Todos</option>
-            <option value="true">Destacados</option>
-            <option value="false">No Destacados</option>
-          </select>
+            + Nuevo Producto
+          </button>
         </div>
-        <button
-          onClick={handleNewProduct}
-          disabled={!filters.businessId}
-          className="px-4 py-2 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          title={!filters.businessId ? 'Selecciona un negocio primero' : ''}
-        >
-          + Nuevo Producto
-        </button>
       </div>
 
-      {/* Lista de productos */}
-      {loading ? (
+      {loading && products.length === 0 ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-      ) : products.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-xs text-gray-500">No se encontraron productos</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
         </div>
       ) : (
-        <div className="space-y-2">
-          {products.map((product) => (
-            <div
-              key={product.id}
-              className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                selectedProduct?.id === product.id
-                  ? 'bg-indigo-50 border-indigo-200'
-                  : 'bg-white border-gray-200 hover:bg-gray-50'
-              }`}
-              onClick={() => handleSelectProduct(product)}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1">
-                  {product.image_url || product.primary_image_url ? (
-                    <img
-                      src={product.image_url || product.primary_image_url}
-                      alt={product.name}
-                      className="w-16 h-16 rounded object-cover"
+        <div className="border border-gray-200 rounded-lg overflow-hidden flex flex-col max-h-[calc(100vh-260px)]">
+          <div className="overflow-auto relative flex-1">
+            {loading && (
+              <div className="absolute inset-0 bg-white/60 z-20 flex items-start justify-center pt-16">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-black"></div>
+              </div>
+            )}
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={products.length > 0 && products.every((p) => selectedProductIds.has(p.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProductIds((prev) => {
+                          const next = new Set(prev);
+                          products.forEach((p) => next.add(p.id));
+                          return next;
+                        });
+                      } else {
+                        setSelectedProductIds((prev) => {
+                          const next = new Set(prev);
+                          products.forEach((p) => next.delete(p.id));
+                          return next;
+                        });
+                      }
+                    }}
+                    className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                    aria-label="Seleccionar todos"
+                  />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left text-[10px] font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Imagen
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Producto" column="name" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Categoría" column="category" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Descripción" column="description" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Precio" column="price" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Tipo" column="product_type" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Disponibilidad" column="is_available" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 text-left bg-gray-50">
+                  <SortableHeader label="Negocio" column="business" sortBy={filters.sortBy} sortOrder={filters.sortOrder} onSort={handleSort} />
+                </th>
+                <th scope="col" className="px-3 py-2 w-20 bg-gray-50" />
+              </tr>
+              <tr className="border-t border-gray-200">
+                <th className="px-3 py-1.5 bg-white" />
+                <th className="px-3 py-1.5 bg-white" />
+                <th className="px-2 py-1.5 bg-white">
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Filtrar..."
+                    className="w-full min-w-[8rem] px-2 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </th>
+                <th className="px-2 py-1.5 bg-white">
+                  <select
+                    value={filters.categoryId}
+                    onChange={(e) => handleFilterChange('categoryId', e.target.value)}
+                    className="w-full min-w-[8rem] px-2 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  >
+                    <option value="">Todas</option>
+                    <option value="uncategorized">Sin categoría</option>
+                    {filteredCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name} {category.business_name ? `(${category.business_name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-1.5 bg-white" />
+                <th className="px-2 py-1.5 bg-white">
+                  <div className="flex items-center gap-1 min-w-[8rem]">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={priceMinInput}
+                      onChange={(e) => setPriceMinInput(e.target.value)}
+                      placeholder="Mín"
+                      className="w-16 px-1.5 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
                     />
-                  ) : (
-                    <div className="w-16 h-16 rounded bg-gray-200 flex items-center justify-center">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-normal text-gray-900">{product.name}</p>
-                      {product.is_featured && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800">
-                          ⭐ Destacado
-                        </span>
+                    <span className="text-gray-300 text-[10px]">–</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={priceMaxInput}
+                      onChange={(e) => setPriceMaxInput(e.target.value)}
+                      placeholder="Máx"
+                      className="w-16 px-1.5 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    />
+                  </div>
+                </th>
+                <th className="px-2 py-1.5 bg-white">
+                  <select
+                    value={filters.productType}
+                    onChange={(e) => handleFilterChange('productType', e.target.value)}
+                    className="w-full min-w-[7rem] px-2 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  >
+                    <option value="">Todos</option>
+                    {Object.entries(productTypeLabels).map(([value, info]) => (
+                      <option key={value} value={value}>
+                        {info.label}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-1.5 bg-white">
+                  <select
+                    value={filters.isAvailable === undefined ? '' : filters.isAvailable.toString()}
+                    onChange={(e) =>
+                      handleFilterChange('isAvailable', e.target.value === '' ? undefined : e.target.value === 'true')
+                    }
+                    className="w-full min-w-[7rem] px-2 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  >
+                    <option value="">Todas</option>
+                    <option value="true">Disponible</option>
+                    <option value="false">No disponible</option>
+                  </select>
+                </th>
+                <th className="px-2 py-1.5 bg-white">
+                  <select
+                    value={filters.businessId}
+                    onChange={(e) => handleFilterChange('businessId', e.target.value)}
+                    className="w-full min-w-[8rem] px-2 py-1 text-[11px] border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  >
+                    <option value="">Todos</option>
+                    {businesses.map((business) => (
+                      <option key={business.id} value={business.id}>
+                        {business.name}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-2 py-1.5 bg-white" />
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {products.map((product) => {
+                const imageUrl = product.image_url || product.primary_image_url;
+                const typeInfo = productTypeLabels[product.product_type || ''] || {
+                  label: product.product_type || '—',
+                  color: 'bg-gray-100 text-gray-800',
+                };
+
+                const isChecked = selectedProductIds.has(product.id);
+
+                return (
+                  <tr
+                    key={product.id}
+                    className={`cursor-pointer transition-colors ${
+                      isChecked || selectedProduct?.id === product.id ? 'bg-gray-50' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest('input[type="checkbox"]') || target.closest('button')) return;
+                      handleSelectProduct(product);
+                    }}
+                  >
+                    <td
+                      className="px-3 py-2 whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          setSelectedProductIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(product.id)) next.delete(product.id);
+                            else next.add(product.id);
+                            return next;
+                          });
+                        }}
+                        className="rounded border-gray-300 text-gray-600 focus:ring-gray-400"
+                        aria-label={`Seleccionar ${product.name}`}
+                      />
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={product.name}
+                          className="h-8 w-8 rounded object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded border border-gray-200 bg-gray-100 flex items-center justify-center text-gray-400">
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
                       )}
-                    </div>
-                    {product.description && (
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{product.description}</p>
-                    )}
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-xs font-normal text-gray-900">{formatCurrency(product.price)}</span>
-                      {product.category_name && (
-                        <span className="text-xs text-gray-400">{product.category_name}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="text-xs font-medium text-gray-900 max-w-md">{product.name}</div>
+                      {product.sku && (
+                        <div className="text-[10px] font-light text-gray-500 mt-0.5">SKU: {product.sku}</div>
                       )}
-                      {product.business_name && (
-                        <span className="text-xs text-gray-400">{product.business_name}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {product.category_name ? (
+                        <span className="text-xs text-gray-700">{product.category_name}</span>
+                      ) : (
+                        <span className="text-[11px] text-gray-400">Sin categoría</span>
                       )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="text-xs font-light text-gray-500 max-w-xs truncate">
+                        {product.description || '—'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="text-xs font-medium text-gray-900">{formatCurrency(product.price || 0)}</div>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${typeInfo.color}`}>
+                        {typeInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
-                        className={`text-xs px-1.5 py-0.5 rounded ${
-                          product.is_available
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          product.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        {product.is_available ? 'Disponible' : 'No Disponible'}
+                        {product.is_available ? 'Disponible' : 'No disponible'}
                       </span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(product.id);
-                  }}
-                  className="ml-2 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
-                >
-                  Desactivar
-                </button>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="text-xs text-gray-600">{product.business_name || '—'}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleDelete(product.id)}
+                        className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
+                      >
+                        Desactivar
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+            {products.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-xs text-gray-500">No se encontraron productos con estos filtros</p>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
 
-      {/* Paginación */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">
-            Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{' '}
-            {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
-            {pagination.total} productos
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilters((prev) => ({ ...prev, page: prev.page - 1 }))}
-              disabled={pagination.page === 1}
-              className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Anterior
-            </button>
-            <button
-              onClick={() => setFilters((prev) => ({ ...prev, page: prev.page + 1 }))}
-              disabled={pagination.page >= pagination.totalPages}
-              className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Siguiente
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-3 text-xs text-gray-600">
+              <p>
+                {pagination.total === 0
+                  ? '0 productos'
+                  : `Mostrando ${((pagination.page - 1) * pagination.limit) + 1} a ${Math.min(pagination.page * pagination.limit, pagination.total)} de ${pagination.total}`}
+              </p>
+              <label className="flex items-center gap-1.5">
+                <span className="text-gray-500">Filas</span>
+                <select
+                  value={filters.limit}
+                  onChange={(e) => handleFilterChange('limit', parseInt(e.target.value, 10))}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handlePageChange(1)}
+                disabled={pagination.page <= 1}
+                className="px-2 py-1 text-xs border border-gray-300 rounded bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                title="Primera página"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.page - 1)}
+                disabled={pagination.page <= 1}
+                className="px-2 py-1 text-xs border border-gray-300 rounded bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Anterior
+              </button>
+              {getVisiblePages(pagination.page, pagination.totalPages).map((item, index) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${index}`} className="px-1 text-xs text-gray-400">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => handlePageChange(item)}
+                    className={`min-w-[1.75rem] px-2 py-1 text-xs border rounded ${
+                      item === pagination.page
+                        ? 'bg-black text-white border-black'
+                        : 'bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.page + 1)}
+                disabled={pagination.page >= pagination.totalPages || pagination.totalPages === 0}
+                className="px-2 py-1 text-xs border border-gray-300 rounded bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+              >
+                Siguiente
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePageChange(pagination.totalPages)}
+                disabled={pagination.page >= pagination.totalPages || pagination.totalPages === 0}
+                className="px-2 py-1 text-xs border border-gray-300 rounded bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                title="Última página"
+              >
+                »
+              </button>
+              <label className="flex items-center gap-1.5 ml-2">
+                <span className="text-xs text-gray-500">Ir a</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.max(pagination.totalPages, 1)}
+                  value={pageInput}
+                  onChange={(e) => setPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleGoToPage();
+                  }}
+                  className="w-14 px-2 py-1 text-xs border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={handleGoToPage}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded bg-white hover:bg-gray-50"
+                >
+                  Ir
+                </button>
+              </label>
+            </div>
           </div>
         </div>
       )}
@@ -549,17 +1278,31 @@ export default function ProductsManager() {
                     Información General
                   </h3>
 
-                  <div>
-                    <label className="block text-xs font-normal text-gray-600 mb-1.5">
-                      Nombre <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
-                      required
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                        Nombre <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-normal text-gray-600 mb-1.5">
+                        SKU
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.sku}
+                        onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                        placeholder="Sin SKU"
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 font-mono"
+                      />
+                    </div>
                   </div>
 
                   <div>

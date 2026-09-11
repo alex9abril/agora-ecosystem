@@ -13,6 +13,7 @@ import CategoryInfo from '@/components/CategoryInfo';
 import { useStoreContext } from '@/contexts/StoreContext';
 import { branchesService } from '@/lib/branches';
 import { Business } from '@/contexts/StoreContext';
+import { parseCatalogFilters } from '@/lib/catalog-filters';
 
 export default function GlobalProductsPage() {
   const router = useRouter();
@@ -59,33 +60,29 @@ export default function GlobalProductsPage() {
     return Array.from(selectedBranches).sort();
   }, [selectedBranches]);
 
+  const catalogFilters = useMemo(
+    () => (router.isReady ? parseCatalogFilters(router.query) : {}),
+    [router.isReady, router.query],
+  );
+
   // Memoizar los filtros para evitar recrearlos en cada render
   const filters = useMemo(() => {
     const newFilters: any = {
       isAvailable: true,
+      ...catalogFilters,
     };
-    
-    if (searchQuery) {
-      newFilters.search = searchQuery;
-    }
-    
-    if (categoryFilter) {
-      newFilters.categoryId = categoryFilter;
-    }
-    
+
     // Agregar filtro de sucursales seleccionadas
     // Nota: El backend solo soporta un branchId a la vez, así que:
     // - Si todas están seleccionadas o ninguna: mostrar todos los productos (sin filtro)
     // - Si solo una está seleccionada: filtrar por esa sucursal
     // - Si múltiples están seleccionadas: mostrar todos (ya que no podemos filtrar por múltiples)
     if (selectedBranchesArray.length === 1) {
-      // Solo una sucursal seleccionada, filtrar por ella
       newFilters.branchId = selectedBranchesArray[0];
     }
-    // Si todas o ninguna están seleccionadas, no agregar filtro (mostrar todas)
-    
+
     return newFilters;
-  }, [searchQuery, categoryFilter, selectedBranchesArray]);
+  }, [catalogFilters, selectedBranchesArray]);
 
   // Actualizar searchQuery y categoryFilter desde router.query
   useEffect(() => {
@@ -103,8 +100,13 @@ export default function GlobalProductsPage() {
       setCategoryFilter(categoryId);
     } else {
       setCategoryFilter('');
+      setCategoryName('');
+      setCategoryDescription('');
     }
-  }, [router.isReady, router.query]);
+    if (catalogFilters.search) {
+      setSearchQuery(catalogFilters.search);
+    }
+  }, [router.isReady, router.query, catalogFilters.search]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -241,22 +243,19 @@ export default function GlobalProductsPage() {
           {/* Layout: Panel lateral izquierdo + Productos en el centro */}
           <div className="flex gap-6">
             {/* Panel lateral izquierdo - Información de categoría */}
-            {categoryFilter && (
-              <aside className="w-64 flex-shrink-0">
-                <CategoryInfo 
-                  categoryId={categoryFilter} 
-                  onCategoryLoaded={(name, description) => {
-                    setCategoryName(name);
-                    setCategoryDescription(description || '');
-                  }}
-                />
-              </aside>
-            )}
+            <aside className="w-full md:w-72 flex-shrink-0">
+              <CategoryInfo
+                categoryId={categoryFilter || undefined}
+                onCategoryLoaded={(name, description) => {
+                  setCategoryName(name);
+                  setCategoryDescription(description || '');
+                }}
+              />
+            </aside>
 
             {/* Contenido principal - Productos */}
             <div className="flex-1 min-w-0">
-              {/* Grid de productos */}
-              <ProductGrid filters={filters} />
+              <ProductGrid filters={filters} showPagination />
             </div>
           </div>
         </div>

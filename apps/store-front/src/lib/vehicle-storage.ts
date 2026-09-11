@@ -72,7 +72,23 @@ export function isVehicleDeselected(): boolean {
   }
 }
 
-// Función helper para establecer el vehículo seleccionado/activo (sin guardar permanentemente)
+export function getVehicleVariantId(vehicle: any | null): string | undefined {
+  if (!vehicle) return undefined;
+  const id = vehicle.vehicle_variant_id || vehicle.vehicleVariantId;
+  return typeof id === 'string' && id.trim() ? id.trim() : undefined;
+}
+
+export function getVehicleMakeModelYear(
+  vehicle: any | null,
+): { make: string; model: string; year: number } | null {
+  if (!vehicle) return null;
+  const make = vehicle.make || vehicle.brand_name;
+  const model = vehicle.model || vehicle.model_name;
+  const year = Number(vehicle.year || vehicle.year_start);
+  if (!make || !model || !Number.isFinite(year)) return null;
+  return { make: String(make), model: String(model), year };
+}
+
 export function setSelectedVehicle(vehicle: any | null): void {
   if (typeof window === 'undefined') return;
   

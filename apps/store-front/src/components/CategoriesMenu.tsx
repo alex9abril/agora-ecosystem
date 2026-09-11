@@ -388,6 +388,16 @@ export default function CategoriesMenu({
                   </h3>
                 </div>
                 <ul className="border-t border-neutral-100">
+                  <li className="border-b border-neutral-100">
+                    <ContextualLink
+                      href="/products"
+                      onClick={closeAfterNav}
+                      className={rowClass}
+                    >
+                      <span className="font-semibold">Todos los productos</span>
+                      <ChevronRightIcon className="w-4 h-4 text-neutral-400 flex-shrink-0" />
+                    </ContextualLink>
+                  </li>
                   {rootCategories.map((category) => {
                     const hasChildren = categoriesInitialized
                       ? (subcategoriesByParent?.[category.id]?.length ?? 0) > 0

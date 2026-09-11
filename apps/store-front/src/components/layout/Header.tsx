@@ -625,9 +625,29 @@ export default function Header() {
     const q = query.trim();
     if (!q) return;
     addSearchToHistory(contextType, slug ?? null, q);
+    const params = new URLSearchParams();
+    const keepKeys = [
+      'compatible',
+      'categoryId',
+      'uncategorized',
+      'collectionId',
+      'productType',
+      'priceMin',
+      'priceMax',
+      'sortBy',
+      'sortOrder',
+      'featured',
+    ];
+    keepKeys.forEach((key) => {
+      const raw = router.query[key];
+      const value = Array.isArray(raw) ? raw[0] : raw;
+      if (value) params.set(key, value);
+    });
+    params.set('search', q);
+    const qs = params.toString();
     const searchUrl = contextType === 'global'
-      ? `/products?search=${encodeURIComponent(q)}`
-      : `/${contextType}/${router.query.slug}/products?search=${encodeURIComponent(q)}`;
+      ? `/products?${qs}`
+      : `/${contextType}/${router.query.slug}/products?${qs}`;
     router.push(searchUrl);
     setShowSearchHistoryDropdown(false);
   };

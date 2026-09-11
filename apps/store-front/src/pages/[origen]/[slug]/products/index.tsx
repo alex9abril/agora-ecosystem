@@ -2,7 +2,7 @@
  * Página de catálogo de productos con contexto (grupo/sucursal)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import StoreLayout from '@/components/layout/StoreLayout';
@@ -12,54 +12,42 @@ import CategoryInfo from '@/components/CategoryInfo';
 import { useStoreContext } from '@/contexts/StoreContext';
 import ContextualLink from '@/components/ContextualLink';
 import { collectionsService } from '@/lib/collections';
+import { parseCatalogFilters } from '@/lib/catalog-filters';
 
 export default function ContextualProductsPage() {
   const router = useRouter();
   const { contextType, groupData, branchData, branchId, isLoading, error } = useStoreContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [uncategorizedFilter, setUncategorizedFilter] = useState(false);
   const [collectionFilter, setCollectionFilter] = useState<string>('');
   const [categoryName, setCategoryName] = useState<string>('');
   const [categoryDescription, setCategoryDescription] = useState<string>('');
   const [collectionName, setCollectionName] = useState<string>('');
   const [collectionDescription, setCollectionDescription] = useState<string>('');
-  const [filters, setFilters] = useState<any>({
-    isAvailable: true,
-  });
+  const catalogFilters = useMemo(
+    () => (router.isReady ? parseCatalogFilters(router.query) : {}),
+    [router.isReady, router.query],
+  );
+  const filters = useMemo(
+    () => ({
+      isAvailable: true,
+      ...catalogFilters,
+    }),
+    [catalogFilters],
+  );
 
   useEffect(() => {
     if (!router.isReady) return;
-    
-    const { search, categoryId, collectionId } = router.query;
-    const newFilters: any = {
-      isAvailable: true,
-    };
-    
-    if (search) {
-      setSearchQuery(search as string);
-      newFilters.search = search as string;
-    } else {
-      setSearchQuery('');
+    setSearchQuery(catalogFilters.search || '');
+    setCategoryFilter(catalogFilters.categoryId || '');
+    setUncategorizedFilter(Boolean(catalogFilters.uncategorized));
+    if (!catalogFilters.categoryId) {
+      setCategoryName('');
+      setCategoryDescription('');
     }
-    
-    if (categoryId && typeof categoryId === 'string') {
-      setCategoryFilter(categoryId);
-      newFilters.categoryId = categoryId;
-    } else {
-      setCategoryFilter('');
-      delete newFilters.categoryId;
-    }
-
-    if (collectionId && typeof collectionId === 'string') {
-      setCollectionFilter(collectionId);
-      newFilters.collectionId = collectionId;
-    } else {
-      setCollectionFilter('');
-      delete newFilters.collectionId;
-    }
-    
-    setFilters(newFilters);
-  }, [router.isReady, router.query]);
+    setCollectionFilter(catalogFilters.collectionId || '');
+  }, [router.isReady, catalogFilters]);
 
   useEffect(() => {
     if (!collectionFilter) {
@@ -93,21 +81,10 @@ export default function ContextualProductsPage() {
     };
   }, [collectionFilter, branchId]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newFilters = { ...filters };
-    if (searchQuery.trim()) {
-      newFilters.search = searchQuery.trim();
-    } else {
-      delete newFilters.search;
-    }
-    setFilters(newFilters);
-  };
-
   const storeName = contextType === 'grupo' ? groupData?.name : branchData?.name || 'Agora';
   const headerTitle = collectionFilter
     ? (collectionName || 'Colección')
-    : categoryName || (categoryFilter ? 'Productos' : `Productos de ${storeName}`);
+    : categoryName || (categoryFilter ? 'Productos' : 'Todos los productos');
   const headerDescription = collectionFilter ? collectionDescription : categoryDescription;
 
   return (
@@ -129,13 +106,25 @@ export default function ContextualProductsPage() {
                 <CategoryBreadcrumbs categoryId={categoryFilter} />
               )}
 
+              {!categoryFilter && !collectionFilter && (
+                <div className="text-sm text-gray-500 mb-4">
+                  <ContextualLink href="/" className="hover:text-gray-700">
+                    Inicio
+                  </ContextualLink>
+                  <span className="mx-2">/</span>
+                  <span className="text-gray-900">Productos</span>
+                </div>
+              )}
+
               {collectionFilter && (
                 <div className="text-sm text-gray-500 mb-4">
                   <ContextualLink href="/" className="hover:text-gray-700">
-                    Home
+                    Inicio
                   </ContextualLink>
                   <span className="mx-2">/</span>
-                  <span>Colecciones</span>
+                  <ContextualLink href="/products" className="hover:text-gray-700">
+                    Productos
+                  </ContextualLink>
                   <span className="mx-2">/</span>
                   <span className="text-gray-900">{collectionName || 'Colección'}</span>
                 </div>
@@ -149,27 +138,28 @@ export default function ContextualProductsPage() {
                 {headerDescription && (
                   <p className="text-gray-600 text-base max-w-2xl">{headerDescription}</p>
                 )}
+                {!categoryFilter && !collectionFilter && !headerDescription && (
+                  <p className="text-gray-600 text-base max-w-2xl">
+                    Catálogo completo de la sucursal, incluidas las partes aún sin categoría. Usa el menú de la izquierda para filtrar.
+                  </p>
+                )}
               </div>
 
               {/* Layout: Panel lateral izquierdo + Productos en el centro */}
               <div className="flex gap-6">
-                {/* Panel lateral izquierdo - Información de categoría */}
-                {categoryFilter && (
-                  <aside className="w-64 flex-shrink-0">
-                    <CategoryInfo 
-                      categoryId={categoryFilter} 
-                      onCategoryLoaded={(name, description) => {
-                        setCategoryName(name);
-                        setCategoryDescription(description || '');
-                      }}
-                    />
-                  </aside>
-                )}
+                <aside className="w-full md:w-72 flex-shrink-0">
+                  <CategoryInfo
+                    categoryId={categoryFilter || undefined}
+                    onCategoryLoaded={(name, description) => {
+                      setCategoryName(name);
+                      setCategoryDescription(description || '');
+                    }}
+                  />
+                </aside>
 
                 {/* Contenido principal - Productos */}
                 <div className="flex-1 min-w-0">
-                  {/* Grid de productos */}
-                  <ProductGrid filters={filters} />
+                  <ProductGrid filters={filters} showPagination />
                 </div>
               </div>
             </div>
