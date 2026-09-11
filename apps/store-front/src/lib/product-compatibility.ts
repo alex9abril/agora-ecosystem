@@ -81,7 +81,9 @@ export function groupCompatibilitiesForDisplay(
     });
   }
 
-  for (const list of groups.values()) {
+  const groupedLists = Array.from(groups.values());
+  for (let i = 0; i < groupedLists.length; i += 1) {
+    const list = groupedLists[i];
     const years = Array.from(
       new Set(list.map((item) => Number(item.year)).filter((year) => Number.isFinite(year))),
     ).sort((a, b) => a - b);
