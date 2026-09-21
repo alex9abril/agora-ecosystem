@@ -34,6 +34,23 @@ const TOYOTA_PRODUCT_BASE = 'https://autoparts.toyota.com/products/product';
 const LONGO_OEM_BASE = 'https://parts.longotoyota.com/oem-parts';
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const DESCRIPTION_ENRICHMENT_GUARDRAIL = [
+  'Descripcion: si no hay descripcion publicada, devuelve description como "".',
+  'Descripcion: prohibido mencionar California, leyes de California, Prop 65, P65Warnings, riesgos de salud, cancer, advertencias o danos reproductivos.',
+  'Descripcion: no incluyas modelos especificos, fitment, compatibilidad, aplicaciones ni anios de vehiculo.',
+  'Descripcion: no incluyas donde fue creado/fabricado, pais de origen o procedencia.',
+  'Descripcion: no incluyas descuentos, promociones, ofertas, ahorro, disponibilidad, stock, inventario, precio, moneda, importes ni envio gratis.',
+  'Descripcion: no menciones que este producto reemplaza, sustituye o reemplaza al SKU, codigo OEM o numero de parte de otro producto.',
+  'Descripcion: no menciones servicios, instalacion, mantenimiento, reparaciones, tecnicos, mecanicos ni mano de obra.',
+  'Descripcion: no repitas el nombre del producto; si la descripcion queda igual al nombre, usa "".',
+  'Descripcion: debe quedar en espanol natural de Mexico, sin palabras raras en ingles; si no puedes asegurar una descripcion limpia, usa "".',
+].join(' ');
+const NAME_ENRICHMENT_GUARDRAIL = [
+  'Nombre: debe quedar 100% en espanol natural de Mexico y debe sonar como una pieza o accesorio automotriz.',
+  'Nombre: no incluyas SKU, numero de parte, codigos OEM ni codigos entre parentesis.',
+  'Nombre: usa el SKU solo para buscar la pieza correcta, nunca como parte del nombre final.',
+  'Nombre: traduce terminos de autopartes en ingles a espanol natural; si no puedes dejarlo limpio y automotriz, no devuelvas name.',
+].join(' ');
 
 export type EnrichedProductResult = {
   product_id: string;
@@ -144,18 +161,21 @@ export class ProductEnrichmentService {
     const spanish = await this.ensureSpanishCopy({
       name: resolvedName,
       description: dto.fields.includes('description')
-        ? catalog?.description || textResult.description || product.description || ''
+        ? catalog?.description || textResult.description || ''
         : undefined,
       sku: product.sku,
     });
+    const enrichedName = dto.fields.includes('name') ? cleanEnrichedName(spanish.name, product.sku) : undefined;
 
     return {
       product_id: product.id,
       sku: product.sku,
       original_name: product.name,
       fields: dto.fields,
-      name: dto.fields.includes('name') ? spanish.name : undefined,
-      description: dto.fields.includes('description') ? spanish.description : undefined,
+      name: enrichedName,
+      description: dto.fields.includes('description')
+        ? cleanEnrichedDescription(spanish.description, enrichedName || product.name)
+        : undefined,
       category_id: dto.fields.includes('category') ? oemCategory?.id ?? textResult.category_id ?? null : undefined,
       category_name: dto.fields.includes('category')
         ? oemCategory?.label ?? textResult.category_name ?? null
@@ -197,10 +217,11 @@ export class ProductEnrichmentService {
     const payload: Record<string, unknown> = {};
 
     if (item.fields.includes('name') && item.name?.trim()) {
-      payload.name = item.name.trim();
+      const cleanedName = cleanEnrichedName(item.name, existing.sku);
+      if (cleanedName) payload.name = cleanedName;
     }
     if (item.fields.includes('description') && item.description !== undefined) {
-      payload.description = item.description;
+      payload.description = cleanEnrichedDescription(item.description, String(payload.name || item.name || existing.name || ''));
     }
     if (item.fields.includes('category') && item.category_id) {
       payload.category_id = item.category_id;
@@ -362,7 +383,7 @@ export class ProductEnrichmentService {
     return {
       sku: String(picked.item.sku || ''),
       name: String(picked.item.name || '').trim(),
-      description,
+      description: cleanEnrichedDescription(description, picked.item.name),
       categoryNames: Array.from(
         new Set(
           (Array.isArray(picked.item.categories) ? picked.item.categories : [])
@@ -391,8 +412,10 @@ export class ProductEnrichmentService {
           'Consulta el catálogo OEM Toyota de Longo Parts (RevolutionParts).',
           'Abre la ficha site:parts.longotoyota.com/oem-parts del SKU exacto.',
           'No inventes aplicaciones. Si un dato no está en esa ficha, déjalo vacío.',
-          'name = título COMPLETO de la ficha (H1), incluyendo tipo, clase, marca y número de parte si aparecen. No lo acortes a 1 o 2 palabras.',
+          NAME_ENRICHMENT_GUARDRAIL,
+          'name = nombre comercial limpio en español, con tipo de pieza, clase o atributo relevante y marca si aplica, pero sin SKU ni número de parte.',
           'description en español de México. Si la ficha está en inglés, tradúcela sin inventar.',
+          DESCRIPTION_ENRICHMENT_GUARDRAIL,
           'No inventes atributos que no estén en la ficha.',
           'Devuelve SOLO JSON válido, sin markdown.',
         ].join(' '),
@@ -404,7 +427,7 @@ export class ProductEnrichmentService {
           'Extrae JSON con esta forma:',
           JSON.stringify({
             sku: '90916-A2016',
-            name: 'Tow Hitch Ball Mount, Class III - Toyota (PT228-48141)',
+            name: 'Soporte de bola para enganche Clase III Toyota',
             description: 'texto de la ficha / Fits ...',
             pageUrl: 'https://parts.longotoyota.com/oem-parts/...',
             image_urls: ['https://cdn.revolutionparts.io/images/...', 'https://cdn-product-images.revolutionparts.io/assets/...'],
@@ -434,8 +457,8 @@ export class ProductEnrichmentService {
         ) ||
         (typeof parsed.pageUrl === 'string' && /^https?:\/\//i.test(parsed.pageUrl) ? parsed.pageUrl : candidates[0]);
 
-      const name = String(parsed.name || '').trim();
-      const description = String(parsed.description || '').trim();
+      const name = cleanEnrichedName(parsed.name, sku);
+      const description = cleanEnrichedDescription(parsed.description, name);
       const imageUrls = collectHttpUrls([parsed.image_url, parsed.image_urls, parsed.sources, raw]).filter(
         (url) => !looksLikeLogoUrl(url),
       );
@@ -479,9 +502,12 @@ export class ProductEnrichmentService {
     const schema: Record<string, unknown> = { sources: ['urls consultadas'], warnings: ['string'] };
     if (selected.has('name')) {
       schema.name =
-        'título completo encontrado en la ficha (tipo + clase/atributos + marca + SKU si aparecen). Nunca un nombre de 1-2 palabras.';
+        'nombre comercial limpio en espanol, sin SKU ni numero de parte; incluye tipo de pieza, clase/atributos y marca si aplica';
     }
-    if (selected.has('description')) schema.description = 'string de ficha publicada en español';
+    if (selected.has('description')) {
+      schema.description =
+        'string de ficha publicada en espanol, sin riesgos de salud, modelos especificos, origen, reemplazos de SKU, servicios, tecnicos, descuentos, stock ni precio; "" si no hay descripcion publicada o si repite el nombre';
+    }
     if (selected.has('category')) schema.category_id = 'uuid|null';
     if (selected.has('category')) schema.category_name = 'string|null';
     if (selected.has('photography')) {
@@ -518,9 +544,11 @@ export class ProductEnrichmentService {
     const instructions = [
       'Eres un investigador de catálogo automotriz para AGORA.',
       `Busca en internet SOLO estos campos: ${fields.join(', ')}. No investigues ni devuelvas nada más.`,
-      'Usa el SKU y el nombre exactos del producto.',
-      'Nombre: construye el título con SOLO lo publicado (tipo de pieza, clase, marca, SKU). No inventes. No acortes. Si el nombre actual ya es más completo que el de la ficha, conserva esos datos que también aparezcan en la red.',
-      'Nombre y descripción DEBEN ir en español de México. Si la ficha está en inglés, tradúcela sin inventar datos. Conserva SKU, marcas, clase y números.',
+      'Usa el SKU solo para encontrar la ficha correcta.',
+      selected.has('name') ? NAME_ENRICHMENT_GUARDRAIL : '',
+      'Nombre: construye el título con SOLO lo publicado (tipo de pieza, clase, marca y atributos relevantes). No inventes. No incluyas SKU ni número de parte.',
+      'Nombre y descripción DEBEN ir en español de México. Si la ficha está en inglés, tradúcela sin inventar datos.',
+      selected.has('description') ? DESCRIPTION_ENRICHMENT_GUARDRAIL : '',
       'Prioriza parts.longotoyota.com/oem-parts, luego autoparts.toyota.com, y fotos en cdn.revolutionparts.io o cdn-product-images.revolutionparts.io.',
       selected.has('photography')
         ? 'Para fotografía: NO generes imagen. Devuelve URLs https DIRECTAS a la foto real (.jpg .png .webp) de ESA pieza. No uses logos ni cdn-static.revolutionparts.io.'
@@ -543,7 +571,7 @@ export class ProductEnrichmentService {
       `Producto: "${searchQuery}".`,
       `SKU: ${product.sku || 'no disponible'}.`,
       `Nombre actual: ${product.name}.`,
-      `Descripción actual: ${product.description || 'ninguna'}.`,
+      `Descripcion local actual (contexto interno, no usar como fuente para description): ${product.description || 'ninguna'}.`,
       oem?.pageUrl
         ? `Ficha ya encontrada: ${oem.pageUrl} (SKU ${oem.sku}, nombre "${oem.name}", categorías: ${oem.categoryNames.join(', ') || 'n/a'}). Úsala como fuente principal.`
         : `Busca primero site:parts.longotoyota.com/oem-parts ${product.sku || ''} y https://autoparts.toyota.com.`,
@@ -566,7 +594,9 @@ export class ProductEnrichmentService {
       parsed.category_name = undefined;
     }
     if (!fields.includes('name')) parsed.name = undefined;
+    else parsed.name = cleanEnrichedName(parsed.name, product.sku);
     if (!fields.includes('description')) parsed.description = undefined;
+    else parsed.description = cleanEnrichedDescription(parsed.description, parsed.name || product.name);
     if (!fields.includes('shipping')) parsed.shipping = undefined;
     if (!fields.includes('compatibility')) parsed.compatibility = undefined;
     if (!fields.includes('photography')) {
@@ -631,7 +661,8 @@ export class ProductEnrichmentService {
     const description = input.description?.trim();
     if (!name && !description) return input;
     if (!looksLikeEnglish(name) && !looksLikeEnglish(description)) {
-      return { name, description };
+      const cleanedName = cleanEnrichedName(name, input.sku);
+      return { name: cleanedName, description: cleanEnrichedDescription(description, cleanedName) };
     }
 
     try {
@@ -646,9 +677,11 @@ export class ProductEnrichmentService {
               role: 'system',
               content: [
                 'Traduces fichas de refacciones automotrices al español de México.',
-                'No inventes datos. No acortes el nombre. No elimines clase, marca ni número de parte.',
+                'No inventes datos. No acortes el nombre de forma agresiva.',
+                NAME_ENRICHMENT_GUARDRAIL,
                 'No juntes palabras (Ball Mount no es Ballmount).',
-                'Conserva SKU, marcas, números de parte, medidas y Class/Clase.',
+                'Conserva marca, medidas y Class/Clase traducido como Clase cuando aplique.',
+                DESCRIPTION_ENRICHMENT_GUARDRAIL,
                 'Si el texto ya está en español, devuélvelo igual.',
                 'Responde SOLO JSON { "name": "...", "description": "..." }.',
               ].join(' '),
@@ -665,20 +698,19 @@ export class ProductEnrichmentService {
         },
       );
       const parsed = parseJsonObject(data?.choices?.[0]?.message?.content || '');
-      const translatedName = String(parsed?.name || name || '').trim() || name;
-      const translatedDescription = String(parsed?.description || description || '').trim() || description;
+      const translatedName = cleanEnrichedName(parsed?.name || name || '', input.sku);
+      const fallbackName = translatedName || cleanEnrichedName(name, input.sku);
+      const translatedDescription = cleanEnrichedDescription(parsed?.description || description || '', fallbackName);
       return {
-        name:
-          name && translatedName && nameQualityScore(translatedName, input.sku) + 8 < nameQualityScore(name, input.sku)
-            ? name
-            : translatedName,
+        name: fallbackName,
         description: translatedDescription,
       };
     } catch (error: unknown) {
       this.logger.warn(
         `No se pudo traducir al español: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return { name, description };
+      const cleanedName = cleanEnrichedName(name, input.sku);
+      return { name: cleanedName, description: cleanEnrichedDescription(description, cleanedName) };
     }
   }
 
@@ -882,6 +914,157 @@ function parseJsonObject(raw: string): any | null {
   }
 }
 
+function cleanEnrichedDescription(value: unknown, title?: unknown): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^(?:string\s+vacio|cadena\s+vacia|sin\s+descripci[oó]n|sin\s+descripcion|vac[ií]o|empty\s+string|""|''|null|n\/a)$/i.test(raw)) return '';
+  if (descriptionHasBlockedContent(raw)) return '';
+  if (title && normalizedProductText(raw) === normalizedProductText(String(title || ''))) return '';
+
+  const parts = raw
+    .replace(/\s+/g, ' ')
+    .replace(/([.!?])\s+/g, '$1\n')
+    .split(/\n|;+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const cleaned = parts
+    .filter((part) => !descriptionHasBlockedContent(part))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned || descriptionHasBlockedContent(cleaned) || looksLikeEnglish(cleaned)) return '';
+  if (title && normalizedProductText(cleaned) === normalizedProductText(String(title || ''))) return '';
+  return cleaned;
+}
+
+function normalizedProductText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b(el|la|los|las|un|una|unos|unas|de|del|para|por|con|sin)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanEnrichedName(value: unknown, sku?: string | null): string {
+  let cleaned = String(value ?? '').trim();
+  if (!cleaned) return '';
+
+  cleaned = cleaned
+    .replace(/\s+/g, ' ')
+    .replace(/\bClass\b/gi, 'Clase')
+    .replace(/\bGenuine\b/gi, 'Genuino')
+    .replace(/\bAssembly\b|\bAssy\b/gi, 'Ensamble')
+    .replace(/\bSet\b/gi, 'Juego')
+    .replace(/\bMount\b/gi, 'Soporte')
+    .replace(/\bBracket\b/gi, 'Soporte')
+    .replace(/\bBelt\b/gi, 'Banda')
+    .replace(/\bFilter\b/gi, 'Filtro')
+    .replace(/\bWasher\b/gi, 'Arandela')
+    .replace(/\bGasket\b/gi, 'Empaque')
+    .replace(/\bBolt\b/gi, 'Perno')
+    .replace(/\bScrew\b/gi, 'Tornillo')
+    .replace(/\bNut\b/gi, 'Tuerca')
+    .replace(/\bBearing\b/gi, 'Balero')
+    .replace(/\bPad\b/gi, 'Balata')
+    .replace(/\bRotor\b/gi, 'Disco')
+    .replace(/\bPump\b/gi, 'Bomba')
+    .replace(/\bSensor\b/gi, 'Sensor')
+    .replace(/\bLamp\b/gi, 'Lámpara')
+    .replace(/\bCable\b|\bWire\b/gi, 'Cable')
+    .replace(/\bMirror\b/gi, 'Espejo')
+    .replace(/\bHandle\b/gi, 'Manija')
+    .replace(/\bPanel\b/gi, 'Panel')
+    .replace(/\bMolding\b/gi, 'Moldura')
+    .replace(/\bJoint\b/gi, 'Junta')
+    .replace(/\bCover\b/gi, 'Cubierta')
+    .replace(/\bCap\b/gi, 'Tapa')
+    .replace(/\bSeal\b/gi, 'Sello')
+    .replace(/\bHose\b/gi, 'Manguera')
+    .replace(/\bKit\b/gi, 'Kit')
+    .replace(/\bToyota\s*[-–]\s*/gi, 'Toyota ')
+    .trim();
+
+  const skuValues = Array.from(
+    new Set(
+      [sku, sku ? compactSku(sku) : '', sku ? compactSku(sku).replace(/^(\d+)([A-Z].*)$/, '$1-$2') : '']
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  );
+  for (const item of skuValues) {
+    cleaned = cleaned.replace(new RegExp(`\\b${escapeRegExp(item)}\\b`, 'gi'), ' ');
+  }
+
+  cleaned = cleaned
+    .replace(/\([^)]*[A-Z0-9]{2,}[-_][A-Z0-9-]{2,}[^)]*\)/gi, ' ')
+    .replace(/\b[A-Z]{1,5}\d[A-Z0-9-]{4,}\b/g, ' ')
+    .replace(/\b\d{5,}[A-Z0-9-]*\b/g, ' ')
+    .replace(/\s*[-–]\s*$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+,/g, ',')
+    .trim();
+
+  if (!cleaned || looksLikePartNumberName(cleaned) || looksLikeEnglish(cleaned)) return '';
+  return normalizeSpanishNameCase(cleaned);
+}
+
+function normalizeSpanishNameCase(value: string): string {
+  const trimmed = value.replace(/\s+/g, ' ').trim();
+  if (!trimmed || !isMostlyUppercase(trimmed)) return trimmed;
+
+  const lowercaseWords = new Set(['a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'los', 'o', 'para', 'por', 'sin', 'y']);
+  return trimmed
+    .toLocaleLowerCase('es-MX')
+    .split(' ')
+    .map((word, index) => {
+      if (!word) return word;
+      if (index > 0 && lowercaseWords.has(word)) return word;
+      if (/^(ii|iii|iv|v|vi|vii|viii|ix|x)$/i.test(word)) return word.toUpperCase();
+      return word.charAt(0).toLocaleUpperCase('es-MX') + word.slice(1);
+    })
+    .join(' ');
+}
+
+function isMostlyUppercase(value: string): boolean {
+  const letters = value.match(/\p{L}/gu) || [];
+  if (letters.length < 3) return false;
+  const uppercase = letters.filter(
+    (letter) => letter === letter.toLocaleUpperCase('es-MX') && letter !== letter.toLocaleLowerCase('es-MX'),
+  );
+  return uppercase.length / letters.length >= 0.8;
+}
+
+function descriptionHasBlockedContent(value: string): boolean {
+  const text = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return [
+    /\b(california|ley(?:es)? de california|prop\s*65|proposition\s*65|p65warnings|p65warnings\.ca\.gov|warning|advertencia|advertencias|cancer|carcinogen[oa]s?|reproductive|reproductiv[oa]s?|birth defects?|defectos? de nacimiento|riesgos? de salud|health risks?|danos? reproductivos?|toxic[oa]s?|sustancias quimicas|quimicos?)\b/,
+    /\b(fits?|fitment|applications?|aplicaciones?|aplica(?:cion|ciones)?|compatible(?:s)?\s+(?:con|para)|compatibilidad|vehiculos?|vehicles?|modelos?\s+(?:toyota|lexus|honda|ford|nissan|mazda|chevrolet|kia|hyundai|bmw|audi)|rav4|corolla|camry|tacoma|tundra|highlander|sienna|prius|hilux|yaris|supra|avalon|4runner|land cruiser|sequoia|venza|c-hr|chr)\b/,
+    /\b(?:este\s+producto\s+)?(?:reemplaza|sustituye|replacement|replaces|supersedes?|substitutes?)\b.{0,80}\b(?:sku|codigo|c[oó]digo|oem|parte|part|part\s*number|numero|n[uú]mero)\b|\b(?:sku|codigo|c[oó]digo|oem|parte|part|part\s*number|numero|n[uú]mero)\b.{0,80}\b(?:reemplaza|sustituye|replacement|replaces|supersedes?|substitutes?)\b/,
+    /\b(19|20)\d{2}\s*(?:-|a|to)\s*(19|20)\d{2}\b/,
+    /\b(made in|hecho en|fabricad[oa] en|manufacturad[oa] en|created in|country of origin|pais de origen|origen|procedencia)\b/,
+    /\b(servicios?|services?|servicio\s+(?:de\s+)?(?:instalacion|instalaci[oÃ³]n|mantenimiento|reparacion|reparaci[oÃ³]n)|instalaci[oÃ³]n|install(?:ation)?|mantenimiento|maintenance|reparaci[oÃ³]n|repair|mano de obra|labor|taller|workshop|tecnic[oa]s?|technicians?|mecanic[oa]s?|mechanics?)\b/,
+    /\b(discount|discounted|descuento|descuentos|oferta|ofertas|rebaja|rebajas|promocion|promociones|ahorro|ahorra|sale price|precio|price|msrp|lista|mxn|usd|dolares?|pesos?|stock|inventario|existencias?|disponibilidad|available|unavailable|agotad[oa]|en existencia|sin existencia|in stock|out of stock|envio gratis|free shipping)\b|[%$€£]\s?\d|\b\d+(?:[.,]\d{2})?\s?(?:%|mxn|usd|pesos?|dolares?)\b/,
+  ].some((pattern) => pattern.test(text));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function looksLikePartNumberName(value: string): boolean {
+  const compact = value.replace(/[^A-Za-z0-9]/g, '');
+  return compact.length >= 6 && /\d/.test(compact) && /^[A-Z0-9-]+$/i.test(value.replace(/\s+/g, ''));
+}
+
 function isPrivateUrl(raw: string): boolean {
   try {
     const { hostname } = new URL(raw);
@@ -990,10 +1173,11 @@ function mergeCatalogLookups(
     toyota?.description ||
     longo?.description ||
     '';
+  const name = chooseCatalogName('', toyota?.sku || longo?.sku, [longo?.name, toyota?.name]);
   return {
     sku: toyota?.sku || longo?.sku || '',
-    name: chooseCatalogName('', toyota?.sku || longo?.sku, [longo?.name, toyota?.name]),
-    description,
+    name,
+    description: cleanEnrichedDescription(description, name),
     categoryNames,
     pageUrl: longo?.pageUrl || toyota?.pageUrl || '',
     imageUrls,
@@ -1074,24 +1258,25 @@ function nameTokens(name: string): string[] {
 }
 
 function nameQualityScore(name?: string | null, sku?: string | null): number {
-  const cleaned = String(name || '').trim();
+  const cleaned = cleanEnrichedName(name, sku) || String(name || '').trim();
   if (!cleaned) return -100;
   const tokens = nameTokens(cleaned);
   let score = tokens.length * 4 + Math.min(cleaned.length, 120) / 6;
-  if (sku && compactSku(cleaned).includes(compactSku(sku))) score += 14;
-  if (/\b(toyota|lexus|class|clase|iii|ii|iv)\b/i.test(cleaned)) score += 8;
+  if (sku && compactSku(String(name || '')).includes(compactSku(sku))) score -= 24;
+  if (/\b[A-Z]{1,5}\d[A-Z0-9-]{4,}\b|\b\d{5,}[A-Z0-9-]*\b/.test(String(name || ''))) score -= 18;
+  if (/\b(toyota|lexus|clase|iii|ii|iv)\b/i.test(cleaned)) score += 8;
+  if (/\b(banda|filtro|soporte|cubierta|tapa|sello|manguera|ensamble|juego|kit)\b/i.test(cleaned)) score += 8;
   if (tokens.length <= 2) score -= 24;
   if (cleaned.length < 14) score -= 16;
   return score;
 }
 
 function isCompleteProductName(name?: string | null, sku?: string | null): boolean {
-  const cleaned = String(name || '').trim();
+  const cleaned = cleanEnrichedName(name, sku);
   if (!cleaned) return false;
   const tokens = nameTokens(cleaned);
-  const hasSku = Boolean(sku && compactSku(cleaned).includes(compactSku(sku)));
   const hasBrandOrClass = /\b(toyota|lexus|class|clase)\b/i.test(cleaned);
-  return tokens.length >= 4 && cleaned.length >= 22 && (hasSku || hasBrandOrClass);
+  return tokens.length >= 3 && cleaned.length >= 14 && (hasBrandOrClass || !looksLikeEnglish(cleaned));
 }
 
 function chooseCatalogName(
@@ -1099,8 +1284,8 @@ function chooseCatalogName(
   sku?: string | null,
   candidates: Array<string | undefined | null> = [],
 ): string {
-  const originalClean = String(original || '').trim();
-  const options = [originalClean, ...candidates.map((value) => String(value || '').trim())].filter(Boolean);
+  const originalClean = cleanEnrichedName(original, sku);
+  const options = [originalClean, ...candidates.map((value) => cleanEnrichedName(value, sku))].filter(Boolean);
   if (options.length === 0) return originalClean;
   const ranked = [...options].sort((a, b) => nameQualityScore(b, sku) - nameQualityScore(a, sku));
   const best = ranked[0];
@@ -1182,7 +1367,7 @@ function looksLikeEnglish(text?: string): boolean {
   const sample = text.toLowerCase();
   const englishHits = (
     sample.match(
-      /\b(the|and|with|without|belt|filter|ribbed|genuine|drive|accessory|spark|oil|engine|serpentine|fits|built|delivers|reliable|vehicle|replace|repair)\b/g,
+      /\b(the|and|with|without|belt|filter|ribbed|genuine|drive|accessory|spark|oil|engine|serpentine|fits|built|delivers|reliable|vehicle|replace|repair|tow|hitch|ball|mount|bracket|cover|cap|seal|hose|assembly|assy|front|rear|left|right|upper|lower|set|washer|gasket|bolt|screw|nut|bearing|pad|rotor|pump|lamp|wire|mirror|handle|molding|joint)\b/g,
     ) || []
   ).length;
   const spanishHits = (

@@ -75,6 +75,32 @@ type EnrichmentDraft = {
 };
 
 type CategoryOption = { id: string; name: string; business_name?: string };
+type SaveProductPayload = {
+  id: string;
+  fields: EnrichField[];
+  name?: string;
+  description?: string;
+  category_id?: string;
+  image_url?: string;
+  image_urls?: string[];
+  shipping?: {
+    weight_kg?: number;
+    length_cm?: number;
+    width_cm?: number;
+    height_cm?: number;
+  };
+  compatibility_is_universal?: boolean;
+  compatibility_items?: Array<{
+    make: string;
+    model: string;
+    year_start?: number;
+    year_end?: number;
+    body_trim?: string;
+    engine_transmission?: string;
+    notes?: string;
+    source?: string;
+  }>;
+};
 
 interface Props {
   items: ProductMetadataSelectionItem[];
@@ -125,7 +151,7 @@ export default function ProductMetadataWizard({ items }: Props) {
           if (rows.length < 100) break;
           page += 1;
         }
-        setCategories(all);
+        setCategories(dedupeCategories(all));
       } catch (error) {
         console.error('Error cargando categorías:', error);
       }
@@ -225,51 +251,41 @@ export default function ProductMetadataWizard({ items }: Props) {
     }
     setSaving(true);
     try {
-      const response = await apiRequest<{ saved: number; failed: number }>('/catalog/products/enrich/apply', {
-        method: 'POST',
-        body: JSON.stringify({
-          products: selectedDrafts
-            .map((draft) => ({
-              id: draft.product_id,
-              fields: draft.fields,
-              name: draft.name,
-              description: draft.description,
-              category_id: draft.category_id || undefined,
-              image_url: draft.selected_image_urls?.[0] || draft.image_url || undefined,
-              image_urls: draft.selected_image_urls?.length
-                ? draft.selected_image_urls
-                : draft.image_url
-                  ? [draft.image_url]
-                  : [],
-              shipping: draft.shipping
-                ? {
-                    weight_kg: draft.shipping.weight_kg ?? undefined,
-                    length_cm: draft.shipping.length_cm ?? undefined,
-                    width_cm: draft.shipping.width_cm ?? undefined,
-                    height_cm: draft.shipping.height_cm ?? undefined,
-                  }
-                : undefined,
-              compatibility_is_universal: draft.compatibility?.is_universal || false,
-              compatibility_items: (draft.compatibility?.items || []).map((item) => ({
-                make: item.make,
-                model: item.model,
-                year_start: item.year_start,
-                year_end: item.year_end,
-                body_trim: item.body_trim || undefined,
-                engine_transmission: item.engine_transmission || undefined,
-                notes: item.notes,
-                source: item.source,
-              })),
-            })),
-        }),
-      });
-      if (response.saved > 0 && response.failed === 0) {
+      const metadataProducts = buildSaveProducts(selectedDrafts, 'metadata');
+      const photographyProducts = buildSaveProducts(selectedDrafts, 'photography');
+      let saved = 0;
+      let failed = 0;
+      let skippedPhotography = false;
+
+      if (metadataProducts.length > 0) {
+        const response = await applyEnrichedProducts(metadataProducts);
+        saved += response.saved;
+        failed += response.failed;
+      }
+
+      if (photographyProducts.length > 0) {
+        try {
+          const response = await applyEnrichedProducts(photographyProducts);
+          saved += response.saved;
+          failed += response.failed;
+        } catch (error) {
+          if (metadataProducts.length > 0 && isFetchLikeError(error)) {
+            skippedPhotography = true;
+          } else {
+            throw error;
+          }
+        }
+      }
+
+      if (skippedPhotography && saved > 0) {
+        showSnackbar('Cambios guardados. Las fotos se omitieron por error de red/CORS.', 'success');
+      } else if (saved > 0 && failed === 0) {
         showSnackbar(
-          response.saved === 1 ? 'Producto guardado correctamente' : `${response.saved} productos guardados correctamente`,
+          saved === 1 ? 'Producto guardado correctamente' : `${saved} productos guardados correctamente`,
           'success',
         );
-      } else if (response.saved > 0) {
-        showSnackbar(`Guardados: ${response.saved}. Con error: ${response.failed}.`, 'success');
+      } else if (saved > 0) {
+        showSnackbar(`Guardados: ${saved}. Con error: ${failed}.`, 'success');
       } else {
         showSnackbar('No se pudo guardar el producto', 'error');
       }
@@ -520,6 +536,84 @@ export default function ProductMetadataWizard({ items }: Props) {
       )}
     </div>
   );
+}
+
+async function applyEnrichedProducts(products: SaveProductPayload[]): Promise<{ saved: number; failed: number }> {
+  return apiRequest<{ saved: number; failed: number }>('/catalog/products/enrich/apply', {
+    method: 'POST',
+    body: JSON.stringify({ products }),
+  });
+}
+
+function buildSaveProducts(drafts: EnrichmentDraft[], mode: 'metadata' | 'photography'): SaveProductPayload[] {
+  return drafts
+    .map((draft) => {
+      const fields: EnrichField[] =
+        mode === 'photography'
+          ? draft.fields.filter((field) => field === 'photography')
+          : draft.fields.filter((field) => field !== 'photography');
+
+      if (fields.length === 0) return null;
+
+      const payload: SaveProductPayload = {
+        id: draft.product_id,
+        fields,
+      };
+
+      if (fields.includes('name')) {
+        payload.name = draft.name;
+      }
+      if (fields.includes('description')) {
+        payload.description = draft.description;
+      }
+      if (fields.includes('category')) {
+        payload.category_id = draft.category_id || undefined;
+      }
+      if (fields.includes('shipping') && draft.shipping) {
+        payload.shipping = {
+          weight_kg: draft.shipping.weight_kg ?? undefined,
+          length_cm: draft.shipping.length_cm ?? undefined,
+          width_cm: draft.shipping.width_cm ?? undefined,
+          height_cm: draft.shipping.height_cm ?? undefined,
+        };
+      }
+      if (fields.includes('compatibility')) {
+        payload.compatibility_is_universal = draft.compatibility?.is_universal || false;
+        payload.compatibility_items = (draft.compatibility?.items || []).map((item) => ({
+          make: item.make,
+          model: item.model,
+          year_start: item.year_start,
+          year_end: item.year_end,
+          body_trim: item.body_trim || undefined,
+          engine_transmission: item.engine_transmission || undefined,
+          notes: item.notes,
+          source: item.source,
+        }));
+      }
+      if (fields.includes('photography')) {
+        const imageUrls = selectedImageUrls(draft);
+        if (imageUrls.length === 0) return null;
+        payload.image_url = imageUrls[0];
+        payload.image_urls = imageUrls;
+      }
+
+      return payload;
+    })
+    .filter((payload): payload is SaveProductPayload => Boolean(payload));
+}
+
+function isFetchLikeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /failed to fetch|load failed|networkerror|network request failed|cors|413|payload too large/i.test(message);
+}
+
+function dedupeCategories(categories: CategoryOption[]): CategoryOption[] {
+  const seen = new Set<string>();
+  return categories.filter((category) => {
+    if (!category.id || seen.has(category.id)) return false;
+    seen.add(category.id);
+    return true;
+  });
 }
 
 function ProductPreviewTable({ items }: { items: ProductMetadataSelectionItem[] }) {
